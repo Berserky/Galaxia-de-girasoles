@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <title>Un universo para ti 🌻</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- PANTALLA DE INICIO -->
+    <section id="inicio" class="pantalla">
+
+        <div class="inicio-contenido">
+
+            <div class="estrella-principal">✦</div>
+
+            <p class="pequeno">PARA ALGUIEN MUY ESPECIAL</p>
+
+            <h1>
+                Tengo algo<br>
+                <span>para ti</span>
+            </h1>
+
+            <p class="introduccion">
+                No pude comprarte flores amarillas...
+            </p>
+
+            <button id="btnEntrar">
+                Descubrir ✨
+            </button>
+
+        </div>
+
+    </section>
+
+
+    <!-- GALAXIA -->
+    <section id="galaxia" class="pantalla oculto">
+
+        <canvas id="universo"></canvas>
+
+        <div class="galaxia-ui">
+
+            <p class="galaxia-texto">
+                Así que decidí hacer algo diferente...
+            </p>
+
+            <h2>
+                Te hice un<br>
+                <span>universo entero.</span>
+            </h2>
+
+            <p class="instruccion">
+                Toca las flores que encuentres 🌻
+            </p>
+<div id="progresoFlores">
+    <span id="contadorFlores">0</span> / 6 flores encontradas
+</div>
+        </div>
+<!-- MENSAJE DE CADA GIRASOL -->
+<div id="mensajeFlor" class="mensaje-flor oculto">
+
+    <div class="mensaje-contenido">
+
+        <span class="numero-flor" id="numeroFlor">
+            🌻
+        </span>
+
+        <p class="mensaje-pequeno">
+            UNA FLOR PARA TI
+        </p>
+
+        <h3 id="tituloFlor">
+            Encontraste una
+        </h3>
+
+        <p id="textoFlor">
+            Mensaje
+        </p>
+
+        <button id="cerrarMensaje">
+            Seguir explorando ✦
+        </button>
+
+    </div>
+
+</div>
+
+<!-- DESBLOQUEO FINAL -->
+<div id="desbloqueoFinal" class="desbloqueo-final oculto">
+
+    <div class="final-contenido">
+
+        <div class="brillo-final">✦</div>
+
+        <p class="final-pequeno">
+            ENCONTRASTE TODAS LAS FLORES
+        </p>
+
+        <h3>
+            Pero todavía<br>
+            <span>falta una...</span>
+        </h3>
+
+        <p>
+            Hay una flor que no estaba escondida.
+            <br><br>
+            Estaba esperando por ti.
+        </p>
+
+        <button id="btnFlorFinal">
+            Encontrarla 🌻
+        </button>
+
+    </div>
+
+</div>
+      
+    </section>
+
+    <!-- CARTA FINAL -->
+
+    <section id="cartaFinal" class="carta-final oculto"><div class="estrellas-finales"></div>
+<div id="petalos"></div>
+<div class="carta-wrapper">
+
+    <div class="girasol-final">🌻</div>
+
+    <p class="carta-sobre">
+        PARA MI BRUJITA
+    </p>
+
+    <h2>
+        Adri,<br>
+        <span>mi princesa hermosa.</span>
+    </h2>
+
+    <div class="linea-carta"></div>
+
+    <p class="carta-texto">
+        Hoy se supone que debía regalarte flores amarillas.
+        <br><br>
+
+        Y aunque esta vez no pude llegar con un ramo en las manos,
+        no quería que el día pasara sin darte algo.
+        <br><br>
+
+        Entonces pensé que podía hacer lo que mejor sé hacer:
+        sentarme, escribir unas cuantas líneas de código
+        y construirte algo que fuera solamente tuyo.
+        <br><br>
+
+        Y mientras lo hacía me puse a pensar en nosotros.
+        <br><br>
+
+        En Candelario y Pocho, en aquella primera cita donde
+        comenzó todo. En nuestra ida al estadio. En Boyacá y
+        tus tías. En nuestra primera noche juntos y en el pequeño
+        concierto de ronquidos con el que casi consigo espantarte.
+        <br><br>
+
+        También pensé en Útica.
+        <br><br>
+
+        En ese viaje donde, entre tantas cosas, descubrí que algún
+        día quiero ser un viejito pescando desde un puente con una
+        simple rueda de nailon.
+        <br><br>
+
+        Y quizás lo bonito no era solamente imaginarme siendo ese
+        viejito.
+        <br><br>
+
+        Era darme cuenta de que cada vez que pienso en cosas que
+        quisiera vivir en el futuro, tú empiezas a aparecer
+        naturalmente en muchas de ellas.
+        <br><br>
+
+        Apenas llevamos cuatro meses, mi amor.
+        <br><br>
+
+        No sé cuántos viajes, citas, lugares, historias, noches,
+        chistes malos o aventuras nos esperan todavía.
+        <br><br>
+
+        Pero sí sé que estos cuatro meses ya me dejaron recuerdos
+        que quiero guardar por muchísimo tiempo.
+    </p>
+
+    <p class="carta-destacado">
+        Así que hoy no pude regalarte flores amarillas...
+        <br><br>
+        pero pude construirte un universo donde nunca se marchitan.
+        <br><br>
+        Y entre todas ellas, mi flor favorita siempre vas a ser tú.
+    </p>
+
+    <div class="firma">
+        Feliz día de las flores amarillas, brujita.
+        <br><br>
+        Con muchísimo cariño,
+        <br>
+        <span>Sebas ♡</span>
+    </div>
+<div class="secreto-final">
+
+    <p class="pista-secreta">
+        P.D. Hay una última cosa...
+    </p>
+
+    <button id="btnSecreto" class="btn-secreto">
+        🌻
+    </button>
+
+    <p class="toca-secreto">
+        toca el girasol
+    </p>
+
+</div>
+
+
+<div id="mensajeSecreto" class="mensaje-secreto oculto">
+
+    <div class="secreto-brillo">
+        ✦
+    </div>
+
+    <p class="secreto-mini">
+        UNA ÚLTIMA COSA
+    </p>
+
+    <h3>
+        Mi brujita...
+    </h3>
+
+    <p>
+        Si llegaste hasta aquí,
+        encontraste todas las flores,
+        todos los recuerdos
+        y hasta este pequeño secreto.
+        <br><br>
+
+        Solo quería dejarte algo
+        que no necesitara código,
+        animaciones ni estrellas:
+        <br><br>
+
+        <strong>
+            gracias por estos cuatro meses,
+            Adri.
+        </strong>
+        <br><br>
+
+        Espero que sigamos llenando
+        nuestra historia de lugares,
+        viajes, bobadas, aventuras
+        y muchos recuerdos más.
+        <br><br>
+
+        Y si algún día encuentras a un
+        viejito pescando desde un puente
+        con una rueda de nailon...
+        <br><br>
+
+        espero que estés ahí conmigo. ♡
+    </p>
+
+    <button id="cerrarSecreto">
+        ♡
+    </button>
+
+</div>
+</div>
+
+    </section>
+  <!-- MÚSICA DE FONDO -->
+<audio id="musicaFondo" loop preload="auto">
+    <source src="musica.mp3" type="audio/mpeg">
+</audio>
+
+<button id="controlMusica"
+        class="control-musica oculto"
+        aria-label="Pausar o reproducir música">
+    ♫
+</button>
+    <script src="script.js"></script>
+
+</body>
+</html>
