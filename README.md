@@ -4,6 +4,8 @@ Una aplicación privada para dos: fotos, recuerdos, música, calendario, planes 
 
 ## Probar
 
+**Publicación gratuita:** la variante GitHub Pages + Supabase Free se configura en [docs/GRATIS.md](docs/GRATIS.md). Incluye invitación de un solo uso para registrar a la pareja. `node scripts/build-pages.mjs` genera el sitio; el flujo de GitHub Actions publica desde `main` cuando se han configurado las variables públicas. Google Fotos se abre por enlace; la sincronización directa de Drive requiere la variante con servidor que se describe abajo.
+
 Requiere **Node.js 24+**. Sin dependencias de ejecución ni compilación.
 
 ```sh
