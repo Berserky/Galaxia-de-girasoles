@@ -1,0 +1,12 @@
+{
+  "name": "nuestra-galaxia",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env app/server.mjs",
+    "dev": "node --env-file-if-exists=.env app/server.mjs --demo",
+    "test": "node --test tests/*.test.mjs"
+  }
+}
