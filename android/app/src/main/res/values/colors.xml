@@ -1,0 +1,8 @@
+<resources>
+    <color name="galaxy_bg">#090B18</color>
+    <color name="galaxy_surface">#12162A</color>
+    <color name="galaxy_text">#F5F2FF</color>
+    <color name="galaxy_muted">#A7ABC3</color>
+    <color name="galaxy_accent">#8B5CF6</color>
+    <color name="galaxy_accent_2">#EC4899</color>
+</resources>
