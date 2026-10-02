@@ -55,3 +55,16 @@ test('Map markers reflect movement with Lucide icons and live speed',()=>{
  assert.match(app,/setIcon\(markerIcon\)/);
  assert.match(css,/\.motion-marker-speed/);
 });
+
+
+test('Private mobility history is sampled, bounded in reads and RLS-backed',()=>{
+ const app=read('app/public/app.js'),cloud=read('app/cloud/adapter.js'),schema=read('supabase/schema.sql');
+ assert.match(app,/lastHistorySent/);
+ assert.match(app,/motion==='still'\?60000:15000/);
+ assert.match(cloud,/galaxy_location_history/);
+ assert.match(cloud,/\.limit\(2000\)/);
+ assert.match(cloud,/galaxy_trip_history/);
+ assert.match(schema,/location_history_read/);
+ assert.match(schema,/trip_history_read/);
+ assert.match(schema,/galaxy_location_history_person_time_idx/);
+});
