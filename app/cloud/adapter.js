@@ -31,7 +31,8 @@ export async function cloudApi(url,options={}){
  if(url==='/api/locations'&&method==='GET')return checked(client.from('galaxy_locations').select('person,latitude,longitude,accuracy,speed,heading,sharing,status,trip_active,trip_started_at,updated_at').order('person'));
  if(url==='/api/location'&&method==='PUT'){
   const sharing=!!data.sharing;
-  const row={person:String(p),sharing,updated_at:new Date().toISOString(),latitude:null,longitude:null,accuracy:null,speed:null,heading:null};
+  if(!sharing)await checked(client.from('galaxy_trip_points').delete().eq('person',String(p)));
+  const row={person:String(p),sharing,updated_at:new Date().toISOString(),latitude:null,longitude:null,accuracy:null,speed:null,heading:null,...(!sharing?{trip_active:false,trip_started_at:null,status:null}:{})};
   if(data.status!==undefined)row.status=text(data.status,40,true);
   if(data.trip_active!==undefined){row.trip_active=!!data.trip_active;row.trip_started_at=data.trip_active?new Date().toISOString():null;}
   if(sharing){
@@ -53,9 +54,9 @@ export async function cloudApi(url,options={}){
  if(url==='/api/map/trip/point'&&method==='POST')return checked(client.from('galaxy_trip_points').insert({person:String(p),latitude:Number(data.latitude),longitude:Number(data.longitude)}));
  if(url==='/api/map/trip/end'&&method==='POST'){await checked(client.from('galaxy_trip_points').delete().eq('person',String(p)));return checked(client.from('galaxy_locations').update({trip_active:false,trip_started_at:null}).eq('person',String(p)));}
  if(url==='/api/state'){
-  const [s,items,daily,home]=await Promise.all([settings(),allItems(),checked(client.rpc('galaxy_daily_read')),checked(client.rpc('galaxy_home_state'))]);
+  const [s,items,daily]=await Promise.all([settings(),allItems(),checked(client.rpc('galaxy_daily_read'))]);
   const day=today(),current=daily.filter(d=>d.day===day);
-  return {demo:false,cloud:true,person:p,settings:s,items,today:day,question:questionFor(day),ideas,daily:current,allAnswered:current.filter(d=>d.answered).length===2,connections:{google:false,photos:false,drive:false},photoCount:0,home};
+  return {demo:false,cloud:true,person:p,settings:s,items,today:day,question:questionFor(day),ideas,daily:current,allAnswered:current.filter(d=>d.answered).length===2,connections:{google:false,photos:false,drive:false},photoCount:0};
  }
  if(url==='/api/items'&&method==='POST'){const d=validateItem(data);if(data.audioPath)d.audioPath=text(data.audioPath,300,true);const out=await checked(client.from('galaxy_items').insert({kind:d.kind,data:d,author:p}).select().single());const rewards={memory:12,event:8};if(rewards[d.kind])await checked(client.rpc('galaxy_reward',{reward_key:d.kind,amount:rewards[d.kind]}));return out;}
  if(url.startsWith('/api/items/')){const id=url.split('/').pop();if(method==='DELETE')return updateOne(client.from('galaxy_items').delete().eq('id',id).eq('version',data.version));if(method==='PUT'){const d=validateItem(data);if(data.audioPath)d.audioPath=text(data.audioPath,300,true);const out=await updateOne(client.from('galaxy_items').update({data:d}).eq('id',id).eq('version',data.version));if(d.kind==='plan'&&d.done)await checked(client.rpc('galaxy_reward',{reward_key:'plan_done',amount:15}));return out;}}
