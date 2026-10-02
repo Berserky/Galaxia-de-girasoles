@@ -44,6 +44,11 @@ const surpriseIdeas=[
 
 let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null;
 let toastTimer,refreshing=false,updateState={text:'La app está al día.',progress:0,busy:false},pendingVoiceDraft=null,lastSurprise=null;
+let welcomeStep=0,welcomePreview=false;
+const WELCOME_KEY='nuestra-galaxia.adri-welcome.v1';
+const welcomeDone=()=>{try{return localStorage.getItem(WELCOME_KEY)==='done';}catch{return false;}};
+const shouldShowAdriWelcome=()=>native.paired&&String(native.person)==='1'&&(welcomePreview||!welcomeDone());
+const finishAdriWelcome=()=>{try{localStorage.setItem(WELCOME_KEY,'done');}catch{}welcomePreview=false;welcomeStep=0;render();};
 
 window.GalaxyNative={
  pending:new Map(),
@@ -126,7 +131,7 @@ function header(){
  return '<header class="header"><div class="brand"><div class="brand-mark">'+ico('sparkles')+'</div><div><strong>Nuestra Galaxia</strong><small>'+esc(native.paired?(myName()+' & '+partnerName()):'Un espacio para dos')+'</small></div></div><div class="avatar">'+esc((native.paired?myName():'N').slice(0,1).toUpperCase())+'</div></header>';
 }
 function renderNav(){
- navEl.style.display=native.paired?'grid':'none';
+ navEl.style.display=native.paired&&!shouldShowAdriWelcome()?'grid':'none';
  navEl.innerHTML=nav.map(([id,label])=>'<button class="nav-btn '+(view===id?'active':'')+'" data-view="'+id+'">'+ico(icons[id],'nav-icon')+'<span>'+label+'</span></button>').join('');
 }
 function go(next){
@@ -137,6 +142,7 @@ function go(next){
 function render(){
  renderNav();
  if(!native.paired){renderOnboarding();refreshIcons();return;}
+ if(shouldShowAdriWelcome()){renderAdriWelcome();refreshIcons();return;}
  if(!cloud){app.innerHTML=header()+loading('Cargando nuestra galaxia');refreshIcons();refreshState();return;}
  if(view==='home')app.innerHTML=header()+homeView();
  if(view==='map'){app.innerHTML=header()+mapView();setTimeout(()=>{drawMap();if(!mapData)refreshMap({detail:true});},0);}
@@ -147,6 +153,25 @@ function render(){
 }
 function renderOnboarding(){
  app.innerHTML='<div class="onboarding"><div class="card"><div class="onboarding-logo">'+ico('sparkles')+'</div><p class="eyebrow">NUESTRA GALAXIA · ANDROID</p><h1>Todo lo nuestro, ahora en el teléfono.</h1><p>Vincula este dispositivo con el código generado en Ajustes de Nuestra Galaxia. El código solo sirve una vez y el token queda cifrado por Android.</p><form id="pairForm" class="stack" style="margin-top:22px"><div class="field"><label>Código de vinculación</label><input class="input" name="code" autocomplete="off" autocapitalize="characters" placeholder="Pega aquí el código" required></div><button class="btn" type="submit">Vincular este teléfono</button></form><p class="muted" style="font-size:11px;margin-top:16px">Versión '+esc(native.version||'')+'</p></div></div>';
+}
+
+function renderAdriWelcome(){
+ const scenes=[
+  {icon:'sparkles',eyebrow:'HOLA, ADRI',title:'Hay algo que Sebas construyó pensando en ti.',copy:'No es solo una aplicación. Es un pequeño lugar para ustedes dos: para acompañarse, guardar lo vivido y seguir construyendo lo que viene.',visual:'stars'},
+  {icon:'map-pin',eyebrow:'UN MISMO MAPA',title:'Aunque estén en lugares diferentes, aquí pueden encontrarse.',copy:'Sus ubicaciones, caminos y lugares importantes pueden vivir en un mismo mapa, siempre bajo el control de cada uno.',visual:'map'},
+  {icon:'images',eyebrow:'LO QUE VALE LA PENA GUARDAR',title:'Recuerdos, canciones, planes y pequeñas historias.',copy:'Porque muchas veces lo más bonito no es el gran evento, sino esas cosas pequeñas que terminan significándolo todo.',visual:'memories'},
+  {icon:'heart',eyebrow:'UN MENSAJE DE SEBAS',title:'Mi brujita, quería regalarte algo diferente.',copy:'No solamente algo que pudieras guardar, sino algo que pudiéramos seguir construyendo juntos. Aquí quiero que vivan nuestros recuerdos, nuestros lugares, nuestros caminos y todas esas pequeñas cosas que con el tiempo terminan significando muchísimo. Todo esto fue hecho pensando en ti.',visual:'letter'},
+  {icon:'route',eyebrow:'ADRI + SEBAS',title:'Nuestra historia, en un solo lugar.',copy:'Esta aplicación no está terminada. Porque nuestra historia tampoco. Bienvenida, mi amor.',visual:'together'}
+ ];
+ const s=scenes[welcomeStep]||scenes[0],last=welcomeStep===scenes.length-1;
+ const dots=scenes.map((_,i)=>'<i class="'+(i===welcomeStep?'active':'')+'"></i>').join('');
+ let visual='';
+ if(s.visual==='map')visual='<div class="welcome-map"><span class="welcome-pin one">'+ico('navigation')+'</span><span class="welcome-route"></span><span class="welcome-pin two">'+ico('map-pin')+'</span></div>';
+ else if(s.visual==='memories')visual='<div class="welcome-orbit"><span>'+ico('images')+'</span><span>'+ico('music')+'</span><span>'+ico('calendar')+'</span><span>'+ico('star')+'</span></div>';
+ else if(s.visual==='letter')visual='<div class="welcome-letter">'+ico('heart')+'<span>Para Adri</span></div>';
+ else if(s.visual==='together')visual='<div class="welcome-together"><span>A</span><i></i><span>S</span></div>';
+ else visual='<div class="welcome-constellation"><i></i><i></i><i></i><i></i><i></i></div>';
+ app.innerHTML='<section class="welcome-experience"><div class="welcome-stars" aria-hidden="true"></div><button class="welcome-skip" data-action="welcome-skip">Omitir</button><div class="welcome-stage" data-step="'+welcomeStep+'"><div class="welcome-visual"><div class="welcome-symbol">'+ico(s.icon)+'</div>'+visual+'</div><div class="welcome-copy"><p class="welcome-eyebrow">'+s.eyebrow+'</p><h1>'+s.title+'</h1><p>'+s.copy+'</p></div><div class="welcome-footer"><div class="welcome-dots" aria-label="Paso '+(welcomeStep+1)+' de '+scenes.length+'">'+dots+'</div><button class="welcome-next" data-action="welcome-next">'+(last?'Entrar a nuestra galaxia':'Continuar')+' '+ico(last?'sparkles':'arrow-right')+'</button></div></div></section>';
 }
 
 function homeView(){
@@ -281,6 +306,7 @@ function moreView(){
  '<div class="card"><div class="row between"><div><h3>Widget “Nuestra Galaxia”</h3><p>Foto, próxima fecha y un abrazo desde el escritorio.</p></div><span class="badge '+(native.canPinWidget?'good':'')+'">'+(native.canPinWidget?'Disponible':'Manual')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small" data-action="widget-add">Añadir widget</button><button class="btn small secondary" data-action="widget-photo">Elegir foto</button><button class="btn small ghost" data-action="widget-photo-clear">Quitar foto</button></div></div>'+
  '<div class="card"><div class="row between"><div><h3>Notificaciones de momentos</h3><p>Gestos y fechas especiales, sin depender del GPS.</p></div><span class="badge '+(native.momentNotifications?'good':'')+'">'+(native.momentNotifications?'Activas':'Pausadas')+'</span></div><button class="btn small secondary" style="margin-top:14px" data-action="moment-notifications">'+(native.momentNotifications?'Desactivar':'Activar')+'</button></div>'+
  '<div class="card"><h3>Nuestros datos</h3><form id="settingsForm" class="stack" style="margin-top:12px"><div class="grid"><div class="field"><label>Nombre 1</label><input class="input" name="name0" value="'+attr(data.names?.[0]||'')+'" required></div><div class="field"><label>Nombre 2</label><input class="input" name="name1" value="'+attr(data.names?.[1]||'')+'" required></div></div><div class="field"><label>Inicio de nuestra historia</label><input class="input" type="date" name="startDate" value="'+attr(data.startDate||'')+'"></div><div class="field"><label>Álbum de Google Fotos (opcional)</label><input class="input" name="albumUrl" value="'+attr(data.albumUrl||'')+'" placeholder="https://photos.app.goo.gl/…"></div><button class="btn" type="submit">Guardar ajustes</button></form></div>'+
+ '<div class="card"><div class="row between"><div><h3>La bienvenida</h3><p>Vuelve a abrir la introducción especial de Nuestra Galaxia.</p></div>'+ico('sparkles')+'</div><button class="btn small secondary" style="margin-top:14px" data-action="welcome-replay">Volver a verla</button></div>'+ 
  '<div class="card"><h3>Permisos de Android</h3><p>Ubicación: '+(native.locationGranted?'concedida':'pendiente')+' · Segundo plano: '+(native.backgroundLocationGranted?'concedido':'opcional')+' · Notificaciones: '+(native.notificationsGranted?'concedidas':'pendientes')+'</p><button class="btn small secondary" style="margin-top:14px" data-action="app-settings">Abrir ajustes del sistema</button></div>'+
  '<div class="card" id="updateCard">'+updateMarkup()+'</div>'+
  '<div class="card"><h3>Este teléfono</h3><p>'+esc(native.name||'Android')+' · Perfil '+esc(myName())+' · v'+esc(native.version)+'</p><button class="btn small danger" style="margin-top:14px" data-action="unpair">Desvincular teléfono</button></div>'+
@@ -402,6 +428,9 @@ document.addEventListener('click',async e=>{
  if(btn.dataset.tab){memoryTab=btn.dataset.tab;render();return;}
  const a=btn.dataset.action;
  try{
+  if(a==='welcome-next'){if(welcomeStep<4){welcomeStep++;render();}else finishAdriWelcome();return;}
+  if(a==='welcome-skip'){finishAdriWelcome();return;}
+  if(a==='welcome-replay'){welcomePreview=true;welcomeStep=0;render();window.scrollTo(0,0);return;}
   if(a==='modal-close'){closeModal();return;}
   if(a==='map'){go('map');return;}
   if(a==='moments'){go('moments');return;}

@@ -92,7 +92,13 @@ assert.ok(edge.includes('body.detail!==true'),'El mapa debe tener refresco liger
 assert.ok(app.includes("refreshMap({quiet:true,detail:false})"),'El polling del mapa debe usar refresco ligero');
 assert.ok(app.includes("document.visibilityState!=='visible'"),'La app debe pausar polling fuera de primer plano');
 assert.ok(app.includes('editingNow()'),'La sincronización automática debe respetar formularios en edición');
+assert.ok(app.includes("WELCOME_KEY='nuestra-galaxia.adri-welcome.v1'"),'Falta persistencia de la bienvenida de Adri');
+assert.ok(app.includes("String(native.person)==='1'"),'La bienvenida especial debe limitarse a Adri/person 1');
+assert.ok(app.includes("data-action=\"welcome-next\""),'Falta navegación de la bienvenida');
+assert.ok(app.includes("data-action=\"welcome-skip\""),'La bienvenida debe poder omitirse');
+assert.ok(app.includes("data-action=\"welcome-replay\""),'Falta opción para volver a ver la bienvenida');
+assert.ok(css.includes('@media(prefers-reduced-motion:reduce)'),'La bienvenida debe respetar reducir movimiento');
 assert.equal(motionTest.includes('placeholderKeepsUnitTestTaskActive'),false,'La prueba de movimiento no puede ser placeholder');
 assert.ok(motionTest.includes('medianIgnoresSingleGpsSpeedSpike'),'Falta prueba de ruido GPS');
 
-console.log('QA móvil 1.4.1: OK');
+console.log('QA móvil 1.5.0: OK');
