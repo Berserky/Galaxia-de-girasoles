@@ -1,4 +1,4 @@
-import {freeHomeAssets} from './assets/home/free-assets.js';
+import {homeAssetManifest} from './assets/home/manifest.js';
 import {setupPwa} from './install.js';
 import {applyTheme,themeOptions} from './theme.js';
 import {nextOccurrence} from './dates.js';
@@ -70,7 +70,7 @@ const homeCatalog={
  album:{name:'Álbum de fotos',price:50,asset:'album',w:48,h:42,place:'surface',route:'album'},recordplayer:{name:'Reproductor de música',price:60,asset:'recordplayer',w:90,h:72,place:'surface',route:'musica'},wallcalendar:{name:'Calendario de pared',price:45,asset:'wallcalendar',w:72,h:82,place:'wall',route:'calendario'},memorybox:{name:'Caja de recuerdos',price:50,asset:'memorybox',w:78,h:62,place:'surface',route:'recuerdos'},planner:{name:'Tablero de planes',price:45,asset:'planner',w:100,h:75,place:'wall',route:'planes'},telephone:{name:'Teléfono de los dos',price:40,asset:'telephone',w:62,h:62,place:'surface',route:'conectar'}
 };
 const customHomeAssets=new Set(['album','recordplayer','wallcalendar','memorybox','planner','telephone']);
-function homeAssetSrc(asset){if(freeHomeAssets[asset])return freeHomeAssets[asset];if(customHomeAssets.has(asset))return `./assets/home/${asset==='wallcalendar'?'calendar':asset}.svg`;return '';}
+function homeAssetSrc(asset){const entry=homeAssetManifest[asset];if(entry)return entry.src;if(customHomeAssets.has(asset))return `./assets/home/${asset==='wallcalendar'?'calendar':asset}.svg`;return '';}
 function homeVisual(id,context='catalog'){const item=homeCatalog[id],src=item&&homeAssetSrc(item.asset);if(!item||!src)return'';const style=context==='scene'?`style="--object-w:${item.w}px;--object-h:${item.h}px"`:'';return `<img class="home-object-art" src="${src}" alt="${esc(item.name)}" ${style}>`;}
 function homeCatalogEntries(){return Object.entries(homeCatalog).filter(([,item])=>homeAssetSrc(item.asset));}
 let homeRoom='living',homeMode='room',placingItem='',homeAvatarX=48,homeCameraX=.5,homeDrag=null,homeDragSuppressUntil=0;
