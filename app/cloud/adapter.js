@@ -15,6 +15,11 @@ async function photoList(){let files=[],offset=0;for(;;){const page=await checke
  const signed=await checked(bucket().createSignedUrls(files.map(f=>f.name),600));
  return files.map((f,i)=>({id:f.name,name:f.name.slice(37),url:signed[i].signedUrl,created:f.created_at}));}
 async function updateOne(query){const rows=await checked(query.select('id'));if(!rows.length)throw Error('Cambió en otro dispositivo. Actualiza la página antes de guardar.');return {};}
+export function subscribeLocations(callback){
+ if(!client)return()=>{};
+ const channel=client.channel('galaxy-locations-live').on('postgres_changes',{event:'*',schema:'public',table:'galaxy_locations'},()=>callback()).subscribe();
+ return()=>{client.removeChannel(channel);};
+}
 export async function cloudApi(url,options={}){
  if(!configured)throw Error('Falta conectar el proyecto gratuito de Supabase.');
  const session=(await client.auth.getSession()).data.session;
@@ -23,6 +28,17 @@ export async function cloudApi(url,options={}){
  if(url==='/api/logout'){await checked(client.auth.signOut());return {};}
  const p=await person();
  if(url==='/api/invite')return {token:await checked(client.rpc('galaxy_invite'))};
+ if(url==='/api/locations'&&method==='GET')return checked(client.from('galaxy_locations').select('person,latitude,longitude,accuracy,speed,heading,sharing,updated_at').order('person'));
+ if(url==='/api/location'&&method==='PUT'){
+  const sharing=!!data.sharing;
+  const row={person:String(p),sharing,updated_at:new Date().toISOString(),latitude:null,longitude:null,accuracy:null,speed:null,heading:null};
+  if(sharing){
+   const latitude=Number(data.latitude),longitude=Number(data.longitude),accuracy=Number(data.accuracy);
+   if(!Number.isFinite(latitude)||latitude < -90||latitude > 90||!Number.isFinite(longitude)||longitude < -180||longitude > 180)throw Error('La ubicación recibida no es válida.');
+   Object.assign(row,{latitude,longitude,accuracy:Number.isFinite(accuracy)&&accuracy>=0?accuracy:null,speed:Number.isFinite(Number(data.speed))&&Number(data.speed)>=0?Number(data.speed):null,heading:Number.isFinite(Number(data.heading))&&Number(data.heading)>=0&&Number(data.heading)<=360?Number(data.heading):null});
+  }
+  return checked(client.from('galaxy_locations').upsert(row,{onConflict:'person'}).select().single());
+ }
  if(url==='/api/state'){
   const [s,items,daily,home]=await Promise.all([settings(),allItems(),checked(client.rpc('galaxy_daily_read')),checked(client.rpc('galaxy_home_state'))]);
   const day=today(),current=daily.filter(d=>d.day===day);
