@@ -58,7 +58,11 @@ export function validateItem(raw) {
  const d={kind:raw.kind,title:text(raw.title,120,true),body:text(raw.body||'',5000),date:raw.date||'',category:text(raw.category||'',40),done:!!raw.done,annual:!!raw.annual};
  if(d.date && !validDate(d.date)) fail('La fecha no es válida.');
  if(raw.kind==='event' && !d.date) fail('Elige una fecha para este evento.');
- if(raw.kind==='song') Object.assign(d,mediaLink(text(raw.url,700,true)));
+ if(raw.kind==='song'){
+  const audioUrl=text(raw.audioUrl||'',1000);
+  if(audioUrl){if(!/^https:\/\//.test(audioUrl))fail('El audio guardado no es válido.');d.audioUrl=audioUrl;d.url=text(raw.url||'',700);d.provider='MP3';d.embed='';}
+  else Object.assign(d,mediaLink(text(raw.url,700,true)));
+ }
  return d;
 }
 export function ics(events) {
