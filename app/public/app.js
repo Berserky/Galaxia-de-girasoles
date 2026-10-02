@@ -75,11 +75,19 @@ const homeSemanticZones=[
 ];
 const semanticById=new Map();
 for(const zone of homeSemanticZones)for(const row of zone.rows)for(const col of zone.cols){const n=row*27+col;if(n<480)semanticById.set(`rpg_${String(n).padStart(3,'0')}`,zone);}
-const categoryOrder=['Cocina','Electrodomésticos','Baño','Sala y comedor','Mesas y sillas','Almacenamiento','Decoración','Otros'];
-const homeCatalog=Object.fromEntries(Object.entries(homeAssetManifest).filter(([id,a])=>id.startsWith('rpg_')&&a.kind!=='structural').map(([id,a],index)=>{
+const categoryOrder=['Cocina','Electrodomésticos','Baño','Dormitorio','Sala y comedor','Mesas y sillas','Almacenamiento','Decoración','Otros'];
+const homeCatalog={...Object.fromEntries(Object.entries(homeAssetManifest).filter(([id,a])=>id.startsWith('rpg_')&&a.kind!=='structural').map(([id,a],index)=>{
  const semantic=semanticById.get(id),category=semantic?.category||(a.kind==='prop'?'Decoración':'Otros'),base=semantic?.name||(a.kind==='prop'?'Decoración':'Objeto');
  return[id,{name:`${base} ${String(index+1).padStart(3,'0')}`,price:12+(index%9)*3,asset:id,place:a.kind==='prop'?'surface':'floor',category}];
-}));
+})),
+ bath_bathtub:{name:'Bañera',price:36,asset:'ogaBath',place:'floor',category:'Baño',w:64,h:64},
+ bath_sink:{name:'Lavamanos',price:28,asset:'rpg_284',place:'floor',category:'Baño',w:56,h:56},
+ bath_cabinet:{name:'Mueble de baño',price:30,asset:'rpg_285',place:'floor',category:'Baño',w:56,h:56},
+ kitchen_oven:{name:'Estufa y horno',price:42,asset:'ogaOven',place:'floor',category:'Electrodomésticos',w:64,h:64},
+ bedroom_bed:{name:'Cama de madera',price:48,asset:'ogaBed',place:'floor',category:'Dormitorio',w:72,h:72},
+ electronics_hifi:{name:'Equipo de sonido',price:32,asset:'ogaHifi',place:'surface',category:'Electrodomésticos',w:56,h:56},
+ electronics_speaker:{name:'Parlante',price:22,asset:'ogaSpeaker',place:'surface',category:'Electrodomésticos',w:48,h:48}
+};
 function homeAssetSrc(asset){const entry=homeAssetManifest[asset];return entry?.src||'';}
 function homeVisual(id,context='catalog'){const item=homeCatalog[id],entry=item&&homeAssetManifest[item.asset],src=item&&homeAssetSrc(item.asset);if(!item)return'';if(entry?.sheet){const scale=context==='scene'?4:3;return `<span class="home-object-art home-rpg-sprite" role="img" aria-label="${esc(item.name)}" style="--object-w:${item.w}px;--object-h:${item.h}px;--rpg-bg-x:${-entry.col*17*scale}px;--rpg-bg-y:${-entry.row*17*scale}px;--rpg-bg-w:${458*scale}px;--rpg-bg-h:${305*scale}px;--rpg-size:${16*scale}px;--rpg-sheet:url('${entry.sheet}')"></span>`;}if(!src)return'';const style=context==='scene'?`style="--object-w:${item.w}px;--object-h:${item.h}px"`:'';return `<img class="home-object-art" src="${src}" alt="${esc(item.name)}" ${style}>`;}
 function homeCatalogEntries(){return Object.entries(homeCatalog).filter(([,item])=>homeAssetSrc(item.asset)||homeAssetManifest[item.asset]?.sheet);}
@@ -117,7 +125,7 @@ function roomScene(h,room){
 function homeOverlay(h){
  if(homeMode==='shop'){
   const groups=homeShopGroups(),categories=Object.keys(groups),items=groups[homeShopCategory]||groups[categories[0]]||[],pageSize=24,pages=Math.max(1,Math.ceil(items.length/pageSize)),page=Math.min(homeShopPage,pages-1),shown=items.slice(page*pageSize,(page+1)*pageSize);
-  return `<aside class="rogue-overlay rogue-shop" aria-label="Tienda"><header><div><small>TIENDA RPG · 412 OBJETOS</small><b>${homeShopCategory}</b></div><button data-action="home-room" aria-label="Cerrar">×</button></header><nav class="shop-category-tabs">${categories.map(cat=>`<button class="${cat===homeShopCategory?'active':''}" data-action="home-shop-category" data-category="${cat}">${cat}</button>`).join('')}</nav><div class="rogue-overlay-scroll"><div class="rogue-item-grid">${shown.map(([id,item])=>`<article class="rogue-item"><span>${homeVisual(id)}</span><b>${item.name}</b><button data-action="home-buy" data-item="${id}" data-cost="${item.price}" ${h.coins<item.price?'disabled':''}>${item.price} ☀</button></article>`).join('')}</div></div><footer class="shop-pager"><button data-action="home-shop-page" data-page="${Math.max(0,page-1)}" ${page===0?'disabled':''}>‹</button><b>${page+1} / ${pages}</b><button data-action="home-shop-page" data-page="${Math.min(pages-1,page+1)}" ${page>=pages-1?'disabled':''}>›</button></footer></aside>`;
+  return `<aside class="rogue-overlay rogue-shop" aria-label="Tienda"><header><div><small>TIENDA RPG · ${homeCatalogEntries().length} OBJETOS</small><b>${homeShopCategory}</b></div><button data-action="home-room" aria-label="Cerrar">×</button></header><nav class="shop-category-tabs">${categories.map(cat=>`<button class="${cat===homeShopCategory?'active':''}" data-action="home-shop-category" data-category="${cat}">${cat}</button>`).join('')}</nav><div class="rogue-overlay-scroll"><div class="rogue-item-grid">${shown.map(([id,item])=>`<article class="rogue-item"><span>${homeVisual(id)}</span><b>${item.name}</b><button data-action="home-buy" data-item="${id}" data-cost="${item.price}" ${h.coins<item.price?'disabled':''}>${item.price} ☀</button></article>`).join('')}</div></div><footer class="shop-pager"><button data-action="home-shop-page" data-page="${Math.max(0,page-1)}" ${page===0?'disabled':''}>‹</button><b>${page+1} / ${pages}</b><button data-action="home-shop-page" data-page="${Math.min(pages-1,page+1)}" ${page>=pages-1?'disabled':''}>›</button></footer></aside>`;
  }
  if(homeMode==='inventory'){const available=homeCatalogEntries().filter(([id])=>(h.inventory?.[id]||0)>homePlaced(homeRoom).filter(x=>x.item===id).length);return `<aside class="rogue-overlay rogue-inventory" aria-label="Inventario"><header><div><small>MOCHILA</small><b>Inventario</b></div><button data-action="home-room" aria-label="Cerrar">×</button></header><div class="rogue-overlay-scroll"><div class="rogue-item-grid">${available.map(([id,item])=>`<button class="rogue-item ${placingItem===id?'selected':''}" data-action="home-select-item" data-item="${id}"><span>${homeVisual(id)}</span><b>${item.name}</b><small>x${(h.inventory[id]||0)-homePlaced(homeRoom).filter(x=>x.item===id).length}</small></button>`).join('')||'<p class="muted">Tu mochila está vacía.</p>'}</div></div></aside>`;}
  return '';
