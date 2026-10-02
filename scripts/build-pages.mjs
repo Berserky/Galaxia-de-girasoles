@@ -1,4 +1,4 @@
-import {readFile,writeFile,mkdir,copyFile} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,copyFile,readdir} from 'node:fs/promises';
 import path from 'node:path';
 const root=path.resolve(import.meta.dirname,'..'),out=path.join(root,'dist');
 function replaceRequired(source,needle,replacement,label){
@@ -45,6 +45,8 @@ document.addEventListener('click',async e=>{if(e.target.id==='cloud-signout'){aw
  }
  await writeFile(path.join(out,name),source);
 }
+await mkdir(path.join(out,'assets/home'),{recursive:true});
+for(const name of await readdir(path.join(root,'app/public/assets/home')))await copyFile(path.join(root,'app/public/assets/home',name),path.join(out,'assets/home',name));
 await copyFile(path.join(root,'app/cloud/adapter.js'),path.join(out,'cloud.js'));
 await writeFile(path.join(out,'domain.js'),(await readFile(path.join(root,'app/domain.mjs'),'utf8')).replaceAll('Buffer.byteLength(chunk+ch)','new TextEncoder().encode(chunk+ch).length'));
 await writeFile(path.join(out,'config.js'),'export default '+JSON.stringify({url,key})+';\n');
