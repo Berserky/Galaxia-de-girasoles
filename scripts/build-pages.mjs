@@ -1,6 +1,10 @@
 import {readFile,writeFile,mkdir,copyFile} from 'node:fs/promises';
 import path from 'node:path';
 const root=path.resolve(import.meta.dirname,'..'),out=path.join(root,'dist');
+function replaceRequired(source,needle,replacement,label){
+ if(!source.includes(needle))throw Error('Build Pages incompatible: '+label);
+ return source.replace(needle,replacement);
+}
 const defaults=JSON.parse(await readFile(path.join(root,'deploy/public-config.json'),'utf8'));
 const url=process.env.SUPABASE_URL||defaults.url||'',key=process.env.SUPABASE_PUBLISHABLE_KEY||process.env.SUPABASE_ANON_KEY||defaults.key||'';
 if(process.env.CI&&(!url||!key))throw Error('Configura SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY en las variables del repositorio.');
@@ -21,10 +25,10 @@ document.addEventListener('submit',async e=>{if(e.target.id!=='cloud-login')retu
 document.addEventListener('click',async e=>{try{if(e.target.closest('#cloud-google'))await googleLogin();if(e.target.id==='invite-partner'){const {token}=await api('/api/invite');show('<h2 id="modal-title">Una invitación para Adriana</h2><p>Comparte la dirección de esta página y este código solo con ella. Expira en 7 días y sirve una vez.</p><textarea readonly aria-label="Código de invitación">'+esc(token)+'</textarea>');}}catch(error){const status=document.querySelector('#login-status');if(status)status.textContent=error.message;else toast(error.message);}});
 document.addEventListener('click',async e=>{if(e.target.id==='cloud-signout'){await signOut();await boot();}const a=e.target.closest('a');if(!a)return;if(['./api/export','./api/calendar.ics'].includes(a.getAttribute('href'))){e.preventDefault();try{const calendar=a.getAttribute('href').endsWith('.ics'),data=await api(calendar?'/api/calendar.ics':'/api/export');const url=URL.createObjectURL(new Blob([calendar?data:JSON.stringify(data,null,2)],{type:calendar?'text/calendar':'application/json'}));const link=document.createElement('a');link.href=url;link.download=calendar?'nuestros-dias.ics':'nuestra-galaxia.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(error){toast(error.message);}}});
 `+source.slice(end);
-  source=source.replace("filter='Todos';draw();", "filter='Todos';if(state)draw();");
-  source=source.replace('<h2>Guardar y salir</h2>','<h2>Guardar y salir</h2>${state.person===\'0\'?\'<button class="btn secondary" id="invite-partner">Invitar a Adriana</button>\':\'\'}');
+  source=replaceRequired(source,"filter='Todos';draw();","filter='Todos';if(state)draw();",'hashchange');
+  source=replaceRequired(source,'<h2>Guardar y salir</h2>','<h2>Guardar y salir</h2>${state.person===\'0\'?\'<button class="btn secondary" id="invite-partner">Invitar a Adriana</button>\':\'\'}','botón de invitación');
   source=source.replaceAll("${photoSource==='drive'?'/api/drive/image/':'/media/'}${encodeURIComponent(p.id)}",'${esc(p.url)}').replaceAll("${photoSource==='drive'?'/api/drive/image/':'/media/'}${encodeURIComponent(id)}",'${esc(p.url)}');
-  source=source.replace("case'picker':if", "case'picker':return toast('Abre su álbum de Google Fotos, descarga las fotos que elijan y súbelas con Añadir fotos.');if");
+  source=replaceRequired(source,"case'picker':if","case'picker':return toast('Abre su álbum de Google Fotos, descarga las fotos que elijan y súbelas con Añadir fotos.');if",'Google Fotos');
   source=source.replace("${btn('Elegir de Google Fotos','picker','text-button')}",'');
   source=source.replace(/<button data-action="photo-source" data-value="drive"[\s\S]*?<\/button>/,'');
   // Sustituye exclusivamente la tarjeta de conexiones de la versión con servidor.
