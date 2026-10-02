@@ -70,7 +70,6 @@ public final class MainActivity extends Activity {
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
-        if(Build.VERSION.SDK_INT>=26)WebView.enableSlowWholeDocumentDraw();
         if(Build.VERSION.SDK_INT>=26)settings.setSafeBrowsingEnabled(true);
 
         web.addJavascriptInterface(new GalaxyBridge(this),"GalaxyAndroid");
