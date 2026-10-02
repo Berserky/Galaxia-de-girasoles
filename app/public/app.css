@@ -74,6 +74,19 @@ html.home-fullscreen .home-world{min-height:100%;height:100%}
 .door-panel{inset:11% 14% 28%}
 .scene-door b{bottom:9%}
 @media(max-width:700px){.scene-door{width:100px;height:40%;max-height:250px;border-width:5px}.door-0{right:7%}.door-1{right:24%}.door-2{right:41%}.scene-slot>.home-object-pack{max-width:140px;max-height:118px}}
+/* Hogar visual identity + physical scale V6 */
+html.home-fullscreen .workspace{background:linear-gradient(180deg,var(--home-sky,var(--surface-2)),var(--home-room-bg,var(--surface)))}
+html.home-fullscreen .adventure-room{--home-room-bg:color-mix(in srgb,var(--highlight) 22%,white);--home-wall:color-mix(in srgb,var(--highlight) 16%,white);--home-floor:color-mix(in srgb,var(--highlight) 26%,var(--surface-2));background:var(--home-room-bg)}
+html.home-fullscreen .scene-sky{background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 18%,white),color-mix(in srgb,var(--highlight) 22%,white));opacity:1}
+html.home-fullscreen .scene-wall,.scene-kitchen .scene-wall,.scene-shared .scene-wall,.scene-sebas .scene-wall,.scene-adri .scene-wall,.scene-bath .scene-wall,.scene-hall .scene-wall,.scene-studio .scene-wall,.scene-balcony .scene-wall{background:linear-gradient(180deg,var(--home-wall),color-mix(in srgb,var(--home-wall) 72%,white))}
+html.home-fullscreen .scene-floor{background:repeating-linear-gradient(100deg,var(--home-floor) 0 74px,color-mix(in srgb,var(--home-floor) 80%,var(--border)) 75px 78px)}
+.scene-slot.has-item{width:16%;height:36%;overflow:visible}
+.scene-slot.has-item .home-object-art{object-fit:contain}
+.scene-slot.size-xs .home-object-art{max-width:48px;max-height:42px}.scene-slot.size-sm .home-object-art{max-width:72px;max-height:66px}.scene-slot.size-md .home-object-art{max-width:105px;max-height:100px}.scene-slot.size-lg .home-object-art{max-width:145px;max-height:145px}.scene-slot.size-xl .home-object-art{max-width:190px;max-height:175px}.scene-slot.size-xxl .home-object-art{max-width:245px;max-height:205px}
+.scene-slot.place-ground{z-index:2;transform:translateY(22%)}.scene-slot.place-wall{z-index:3;transform:translateY(-70%)}.scene-slot.place-surface{z-index:6;transform:translateY(-18%)}
+.furniture-preview.size-xs .home-object-art{max-height:42px}.furniture-preview.size-sm .home-object-art{max-height:58px}.furniture-preview.size-md .home-object-art{max-height:78px}.furniture-preview.size-lg .home-object-art{max-height:98px}.furniture-preview.size-xl .home-object-art,.furniture-preview.size-xxl .home-object-art{max-height:112px}
+html.home-fullscreen .home-game-panel{background:linear-gradient(180deg,color-mix(in srgb,var(--highlight) 10%,var(--surface)),var(--surface))}
+@media(max-width:700px){.scene-slot.size-xxl .home-object-art{max-width:230px;max-height:195px}.scene-slot.size-xl .home-object-art{max-width:180px;max-height:165px}}
 /* Palette is the only source of literal UI colors below this line. */
 :root[data-theme="cosmic"]{--bg:#090b18;--surface:#12162a;--surface-2:#191e35;--surface-3:#0d1020;--text:#f5f2ff;--muted:#a7abc3;--border:#292f4d;--accent:#8b5cf6;--accent-2:#ec4899;--highlight:#f5b942;--danger:#ef4444;--overlay:#03040bd9;--shadow:#0006}
 :root[data-theme="halloween"]{--bg:#0c0710;--surface:#17101d;--surface-2:#211529;--surface-3:#0e0913;--text:#fff4e8;--muted:#c2a9c6;--border:#3c2345;--accent:#ff7a18;--accent-2:#9333ea;--highlight:#ffb45c;--danger:#ef4444;--overlay:#09030ddd;--shadow:#0008}
