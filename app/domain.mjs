@@ -59,8 +59,8 @@ export function validateItem(raw) {
  if(d.date && !validDate(d.date)) fail('La fecha no es válida.');
  if(raw.kind==='event' && !d.date) fail('Elige una fecha para este evento.');
  if(['memory','plan','wish','journey'].includes(raw.kind)){
-  const latitude=Number(raw.latitude),longitude=Number(raw.longitude);
-  if(Number.isFinite(latitude)&&Number.isFinite(longitude)&&latitude>=-90&&latitude<=90&&longitude>=-180&&longitude<=180){d.latitude=latitude;d.longitude=longitude;d.placeName=text(raw.placeName||'',80);}
+  const hasCoords=raw.latitude!==''&&raw.latitude!=null&&raw.longitude!==''&&raw.longitude!=null,latitude=Number(raw.latitude),longitude=Number(raw.longitude);
+  if(hasCoords&&Number.isFinite(latitude)&&Number.isFinite(longitude)&&latitude>=-90&&latitude<=90&&longitude>=-180&&longitude<=180){d.latitude=latitude;d.longitude=longitude;d.placeName=text(raw.placeName||'',80);}
  }
  if(raw.kind==='capsule'){
   const unlockDate=raw.unlockDate||raw.date;if(!unlockDate||!validDate(unlockDate))fail('Elige cuándo se abrirá la cápsula.');d.unlockDate=unlockDate;d.date=unlockDate;
