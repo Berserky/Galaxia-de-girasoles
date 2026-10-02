@@ -141,3 +141,22 @@ textarea{min-height:110px;resize:vertical}
   .hero{padding:32px}
 }
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+
+.gmap-tiles,.gmap-lines,.gmap-markers{position:absolute;inset:0;overflow:hidden}
+.gmap-tiles{background:#e9e6ef;touch-action:none}
+.gmap-tile{position:absolute;width:256px;height:256px;user-select:none;-webkit-user-drag:none;pointer-events:none}
+.gmap-lines{pointer-events:none;z-index:2}
+.gmap-line{stroke:var(--accent);stroke-width:5;stroke-linecap:round;stroke-linejoin:round;opacity:.76}
+.gmap-line.partner{stroke:var(--accent2)}
+.gmap-line.dashed{stroke-dasharray:8 7}
+.gmap-markers{z-index:3;pointer-events:none}
+.gmap-marker{position:absolute;transform:translate(-50%,-50%);pointer-events:auto}
+.gmap-marker button{width:40px;height:40px;border-radius:15px;border:3px solid white;background:var(--accent);color:white;font-weight:900;box-shadow:0 6px 20px rgba(0,0,0,.22)}
+.gmap-marker.partner button{background:var(--accent2)}
+.gmap-marker.place button{width:34px;height:34px;border-radius:12px;background:white;color:var(--accent);border:2px solid var(--accent)}
+.gmap-popup{display:none;position:absolute;left:50%;bottom:48px;transform:translateX(-50%);white-space:nowrap;max-width:230px;overflow:hidden;text-overflow:ellipsis;background:#2f2a3a;color:white;padding:8px 10px;border-radius:11px;font-size:11px;box-shadow:var(--shadow)}
+.gmap-marker.open .gmap-popup{display:block}
+.gmap-controls{position:absolute;z-index:6;left:10px;bottom:10px;display:flex;flex-direction:column;gap:5px}
+.gmap-controls button{width:38px;height:38px;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.94);color:var(--text);font-size:22px;box-shadow:0 4px 12px rgba(0,0,0,.08)}
+.gmap-attrib{position:absolute;z-index:5;right:5px;bottom:3px;background:rgba(255,255,255,.76);font-size:9px;padding:2px 4px;border-radius:4px;color:#555}
+#map{position:relative;touch-action:none;user-select:none}
