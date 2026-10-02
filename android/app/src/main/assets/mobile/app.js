@@ -46,6 +46,36 @@ let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryT
 let toastTimer,refreshing=false,updateState={text:'La app está al día.',progress:0,busy:false},pendingVoiceDraft=null,lastSurprise=null;
 let welcomeStep=0,welcomePreview=false,welcomeGift=true,welcomeEntering=false,tourStep=-1;
 const welcomeMusic=new Audio('../musica.mp3');welcomeMusic.loop=true;welcomeMusic.volume=.32;
+const globalPlayer=document.getElementById('globalPlayer'),providerPlayer=document.getElementById('providerPlayer');
+const musicAudio=new Audio();musicAudio.preload='metadata';
+let musicQueue=[],musicIndex=-1,musicPlaying=false,ytPlayer=null,spotifyApi=null,spotifyController=null,pendingProviderTrack=null;
+const songItems=()=>cloud?.items?.filter(x=>x.kind==='song').map(x=>({id:x.id,type:'url',title:x.data?.title||'Canción',url:x.data?.url||'',platform:x.data?.platform||detectMusicPlatform(x.data?.url||''),created:x.created}))||[];
+function detectMusicPlatform(url){try{const h=new URL(url).hostname.toLowerCase();if(h.includes('spotify.com'))return'spotify';if(h.includes('youtube.com')||h.includes('youtu.be'))return'youtube';return'audio';}catch{return'audio';}}
+function youtubeId(url){try{const u=new URL(url);if(u.hostname.includes('youtu.be'))return u.pathname.split('/')[1];if(u.pathname.includes('/shorts/'))return u.pathname.split('/shorts/')[1]?.split('/')[0];return u.searchParams.get('v');}catch{return'';}}
+function rebuildMusicQueue(){const uploads=(media.music||[]).map((x,n)=>({id:'mp3:'+x.path,type:'mp3',title:x.originalName||x.name||('Canción '+(n+1)),url:x.url,platform:'mp3',path:x.path,created:x.created}));musicQueue=[...uploads,...songItems()];}
+function playerIcon(){return musicPlaying?'pause':'play';}
+function renderGlobalPlayer(){
+ rebuildMusicQueue();const t=musicQueue[musicIndex];
+ if(!t){globalPlayer.className='global-player';globalPlayer.innerHTML='';return;}
+ globalPlayer.className='global-player visible';
+ globalPlayer.innerHTML='<button class="player-main" data-action="player-toggle" aria-label="'+(musicPlaying?'Pausar':'Reproducir')+'">'+ico(playerIcon())+'</button><button class="player-info" data-action="player-expand"><span class="player-eq '+(musicPlaying?'playing':'')+'"><i></i><i></i><i></i></span><span><b>'+esc(t.title)+'</b><small>'+esc(t.platform==='youtube'?'YouTube / YouTube Music':t.platform==='spotify'?'Spotify':t.platform==='mp3'?'MP3':'Audio')+'</small></span></button><button class="player-skip" data-action="player-next" aria-label="Siguiente">'+ico('skip-forward')+'</button>';
+ refreshIcons();
+}
+function setMusicPlaying(v){musicPlaying=!!v;renderGlobalPlayer();}
+function playMusicAt(index){
+ rebuildMusicQueue();if(!musicQueue.length)return;musicIndex=(index+musicQueue.length)%musicQueue.length;const t=musicQueue[musicIndex];
+ musicAudio.pause();if(ytPlayer?.pauseVideo)try{ytPlayer.pauseVideo();}catch{}if(spotifyController?.pause)try{spotifyController.pause();}catch{}
+ if(t.platform==='youtube'){const id=youtubeId(t.url);if(!id){toast('No pude reconocer ese enlace de YouTube.');return;}pendingProviderTrack=t;if(ytPlayer?.loadVideoById){ytPlayer.loadVideoById(id);setMusicPlaying(true);}else initYouTube(id);}
+ else if(t.platform==='spotify'){pendingProviderTrack=t;if(spotifyController){spotifyController.loadEntity(t.url);spotifyController.play();setMusicPlaying(true);}else initSpotify(t);}
+ else{musicAudio.src=t.url;musicAudio.play().then(()=>setMusicPlaying(true)).catch(()=>{setMusicPlaying(false);toast('No pude reproducir ese audio.');});}
+ renderGlobalPlayer();
+}
+function toggleMusic(){const t=musicQueue[musicIndex];if(!t)return;if(t.platform==='youtube'&&ytPlayer){musicPlaying?ytPlayer.pauseVideo():ytPlayer.playVideo();setMusicPlaying(!musicPlaying);}else if(t.platform==='spotify'&&spotifyController){spotifyController.togglePlay();setMusicPlaying(!musicPlaying);}else{if(musicPlaying)musicAudio.pause();else musicAudio.play().catch(()=>{});setMusicPlaying(!musicPlaying);}}
+function initYouTube(id){if(!window.YT?.Player){setTimeout(()=>initYouTube(id),350);return;}providerPlayer.innerHTML='<div id="ytGlobal"></div>';ytPlayer=new YT.Player('ytGlobal',{height:'200',width:'200',videoId:id,playerVars:{playsinline:1},events:{onReady:e=>{e.target.playVideo();setMusicPlaying(true);},onStateChange:e=>{if(e.data===YT.PlayerState.ENDED)playMusicAt(musicIndex+1);else if(e.data===YT.PlayerState.PLAYING)setMusicPlaying(true);else if(e.data===YT.PlayerState.PAUSED)setMusicPlaying(false);}}});}
+window.onSpotifyIframeApiReady=api=>{spotifyApi=api;if(pendingProviderTrack?.platform==='spotify')initSpotify(pendingProviderTrack);};
+function initSpotify(t){if(!spotifyApi){setTimeout(()=>{if(!spotifyController&&pendingProviderTrack===t)initSpotify(t);},400);return;}providerPlayer.innerHTML='<div id="spotifyGlobal"></div>';spotifyApi.createController(document.getElementById('spotifyGlobal'),{url:t.url,width:300,height:152},c=>{spotifyController=c;c.addListener('playback_update',e=>setMusicPlaying(!e.data.isPaused));c.play();});}
+musicAudio.addEventListener('ended',()=>playMusicAt(musicIndex+1));musicAudio.addEventListener('play',()=>setMusicPlaying(true));musicAudio.addEventListener('pause',()=>{if(musicQueue[musicIndex]?.platform!=='youtube'&&musicQueue[musicIndex]?.platform!=='spotify')setMusicPlaying(false);});
+
 const WELCOME_KEY='nuestra-galaxia.adri-welcome.v1';
 const welcomeDone=()=>{try{return localStorage.getItem(WELCOME_KEY)==='done';}catch{return false;}};
 const shouldShowAdriWelcome=()=>native.paired&&(welcomePreview||(String(native.person)==='1'&&!welcomeDone()));
