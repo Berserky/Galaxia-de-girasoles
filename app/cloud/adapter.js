@@ -23,6 +23,17 @@ export async function cloudApi(url,options={}){
  if(url==='/api/logout'){await checked(client.auth.signOut());return {};}
  const p=await person();
  if(url==='/api/invite')return {token:await checked(client.rpc('galaxy_invite'))};
+ if(url==='/api/locations'&&method==='GET')return checked(client.from('galaxy_locations').select('person,latitude,longitude,accuracy,speed,heading,sharing,updated_at').order('person'));
+ if(url==='/api/location'&&method==='PUT'){
+  const sharing=!!data.sharing;
+  const row={person:String(p),sharing,updated_at:new Date().toISOString()};
+  if(sharing){
+   const latitude=Number(data.latitude),longitude=Number(data.longitude),accuracy=Number(data.accuracy);
+   if(!Number.isFinite(latitude)||latitude < -90||latitude > 90||!Number.isFinite(longitude)||longitude < -180||longitude > 180)throw Error('La ubicación recibida no es válida.');
+   Object.assign(row,{latitude,longitude,accuracy:Number.isFinite(accuracy)&&accuracy>=0?accuracy:null,speed:Number.isFinite(Number(data.speed))&&Number(data.speed)>=0?Number(data.speed):null,heading:Number.isFinite(Number(data.heading))&&Number(data.heading)>=0&&Number(data.heading)<=360?Number(data.heading):null});
+  }
+  return checked(client.from('galaxy_locations').upsert(row,{onConflict:'person'}).select().single());
+ }
  if(url==='/api/state'){
   const [s,items,daily,home]=await Promise.all([settings(),allItems(),checked(client.rpc('galaxy_daily_read')),checked(client.rpc('galaxy_home_state'))]);
   const day=today(),current=daily.filter(d=>d.day===day);
