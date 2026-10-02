@@ -101,3 +101,15 @@
 :root[data-theme] .theme-choice{background:var(--surface-3);border-color:var(--border);color:var(--text-2)}
 :root[data-theme] .theme-choice:hover,:root[data-theme] .theme-choice.selected{background:var(--accent-soft);border-color:var(--accent);color:var(--text)}
 :root[data-theme="halloween"]{--overlay:#09030ddd}:root[data-theme="christmas"]{--overlay:#020c08dd}:root[data-theme="valentine"]{--overlay:#10030add}:root[data-theme="friendship"]{--overlay:#090313dd}:root[data-theme="easter"]{--overlay:#070b1bdd}
+
+/* Theme leak hardening: specific legacy components must never fall back to the old light palette. */
+:root[data-theme] .connection-question>.pill,:root[data-theme] .pill{background:var(--accent-soft)!important;color:color-mix(in srgb,var(--accent) 65%,#fff)!important;border:1px solid color-mix(in srgb,var(--accent) 32%,var(--border))}
+:root[data-theme] .answer-grid article{background:var(--surface-2)!important;color:var(--text)!important;border:1px solid var(--border)}
+:root[data-theme] .answer-avatar{background:var(--accent-soft)!important;color:color-mix(in srgb,var(--accent) 70%,#fff)!important}
+:root[data-theme] .answer-grid b{color:var(--text)!important}:root[data-theme] .answer-grid p{color:var(--text-2)!important}
+:root[data-theme] .note-card{background:var(--surface-2)!important;box-shadow:2px 4px 0 var(--border)!important}:root[data-theme] .note-card>span{color:var(--accent-2)!important}:root[data-theme] .note-card p,:root[data-theme] .note-card small{color:var(--text-2)!important}
+:root[data-theme] .plan-card.done,:root[data-theme] .empty,:root[data-theme] .gift-settings{background:var(--surface-2)!important;border-color:var(--border)!important}
+:root[data-theme] .empty-icon,:root[data-theme] .connection-icon{background:var(--accent-soft)!important;color:var(--accent)!important}
+:root[data-theme] .memory-copy small,:root[data-theme] .memory-copy p,:root[data-theme] .plan-card small,:root[data-theme] .complete-plan,:root[data-theme] .gift-settings p{color:var(--text-2)!important}
+:root[data-theme] .memory-category{color:#fff!important}
+:root[data-theme] .question-banner p{color:var(--text-2)!important}:root[data-theme] .question-banner .question-symbol{color:var(--accent-2)!important}
