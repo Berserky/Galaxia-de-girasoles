@@ -52,8 +52,19 @@ export async function cloudApi(url,options={}){
  }
  if(url.startsWith('/api/map/place/')&&method==='DELETE')return checked(client.from('galaxy_places').delete().eq('id',url.split('/').pop()).eq('owner',String(p)));
  if(url==='/api/map/trip'&&method==='GET')return checked(client.from('galaxy_trip_points').select('*').order('created_at'));
+ if(url==='/api/map/history/point'&&method==='POST'){
+  const latitude=Number(data.latitude),longitude=Number(data.longitude),accuracy=Number(data.accuracy),speed=Number(data.speed),heading=Number(data.heading),motion=['still','walking','vehicle'].includes(data.motion)?data.motion:null;
+  if(!Number.isFinite(latitude)||latitude < -90||latitude > 90||!Number.isFinite(longitude)||longitude < -180||longitude > 180)throw Error('Punto histórico no válido.');
+  return checked(client.from('galaxy_location_history').insert({person:String(p),latitude,longitude,accuracy:Number.isFinite(accuracy)&&accuracy>=0?accuracy:null,speed:Number.isFinite(speed)&&speed>=0?speed:null,heading:Number.isFinite(heading)&&heading>=0&&heading<=360?heading:null,motion}));
+ }
+ if(url==='/api/map/history'&&method==='GET')return checked(client.from('galaxy_location_history').select('*').order('captured_at',{ascending:false}).limit(2000));
+ if(url==='/api/map/trip/history'&&method==='GET')return checked(client.from('galaxy_trip_history').select('*').order('started_at',{ascending:false}).limit(200));
  if(url==='/api/map/trip/point'&&method==='POST')return checked(client.from('galaxy_trip_points').insert({person:String(p),latitude:Number(data.latitude),longitude:Number(data.longitude)}));
- if(url==='/api/map/trip/end'&&method==='POST'){await checked(client.from('galaxy_trip_points').delete().eq('person',String(p)));return checked(client.from('galaxy_locations').update({trip_active:false,trip_started_at:null}).eq('person',String(p)));}
+ if(url==='/api/map/trip/end'&&method==='POST'){
+  const points=await checked(client.from('galaxy_trip_points').select('*').eq('person',String(p)).order('created_at')),loc=(await checked(client.from('galaxy_locations').select('trip_started_at').eq('person',String(p)).single()));
+  if(points.length){let distance=0;for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],rad=x=>x*Math.PI/180,dlat=rad(b.latitude-a.latitude),dlon=rad(b.longitude-a.longitude),h=Math.sin(dlat/2)**2+Math.cos(rad(a.latitude))*Math.cos(rad(b.latitude))*Math.sin(dlon/2)**2;distance+=6371000*2*Math.atan2(Math.sqrt(h),Math.sqrt(1-h));}const started=loc?.trip_started_at||points[0].created_at,ended=new Date().toISOString(),duration=Math.max(0,Math.round((Date.parse(ended)-Date.parse(started))/1000));await checked(client.from('galaxy_trip_history').insert({person:String(p),started_at:started,ended_at:ended,distance_m:Math.round(distance),duration_s:duration}));}
+  await checked(client.from('galaxy_trip_points').delete().eq('person',String(p)));return checked(client.from('galaxy_locations').update({trip_active:false,trip_started_at:null}).eq('person',String(p)));
+ }
  if(url==='/api/state'){
   const [s,items,daily]=await Promise.all([settings(),allItems(),checked(client.rpc('galaxy_daily_read'))]);
   const day=today(),current=daily.filter(d=>d.day===day);
