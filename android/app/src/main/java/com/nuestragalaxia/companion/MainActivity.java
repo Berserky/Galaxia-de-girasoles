@@ -10,11 +10,13 @@ import android.os.*;
 import android.provider.Settings;
 import android.webkit.*;
 import android.widget.Toast;
+import androidx.activity.ComponentActivity;
+import androidx.activity.OnBackPressedCallback;
 import org.json.JSONObject;
 import java.util.Set;
 import java.util.concurrent.*;
 
-public final class MainActivity extends Activity {
+public final class MainActivity extends ComponentActivity {
     private static final int REQ_LOCATION=100;
     private static final int REQ_TRACKING_NOTIFICATIONS=101;
     private static final int REQ_BOND_NOTIFICATIONS=102;
@@ -22,7 +24,7 @@ public final class MainActivity extends Activity {
     private static final Set<String> MOBILE_ACTIONS=Set.of(
         "mobile-state","item-save","item-delete","settings-save","daily-save",
         "bond-save","bond-update","bond-guess","bond-delete","bond-widget",
-        "map-state","place-save","place-delete","status-set","destination-save","trip",
+        "map-state","place-save","place-delete","status-set","transport-set","destination-save","trip",
         "media-list","media-delete"
     );
 
@@ -38,6 +40,15 @@ public final class MainActivity extends Activity {
 
     @Override protected void onCreate(Bundle savedInstanceState){
         super.onCreate(savedInstanceState);
+        getOnBackPressedDispatcher().addCallback(this,new OnBackPressedCallback(true){
+            @Override public void handleOnBackPressed(){
+                if(pageReady)evaluate("window.GalaxyNative&&window.GalaxyNative.back&&window.GalaxyNative.back();");
+                else{
+                    setEnabled(false);
+                    getOnBackPressedDispatcher().onBackPressed();
+                }
+            }
+        });
         setContentView(R.layout.activity_main);
         store=new DeviceStore(this);
         web=findViewById(R.id.webView);
@@ -310,7 +321,12 @@ public final class MainActivity extends Activity {
                 if(request!=null)reject(request,"La ubicación precisa es necesaria para compartir tu recorrido.");
             }
         }else if(requestCode==REQ_TRACKING_NOTIFICATIONS){
-            doStartLocation();
+            boolean granted=results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED;
+            if(granted)doStartLocation();
+            else{
+                String request=pendingLocationRequest;pendingLocationRequest=null;
+                if(request!=null)reject(request,"Activa las notificaciones para que Android muestre claramente cuándo compartes tu ubicación.");
+            }
         }else if(requestCode==REQ_BOND_NOTIFICATIONS){
             String request=pendingBondRequest;pendingBondRequest=null;
             boolean granted=results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED;
@@ -347,8 +363,11 @@ public final class MainActivity extends Activity {
 
     private void toast(String text){runOnUiThread(()->Toast.makeText(this,text,Toast.LENGTH_LONG).show());}
 
+    void closeApp(){runOnUiThread(this::finish);}
+
     @Override protected void onResume(){
         super.onResume();
+        if(updater!=null)updater.resumePendingInstall();
         if(pageReady){nativeChanged();refreshMomentsInternal();}
     }
 

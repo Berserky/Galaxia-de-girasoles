@@ -59,7 +59,7 @@ public final class MobileApiClient {
         c.setRequestProperty("x-device-token",token);
         c.setRequestProperty("x-mobile-action","upload");
         c.setRequestProperty("x-media-kind",kind);
-        c.setRequestProperty("x-file-name",URLEncoder.encode(name,StandardCharsets.UTF_8));
+        c.setRequestProperty("x-file-name",URLEncoder.encode(name,"UTF-8"));
         if(length>=0&&length<=Integer.MAX_VALUE)c.setFixedLengthStreamingMode((int)length);
         else c.setChunkedStreamingMode(8192);
 

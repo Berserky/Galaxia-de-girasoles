@@ -56,7 +56,7 @@ public final class BondWidget extends AppWidgetProvider {
             PendingIntent.getBroadcast(c,id,hug,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE)
         );
         views.setBoolean(R.id.widgetHug,"setEnabled",paired);
-        views.setTextViewText(R.id.widgetHug,paired?"Enviar abrazo ♡":"Vincula la app");
+        views.setTextViewText(R.id.widgetHug,paired?"Enviar abrazo":"Vincula la app");
         manager.updateAppWidget(id,views);
     }
 

@@ -19,7 +19,11 @@ const dist=(a:any,b:any)=>{const R=6371000,rad=(x:number)=>x*Math.PI/180,dLat=ra
 const ok=async(q:PromiseLike<any>)=>{const {data,error}=await q;if(error)throw error;return data;};
 const today=()=>new Intl.DateTimeFormat("en-CA",{timeZone:"America/Bogota",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
 const text=(v:unknown,max:number)=>String(v??"").trim().slice(0,max);
-const validDate=(v:unknown)=>typeof v==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&!Number.isNaN(Date.parse(v+"T12:00:00Z"));
+const validDate=(v:unknown)=>{
+  if(typeof v!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(v))return false;
+  const parsed=new Date(v+"T12:00:00Z");
+  return Number.isFinite(parsed.getTime())&&parsed.toISOString().slice(0,10)===v;
+};
 const allowedKinds=new Set(["memory","song","event","plan","note","capsule","wish","journey"]);
 const questions:Record<string,string[]>={
  comfort:["Un abrazo","Hablar de todo","Un rato de calma","Algo rico"],
@@ -126,7 +130,7 @@ function nextCalendarEvent(items:any[],day:string){
         if(validDate(candidate)&&candidate>=day&&candidate>=data.date){date=candidate;break;}
       }
     }
-    if(date>=day)events.push({id:item.id,title:text(data.title||"Nuestra próxima fecha",120),date});
+    if(date>=day)events.push({title:text(data.title||"Nuestra próxima fecha",120),date});
   }
   return events.sort((a,b)=>a.date.localeCompare(b.date))[0]||null;
 }
@@ -357,19 +361,22 @@ async function gesture(req:Request,body:any){
   return bondSave(req,{type:"gesture",data:{gesture:body.gesture}});
 }
 
-async function mapState(req:Request){
+async function mapState(req:Request,body:any){
   await device(req);
-  const [locations,places,tripPoints,historyRows,trips,events,destinations,encounters]=await Promise.all([
+  const [locations,places,tripPoints,destinations]=await Promise.all([
     ok(db.from("galaxy_locations").select("*").order("person")),
     ok(db.from("galaxy_places").select("*").order("created_at",{ascending:false}).limit(100)),
-    ok(db.from("galaxy_trip_points").select("*").order("created_at",{ascending:false}).limit(700)),
-    ok(db.from("galaxy_location_history").select("*").order("captured_at",{ascending:false}).limit(400)),
-    ok(db.from("galaxy_trip_history").select("*").order("started_at",{ascending:false}).limit(60)),
-    ok(db.from("galaxy_place_events").select("*").order("happened_at",{ascending:false}).limit(60)),
-    ok(db.from("galaxy_destinations").select("*")),
-    ok(db.from("galaxy_encounters").select("*").order("started_at",{ascending:false}).limit(60))
+    ok(db.from("galaxy_trip_points").select("*").order("created_at",{ascending:false}).limit(500)),
+    ok(db.from("galaxy_destinations").select("*"))
   ]);
-  return json({locations,places,tripPoints,history:historyRows,trips,events,destinations,encounters});
+  const base={locations,places,tripPoints,destinations};
+  if(body.detail!==true)return json(base);
+  const [trips,events,encounters]=await Promise.all([
+    ok(db.from("galaxy_trip_history").select("*").order("started_at",{ascending:false}).limit(40)),
+    ok(db.from("galaxy_place_events").select("*").order("happened_at",{ascending:false}).limit(40)),
+    ok(db.from("galaxy_encounters").select("*").order("started_at",{ascending:false}).limit(40))
+  ]);
+  return json({...base,trips,events,encounters});
 }
 
 async function placeSave(req:Request,body:any){
@@ -396,6 +403,14 @@ async function setStatus(req:Request,body:any){
   const d=await device(req),status=text(body.status,40);
   await ok(db.from("galaxy_locations").update({status:status||null}).eq("person",String(d.person)));
   return json({ok:true,status});
+}
+
+async function transportSet(req:Request,body:any){
+  const d=await device(req),person=String(d.person),raw=String(body.preference||"");
+  if(!["","motorcycle","transit"].includes(raw))return json({error:"Preferencia de transporte no válida."},400);
+  const preference=raw||null;
+  await ok(db.from("galaxy_locations").upsert({person,transport_preference:preference,updated_at:new Date().toISOString()},{onConflict:"person"}));
+  return json({ok:true,transport_preference:preference});
 }
 
 async function destinationSave(req:Request,body:any){
@@ -537,10 +552,11 @@ Deno.serve(async req=>{
     if(action==="bond-guess")return await bondGuess(req,body);
     if(action==="bond-delete")return await bondDelete(req,body);
     if(action==="bond-widget")return await bondWidget(req,body);
-    if(action==="map-state")return await mapState(req);
+    if(action==="map-state")return await mapState(req,body);
     if(action==="place-save")return await placeSave(req,body);
     if(action==="place-delete")return await placeDelete(req,body);
     if(action==="status-set")return await setStatus(req,body);
+    if(action==="transport-set")return await transportSet(req,body);
     if(action==="destination-save")return await destinationSave(req,body);
     if(action==="trip")return await tripAction(req,body);
     if(action==="media-list")return await mediaList(req,body);
