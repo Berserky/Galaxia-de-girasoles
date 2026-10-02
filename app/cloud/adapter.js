@@ -15,6 +15,11 @@ async function photoList(){let files=[],offset=0;for(;;){const page=await checke
  const signed=await checked(bucket().createSignedUrls(files.map(f=>f.name),600));
  return files.map((f,i)=>({id:f.name,name:f.name.slice(37),url:signed[i].signedUrl,created:f.created_at}));}
 async function updateOne(query){const rows=await checked(query.select('id'));if(!rows.length)throw Error('Cambió en otro dispositivo. Actualiza la página antes de guardar.');return {};}
+export function subscribeLocations(callback){
+ if(!client)return()=>{};
+ const channel=client.channel('galaxy-locations-live').on('postgres_changes',{event:'*',schema:'public',table:'galaxy_locations'},()=>callback()).subscribe();
+ return()=>{client.removeChannel(channel);};
+}
 export async function cloudApi(url,options={}){
  if(!configured)throw Error('Falta conectar el proyecto gratuito de Supabase.');
  const session=(await client.auth.getSession()).data.session;
