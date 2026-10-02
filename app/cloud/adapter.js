@@ -1,4 +1,4 @@
-import {createClient} from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+import {createClient} from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm';
 import {ideas,questionFor,today,validateItem,text,validDate,ics} from './domain.js';
 import config from './config.js';
 const configured=/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(config.url||'')&&!!config.key;
@@ -53,3 +53,4 @@ export function rememberInvitation(){const value=document.querySelector('#invita
 export async function googleLogin(){rememberInvitation();await checked(client.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname,queryParams:{prompt:'select_account'}}}));}
 export async function login(email,password){await checked(client.auth.signInWithPassword({email,password}));await person();}
 export async function signOut(){if(client)await checked(client.auth.signOut());}
+
