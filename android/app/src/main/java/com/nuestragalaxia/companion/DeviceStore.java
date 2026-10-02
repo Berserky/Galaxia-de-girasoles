@@ -15,7 +15,8 @@ import javax.crypto.spec.GCMParameterSpec;
 public final class DeviceStore {
     private static final String PREFS="galaxy_companion", KEY_ALIAS="galaxy_device_token";
     private final SharedPreferences prefs;
-    public DeviceStore(Context context){ prefs=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE); }
+    private final Context context;
+    public DeviceStore(Context context){ this.context=context.getApplicationContext(); prefs=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE); }
 
     private SecretKey key() throws Exception {
         KeyStore ks=KeyStore.getInstance("AndroidKeyStore"); ks.load(null);
@@ -28,6 +29,7 @@ public final class DeviceStore {
         return ((KeyStore.SecretKeyEntry)ks.getEntry(KEY_ALIAS,null)).getSecretKey();
     }
     public void save(String token,String person,String name) throws Exception {
+        new BondStore(context).clear();
         Cipher c=Cipher.getInstance("AES/GCM/NoPadding"); c.init(Cipher.ENCRYPT_MODE,key());
         byte[] encrypted=c.doFinal(token.getBytes(StandardCharsets.UTF_8));
         prefs.edit().putString("token",Base64.encodeToString(encrypted,Base64.NO_WRAP))
@@ -46,5 +48,5 @@ public final class DeviceStore {
     public boolean paired(){ return token()!=null; }
     public void setTracking(boolean value){ prefs.edit().putBoolean("tracking",value).apply(); }
     public boolean tracking(){ return prefs.getBoolean("tracking",false); }
-    public void clear(){ prefs.edit().clear().apply(); }
+    public void clear(){ prefs.edit().clear().commit();new BondStore(context).clear();context.stopService(new android.content.Intent(context,TrackingService.class));BondWorker.cancel(context);context.getSystemService(android.app.NotificationManager.class).cancelAll();BondWidget.updateAll(context); }
 }

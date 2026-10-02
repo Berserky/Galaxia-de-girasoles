@@ -1,12 +1,18 @@
-const CACHE='galaxia-shell-v47';
-const SHELL=['./','./index.html','./app.css','./modern.css','./vendor/leaflet.js','./vendor/leaflet.css','./vendor/lucide.js','./ui.js','./map-loader.js','./startup.js','./app.js','./install.js','./theme.js','./dates.js','./insights.js','./icon.svg','./garden.svg','./manifest.webmanifest'];
+const CACHE='galaxia-shell-v49';
+const privatePath=pathname=>['/api/','/auth/','/media/'].some(part=>pathname.includes(part));
+const SHELL=['./','./index.html','./app.css','./modern.css','./bond.css','./bond-ui.js','./bond-domain.js','./vendor/leaflet.js','./vendor/leaflet.css','./vendor/lucide.js','./ui.js','./map-loader.js','./startup.js','./app.js','./install.js','./theme.js','./dates.js','./insights.js','./icon.svg','./garden.svg','./manifest.webmanifest'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting())));
-self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
+self.addEventListener('activate',event=>event.waitUntil((async()=>{
+ const names=await caches.keys();await Promise.all(names.filter(name=>name!==CACHE).map(name=>caches.delete(name)));
+ const cache=await caches.open(CACHE),requests=await cache.keys();
+ await Promise.all(requests.filter(request=>privatePath(new URL(request.url).pathname)).map(request=>cache.delete(request)));
+ await self.clients.claim();
+})()));
 self.addEventListener('fetch',event=>{
  if(event.request.method!=='GET')return;
  const url=new URL(event.request.url);
  if(url.origin!==location.origin)return;
- if(url.pathname.includes('/api/')||url.pathname.includes('/auth/'))return;
+ if(privatePath(url.pathname))return;
  if(event.request.mode==='navigate'){event.respondWith(fetch(event.request,{cache:'no-store'}).then(r=>{const copy=r.clone();caches.open(CACHE).then(c=>c.put('./index.html',copy));return r;}).catch(()=>caches.match('./index.html')));return;}
  event.respondWith(fetch(event.request,{cache:'no-store'}).then(r=>{if(r.ok){const copy=r.clone();caches.open(CACHE).then(c=>c.put(event.request,copy));}return r;}).catch(()=>caches.match(event.request)));
 });

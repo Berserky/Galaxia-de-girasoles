@@ -27,7 +27,12 @@ npm test
 - Calendario con eventos, aniversarios anuales y exportación ICS.
 - Planes compartidos, ideas para elegir y seguimiento de planes vividos.
 - Pregunta diaria: las respuestas del otro se ocultan en el servidor hasta que ambos respondan.
-- Notas, ajustes personales, exportación JSON y regalo original.
+- Gestos privados: abrazo, beso y te extraño; girasol que crece con la participación de ambos, sin perder progreso por descansar.
+- Juego de conocerse con respuestas protegidas hasta adivinar; ritual semanal de agradecimiento, necesidades y próximo plan.
+- Notas colaborativas con control de versiones; mensajes de voz con dedicatoria y referencia a un recuerdo, canción o cápsula.
+- Citas sorpresa según tiempo, presupuesto estimado en COP y casa/salir; guardar como plan compartido.
+- Widget Android con foto opcional del álbum, próxima fecha especial y envío de abrazo. Notificaciones nativas opcionales mediante sincronización periódica, independientes del GPS.
+- Ajustes personales, exportación JSON y regalo original.
 
 ## Activar para ambos
 
@@ -35,7 +40,7 @@ Ver **[docs/ACTIVAR.md](docs/ACTIVAR.md)** para configurar Google, las dos cuent
 
 **GitHub Pages no ejecuta el servidor privado.** Los archivos originales en la raíz conservan el regalo estático; la aplicación completa arranca con `npm start` y requiere la configuración de `.env.example`.
 
-El código de las integraciones Google está preparado, pero la conexión con las cuentas reales requiere credenciales y autorización. El enlace compartido de Google Fotos abre el álbum original; importar mediante el selector es un paso manual. No hay sincronización automática de ese álbum ni recordatorios push.
+El código de las integraciones Google está preparado, pero la conexión con las cuentas reales requiere credenciales y autorización. El enlace compartido de Google Fotos abre el álbum original; importar mediante el selector es un paso manual. No hay sincronización automática de ese álbum. Las notificaciones de gestos en Android usan sincronización periódica: el sistema puede retrasarlas y no son push instantáneos.
 
 ## Arquitectura
 

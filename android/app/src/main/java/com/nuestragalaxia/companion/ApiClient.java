@@ -23,7 +23,7 @@ public final class ApiClient {
         int code=c.getResponseCode();
         InputStream stream=code>=200&&code<300?c.getInputStream():c.getErrorStream();
         String text; try(BufferedReader r=new BufferedReader(new InputStreamReader(stream,StandardCharsets.UTF_8))){StringBuilder b=new StringBuilder();String line;while((line=r.readLine())!=null)b.append(line);text=b.toString();}
-        JSONObject result=text.isBlank()?new JSONObject():new JSONObject(text);
+        JSONObject result=text.trim().isEmpty()?new JSONObject():new JSONObject(text);
         if(code<200||code>=300)throw new ApiException(code,result.optString("error","Error de red "+code));
         return result;
     }
@@ -47,4 +47,6 @@ public final class ApiClient {
     public static void stop(String token) throws Exception {
         post(new JSONObject().put("action","location").put("sharing",false),token);
     }
+    public static JSONObject moments(String token) throws Exception {return post(new JSONObject().put("action","moments"),token);}
+    public static void gesture(String token,String gesture) throws Exception {post(new JSONObject().put("action","gesture").put("gesture",gesture),token);}
 }

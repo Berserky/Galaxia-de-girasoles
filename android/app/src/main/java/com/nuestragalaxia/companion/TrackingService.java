@@ -56,10 +56,9 @@ public final class TrackingService extends Service {
                 flush(token);
             }catch(Exception e){
                 if(e instanceof ApiClient.ApiException && ((ApiClient.ApiException)e).status==401){
-                    store.setTracking(false);
-                    updateNotification("Vinculación revocada · abre la app para volver a vincular");
+                    store.clear();
                     if(callback!=null){fused.removeLocationUpdates(callback);callback=null;}
-                    stopForeground(STOP_FOREGROUND_DETACH);
+                    stopForeground(STOP_FOREGROUND_REMOVE);
                     stopSelf();
                     return;
                 }

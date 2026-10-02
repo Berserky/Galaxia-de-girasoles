@@ -40,3 +40,8 @@ gradle -p android testDebugUnitTest assembleDebug
 ```
 
 GitHub Actions publica el APK instalable en la release `android-stable`.
+# Momentos para dos (1.3.0)
+
+Vincula el teléfono con el código generado en Ajustes de la web. Activa **Notificaciones de momentos** de forma independiente de los permisos de ubicación. Android revisa gestos y fechas mediante trabajo periódico de al menos 15 minutos y puede retrasarlo por batería o conectividad; no es una entrega push instantánea.
+
+Añade **Nuestra Galaxia** desde el selector de widgets del launcher o con **Añadir widget** en la app. El widget muestra nombres, la próxima fecha y la foto opcional elegida del álbum en Ajustes de la web. Su botón envía un abrazo mediante el token cifrado del dispositivo, solo tras tocarlo; el resultado aparece en el widget. No solicita GPS. La foto se descarga desde una URL privada temporal con límite de 5 MB y se reduce a 512 px en almacenamiento privado. Desvincular o detectar una revocación cancela trabajos y borra caché/notificaciones. La primera sincronización toma una referencia de los gestos existentes sin reproducirlos.

@@ -18,7 +18,7 @@ const componentCss=themeCss.slice(0,paletteIndex);
 const literalColors=componentCss.match(/#[0-9a-fA-F]{3,8}\b/g)||[];
 if(literalColors.length)throw Error('Tema inválido: los componentes no pueden contener colores literales. Usa tokens semánticos.');
 await mkdir(out,{recursive:true});
-for(const name of ['index.html','app.js','app.css','modern.css','ui.js','map-loader.js','dates.js','insights.js','startup.js','network.js','icon.svg','garden.svg','manifest.webmanifest','install.js','sw.js','theme.js']){
+for(const name of ['index.html','app.js','app.css','modern.css','bond.css','bond-ui.js','bond-domain.js','ui.js','map-loader.js','dates.js','insights.js','startup.js','network.js','icon.svg','garden.svg','manifest.webmanifest','install.js','sw.js','theme.js']){
  let source=await readFile(path.join(root,'app/public',name),'utf8');
  source=source.replaceAll('="/','="./').replaceAll("url('/","url('./").replaceAll('"start_url":"/"','"start_url":"./"').replaceAll('"src":"/icon.svg"','"src":"./icon.svg"');
  if(name==='app.js'){
@@ -27,10 +27,10 @@ for(const name of ['index.html','app.js','app.css','modern.css','ui.js','map-loa
   source=source.slice(0,apiStart)+'const api=cloudApi;\n'+source.slice(apiEnd);
   source=source.replace("async function boot(){try", "async function boot(){try");
   const start=source.indexOf('async function boot()'),end=source.indexOf('// Refresca',start);
-  source=source.slice(0,start)+`async function boot(){try{await refresh();}catch(e){state=null;app.innerHTML=loginMarkup(esc);document.querySelector('#login-status').textContent=e.message==='Entra con tu correo para abrir su espacio.'?'':e.message;}}
+  source=source.slice(0,start)+`async function boot(){try{await refresh();}catch(e){bondUI.invalidate();state=null;app.innerHTML=loginMarkup(esc);document.querySelector('#login-status').textContent=e.message==='Entra con tu correo para abrir su espacio.'?'':e.message;}}
 document.addEventListener('submit',async e=>{if(e.target.id!=='cloud-login')return;e.preventDefault();const f=e.target,b=f.querySelector('button');b.disabled=true;try{rememberInvitation();const d=new FormData(f);await login(d.get('email'),d.get('password'));await boot();}catch(error){f.querySelector('.inline-error').textContent=error.message;}finally{b.disabled=false;}});
 document.addEventListener('click',async e=>{try{if(e.target.closest('#cloud-google'))await googleLogin();if(e.target.id==='invite-partner'){const {token}=await api('/api/invite');show('<h2 id="modal-title">Una invitación para Adriana</h2><p>Comparte la dirección de esta página y este código solo con ella. Expira en 7 días y sirve una vez.</p><textarea readonly aria-label="Código de invitación">'+esc(token)+'</textarea>');}}catch(error){const status=document.querySelector('#login-status');if(status)status.textContent=error.message;else toast(error.message);}});
-document.addEventListener('click',async e=>{if(e.target.id==='cloud-signout'){await signOut();await boot();}const a=e.target.closest('a');if(!a)return;if(['./api/export','./api/calendar.ics'].includes(a.getAttribute('href'))){e.preventDefault();try{const calendar=a.getAttribute('href').endsWith('.ics'),data=await api(calendar?'/api/calendar.ics':'/api/export');const url=URL.createObjectURL(new Blob([calendar?data:JSON.stringify(data,null,2)],{type:calendar?'text/calendar':'application/json'}));const link=document.createElement('a');link.href=url;link.download=calendar?'nuestros-dias.ics':'nuestra-galaxia.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(error){toast(error.message);}}});
+document.addEventListener('click',async e=>{if(e.target.id==='cloud-signout'){bondUI.invalidate();state=null;await signOut();await boot();}const a=e.target.closest('a');if(!a)return;if(['./api/export','./api/calendar.ics'].includes(a.getAttribute('href'))){e.preventDefault();try{const calendar=a.getAttribute('href').endsWith('.ics'),data=await api(calendar?'/api/calendar.ics':'/api/export');const url=URL.createObjectURL(new Blob([calendar?data:JSON.stringify(data,null,2)],{type:calendar?'text/calendar':'application/json'}));const link=document.createElement('a');link.href=url;link.download=calendar?'nuestros-dias.ics':'nuestra-galaxia.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(error){toast(error.message);}}});
 `+source.slice(end);
   source=replaceRequired(source,"filter='Todos';draw();","filter='Todos';if(state)draw();",'hashchange');
   source=replaceRequired(source,'<h2>Guardar y salir</h2>','<h2>Guardar y salir</h2>${state.person===\'0\'?\'<button class="btn secondary" id="invite-partner">Invitar a Adriana</button>\':\'\'}','botón de invitación');
@@ -56,12 +56,12 @@ await mkdir(path.join(out,'regalo'),{recursive:true});
 for(const name of ['index.html','style.css','script.js','recuerdos.js','girasol.js','musica.mp3'])await copyFile(path.join(root,name),path.join(out,'regalo',name));
 // Cada publicación renueva los recursos para evitar mezclar pantallas antiguas y nuevas.
 const revision=(process.env.GITHUB_SHA||Date.now().toString(36)).slice(0,12);
-for(const name of ['app.js','cloud.js','install.js','theme.js','ui.js']){
+for(const name of ['app.js','cloud.js','install.js','theme.js','ui.js','bond-ui.js']){
  const source=await readFile(path.join(out,name),'utf8');
  await writeFile(path.join(out,name),source.replace(/from '(\.\/[^']+\.js)'/g,`from '$1?v=${revision}'`));
 }
 const html=await readFile(path.join(out,'index.html'),'utf8');
-await writeFile(path.join(out,'index.html'),html.replace(/(\.\/(?:app\.(?:js|css)|modern\.css|startup\.js))"/g,`$1?v=${revision}"`));
+await writeFile(path.join(out,'index.html'),html.replace(/(\.\/(?:app\.(?:js|css)|modern\.css|bond\.css|startup\.js))"/g,`$1?v=${revision}"`));
 console.log('Sitio generado en dist. Los datos privados se guardan en Supabase, nunca en GitHub.');
 
 
