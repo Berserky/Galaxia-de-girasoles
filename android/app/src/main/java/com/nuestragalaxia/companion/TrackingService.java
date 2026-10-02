@@ -6,7 +6,6 @@ import android.content.*;
 import android.content.pm.*;
 import android.location.Location;
 import android.os.*;
-import androidx.annotation.Nullable;
 import com.google.android.gms.location.*;
 import java.time.Instant;
 import java.util.*;
@@ -96,5 +95,5 @@ public final class TrackingService extends Service {
     }
     private void updateNotification(String text){getSystemService(NotificationManager.class).notify(NOTIFICATION_ID,notification(text));}
     @Override public void onDestroy(){if(callback!=null)fused.removeLocationUpdates(callback);io.shutdown();pending.close();super.onDestroy();}
-    @Nullable @Override public android.os.IBinder onBind(Intent intent){return null;}
+    @Override public android.os.IBinder onBind(Intent intent){return null;}
 }
