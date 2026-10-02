@@ -24,19 +24,21 @@ export async function cloudApi(url,options={}){
  const p=await person();
  if(url==='/api/invite')return {token:await checked(client.rpc('galaxy_invite'))};
  if(url==='/api/state'){
-  const [s,items,daily]=await Promise.all([settings(),allItems(),checked(client.rpc('galaxy_daily_read'))]);
+  const [s,items,daily,home]=await Promise.all([settings(),allItems(),checked(client.rpc('galaxy_daily_read')),checked(client.rpc('galaxy_home_state'))]);
   const day=today(),current=daily.filter(d=>d.day===day);
-  return {demo:false,cloud:true,person:p,settings:s,items,today:day,question:questionFor(day),ideas,daily:current,allAnswered:current.filter(d=>d.answered).length===2,connections:{google:false,photos:false,drive:false},photoCount:0};
+  return {demo:false,cloud:true,person:p,settings:s,items,today:day,question:questionFor(day),ideas,daily:current,allAnswered:current.filter(d=>d.answered).length===2,connections:{google:false,photos:false,drive:false},photoCount:0,home};
  }
- if(url==='/api/items'&&method==='POST'){const d=validateItem(data);if(data.audioPath)d.audioPath=text(data.audioPath,300,true);return checked(client.from('galaxy_items').insert({kind:d.kind,data:d,author:p}).select().single());}
- if(url.startsWith('/api/items/')){const id=url.split('/').pop();if(method==='DELETE')return updateOne(client.from('galaxy_items').delete().eq('id',id).eq('version',data.version));if(method==='PUT'){const d=validateItem(data);if(data.audioPath)d.audioPath=text(data.audioPath,300,true);return updateOne(client.from('galaxy_items').update({data:d}).eq('id',id).eq('version',data.version));}}
+ if(url==='/api/items'&&method==='POST'){const d=validateItem(data);if(data.audioPath)d.audioPath=text(data.audioPath,300,true);const out=await checked(client.from('galaxy_items').insert({kind:d.kind,data:d,author:p}).select().single());const rewards={memory:12,event:8};if(rewards[d.kind])await checked(client.rpc('galaxy_reward',{reward_key:d.kind,amount:rewards[d.kind]}));return out;}
+ if(url.startsWith('/api/items/')){const id=url.split('/').pop();if(method==='DELETE')return updateOne(client.from('galaxy_items').delete().eq('id',id).eq('version',data.version));if(method==='PUT'){const d=validateItem(data);if(data.audioPath)d.audioPath=text(data.audioPath,300,true);const out=await updateOne(client.from('galaxy_items').update({data:d}).eq('id',id).eq('version',data.version));if(d.kind==='plan'&&d.done)await checked(client.rpc('galaxy_reward',{reward_key:'plan_done',amount:15}));return out;}}
  if(url==='/api/settings'&&method==='PUT'){
   if(!Array.isArray(data.names)||data.names.length!==2)throw Error('Completa los dos nombres.');
   const d={names:data.names.map(n=>text(n,40,true)),startDate:data.startDate||'',albumUrl:albumUrl(data.albumUrl)};
   if(d.startDate&&(!validDate(d.startDate)||d.startDate>today()))throw Error('Revisa la fecha de inicio.');
   return updateOne(client.from('galaxy_settings').update({data:d}).eq('id',1).eq('version',data.version));
  }
- if(url==='/api/daily')return checked(client.rpc('galaxy_daily_save',data));
+ if(url==='/api/daily'){const out=await checked(client.rpc('galaxy_daily_save',data));await checked(client.rpc('galaxy_reward',{reward_key:data.field==='mood'?'daily_mood':'daily_answer',amount:data.field==='mood'?5:10}));return out;}
+ if(url==='/api/home/buy')return checked(client.rpc('galaxy_home_buy',{item_key:text(data.item,40,true),cost:Number(data.cost)}));
+ if(url==='/api/home/place')return checked(client.rpc('galaxy_home_place',{item_key:text(data.item,40,true),room_key:text(data.room,20,true),slot:Number(data.slot)}));
  if(url==='/api/music/upload'){
   const file=options.body,b=new Uint8Array(await file.slice(0,3).arrayBuffer());
   const mime=(b[0]===73&&b[1]===68&&b[2]===51)||(b[0]===255&&(b[1]&224)===224)?'audio/mpeg':null;
@@ -52,7 +54,7 @@ export async function cloudApi(url,options={}){
   const mime=b[0]===255&&b[1]===216&&b[2]===255?'image/jpeg':b[0]===137&&b[1]===80&&b[2]===78&&b[3]===71?'image/png':String.fromCharCode(...b.slice(0,4))==='RIFF'&&String.fromCharCode(...b.slice(8,12))==='WEBP'?'image/webp':null;
   if(!mime||file.size>12582912)throw Error('Sube una foto JPG, PNG o WebP de hasta 12 MB.');
   const name=decodeURIComponent(options.headers['X-File-Name']).replace(/[^\p{L}\p{N} ._-]/gu,'_').slice(0,120)||'Foto';
-  await checked(bucket().upload(crypto.randomUUID()+'-'+name,file,{contentType:mime,upsert:false}));return {};
+  await checked(bucket().upload(crypto.randomUUID()+'-'+name,file,{contentType:mime,upsert:false}));await checked(client.rpc('galaxy_reward',{reward_key:'photo',amount:8}));return {};
  }
  if(url.startsWith('/api/photos/')&&method==='DELETE'){await checked(bucket().remove([decodeURIComponent(url.slice('/api/photos/'.length))]));return {};}
  if(url==='/api/export')return {settings:await settings(),items:await allItems(),daily:await checked(client.rpc('galaxy_daily_read'))};
