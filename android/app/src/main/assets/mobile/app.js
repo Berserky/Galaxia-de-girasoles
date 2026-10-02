@@ -44,7 +44,7 @@ const surpriseIdeas=[
 
 let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null;
 let toastTimer,refreshing=false,updateState={text:'La app está al día.',progress:0,busy:false},pendingVoiceDraft=null,lastSurprise=null;
-let welcomeStep=0,welcomePreview=false,welcomeGift=true,tourStep=-1;
+let welcomeStep=0,welcomePreview=false,welcomeGift=true,welcomeEntering=false,tourStep=-1;
 const welcomeMusic=new Audio('../musica.mp3');welcomeMusic.loop=true;welcomeMusic.volume=.32;
 const WELCOME_KEY='nuestra-galaxia.adri-welcome.v1';
 const welcomeDone=()=>{try{return localStorage.getItem(WELCOME_KEY)==='done';}catch{return false;}};
@@ -458,12 +458,12 @@ document.addEventListener('click',async e=>{
  if(btn.dataset.tab){memoryTab=btn.dataset.tab;render();return;}
  const a=btn.dataset.action;
  try{
-  if(a==='gift-open'){welcomeGift=false;welcomeMusic.play().catch(()=>{});render();return;}
+  if(a==='gift-open'){if(welcomeEntering)return;welcomeEntering=true;welcomeMusic.play().catch(()=>{});const intro=document.querySelector('.gift-intro');intro?.classList.add('opening');setTimeout(()=>intro?.classList.add('entering'),900);setTimeout(()=>intro?.classList.add('blackout'),1750);setTimeout(()=>{welcomeGift=false;welcomeEntering=false;render();},2850);return;}
   if(a==='welcome-next'){if(welcomeStep<4){const w=document.querySelector('.welcome-curtain');if(w)w.classList.add('closing');setTimeout(()=>{welcomeStep++;render();},420);}else finishAdriWelcome();return;}
   if(a==='tour-next'){document.querySelector('.app-tour')?.remove();tourStep++;renderTourOverlay();return;}
   if(a==='tour-skip'){document.querySelector('.app-tour')?.remove();tourStep=-1;welcomeMusic.pause();welcomeMusic.currentTime=0;render();return;}
   if(a==='welcome-skip'){finishAdriWelcome();return;}
-  if(a==='welcome-replay'){welcomePreview=true;welcomeStep=0;welcomeGift=true;tourStep=-1;render();window.scrollTo(0,0);return;}
+  if(a==='welcome-replay'){welcomePreview=true;welcomeStep=0;welcomeGift=true;welcomeEntering=false;tourStep=-1;render();window.scrollTo(0,0);return;}
   if(a==='modal-close'){closeModal();return;}
   if(a==='map'){go('map');return;}
   if(a==='moments'){go('moments');return;}
