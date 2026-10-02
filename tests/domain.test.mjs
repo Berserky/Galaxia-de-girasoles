@@ -40,3 +40,10 @@ test('shared storage persists across restarts and rejects stale updates',()=>{
  const dir=mkdtempSync(path.join(os.tmpdir(),'galaxia-test-'));let store=openStore(dir);
  try {assert.equal(store.list().length,6);const data=validateItem({kind:'plan',title:'Una caminata'});const id=store.add(data,'0');store.update(id,{...data,done:true},1);assert.throws(()=>store.update(id,data,1),/cambió/);assert.throws(()=>store.remove(id,1),/cambió/);store.close();store=openStore(dir);assert.equal(store.list().find(i=>i.id===id).data.done,true);assert.equal(store.list().length,7);}finally{store.close();rmSync(dir,{recursive:true,force:true});}
 });
+
+test('connected universe validates capsules wishes journeys and geotags',()=>{
+ const capsule=validateItem({kind:'capsule',title:'Para después',body:'Hola futuro',unlockDate:'2027-01-01'});assert.equal(capsule.unlockDate,'2027-01-01');
+ const wish=validateItem({kind:'wish',title:'Conocer un lugar',latitude:'4.65',longitude:'-74.08',placeName:'Bogotá'});assert.equal(wish.placeName,'Bogotá');assert.equal(wish.latitude,4.65);assert.equal(validateItem({kind:'plan',title:'Sin lugar'}).latitude,undefined);
+ const journey=validateItem({kind:'journey',title:'Viaje',date:'2026-10-10',endDate:'2026-10-12'});assert.equal(journey.endDate,'2026-10-12');
+ assert.throws(()=>validateItem({kind:'capsule',title:'Sin fecha'}));assert.throws(()=>validateItem({kind:'journey',title:'Al revés',date:'2026-10-12',endDate:'2026-10-10'}));
+});

@@ -52,6 +52,11 @@ export async function cloudApi(url,options={}){
  }
  if(url.startsWith('/api/map/place/')&&method==='DELETE')return checked(client.from('galaxy_places').delete().eq('id',url.split('/').pop()).eq('owner',String(p)));
  if(url==='/api/map/trip'&&method==='GET')return checked(client.from('galaxy_trip_points').select('*').order('created_at'));
+ if(url==='/api/map/destinations'&&method==='GET')return checked(client.from('galaxy_destinations').select('*').eq('active',true));
+ if(url==='/api/map/destination'&&method==='POST'){const kind=['person','place'].includes(data.kind)?data.kind:null;if(!kind)throw Error('Destino no válido.');const row={person:String(p),kind,label:text(data.label,80,true),active:true,updated_at:new Date().toISOString(),target_person:null,place_id:null};if(kind==='person'){const target=String(data.target_person);if(!['0','1'].includes(target)||target===String(p))throw Error('Persona destino no válida.');row.target_person=target;}else{const placeId=Number(data.place_id),place=await checked(client.from('galaxy_places').select('id').eq('id',placeId).single());row.place_id=place.id;}return checked(client.from('galaxy_destinations').upsert(row,{onConflict:'person'}).select().single());}
+ if(url==='/api/map/destination'&&method==='DELETE')return checked(client.from('galaxy_destinations').delete().eq('person',String(p)));
+ if(url==='/api/map/encounters'&&method==='GET')return checked(client.from('galaxy_encounters').select('*').order('started_at',{ascending:false}).limit(100));
+ if(url==='/api/map/encounter'&&method==='POST'){const open=(await checked(client.from('galaxy_encounters').select('*').is('ended_at',null).limit(1)))[0];if(data.active){if(open)return open;return checked(client.from('galaxy_encounters').insert({started_at:new Date().toISOString(),distance_m:Number.isFinite(Number(data.distance_m))?Math.round(Number(data.distance_m)):null,created_by:String(p)}).select().single());}if(open)return checked(client.from('galaxy_encounters').update({ended_at:new Date().toISOString()}).eq('id',open.id).select().single());return {};}
  if(url==='/api/map/history/point'&&method==='POST'){
   const latitude=Number(data.latitude),longitude=Number(data.longitude),accuracy=Number(data.accuracy),speed=Number(data.speed),heading=Number(data.heading),motion=['still','walking','vehicle'].includes(data.motion)?data.motion:null;
   if(!Number.isFinite(latitude)||latitude < -90||latitude > 90||!Number.isFinite(longitude)||longitude < -180||longitude > 180)throw Error('Punto histórico no válido.');
@@ -71,9 +76,9 @@ export async function cloudApi(url,options={}){
   await checked(client.from('galaxy_trip_points').delete().eq('person',String(p)));return checked(client.from('galaxy_locations').update({trip_active:false,trip_started_at:null}).eq('person',String(p)));
  }
  if(url==='/api/state'){
-  const [s,items,daily]=await Promise.all([settings(),allItems(),checked(client.rpc('galaxy_daily_read'))]);
+  const [s,items,daily,locations,destinations,encounters,places,tripSummaries]=await Promise.all([settings(),allItems(),checked(client.rpc('galaxy_daily_read')),checked(client.from('galaxy_locations').select('person,latitude,longitude,speed,motion,transport_preference,sharing,status,updated_at')),checked(client.from('galaxy_destinations').select('*').eq('active',true)),checked(client.from('galaxy_encounters').select('*').order('started_at',{ascending:false}).limit(20)),checked(client.from('galaxy_places').select('*').order('created_at')),checked(client.from('galaxy_trip_history').select('*').order('started_at',{ascending:false}).limit(500))]);
   const day=today(),current=daily.filter(d=>d.day===day);
-  return {demo:false,cloud:true,person:p,settings:s,items,today:day,question:questionFor(day),ideas,daily:current,allAnswered:current.filter(d=>d.answered).length===2,connections:{google:false,photos:false,drive:false},photoCount:0};
+  return {demo:false,cloud:true,person:p,settings:s,items,today:day,question:questionFor(day),ideas,daily:current,locations,destinations,encounters,places,tripSummaries,allAnswered:current.filter(d=>d.answered).length===2,connections:{google:false,photos:false,drive:false},photoCount:0};
  }
  if(url==='/api/items'&&method==='POST'){const d=validateItem(data);if(data.audioPath)d.audioPath=text(data.audioPath,300,true);const out=await checked(client.from('galaxy_items').insert({kind:d.kind,data:d,author:p}).select().single());const rewards={memory:12,event:8};if(rewards[d.kind])await checked(client.rpc('galaxy_reward',{reward_key:d.kind,amount:rewards[d.kind]}));return out;}
  if(url.startsWith('/api/items/')){const id=url.split('/').pop();if(method==='DELETE')return updateOne(client.from('galaxy_items').delete().eq('id',id).eq('version',data.version));if(method==='PUT'){const d=validateItem(data);if(data.audioPath)d.audioPath=text(data.audioPath,300,true);const out=await updateOne(client.from('galaxy_items').update({data:d}).eq('id',id).eq('version',data.version));if(d.kind==='plan'&&d.done)await checked(client.rpc('galaxy_reward',{reward_key:'plan_done',amount:15}));return out;}}
@@ -104,7 +109,7 @@ export async function cloudApi(url,options={}){
   await checked(bucket().upload(crypto.randomUUID()+'-'+name,file,{contentType:mime,upsert:false}));await checked(client.rpc('galaxy_reward',{reward_key:'photo',amount:8}));return {};
  }
  if(url.startsWith('/api/photos/')&&method==='DELETE'){await checked(bucket().remove([decodeURIComponent(url.slice('/api/photos/'.length))]));return {};}
- if(url==='/api/export')return {settings:await settings(),items:await allItems(),daily:await checked(client.rpc('galaxy_daily_read'))};
+ if(url==='/api/export'){const [destinations,encounters,places,trips]=await Promise.all([checked(client.from('galaxy_destinations').select('*')),checked(client.from('galaxy_encounters').select('*').order('started_at')),checked(client.from('galaxy_places').select('*')),checked(client.from('galaxy_trip_history').select('*').order('started_at'))]);return {settings:await settings(),items:await allItems(),daily:await checked(client.rpc('galaxy_daily_read')),destinations,encounters,places,trips};}
  if(url==='/api/calendar.ics')return ics((await allItems()).filter(i=>i.kind==='event'));
  throw Error('En la versión gratuita pueden abrir su álbum de Google Fotos y subir aquí las fotos que elijan.');
 }

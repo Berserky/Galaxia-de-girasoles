@@ -6,7 +6,7 @@ function installMarkup(){
  return `<section class="install-gate"><div class="install-card"><img src="./icon.svg" width="76" height="76" alt=""><p class="eyebrow">NUESTRA GALAXIA</p><h1>Llévame contigo.</h1><p class="install-copy">Este pequeño universo fue hecho para vivir en tu celular, como una aplicación solo para ustedes dos.</p><button class="btn primary install-action" id="install-app">${ios?'Ver cómo instalar':'Instalar nuestra galaxia'}</button><button class="btn text-button" id="install-later">Continuar en el navegador</button><p class="install-help" id="install-help">${ios?'En iPhone: toca Compartir y luego «Añadir a pantalla de inicio».':''}</p><small>Después de instalarla, ábrela desde el icono de tu pantalla de inicio.</small></div></section>`;
 }
 export async function setupPwa(beforeLogin){
- if('serviceWorker'in navigator)try{await navigator.serviceWorker.register('./sw.js?v=42',{scope:'./',updateViaCache:'none'});}catch{}
+ if('serviceWorker'in navigator)try{await navigator.serviceWorker.register('./sw.js?v=43',{scope:'./',updateViaCache:'none'});}catch{}
  if(standalone()){document.documentElement.classList.add('is-installed');return false;}
  window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstallPrompt=e;document.querySelector('#install-app')?.removeAttribute('disabled');});
  window.addEventListener('appinstalled',()=>{deferredInstallPrompt=null;location.reload();});

@@ -82,3 +82,12 @@ test('Mobility insights include privacy controls and dwell-based smart arrivals'
  assert.match(schema,/create table public\.galaxy_place_events/);
  assert.match(schema,/place_events_insert_own/);
 });
+
+
+test('Connected universe links history destinations encounters privacy and search',()=>{
+ const app=read('app/public/app.js'),cloud=read('app/cloud/adapter.js'),schema=read('supabase/schema.sql');
+ for(const pattern of [/function universeView\(/,/function smartContext\(/,/function universeSearchResults\(/,/function todayInHistory\(/,/destination-person/,/function etaText\(/,/function detectEncounter\(/,/notifications-enable/])assert.match(app,pattern);
+ assert.match(cloud,/galaxy_destinations/);assert.match(cloud,/galaxy_encounters/);assert.match(cloud,/tripSummaries/);
+ assert.match(schema,/capsule','wish','journey/);assert.match(schema,/create table public\.galaxy_destinations/);assert.match(schema,/create table public\.galaxy_encounters/);
+ assert.doesNotMatch(app,/\\\\n/);
+});
