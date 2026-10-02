@@ -1,4 +1,4 @@
-export const kinds = ['memory','song','event','plan','note'];
+export const kinds = ['memory','song','event','plan','note','capsule','wish','journey'];
 export const questions = [
  '¿Qué pequeño momento nuestro te gustaría volver a vivir?',
  '¿Qué puedo hacer esta semana para que te sientas más acompañado/a?',
@@ -58,6 +58,16 @@ export function validateItem(raw) {
  const d={kind:raw.kind,title:text(raw.title,120,true),body:text(raw.body||'',5000),date:raw.date||'',category:text(raw.category||'',40),done:!!raw.done,annual:!!raw.annual};
  if(d.date && !validDate(d.date)) fail('La fecha no es válida.');
  if(raw.kind==='event' && !d.date) fail('Elige una fecha para este evento.');
+ if(['memory','plan','wish','journey'].includes(raw.kind)){
+  const latitude=Number(raw.latitude),longitude=Number(raw.longitude);
+  if(Number.isFinite(latitude)&&Number.isFinite(longitude)&&latitude>=-90&&latitude<=90&&longitude>=-180&&longitude<=180){d.latitude=latitude;d.longitude=longitude;d.placeName=text(raw.placeName||'',80);}
+ }
+ if(raw.kind==='capsule'){
+  const unlockDate=raw.unlockDate||raw.date;if(!unlockDate||!validDate(unlockDate))fail('Elige cuándo se abrirá la cápsula.');d.unlockDate=unlockDate;d.date=unlockDate;
+ }
+ if(raw.kind==='wish')d.done=!!raw.done;
+ if(raw.kind==='journey'){d.endDate=raw.endDate||'';if(d.endDate&&!validDate(d.endDate))fail('La fecha final del viaje no es válida.');if(d.date&&d.endDate<d.date)fail('El viaje no puede terminar antes de comenzar.');}
+
  if(raw.kind==='song'){
   const audioUrl=text(raw.audioUrl||'',1000);
   if(audioUrl){if(!/^https:\/\//.test(audioUrl))fail('El audio guardado no es válido.');d.audioUrl=audioUrl;d.url=text(raw.url||'',700);d.provider='MP3';d.embed='';}
