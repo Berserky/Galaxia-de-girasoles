@@ -2,16 +2,32 @@ name: Publicar nuestra galaxia gratis
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
   pages: write
   id-token: write
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
+  qa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm test
+      - run: node scripts/build-pages.mjs
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
   publish:
+    if: github.event_name != 'pull_request'
+    needs: qa
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -21,7 +37,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: npm test
       - run: node scripts/build-pages.mjs
         env:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
