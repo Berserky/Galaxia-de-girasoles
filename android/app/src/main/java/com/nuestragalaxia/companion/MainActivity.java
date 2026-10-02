@@ -12,6 +12,7 @@ import android.webkit.*;
 import android.widget.Toast;
 import androidx.activity.ComponentActivity;
 import androidx.activity.OnBackPressedCallback;
+import androidx.webkit.WebViewAssetLoader;
 import org.json.JSONObject;
 import java.util.Set;
 import java.util.concurrent.*;
@@ -33,6 +34,7 @@ public final class MainActivity extends ComponentActivity {
     private UpdateManager updater;
     private final ExecutorService io=Executors.newFixedThreadPool(3);
     private boolean pageReady=false;
+    private WebViewAssetLoader assetLoader;
     private String pendingLocationRequest;
     private String pendingBondRequest;
     private String pendingMediaRequest;
@@ -64,11 +66,12 @@ public final class MainActivity extends ComponentActivity {
             event("update",payload);
         });
 
-        web.loadUrl("file:///android_asset/mobile/index.html");
+        web.loadUrl("https://appassets.androidplatform.net/assets/mobile/index.html");
     }
 
     @SuppressWarnings("SetJavaScriptEnabled")
     private void setupWeb(){
+        assetLoader=new WebViewAssetLoader.Builder().addPathHandler("/assets/",new WebViewAssetLoader.AssetsPathHandler(this)).build();
         WebSettings settings=web.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -86,8 +89,9 @@ public final class MainActivity extends ComponentActivity {
         web.addJavascriptInterface(new GalaxyBridge(this),"GalaxyAndroid");
         web.setWebChromeClient(new WebChromeClient());
         web.setWebViewClient(new WebViewClient(){
+            @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){ return assetLoader.shouldInterceptRequest(request.getUrl()); }
             @Override public void onPageFinished(WebView view,String url){
-                if(url.startsWith("file:///android_asset/mobile/")){
+                if(url.startsWith("https://appassets.androidplatform.net/assets/mobile/")){
                     pageReady=true;
                     nativeChanged();
                     refreshMomentsInternal();
@@ -99,7 +103,7 @@ public final class MainActivity extends ComponentActivity {
                 if(!request.isForMainFrame())return false;
                 Uri uri=request.getUrl();
                 String value=uri.toString();
-                if(value.startsWith("file:///android_asset/mobile/")||"about:blank".equals(value))return false;
+                if(value.startsWith("https://appassets.androidplatform.net/assets/mobile/")||"about:blank".equals(value))return false;
                 return true;
             }
 
