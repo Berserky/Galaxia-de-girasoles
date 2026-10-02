@@ -47,7 +47,7 @@ let toastTimer,refreshing=false,updateState={text:'La app está al día.',progre
 let welcomeStep=0,welcomePreview=false;
 const WELCOME_KEY='nuestra-galaxia.adri-welcome.v1';
 const welcomeDone=()=>{try{return localStorage.getItem(WELCOME_KEY)==='done';}catch{return false;}};
-const shouldShowAdriWelcome=()=>native.paired&&String(native.person)==='1'&&(welcomePreview||!welcomeDone());
+const shouldShowAdriWelcome=()=>native.paired&&(welcomePreview||(String(native.person)==='1'&&!welcomeDone()));
 const finishAdriWelcome=()=>{try{localStorage.setItem(WELCOME_KEY,'done');}catch{}welcomePreview=false;welcomeStep=0;render();};
 
 window.GalaxyNative={
