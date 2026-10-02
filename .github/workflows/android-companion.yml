@@ -5,7 +5,7 @@ on:
     paths: ["app/public/**","app/cloud/**","scripts/build-pages.mjs","android/**","supabase/functions/android-companion/**",".github/workflows/android-companion.yml"]
   push:
     branches: [main]
-    paths: ["android/**","supabase/functions/android-companion/**",".github/workflows/android-companion.yml"]
+    paths: ["android/**","scripts/qa-android-mobile.mjs","supabase/functions/android-companion/**",".github/workflows/android-companion.yml"]
   workflow_dispatch:
 permissions: { contents: write }
 concurrency:
