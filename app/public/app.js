@@ -95,17 +95,16 @@ function setHomeAvatarTarget(x,y){
  };
  homeMoveFrame=requestAnimationFrame(step);
 }
+function rpgTile(asset,className=''){const e=homeAssetManifest[asset];if(!e?.sheet)return'';const scale=4;return `<span class="rpg-tile ${className}" aria-hidden="true" style="--tile-sheet:url('${e.sheet}');--tile-x:${-e.col*17*scale}px;--tile-y:${-e.row*17*scale}px;--tile-w:${458*scale}px;--tile-h:${305*scale}px"></span>`;}
 function roomScene(h,room){
  const names=state.settings.data.names,person=Number(state.person)||0,placed=homePlaced(homeRoom);
  return `<section class="rogue-room">
   <div class="rogue-map" data-action="home-walk" aria-label="Mapa de ${esc(room[0])}. Toca o haz clic para caminar.">
-   <div class="rogue-floor" aria-hidden="true"></div>
-   <div class="rogue-wall rogue-wall-top"></div><div class="rogue-wall rogue-wall-left"></div><div class="rogue-wall rogue-wall-right"></div><div class="rogue-wall rogue-wall-bottom"></div>
-   ${homeDoors[homeRoom].map(([to,label],i)=>`<button class="rogue-door rogue-door-${i}" data-action="home-door" data-room="${to}" aria-label="Ir a ${label}"><span></span><b>${label}</b></button>`).join('')}
-   ${Array.from({length:8},(_,slot)=>{const p=placed.find(x=>Number(x.slot)===slot);return `<div class="rogue-slot rogue-slot-${slot}" data-slot="${slot}">${p?(homeCatalog[p.item]?.route?`<button class="home-object-hitbox" data-action="home-tool" data-route="${homeCatalog[p.item].route}" aria-label="Abrir ${homeCatalog[p.item].name}">${homeVisual(p.item,'scene')}</button>`:`${homeVisual(p.item,'scene')}`):(placingItem?`<button class="home-empty-slot" data-action="home-slot" data-slot="${slot}" aria-label="Colocar aquí"><i>+</i></button>`:'')}</div>`}).join('')}
+   <div class="rpg-room-shell" aria-hidden="true" style="--default-floor:url('${homeAssetManifest.rpgFloorDefault.sheet}');--floor-x:${-homeAssetManifest.rpgFloorDefault.col*68}px;--floor-y:${-homeAssetManifest.rpgFloorDefault.row*68}px;--default-wall:url('${homeAssetManifest.rpgWallDefault.sheet}');--wall-x:${-homeAssetManifest.rpgWallDefault.col*68}px;--wall-y:${-homeAssetManifest.rpgWallDefault.row*68}px"><div class="rpg-floor-field"></div><div class="rpg-wall-band wall-north"></div><div class="rpg-wall-band wall-south"></div><div class="rpg-wall-band wall-west"></div><div class="rpg-wall-band wall-east"></div><div class="rpg-corner corner-nw"></div><div class="rpg-corner corner-ne"></div><div class="rpg-corner corner-sw"></div><div class="rpg-corner corner-se"></div></div>
+   ${homeDoors[homeRoom].map(([to,label],i)=>`<button class="rogue-door rogue-door-${i}" data-action="home-door" data-room="${to}" aria-label="Ir a ${label}"><span class="door-pixel"></span><b>${label}</b></button>`).join('')}
+   ${Array.from({length:8},(_,slot)=>{const p=placed.find(x=>Number(x.slot)===slot);return `<div class="rogue-slot rogue-slot-${slot}" data-slot="${slot}">${p?`${homeVisual(p.item,'scene')}`:(placingItem?`<button class="home-empty-slot" data-action="home-slot" data-slot="${slot}" aria-label="Colocar aquí"><i>+</i></button>`:'')}</div>`}).join('')}
    <div class="rogue-player person-${person}" style="left:${homeAvatar.x}%;top:${homeAvatar.y}%" aria-label="${esc(names[person])}"><span>${esc(names[person][0])}</span><b>${esc(names[person])}</b></div>
   </div>
-  <div class="rogue-hint">Toca cualquier punto del suelo para caminar</div>
  </section>`;
 }
 function homeOverlay(h){
@@ -118,9 +117,9 @@ function hogar(){
  const hud=`<button class="home-exit" data-action="home-exit" aria-label="Volver al universo">← <span>Universo</span></button><div class="home-game-hud"><div class="home-room-label"><span>${room[2]}</span><div><b>${room[0]}</b><small>Nuestro Hogar</small></div></div><div class="sun-coins"><b>${h.coins}</b><small>☀</small></div></div>`;
  return `<div class="home-game rogue-game">${hud}${roomScene(h,room)}
   <div class="rogue-corner-actions">
-   <button class="rogue-action rogue-action-bag ${homeMode==='inventory'?'active':''}" data-action="home-inventory" aria-label="Abrir inventario"><span>▦</span><b>Inventario</b></button>
-   <button class="rogue-action rogue-action-shop ${homeMode==='shop'?'active':''}" data-action="home-shop" aria-label="Abrir tienda"><span>◆</span><b>Tienda</b></button>
-   <button class="rogue-action rogue-action-map" data-action="home-map" aria-label="Abrir mapa"><span>⌂</span><b>Mapa</b></button>
+   <button class="rogue-action rogue-action-bag ${homeMode==='inventory'?'active':''}" data-action="home-inventory" aria-label="Abrir inventario"><span class="hud-icon hud-icon-bag"><i></i></span><b>Inventario</b></button>
+   <button class="rogue-action rogue-action-shop ${homeMode==='shop'?'active':''}" data-action="home-shop" aria-label="Abrir tienda"><span class="hud-icon hud-icon-shop"><i></i></span><b>Tienda</b></button>
+   <button class="rogue-action rogue-action-map" data-action="home-map" aria-label="Abrir mapa"><span class="hud-icon hud-icon-map"><i></i></span><b>Mapa</b></button>
   </div>
   ${homeOverlay(h)}
   <p class="home-tip">${placingItem?'Toca un + del mapa para colocar '+homeCatalog[placingItem].name+'.':'Toca el suelo para caminar.'}</p>
