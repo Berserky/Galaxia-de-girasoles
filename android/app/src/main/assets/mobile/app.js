@@ -187,6 +187,7 @@ function renderAdriWelcome(){
 }
 
 function renderTourOverlay(){
+ document.querySelectorAll('.app-tour').forEach(x=>x.remove());
  document.querySelectorAll('.tour-focus').forEach(x=>x.classList.remove('tour-focus'));
  const steps=[
   {view:'home',sel:'.hero',title:'Este es su lugar',copy:'Aquí verás lo esencial de ustedes: días juntos, recuerdos y cómo están hoy.'},
