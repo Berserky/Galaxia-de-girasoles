@@ -32,6 +32,11 @@ jobs:
           node scripts/qa-android-mobile.mjs
       - name: QA Android
         run: gradle -p android testDebugUnitTest lintDebug assembleDebug
+      - name: Reporte Android Lint
+        if: always()
+        run: |
+          REPORT=$(find android/app/build -name 'lint-results-debug.txt' -type f | head -1)
+          if [ -n "$REPORT" ]; then cat "$REPORT"; else echo "Sin reporte de Lint disponible"; fi
       - name: Compilar estable firmado
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
