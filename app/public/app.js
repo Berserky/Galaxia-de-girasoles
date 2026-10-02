@@ -101,7 +101,7 @@ function roomScene(h,room){
  return `<section class="rogue-room">
   <div class="rogue-map" data-action="home-walk" aria-label="Mapa de ${esc(room[0])}. Toca o haz clic para caminar.">
    <div class="rpg-room-shell" aria-hidden="true"><div class="rpg-floor-field"></div><div class="rpg-wall-band wall-north"></div><div class="rpg-wall-band wall-south"></div><div class="rpg-wall-band wall-west"></div><div class="rpg-wall-band wall-east"></div><div class="rpg-corner corner-nw"></div><div class="rpg-corner corner-ne"></div><div class="rpg-corner corner-sw"></div><div class="rpg-corner corner-se"></div></div>
-   ${homeDoors[homeRoom].map(([to,label],i)=>`<button class="rogue-door rogue-door-${i}" data-action="home-door" data-room="${to}" aria-label="Ir a ${label}"><span class="door-pixel"></span><b>${label}</b></button>`).join('')}
+   ${homeDoors[homeRoom].map(([to,label],i)=>{const sides=['north','east','south','west'],side=sides[i%4];return `<button class="rogue-door door-${side}" data-action="home-door" data-room="${to}" data-entry="${side}" aria-label="Ir a ${label}"><span class="door-pixel"></span><b>${label}</b></button>`}).join('')}
    ${Array.from({length:8},(_,slot)=>{const p=placed.find(x=>Number(x.slot)===slot);return `<div class="rogue-slot rogue-slot-${slot}" data-slot="${slot}">${p?`${homeVisual(p.item,'scene')}`:(placingItem?`<button class="home-empty-slot" data-action="home-slot" data-slot="${slot}" aria-label="Colocar aquí"><i>+</i></button>`:'')}</div>`}).join('')}
    <div class="rogue-player person-${person}" style="left:${homeAvatar.x}%;top:${homeAvatar.y}%" aria-label="${esc(names[person])}"><span>${esc(names[person][0])}</span><b>${esc(names[person])}</b></div>
   </div>
@@ -135,7 +135,7 @@ async function action(el,event=null){const a=el.dataset.action,id=el.dataset.id,
  case'home-tool':location.hash=el.dataset.route;return;
  case'home-rooms':homeMode='room';placingItem='';return draw();
  case'home-map':return show(`<span class="eyebrow">NUESTRO HOGAR</span><h2 id="modal-title">¿A dónde vamos?</h2><div class="home-map-grid">${Object.entries(homeRooms).map(([id,r])=>`<button data-action="home-door" data-room="${id}" class="${id===homeRoom?'current':''}"><span>${r[2]}</span><b>${r[0]}</b></button>`).join('')}</div>`);
- case'home-door':if(modal.open)close();homeRoom=el.dataset.room;homeMode='room';homeAvatar={x:50,y:62};placingItem='';draw();return;
+ case'home-door':if(modal.open)close();{const entry=el.dataset.entry;homeRoom=el.dataset.room;homeMode='room';homeAvatar=entry==='north'?{x:50,y:86}:entry==='south'?{x:50,y:14}:entry==='east'?{x:14,y:50}:{x:86,y:50};placingItem='';draw();}return;
  case'home-step':return;
  case'home-walk':if(event){const box=el.getBoundingClientRect();setHomeAvatarTarget(((event.clientX-box.left)/box.width)*100,((event.clientY-box.top)/box.height)*100);}return;
  case'home-shop':homeMode='shop';return draw();
