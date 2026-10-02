@@ -251,3 +251,28 @@ textarea{min-height:110px;resize:vertical}
 @keyframes welcomeTogetherLine{from{scale:0 1;opacity:0}to{scale:1 1;opacity:1}}
 @keyframes welcomeSpark{to{opacity:0;transform:translate(var(--sx),var(--sy)) scale(.1)}}
 @media(prefers-reduced-motion:reduce){.welcome-experience:before,.welcome-experience:after,.welcome-stars:before,.welcome-symbol:before,.welcome-symbol:after,.welcome-copy h1,.welcome-next:before,.welcome-constellation:before,.welcome-constellation:after,.welcome-constellation i,.welcome-map,.welcome-pin,.welcome-route,.welcome-letter,.welcome-letter:after,.welcome-together span,.welcome-together i{animation:none!important}}
+
+/* Gift opening + guided tour */
+.gift-intro{position:fixed;inset:0;z-index:1300;background:#000;display:grid;place-items:center;overflow:hidden;color:#fff}
+.gift-ambient{position:absolute;width:12px;height:12px;border-radius:50%;background:#8f62ff;box-shadow:0 0 90px 45px rgba(122,72,255,.13);animation:giftAmbient 4s 1.2s ease-out both}
+.gift-wrap{display:flex;flex-direction:column;align-items:center;opacity:0;animation:giftAppear 2.2s .8s cubic-bezier(.16,1,.3,1) forwards}
+.gift-box{position:relative;width:150px;height:128px;cursor:pointer;filter:drop-shadow(0 25px 55px rgba(110,65,210,.22));animation:giftBreathe 3s 3s ease-in-out infinite}
+.gift-body{position:absolute;left:13px;right:13px;bottom:0;height:92px;border:1px solid rgba(211,190,255,.35);background:linear-gradient(145deg,#100d18,#07060b);border-radius:8px 8px 18px 18px;box-shadow:inset 0 0 35px rgba(147,93,255,.1)}
+.gift-lid{position:absolute;z-index:2;left:3px;right:3px;top:20px;height:36px;border:1px solid rgba(222,205,255,.4);background:linear-gradient(145deg,#171020,#09070e);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.6)}
+.gift-ribbon{position:absolute;z-index:3;left:50%;top:20px;bottom:0;width:18px;transform:translateX(-50%);background:linear-gradient(90deg,#6d42c8,#a578ff,#6740b7);opacity:.75}
+.gift-lid:before,.gift-lid:after{content:"";position:absolute;bottom:27px;width:43px;height:31px;border:7px solid #8d5ae6}.gift-lid:before{left:36px;border-radius:34px 34px 5px 34px;transform:rotate(18deg)}.gift-lid:after{right:36px;border-radius:34px 34px 34px 5px;transform:rotate(-18deg)}
+.gift-note{margin-top:35px;font-family:Georgia,serif;font-size:25px;font-style:italic;letter-spacing:.02em;opacity:0;transform:translateY(12px);animation:giftNote 1.2s 2.4s ease forwards;text-shadow:0 0 25px rgba(211,190,255,.45)}
+.gift-hint{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#81798c;margin-top:16px;opacity:0;animation:giftNote 1s 3.4s ease forwards}
+.welcome-curtain{position:absolute;z-index:20;inset:0;background:#000;pointer-events:none;animation:curtainOpen .7s ease forwards}.welcome-curtain.closing{animation:curtainClose .42s ease forwards}
+.app-tour{position:fixed;z-index:1400;inset:0;pointer-events:none}.tour-shade{position:absolute;inset:0;background:rgba(0,0,0,.67);backdrop-filter:blur(2px)}
+.tour-focus{position:relative!important;z-index:1402!important;box-shadow:0 0 0 5px rgba(183,146,255,.25),0 0 45px rgba(143,87,255,.45)!important;border-radius:22px!important;pointer-events:none}
+.tour-card{position:absolute;z-index:1403;left:16px;right:16px;bottom:calc(92px + env(safe-area-inset-bottom));max-width:520px;margin:auto;padding:22px;border:1px solid rgba(255,255,255,.13);border-radius:25px;background:rgba(12,9,18,.96);color:#fff;box-shadow:0 28px 80px rgba(0,0,0,.55);pointer-events:auto;animation:tourCardIn .5s cubic-bezier(.16,1,.3,1)}
+.tour-card h2{margin:4px 0 8px}.tour-card>p:not(.eyebrow){color:#d1cad9;line-height:1.55}.tour-card .row{margin-top:18px;justify-content:flex-end}.tour-card .ghost{color:#d9d0e2}
+@keyframes giftAmbient{from{opacity:0;transform:scale(.2)}to{opacity:1;transform:scale(1)}}
+@keyframes giftAppear{from{opacity:0;transform:translateY(20px) scale(.82);filter:blur(14px)}to{opacity:1;transform:none;filter:none}}
+@keyframes giftBreathe{50%{transform:translateY(-6px) scale(1.015);filter:drop-shadow(0 30px 70px rgba(129,73,235,.35))}}
+@keyframes giftNote{to{opacity:1;transform:none}}
+@keyframes curtainOpen{from{opacity:1}to{opacity:0}}
+@keyframes curtainClose{from{opacity:0}to{opacity:1}}
+@keyframes tourCardIn{from{opacity:0;transform:translateY(24px) scale(.97)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.gift-ambient,.gift-wrap,.gift-box,.gift-note,.gift-hint,.welcome-curtain,.tour-card{animation-duration:.01ms!important;animation-delay:0s!important}}
