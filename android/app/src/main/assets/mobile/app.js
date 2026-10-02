@@ -65,8 +65,8 @@ function setMusicPlaying(v){musicPlaying=!!v;renderGlobalPlayer();}
 function playMusicAt(index){
  rebuildMusicQueue();if(!musicQueue.length)return;musicIndex=(index+musicQueue.length)%musicQueue.length;const t=musicQueue[musicIndex];
  musicAudio.pause();if(ytPlayer?.pauseVideo)try{ytPlayer.pauseVideo();}catch{}if(spotifyController?.pause)try{spotifyController.pause();}catch{}
- if(t.platform==='youtube'){const id=youtubeId(t.url);if(!id){toast('No pude reconocer ese enlace de YouTube.');return;}pendingProviderTrack=t;if(ytPlayer?.loadVideoById){ytPlayer.loadVideoById(id);setMusicPlaying(true);}else initYouTube(id);}
- else if(t.platform==='spotify'){pendingProviderTrack=t;if(spotifyController){spotifyController.loadEntity(t.url);spotifyController.play();setMusicPlaying(true);}else initSpotify(t);}
+ if(t.platform==='youtube'){const id=youtubeId(t.url);if(!id){toast('No pude reconocer ese enlace de YouTube.');return;}pendingProviderTrack=t;setMusicPlaying(false);if(ytPlayer?.loadVideoById){ytPlayer.loadVideoById(id);}else initYouTube(id);}
+ else if(t.platform==='spotify'){pendingProviderTrack=t;setMusicPlaying(false);if(spotifyController){spotifyController.loadEntity(t.url);spotifyController.play();}else initSpotify(t);}
  else{musicAudio.src=t.url;musicAudio.play().then(()=>setMusicPlaying(true)).catch(()=>{setMusicPlaying(false);toast('No pude reproducir ese audio.');});}
  renderGlobalPlayer();
 }
