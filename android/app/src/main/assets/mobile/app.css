@@ -205,3 +205,49 @@ textarea{min-height:110px;resize:vertical}
 @keyframes welcomeSpin{to{transform:rotate(360deg)}}
 @media(max-height:680px){.welcome-visual{height:190px}.welcome-symbol{top:2px}.welcome-copy h1{font-size:29px}.welcome-copy>p:last-child{font-size:13px;line-height:1.55}.welcome-footer{margin-top:20px}.welcome-map,.welcome-orbit,.welcome-letter,.welcome-together,.welcome-constellation{margin-top:58px}}
 @media(prefers-reduced-motion:reduce){.welcome-stars,.welcome-stage,.welcome-symbol,.welcome-orbit{animation:none!important}}
+
+/* Welcome cinematic v2 */
+.welcome-experience{background:#020204;isolation:isolate;perspective:900px}
+.welcome-experience:before{content:"";position:absolute;inset:-25%;z-index:-1;background:radial-gradient(circle at var(--wx,50%) var(--wy,35%),rgba(132,74,255,.22),transparent 18%),radial-gradient(circle at 18% 82%,rgba(255,64,133,.10),transparent 25%),radial-gradient(circle at 82% 20%,rgba(88,54,255,.10),transparent 24%);filter:blur(18px);transition:background-position .2s;animation:welcomeNebula 9s ease-in-out infinite alternate}
+.welcome-experience:after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(115deg,transparent 35%,rgba(255,255,255,.035) 48%,transparent 58%);transform:translateX(-120%);animation:welcomeSweep 7s ease-in-out infinite}
+.welcome-stars{inset:-12%;opacity:.82;background-size:41px 41px,83px 83px,137px 137px;animation:welcomeDrift 25s linear infinite,welcomeStarsPulse 5s ease-in-out infinite alternate;transform:translate3d(var(--px,0),var(--py,0),0)}
+.welcome-stars:before{content:"";position:absolute;inset:0;background-image:radial-gradient(circle,#fff 0 1.4px,transparent 1.8px);background-size:191px 173px;filter:drop-shadow(0 0 5px #fff);animation:welcomeTwinkle 3.4s steps(2,end) infinite}
+.welcome-stage{transform-style:preserve-3d;animation:welcomeCinematicIn .75s cubic-bezier(.16,1,.3,1)}
+.welcome-visual{filter:drop-shadow(0 24px 45px rgba(83,39,165,.2))}
+.welcome-symbol{background:rgba(8,6,13,.72);border:1px solid rgba(210,187,255,.25);box-shadow:0 0 0 8px rgba(145,91,255,.035),0 0 55px rgba(139,80,255,.32),inset 0 0 22px rgba(255,255,255,.05);animation:welcomeFloat 4s ease-in-out infinite,welcomeSymbolGlow 2.8s ease-in-out infinite alternate}
+.welcome-symbol:before,.welcome-symbol:after{content:"";position:absolute;border:1px solid rgba(188,151,255,.18);border-radius:50%;inset:-18px;animation:welcomeRing 4s linear infinite}.welcome-symbol:after{inset:-34px;border-style:dashed;animation-duration:9s;animation-direction:reverse}
+.welcome-copy h1{background:linear-gradient(105deg,#fff 20%,#cdb8ff 48%,#fff 70%);background-size:220% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:welcomeTextShine 6s linear infinite;text-shadow:0 8px 38px rgba(164,119,255,.08)}
+.welcome-eyebrow{text-shadow:0 0 22px rgba(190,151,255,.45)}
+.welcome-next{position:relative;overflow:hidden;background:linear-gradient(135deg,#fff,#e9dcff);box-shadow:0 0 0 1px rgba(255,255,255,.18),0 16px 55px rgba(117,69,215,.28);transition:transform .18s,box-shadow .18s}
+.welcome-next:active{transform:scale(.965);box-shadow:0 8px 28px rgba(117,69,215,.2)}
+.welcome-next:before{content:"";position:absolute;inset:-100% 45%;background:rgba(255,255,255,.8);transform:rotate(22deg);animation:welcomeButtonShine 4s ease-in-out infinite}
+.welcome-skip{backdrop-filter:blur(14px);background:rgba(7,5,12,.48)}
+.welcome-constellation:before,.welcome-constellation:after{transform-origin:left center;animation:welcomeLineDraw 1.2s cubic-bezier(.2,.8,.2,1) both}
+.welcome-constellation:after{animation-delay:.2s}.welcome-constellation i{opacity:0;animation:welcomeStarBirth .55s ease-out forwards}.welcome-constellation i:nth-child(2){animation-delay:.16s}.welcome-constellation i:nth-child(3){animation-delay:.32s}.welcome-constellation i:nth-child(4){animation-delay:.48s}.welcome-constellation i:nth-child(5){animation-delay:.64s}
+.welcome-map{background:rgba(8,6,14,.72);box-shadow:inset 0 0 40px rgba(126,77,220,.09),0 25px 65px rgba(0,0,0,.35);animation:welcomeVisualRise .7s .1s both}
+.welcome-pin{animation:welcomePinDrop .7s cubic-bezier(.2,1.4,.4,1) both}.welcome-pin.two{animation-delay:.25s}.welcome-route{transform-origin:left center;animation:welcomeRouteDraw 1.2s .55s both}
+.welcome-orbit{box-shadow:0 0 70px rgba(127,76,223,.12),inset 0 0 40px rgba(127,76,223,.06)}.welcome-orbit span{box-shadow:0 0 25px rgba(185,146,255,.12)}
+.welcome-letter{position:relative;animation:welcomeLetterReveal .9s cubic-bezier(.16,1,.3,1) both;box-shadow:0 28px 90px rgba(101,58,170,.25),0 0 0 1px rgba(255,255,255,.12)}.welcome-letter:after{content:"";position:absolute;inset:-18px;border:1px solid rgba(209,180,255,.16);border-radius:30px;animation:welcomeLetterAura 2.5s ease-in-out infinite alternate}
+.welcome-together span{animation:welcomeAvatarIn .7s cubic-bezier(.2,1.5,.4,1) both;box-shadow:0 0 45px rgba(132,79,230,.24)}.welcome-together span:last-child{animation-delay:.2s;box-shadow:0 0 45px rgba(210,92,137,.22)}.welcome-together i{transform-origin:center;animation:welcomeTogetherLine .9s .45s both}
+.welcome-dots i.active{box-shadow:0 0 18px rgba(216,196,255,.65)}
+.welcome-spark{position:absolute;width:3px;height:3px;border-radius:50%;background:#fff;pointer-events:none;box-shadow:0 0 12px #c9aaff;animation:welcomeSpark .8s ease-out forwards}
+@keyframes welcomeNebula{to{transform:translate3d(3%,-2%,0) scale(1.06)}}
+@keyframes welcomeSweep{0%,60%{transform:translateX(-120%)}85%,100%{transform:translateX(120%)}}
+@keyframes welcomeStarsPulse{to{opacity:.55}}
+@keyframes welcomeTwinkle{50%{opacity:.35;transform:scale(.995)}}
+@keyframes welcomeCinematicIn{from{opacity:0;transform:translateY(32px) scale(.96) rotateX(3deg);filter:blur(8px)}to{opacity:1;transform:none;filter:none}}
+@keyframes welcomeSymbolGlow{to{box-shadow:0 0 0 12px rgba(145,91,255,.02),0 0 75px rgba(164,91,255,.46),inset 0 0 28px rgba(255,255,255,.08)}}
+@keyframes welcomeRing{to{transform:rotate(360deg)}}
+@keyframes welcomeTextShine{to{background-position:220% center}}
+@keyframes welcomeButtonShine{0%,65%{transform:translateX(-250%) rotate(22deg)}85%,100%{transform:translateX(250%) rotate(22deg)}}
+@keyframes welcomeLineDraw{from{scale:0 1;opacity:0}to{scale:1 1;opacity:1}}
+@keyframes welcomeStarBirth{from{opacity:0;transform:scale(0)}to{opacity:1;transform:scale(1)}}
+@keyframes welcomeVisualRise{from{opacity:0;transform:translateY(18px) scale(.94)}to{opacity:1;transform:none}}
+@keyframes welcomePinDrop{from{opacity:0;transform:translateY(-28px) scale(.6)}to{opacity:1;transform:none}}
+@keyframes welcomeRouteDraw{from{scale:0 1;opacity:0}to{scale:1 1;opacity:1}}
+@keyframes welcomeLetterReveal{from{opacity:0;transform:translateY(30px) rotate(-8deg) scale(.88)}to{opacity:1;transform:rotate(-2deg)}}
+@keyframes welcomeLetterAura{to{inset:-27px;opacity:.35}}
+@keyframes welcomeAvatarIn{from{opacity:0;transform:scale(.45)}to{opacity:1;transform:scale(1)}}
+@keyframes welcomeTogetherLine{from{scale:0 1;opacity:0}to{scale:1 1;opacity:1}}
+@keyframes welcomeSpark{to{opacity:0;transform:translate(var(--sx),var(--sy)) scale(.1)}}
+@media(prefers-reduced-motion:reduce){.welcome-experience:before,.welcome-experience:after,.welcome-stars:before,.welcome-symbol:before,.welcome-symbol:after,.welcome-copy h1,.welcome-next:before,.welcome-constellation:before,.welcome-constellation:after,.welcome-constellation i,.welcome-map,.welcome-pin,.welcome-route,.welcome-letter,.welcome-letter:after,.welcome-together span,.welcome-together i{animation:none!important}}
