@@ -55,4 +55,8 @@ public final class GalaxyBridge {
     @JavascriptInterface public void refreshMoments(String requestId){
         activity.refreshMoments(requestId);
     }
+
+    @JavascriptInterface public void closeApp(){
+        activity.closeApp();
+    }
 }
