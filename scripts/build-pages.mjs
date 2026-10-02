@@ -10,6 +10,13 @@ const url=process.env.SUPABASE_URL||defaults.url||'',key=process.env.SUPABASE_PU
 if(process.env.CI&&(!url||!key))throw Error('Configura SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY en las variables del repositorio.');
 if(key.startsWith('sb_secret_'))throw Error('Nunca publiques una clave secreta. Usa la publishable key.');
 if(key.split('.').length===3){const claims=JSON.parse(Buffer.from(key.split('.')[1],'base64url'));if(claims.role!=='anon')throw Error('Solo se permite la clave anon pública.');}
+const themeCss=await readFile(path.join(root,'app/public/app.css'),'utf8');
+const paletteMarker='/* Palette is the only source of literal UI colors below this line. */';
+const paletteIndex=themeCss.indexOf(paletteMarker);
+if(paletteIndex<0)throw Error('Falta el límite de paletas del sistema visual.');
+const componentCss=themeCss.slice(0,paletteIndex);
+const literalColors=componentCss.match(/#[0-9a-fA-F]{3,8}\b/g)||[];
+if(literalColors.length)throw Error('Tema inválido: los componentes no pueden contener colores literales. Usa tokens semánticos.');
 await mkdir(out,{recursive:true});
 for(const name of ['index.html','app.js','app.css','dates.js','icon.svg','garden.svg','manifest.webmanifest','install.js','sw.js','theme.js']){
  let source=await readFile(path.join(root,'app/public',name),'utf8');
