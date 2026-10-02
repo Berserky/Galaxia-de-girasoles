@@ -102,4 +102,4 @@ assert.ok(css.includes('@media(prefers-reduced-motion:reduce)'),'La bienvenida d
 assert.equal(motionTest.includes('placeholderKeepsUnitTestTaskActive'),false,'La prueba de movimiento no puede ser placeholder');
 assert.ok(motionTest.includes('medianIgnoresSingleGpsSpeedSpike'),'Falta prueba de ruido GPS');
 
-console.log('QA móvil 1.7.1: OK');
+console.log('QA móvil 1.8.0: OK');
