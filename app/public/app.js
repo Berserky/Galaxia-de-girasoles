@@ -73,7 +73,7 @@ function homeVisual(id,context='catalog'){const item=homeCatalog[id],entry=item&
 function homeCatalogEntries(){return Object.entries(homeCatalog).filter(([,item])=>homeAssetSrc(item.asset)||homeAssetManifest[item.asset]?.sheet);}
 function homeCategory(id){return homeCatalog[id]?.category||'Objetos';}
 function homeShopGroups(){return homeCatalogEntries().reduce((groups,entry)=>{const category=homeCategory(entry[0]);(groups[category]??=[]).push(entry);return groups;},{});}
-let homeRoom='living',homeMode='room',placingItem='',homeAvatar={x:50,y:62},homeMoveFrame=0;
+let homeRoom='living',homeMode='room',placingItem='',homeAvatar={x:50,y:62},homeMoveFrame=0,homeShopCategory='Mesas y sillas',homeShopPage=0;
 function homePlaced(room){return(state.home?.placed||[]).filter(x=>x.room===room);}
 function setHomeAvatarTarget(x,y){
  const map=document.querySelector('.rogue-map'),avatar=map?.querySelector('.rogue-player');
@@ -103,7 +103,10 @@ function roomScene(h,room){
  </section>`;
 }
 function homeOverlay(h){
- if(homeMode==='shop')return `<aside class="rogue-overlay rogue-shop" aria-label="Tienda"><header><div><small>TIENDA</small><b>Objetos RPG</b></div><button data-action="home-room" aria-label="Cerrar">×</button></header><div class="rogue-overlay-scroll">${Object.entries(homeShopGroups()).map(([category,items])=>`<section><h3>${category}</h3><div class="rogue-item-grid">${items.map(([id,item])=>`<article class="rogue-item"><span>${homeVisual(id)}</span><b>${item.name}</b><button data-action="home-buy" data-item="${id}" data-cost="${item.price}" ${h.coins<item.price?'disabled':''}>${item.price} ☀</button></article>`).join('')}</div></section>`).join('')}</div></aside>`;
+ if(homeMode==='shop'){
+  const groups=homeShopGroups(),categories=Object.keys(groups),items=groups[homeShopCategory]||groups[categories[0]]||[],pageSize=24,pages=Math.max(1,Math.ceil(items.length/pageSize)),page=Math.min(homeShopPage,pages-1),shown=items.slice(page*pageSize,(page+1)*pageSize);
+  return `<aside class="rogue-overlay rogue-shop" aria-label="Tienda"><header><div><small>TIENDA RPG · 412 OBJETOS</small><b>${homeShopCategory}</b></div><button data-action="home-room" aria-label="Cerrar">×</button></header><nav class="shop-category-tabs">${categories.map(cat=>`<button class="${cat===homeShopCategory?'active':''}" data-action="home-shop-category" data-category="${cat}">${cat}</button>`).join('')}</nav><div class="rogue-overlay-scroll"><div class="rogue-item-grid">${shown.map(([id,item])=>`<article class="rogue-item"><span>${homeVisual(id)}</span><b>${item.name}</b><button data-action="home-buy" data-item="${id}" data-cost="${item.price}" ${h.coins<item.price?'disabled':''}>${item.price} ☀</button></article>`).join('')}</div></div><footer class="shop-pager"><button data-action="home-shop-page" data-page="${Math.max(0,page-1)}" ${page===0?'disabled':''}>‹</button><b>${page+1} / ${pages}</b><button data-action="home-shop-page" data-page="${Math.min(pages-1,page+1)}" ${page>=pages-1?'disabled':''}>›</button></footer></aside>`;
+ }
  if(homeMode==='inventory'){const available=homeCatalogEntries().filter(([id])=>(h.inventory?.[id]||0)>homePlaced(homeRoom).filter(x=>x.item===id).length);return `<aside class="rogue-overlay rogue-inventory" aria-label="Inventario"><header><div><small>MOCHILA</small><b>Inventario</b></div><button data-action="home-room" aria-label="Cerrar">×</button></header><div class="rogue-overlay-scroll"><div class="rogue-item-grid">${available.map(([id,item])=>`<button class="rogue-item ${placingItem===id?'selected':''}" data-action="home-select-item" data-item="${id}"><span>${homeVisual(id)}</span><b>${item.name}</b><small>x${(h.inventory[id]||0)-homePlaced(homeRoom).filter(x=>x.item===id).length}</small></button>`).join('')||'<p class="muted">Tu mochila está vacía.</p>'}</div></div></aside>`;}
  return '';
 }
@@ -138,6 +141,8 @@ async function action(el,event=null){const a=el.dataset.action,id=el.dataset.id,
  case'home-room':homeMode='room';return draw();
  case'home-open':homeRoom=el.dataset.room;homeMode='room';homeAvatar={x:50,y:62};placingItem='';return draw();
  case'home-select-item':placingItem=el.dataset.item;homeMode='room';draw();return toast('Ahora toca un espacio vacío del cuarto.');
+ case'home-shop-category':homeShopCategory=el.dataset.category;homeShopPage=0;return draw();
+ case'home-shop-page':homeShopPage=Number(el.dataset.page)||0;return draw();
  case'home-buy':await api('/api/home/buy',{method:'POST',body:JSON.stringify({item:el.dataset.item,cost:Number(el.dataset.cost)})});await refresh(false);return draw();
  case'home-slot':if(!placingItem)return toast('Elige primero un mueble del inventario.');await api('/api/home/place',{method:'POST',body:JSON.stringify({item:placingItem,room:homeRoom,slot:Number(el.dataset.slot)})});placingItem='';await refresh(false);return draw();
  case'theme':applyTheme(el.dataset.value);draw();return toast('La galaxia cambió de ambiente.');
