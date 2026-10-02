@@ -68,3 +68,17 @@ test('Private mobility history is sampled, bounded in reads and RLS-backed',()=>
  assert.match(schema,/trip_history_read/);
  assert.match(schema,/galaxy_location_history_person_time_idx/);
 });
+
+
+test('Mobility insights include privacy controls and dwell-based smart arrivals',()=>{
+ const app=read('app/public/app.js'),cloud=read('app/cloud/adapter.js'),schema=read('supabase/schema.sql');
+ assert.match(app,/function mobilityInsights\(/);
+ assert.match(app,/function detectSmartPlace\(/);
+ assert.match(app,/now-s\.since>=45000/);
+ assert.match(app,/mobility-export/);
+ assert.match(app,/mobility-clear-confirm/);
+ assert.match(cloud,/\/api\/map\/privacy\/export/);
+ assert.match(cloud,/\/api\/map\/privacy\/history/);
+ assert.match(schema,/create table public\.galaxy_place_events/);
+ assert.match(schema,/place_events_insert_own/);
+});
