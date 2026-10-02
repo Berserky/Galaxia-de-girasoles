@@ -28,12 +28,13 @@ export async function cloudApi(url,options={}){
  if(url==='/api/logout'){await checked(client.auth.signOut());return {};}
  const p=await person();
  if(url==='/api/invite')return {token:await checked(client.rpc('galaxy_invite'))};
- if(url==='/api/locations'&&method==='GET')return checked(client.from('galaxy_locations').select('person,latitude,longitude,accuracy,speed,heading,sharing,status,trip_active,trip_started_at,updated_at').order('person'));
+ if(url==='/api/locations'&&method==='GET')return checked(client.from('galaxy_locations').select('person,latitude,longitude,accuracy,speed,heading,motion,transport_preference,sharing,status,trip_active,trip_started_at,updated_at').order('person'));
  if(url==='/api/location'&&method==='PUT'){
   const sharing=!!data.sharing;
   if(!sharing)await checked(client.from('galaxy_trip_points').delete().eq('person',String(p)));
   const row={person:String(p),sharing,updated_at:new Date().toISOString(),latitude:null,longitude:null,accuracy:null,speed:null,heading:null,...(!sharing?{trip_active:false,trip_started_at:null,status:null}:{})};
   if(data.status!==undefined)row.status=text(data.status,40,true);
+  if(data.motion!==undefined)row.motion=['still','walking','vehicle'].includes(data.motion)?data.motion:null;
   if(data.trip_active!==undefined){row.trip_active=!!data.trip_active;row.trip_started_at=data.trip_active?new Date().toISOString():null;}
   if(sharing){
    const latitude=Number(data.latitude),longitude=Number(data.longitude),accuracy=Number(data.accuracy);

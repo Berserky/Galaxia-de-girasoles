@@ -133,10 +133,12 @@ create table public.galaxy_locations (
  person text primary key check(person in ('0','1')),
  latitude double precision check(latitude between -90 and 90), longitude double precision check(longitude between -180 and 180),
  accuracy double precision check(accuracy>=0), speed double precision check(speed>=0), heading double precision check(heading between 0 and 360),
+ motion text check(motion is null or motion in ('still','walking','vehicle')),
+ transport_preference text check(transport_preference is null or transport_preference in ('motorcycle','transit')),
  sharing boolean not null default false, status text check(status is null or length(status)<=40),
  trip_active boolean not null default false, trip_started_at timestamptz, updated_at timestamptz not null default now()
 );
-insert into public.galaxy_locations(person) values('0'),('1');
+insert into public.galaxy_locations(person,transport_preference) values('0','motorcycle'),('1','transit');
 alter table public.galaxy_locations enable row level security;
 create policy locations_read on public.galaxy_locations for select to authenticated using(public.galaxy_person() is not null);
 create policy locations_insert_own on public.galaxy_locations for insert to authenticated with check(person=public.galaxy_person());
