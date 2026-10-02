@@ -25,7 +25,13 @@ jobs:
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: "9.4.1" }
-      - name: QA
+      - name: QA interfaz móvil
+        run: |
+          node --check android/app/src/main/assets/mobile/app.js
+          node --check android/app/src/main/assets/mobile/map.js
+          test -f android/app/src/main/assets/mobile/index.html
+          test -f android/app/src/main/assets/mobile/app.css
+      - name: QA Android
         run: gradle -p android testDebugUnitTest assembleDebug
       - name: Compilar estable firmado
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
