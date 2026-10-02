@@ -43,7 +43,7 @@ test('shared storage persists across restarts and rejects stale updates',()=>{
 
 test('connected universe validates capsules wishes journeys and geotags',()=>{
  const capsule=validateItem({kind:'capsule',title:'Para después',body:'Hola futuro',unlockDate:'2027-01-01'});assert.equal(capsule.unlockDate,'2027-01-01');
- const wish=validateItem({kind:'wish',title:'Conocer un lugar',latitude:'4.65',longitude:'-74.08',placeName:'Bogotá'});assert.equal(wish.placeName,'Bogotá');assert.equal(wish.latitude,4.65);
+ const wish=validateItem({kind:'wish',title:'Conocer un lugar',latitude:'4.65',longitude:'-74.08',placeName:'Bogotá'});assert.equal(wish.placeName,'Bogotá');assert.equal(wish.latitude,4.65);assert.equal(validateItem({kind:'plan',title:'Sin lugar'}).latitude,undefined);
  const journey=validateItem({kind:'journey',title:'Viaje',date:'2026-10-10',endDate:'2026-10-12'});assert.equal(journey.endDate,'2026-10-12');
  assert.throws(()=>validateItem({kind:'capsule',title:'Sin fecha'}));assert.throws(()=>validateItem({kind:'journey',title:'Al revés',date:'2026-10-12',endDate:'2026-10-10'}));
 });
