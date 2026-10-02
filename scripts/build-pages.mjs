@@ -18,7 +18,7 @@ const componentCss=themeCss.slice(0,paletteIndex);
 const literalColors=componentCss.match(/#[0-9a-fA-F]{3,8}\b/g)||[];
 if(literalColors.length)throw Error('Tema inválido: los componentes no pueden contener colores literales. Usa tokens semánticos.');
 await mkdir(out,{recursive:true});
-for(const name of ['index.html','app.js','app.css','dates.js','icon.svg','garden.svg','manifest.webmanifest','install.js','sw.js','theme.js']){
+for(const name of ['index.html','app.js','app.css','dates.js','insights.js','startup.js','network.js','icon.svg','garden.svg','manifest.webmanifest','install.js','sw.js','theme.js']){
  let source=await readFile(path.join(root,'app/public',name),'utf8');
  source=source.replaceAll('="/','="./').replaceAll("url('/","url('./").replaceAll('"start_url":"/"','"start_url":"./"').replaceAll('"src":"/icon.svg"','"src":"./icon.svg"');
  if(name==='app.js'){

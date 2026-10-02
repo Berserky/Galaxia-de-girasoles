@@ -1,9 +1,10 @@
 import {createClient} from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm';
 import {ideas,questionFor,today,validateItem,text,validDate,ics} from './domain.js';
 import config from './config.js';
+import {withTimeout,boundedFetch} from './network.js';
 const configured=/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(config.url||'')&&!!config.key;
-const client=configured?createClient(config.url,config.key):null;
-const checked=async request=>{const {data,error}=await request;if(error)throw Error(error.message);return data;};
+const client=configured?createClient(config.url,config.key,{global:{fetch:boundedFetch}}):null;
+const checked=async request=>{const {data,error}=await withTimeout(request);if(error)throw Error(error.message);return data;};
 const bucket=()=>client.storage.from('galaxy-photos');
 const musicBucket=()=>client.storage.from('galaxy-music');
 async function signedMusic(path){if(!path)return '';return (await checked(musicBucket().createSignedUrl(path,3600))).signedUrl;}
@@ -22,7 +23,7 @@ export function subscribeLocations(callback){
 }
 export async function cloudApi(url,options={}){
  if(!configured)throw Error('Falta conectar el proyecto gratuito de Supabase.');
- const session=(await client.auth.getSession()).data.session;
+ const session=(await checked(client.auth.getSession())).session;
  if(!session)throw Error('Entra con tu correo para abrir su espacio.');
  const method=options.method||'GET',data=typeof options.body==='string'?JSON.parse(options.body):{};
  if(url==='/api/logout'){await checked(client.auth.signOut());return {};}

@@ -2,7 +2,7 @@ name: Android companion
 on:
   pull_request:
     branches: [main]
-    paths: ["android/**","supabase/functions/android-companion/**",".github/workflows/android-companion.yml"]
+    paths: ["app/public/**","app/cloud/**","scripts/build-pages.mjs","android/**","supabase/functions/android-companion/**",".github/workflows/android-companion.yml"]
   push:
     branches: [main]
     paths: ["android/**","supabase/functions/android-companion/**",".github/workflows/android-companion.yml"]
