@@ -81,9 +81,9 @@ public final class BondWorker extends Worker {
             BondStore bond=new BondStore(c);
 
             if(token==null){
-                bond.clear();
-                cancel(c);
-                BondWidget.updateAll(c);
+                // pairedFast() may still see stored bytes when AndroidKeyStore can no longer decrypt them.
+                // Clear the stale pairing here, safely off the UI thread.
+                device.clear();
                 return Result.success();
             }
 
