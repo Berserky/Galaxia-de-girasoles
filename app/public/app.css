@@ -53,3 +53,51 @@
 :root[data-theme="easter"]{--paper:#11162c;--white:#19213d;--ink:#f7f4ff;--green:#38bdf8;--sage:#222e50;--muted:#b6bdd7;--line:#334264}:root[data-theme="easter"] body{background:radial-gradient(circle at 80% 10%,#c084fc38,transparent 30%),radial-gradient(circle at 12% 85%,#38bdf83d,transparent 34%),#11162c}:root[data-theme="easter"] .hero,:root[data-theme="easter"] .primary{background:linear-gradient(135deg,#2563eb,#7c3aed,#db2777)}
 @media(max-width:850px){.theme-panel{display:block}.theme-choices{justify-content:flex-start;margin-top:20px}}
 @media(max-width:600px){:root[data-theme] .sidebar{background:#0d1020f2}.theme-panel{padding:22px}.theme-choice{padding:9px 10px}.theme-choices{gap:6px}}
+
+/* Full semantic coverage: every application surface inherits the active universe. */
+:root[data-theme]{
+ --surface:var(--white);--surface-2:color-mix(in srgb,var(--white) 82%,var(--sage));--surface-3:color-mix(in srgb,var(--paper) 70%,var(--sage));
+ --accent:var(--green);--accent-soft:color-mix(in srgb,var(--green) 18%,transparent);--accent-2:var(--gold);
+ --text:var(--ink);--text-2:var(--muted);--border:var(--line);--shadow:#0006;--overlay:#03040bd9;
+}
+:root[data-theme] *{scrollbar-color:var(--accent) var(--surface-3)}
+:root[data-theme] ::selection{background:var(--accent);color:var(--text)}
+:root[data-theme] body,:root[data-theme] .workspace,:root[data-theme] main,:root[data-theme] .boot{color:var(--text)}
+:root[data-theme] .sidebar,:root[data-theme] .topbar,:root[data-theme] .mobile-more,:root[data-theme] .footer{color:var(--text);border-color:var(--border)}
+:root[data-theme] .brand,:root[data-theme] .breadcrumb,:root[data-theme] .session-name,:root[data-theme] .couple-card small,:root[data-theme] .nav-label,:root[data-theme] .fine-print,:root[data-theme] .muted,:root[data-theme] .today{color:var(--text-2)}
+:root[data-theme] .couple-card b,:root[data-theme] nav a,:root[data-theme] .sidebar-bottom a,:root[data-theme] .gift-link{color:var(--text)}
+:root[data-theme] .avatars span{background:var(--surface-2);border-color:var(--surface-3);color:var(--accent)}
+:root[data-theme] .avatars span+span{background:var(--accent-soft);color:var(--accent-2)}
+:root[data-theme] .gift-link,:root[data-theme] .sidebar-bottom,:root[data-theme] hr{border-color:var(--border)}
+:root[data-theme] .card,:root[data-theme] .stat,:root[data-theme] .memory-card,:root[data-theme] .song-card,:root[data-theme] .note-card,:root[data-theme] .calendar-card,:root[data-theme] .agenda,:root[data-theme] .ritual-card,:root[data-theme] .connection-question,:root[data-theme] .photo-tile{background:var(--surface);border-color:var(--border);color:var(--text)}
+:root[data-theme] .toolbar,:root[data-theme] .tabs,:root[data-theme] .calendar-controls,:root[data-theme] .section-title,:root[data-theme] .form-actions,:root[data-theme] .daily-status{border-color:var(--border)}
+:root[data-theme] .tabs button,:root[data-theme] .filter,:root[data-theme] .calendar-controls button,:root[data-theme] .text-button{color:var(--text-2)}
+:root[data-theme] .tabs button.active,:root[data-theme] .filter.active{background:var(--accent-soft);color:var(--text);border-color:var(--accent)}
+:root[data-theme] .day,:root[data-theme] .calendar-blank{background:var(--surface-2);border-color:var(--border);color:var(--text)}
+:root[data-theme] .day:hover,:root[data-theme] .day.is-today{background:var(--accent-soft);border-color:var(--accent)}
+:root[data-theme] .day small,:root[data-theme] .weekday,:root[data-theme] .agenda-item p,:root[data-theme] .agenda-item small{color:var(--text-2)}
+:root[data-theme] .agenda-item,:root[data-theme] .day-event{background:var(--surface-2);border-color:var(--border);color:var(--text)}
+:root[data-theme] .question-banner,:root[data-theme] .album-banner,:root[data-theme] .music-feature,:root[data-theme] .notice{background:linear-gradient(135deg,var(--surface-2),var(--accent-soft));border-color:var(--border);color:var(--text)}
+:root[data-theme] .question-symbol,:root[data-theme] .album-art,:root[data-theme] .vinyl,:root[data-theme] .empty-icon{color:var(--accent-2)}
+:root[data-theme] .photo-tile span,:root[data-theme] .memory-category{background:var(--overlay);color:#fff}
+:root[data-theme] .photo-grid,:root[data-theme] .memory-grid,:root[data-theme] .song-grid,:root[data-theme] .note-grid{color:var(--text)}
+:root[data-theme] label,:root[data-theme] .check-label,:root[data-theme] .detail-body,:root[data-theme] .connection-row,:root[data-theme] .answer-grid{color:var(--text)}
+:root[data-theme] input,:root[data-theme] textarea,:root[data-theme] select{background:var(--surface-3)!important;color:var(--text)!important;border-color:var(--border)!important;caret-color:var(--accent)}
+:root[data-theme] input::placeholder,:root[data-theme] textarea::placeholder{color:var(--text-2);opacity:.72}
+:root[data-theme] input:focus,:root[data-theme] textarea:focus,:root[data-theme] select:focus{border-color:var(--accent)!important;box-shadow:0 0 0 3px var(--accent-soft)}
+:root[data-theme] dialog{background:var(--surface);color:var(--text);border:1px solid var(--border);box-shadow:0 30px 100px var(--shadow)}
+:root[data-theme] dialog::backdrop{background:var(--overlay);backdrop-filter:blur(7px)}
+:root[data-theme] .more-nav a,:root[data-theme] .answer-grid article,:root[data-theme] .connection-row{background:var(--surface-2);border-color:var(--border)}
+:root[data-theme] .player,:root[data-theme] audio{background:var(--surface-3);border-color:var(--border)}
+:root[data-theme] .danger{background:color-mix(in srgb,#ef4444 18%,var(--surface));color:#fca5a5;border-color:color-mix(in srgb,#ef4444 35%,var(--border))}
+:root[data-theme] .cream{background:color-mix(in srgb,var(--accent-2) 82%,#fff);color:#17120a}
+:root[data-theme] .text-link,:root[data-theme] a:hover{color:color-mix(in srgb,var(--accent) 72%,#fff)}
+:root[data-theme] button:focus-visible,:root[data-theme] a:focus-visible,:root[data-theme] input:focus-visible,:root[data-theme] textarea:focus-visible,:root[data-theme] select:focus-visible{outline-color:var(--accent)}
+:root[data-theme] #toast{background:var(--surface);color:var(--text);border-color:var(--border);box-shadow:0 16px 50px var(--shadow)}
+:root[data-theme] .login,:root[data-theme] .install-gate{color:var(--text)}
+:root[data-theme] .login small,:root[data-theme] .install-card small,:root[data-theme] .install-help{color:var(--text-2)}
+:root[data-theme] .install-card{background:color-mix(in srgb,var(--surface) 90%,transparent);border-color:var(--border);box-shadow:0 24px 90px var(--shadow)}
+:root[data-theme] .theme-panel{background:var(--surface);border-color:var(--border)}
+:root[data-theme] .theme-choice{background:var(--surface-3);border-color:var(--border);color:var(--text-2)}
+:root[data-theme] .theme-choice:hover,:root[data-theme] .theme-choice.selected{background:var(--accent-soft);border-color:var(--accent);color:var(--text)}
+:root[data-theme="halloween"]{--overlay:#09030ddd}:root[data-theme="christmas"]{--overlay:#020c08dd}:root[data-theme="valentine"]{--overlay:#10030add}:root[data-theme="friendship"]{--overlay:#090313dd}:root[data-theme="easter"]{--overlay:#070b1bdd}
