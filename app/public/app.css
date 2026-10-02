@@ -158,3 +158,19 @@ html.home-fullscreen .scene-floor{background:repeating-linear-gradient(100deg,va
 :root[data-theme] .login,:root[data-theme] .cloud-entry,:root[data-theme] .install-gate{background:radial-gradient(circle at 70% 15%,var(--accent-soft),transparent 35%),var(--bg);color:var(--text)}
 :root[data-theme] .memory-art,:root[data-theme] .album-art,:root[data-theme] .song-cover{background:linear-gradient(135deg,var(--surface-2),var(--accent-soft));color:var(--highlight)}
 :root[data-theme] *{scrollbar-color:var(--accent) var(--surface-3)}
+
+:root{--on-accent:#fff;--bg:#f7f6fa;--surface:#fff;--surface-2:#f1eef8;--surface-3:#faf9fc;--text:#292638;--muted:#6d687d;--border:#e5e0ed;--accent:#7254c7;--accent-2:#b95468;--highlight:#ad7e28;--danger:#b93e50;--overlay:#20182b88;--shadow:#30204412}
+:root[data-theme="daylight"]{--bg:#f7f6fa;--surface:#fff;--surface-2:#f1eef8;--surface-3:#faf9fc;--text:#292638;--muted:#6d687d;--border:#e5e0ed;--accent:#7254c7;--accent-2:#b95468;--highlight:#ad7e28;--danger:#b93e50;--overlay:#20182b88;--shadow:#30204412}
+:root[data-theme="cosmic"]{--bg:#10101d;--surface:#1b1a2b;--surface-2:#25223a;--surface-3:#141322;--text:#f5f2fc;--muted:#b6afc8;--border:#363149;--accent:#ac92fa;--accent-2:#f3a6b7;--highlight:#e9c789;--danger:#ff879a;--overlay:#0c081bcc;--shadow:#0004;--on-accent:#211a35}
+.swatch-daylight{background:linear-gradient(135deg,#f1eef8,#7254c7)}
+
+:root[data-theme="halloween"],:root[data-theme="christmas"],:root[data-theme="valentine"],:root[data-theme="friendship"],:root[data-theme="easter"]{--on-accent:#211a35}
+
+.swatch-auto{--swatch:linear-gradient(135deg,#7254c7,#f3a6b7)}
+.swatch-daylight{--swatch:linear-gradient(135deg,#f1eef8,#7254c7)}
+.swatch-cosmic{--swatch:linear-gradient(135deg,#ac92fa,#25223a)}
+.swatch-halloween{--swatch:linear-gradient(135deg,#ff7a18,#9333ea)}
+.swatch-christmas{--swatch:linear-gradient(135deg,#22c55e,#dc2626)}
+.swatch-valentine{--swatch:linear-gradient(135deg,#fb7185,#e11d48)}
+.swatch-friendship{--swatch:linear-gradient(135deg,#a855f7,#f59e0b)}
+.swatch-easter{--swatch:linear-gradient(135deg,#38bdf8,#c084fc)}

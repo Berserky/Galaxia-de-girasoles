@@ -1,8 +1,5 @@
 <resources>
-    <color name="galaxy_bg">#090B18</color>
-    <color name="galaxy_surface">#12162A</color>
-    <color name="galaxy_text">#F5F2FF</color>
-    <color name="galaxy_muted">#A7ABC3</color>
-    <color name="galaxy_accent">#8B5CF6</color>
-    <color name="galaxy_accent_2">#EC4899</color>
+ <color name="galaxy_bg">#F7F6FA</color><color name="galaxy_surface">#FFFFFF</color><color name="galaxy_surface_2">#F1EEF8</color>
+ <color name="galaxy_text">#292638</color><color name="galaxy_muted">#6D687D</color><color name="galaxy_border">#E5E0ED</color>
+ <color name="galaxy_accent">#7254C7</color><color name="galaxy_accent_2">#B95468</color><color name="galaxy_on_accent">#FFFFFF</color>
 </resources>

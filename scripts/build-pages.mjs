@@ -18,7 +18,7 @@ const componentCss=themeCss.slice(0,paletteIndex);
 const literalColors=componentCss.match(/#[0-9a-fA-F]{3,8}\b/g)||[];
 if(literalColors.length)throw Error('Tema inválido: los componentes no pueden contener colores literales. Usa tokens semánticos.');
 await mkdir(out,{recursive:true});
-for(const name of ['index.html','app.js','app.css','dates.js','insights.js','startup.js','network.js','icon.svg','garden.svg','manifest.webmanifest','install.js','sw.js','theme.js']){
+for(const name of ['index.html','app.js','app.css','modern.css','ui.js','dates.js','insights.js','startup.js','network.js','icon.svg','garden.svg','manifest.webmanifest','install.js','sw.js','theme.js']){
  let source=await readFile(path.join(root,'app/public',name),'utf8');
  source=source.replaceAll('="/','="./').replaceAll("url('/","url('./").replaceAll('"start_url":"/"','"start_url":"./"').replaceAll('"src":"/icon.svg"','"src":"./icon.svg"');
  if(name==='app.js'){
@@ -45,6 +45,9 @@ document.addEventListener('click',async e=>{if(e.target.id==='cloud-signout'){aw
  }
  await writeFile(path.join(out,name),source);
 }
+await mkdir(path.join(out,'vendor/images'),{recursive:true});
+for(const name of ['leaflet.js','leaflet.css','lucide.js','LICENSE-leaflet','LICENSE-lucide'])await copyFile(path.join(root,'app/public/vendor',name),path.join(out,'vendor',name));
+for(const name of await readdir(path.join(root,'app/public/vendor/images')))await copyFile(path.join(root,'app/public/vendor/images',name),path.join(out,'vendor/images',name));
 await copyFile(path.join(root,'app/cloud/adapter.js'),path.join(out,'cloud.js'));
 await writeFile(path.join(out,'domain.js'),(await readFile(path.join(root,'app/domain.mjs'),'utf8')).replaceAll('Buffer.byteLength(chunk+ch)','new TextEncoder().encode(chunk+ch).length'));
 await writeFile(path.join(out,'config.js'),'export default '+JSON.stringify({url,key})+';\n');
@@ -53,12 +56,12 @@ await mkdir(path.join(out,'regalo'),{recursive:true});
 for(const name of ['index.html','style.css','script.js','recuerdos.js','girasol.js','musica.mp3'])await copyFile(path.join(root,name),path.join(out,'regalo',name));
 // Cada publicación renueva los recursos para evitar mezclar pantallas antiguas y nuevas.
 const revision=(process.env.GITHUB_SHA||Date.now().toString(36)).slice(0,12);
-for(const name of ['app.js','cloud.js','install.js','theme.js']){
+for(const name of ['app.js','cloud.js','install.js','theme.js','ui.js']){
  const source=await readFile(path.join(out,name),'utf8');
  await writeFile(path.join(out,name),source.replace(/from '(\.\/[^']+\.js)'/g,`from '$1?v=${revision}'`));
 }
 const html=await readFile(path.join(out,'index.html'),'utf8');
-await writeFile(path.join(out,'index.html'),html.replace(/(\.\/app\.(?:js|css))"/g,`$1?v=${revision}"`));
+await writeFile(path.join(out,'index.html'),html.replace(/(\.\/(?:app\.(?:js|css)|modern\.css|startup\.js))"/g,`$1?v=${revision}"`));
 console.log('Sitio generado en dist. Los datos privados se guardan en Supabase, nunca en GitHub.');
 
 
