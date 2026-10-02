@@ -50,3 +50,16 @@ gradle -p android testDebugUnitTest assembleDebug
 ```
 
 GitHub Actions genera el APK firmado cuando los cambios llegan a `main` y actualiza la release `android-stable`.
+
+
+## Calidad de release 1.4.1
+
+La 1.4.1 añade una barrera de calidad obligatoria antes de publicar:
+
+- Lucide 0.545.0 empaquetado localmente; la interfaz móvil no usa emojis como iconografía.
+- QA de contratos entre UI móvil, puente Android y Edge Function.
+- JUnit real para clasificación de movimiento y ruido GPS.
+- Android Lint completo y build debug.
+- Pruebas del backend móvil para autenticación por dispositivo, calendario estricto, privacidad, mapa ligero y preferencia de transporte.
+- El updater valida SHA-256, packageName y versionCode antes de abrir el instalador.
+- El APK estable se publica como `NuestraGalaxia.apk`; se conserva `com.nuestragalaxia.companion` únicamente como identificador técnico para permitir upgrades sobre instalaciones existentes.
