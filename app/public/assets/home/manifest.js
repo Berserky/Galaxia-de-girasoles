@@ -11,5 +11,11 @@ for(let row=0;row<18;row++)for(let col=0;col<27;col++){
 }
 generated.rpgFloorDefault={sheet:rpgIndoorSheet,col:1,row:0,kind:'floor'};
 generated.rpgWallDefault={sheet:rpgIndoorSheet,col:24,row:0,kind:'structural'};
+// Extra CC0 pixel assets from OpenGameArt (extradave, Crimelike Furniture).
+generated.ogaBath={src:'https://opengameart.org/sites/default/files/bath_n.png',kind:'furniture'};
+generated.ogaOven={src:'https://opengameart.org/sites/default/files/oven1.png',kind:'furniture'};
+generated.ogaBed={src:'https://opengameart.org/sites/default/files/bed_wooden_n.png',kind:'furniture'};
+generated.ogaHifi={src:'https://opengameart.org/sites/default/files/hifi.png',kind:'prop'};
+generated.ogaSpeaker={src:'https://opengameart.org/sites/default/files/speaker.png',kind:'prop'};
 export const homeAssetManifest=generated;
 export {rpgIndoor};
