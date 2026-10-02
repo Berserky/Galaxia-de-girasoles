@@ -11,7 +11,7 @@ if(process.env.CI&&(!url||!key))throw Error('Configura SUPABASE_URL y SUPABASE_P
 if(key.startsWith('sb_secret_'))throw Error('Nunca publiques una clave secreta. Usa la publishable key.');
 if(key.split('.').length===3){const claims=JSON.parse(Buffer.from(key.split('.')[1],'base64url'));if(claims.role!=='anon')throw Error('Solo se permite la clave anon pública.');}
 await mkdir(out,{recursive:true});
-for(const name of ['index.html','app.js','app.css','dates.js','icon.svg','garden.svg','manifest.webmanifest','install.js','sw.js']){
+for(const name of ['index.html','app.js','app.css','dates.js','icon.svg','garden.svg','manifest.webmanifest','install.js','sw.js','theme.js']){
  let source=await readFile(path.join(root,'app/public',name),'utf8');
  source=source.replaceAll('="/','="./').replaceAll("url('/","url('./").replaceAll('"start_url":"/"','"start_url":"./"').replaceAll('"src":"/icon.svg"','"src":"./icon.svg"');
  if(name==='app.js'){
@@ -46,7 +46,7 @@ await mkdir(path.join(out,'regalo'),{recursive:true});
 for(const name of ['index.html','style.css','script.js','recuerdos.js','girasol.js','musica.mp3'])await copyFile(path.join(root,name),path.join(out,'regalo',name));
 // Cada publicación renueva los recursos para evitar mezclar pantallas antiguas y nuevas.
 const revision=(process.env.GITHUB_SHA||Date.now().toString(36)).slice(0,12);
-for(const name of ['app.js','cloud.js','install.js']){
+for(const name of ['app.js','cloud.js','install.js','theme.js']){
  const source=await readFile(path.join(out,name),'utf8');
  await writeFile(path.join(out,name),source.replace(/from '(\.\/[^']+\.js)'/g,`from '$1?v=${revision}'`));
 }
