@@ -162,8 +162,9 @@ function maskedDaily(rows:any[],person:string){
   for(const [day,list] of byDay){
     const both=list.filter(x=>text(x.answer,3000)).length===2;
     for(const row of list){
+      const answered=!!text(row.answer,3000);
+      row.answered=answered;
       if(row.person!==person&&!both)row.answer=null;
-      row.answered=!!text(row.answer,3000)||(row.person!==person&&list.find(x=>x.person===row.person)?.answer!=null);
       out.push(row);
     }
   }
@@ -297,7 +298,7 @@ async function validateVoice(person:string,payload:any){
 async function bondSave(req:Request,body:any){
   const d=await device(req),person=String(d.person),type=String(body.type||""),payload=validateBond(type,body.data);
   if(type==="gesture"){
-    const recent=await ok(db.from("galaxy_bond").select("id",{count:"exact",head:true}).eq("author",person).eq("type","gesture").gt("created",new Date(Date.now()-60000).toISOString()));
+    const recent=await ok(db.from("galaxy_bond").select("id").eq("author",person).eq("type","gesture").gt("created",new Date(Date.now()-60000).toISOString()).limit(20));
     if((recent?.length||0)>=20)return json({error:"Espera un momento antes de enviar otro gesto"},429);
   }
   if(type==="ritual"){
@@ -452,7 +453,7 @@ async function listBucket(bucket:string){
     for(const file of data||[]){
       if(!file.id||file.name===".emptyFolderPlaceholder")continue;
       const path=prefix?prefix+"/"+file.name:file.name,url=await signed(bucket,path,1800);
-      if(url)found.push({path,name:file.name,mime:file.metadata?.mimetype||"",size:file.metadata?.size||0,created:file.created_at||file.updated_at||null,url});
+      if(url)found.push({path,name:file.name,originalName:file.metadata?.originalName||file.metadata?.original_name||file.name,mime:file.metadata?.mimetype||"",size:file.metadata?.size||0,created:file.created_at||file.updated_at||null,url});
     }
   }
   return found;
@@ -493,11 +494,13 @@ async function upload(req:Request){
   if(declared>rules.limit)return json({error:"El archivo supera el límite permitido."},413);
   const bytes=new Uint8Array(await req.arrayBuffer());
   if(bytes.length<1||bytes.length>rules.limit)return json({error:"El archivo supera el límite permitido."},413);
+  let originalName="archivo";
+  try{originalName=decodeURIComponent(String(req.headers.get("x-file-name")||"archivo")).slice(0,300)||"archivo";}catch{}
   const path=String(d.person)+"/"+crypto.randomUUID()+"."+rules.ext[mime];
-  const {error}=await db.storage.from(rules.bucket).upload(path,bytes,{contentType:mime,upsert:false,cacheControl:"3600"});
+  const {error}=await db.storage.from(rules.bucket).upload(path,bytes,{contentType:mime,upsert:false,cacheControl:"3600",metadata:{originalName}});
   if(error)throw error;
   const signedUrl=await signed(rules.bucket,path,3600);
-  return json({path,mime,url:signedUrl,name:text(req.headers.get("x-file-name"),300)||path,size:bytes.length},201);
+  return json({path,mime,url:signedUrl,name:originalName,size:bytes.length},201);
 }
 
 async function moments(req:Request){
@@ -505,13 +508,13 @@ async function moments(req:Request){
   if(!["0","1"].includes(String(d.person)))return json({error:"Dispositivo no válido"},401);
   const [settings,events,config,gestures]=await Promise.all([
     ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
-    ok(db.from("galaxy_items").select("data").eq("kind","event")),
+    ok(db.from("galaxy_items").select("id,data").eq("kind","event")),
     ok(db.from("galaxy_bond_config").select("photo_path").eq("id",1).maybeSingle()),
     ok(db.from("galaxy_bond").select("id,author,created,data").eq("type","gesture").neq("author",d.person).gte("created",new Date(Date.now()-7*86400000).toISOString()).order("created",{ascending:false}).limit(30))
   ]);
   const names=(Array.isArray(settings?.data?.names)?settings.data.names:["Nosotros","Dos"]).slice(0,2).map((name:unknown)=>text(name,40));
   let photoUrl=null;if(config?.photo_path)photoUrl=await signed("galaxy-photos",config.photo_path,300);
-  return json({names,nextEvent:nextCalendarEvent((events||[]).map((data:any)=>({data})),today()),photoUrl,gestures:(gestures||[]).filter((g:any)=>["hug","kiss","miss"].includes(g.data?.gesture)).map((g:any)=>({id:g.id,gesture:g.data.gesture,created:g.created,author:g.author}))});
+  return json({names,nextEvent:nextCalendarEvent(events||[],today()),photoUrl,gestures:(gestures||[]).filter((g:any)=>["hug","kiss","miss"].includes(g.data?.gesture)).map((g:any)=>({id:g.id,gesture:g.data.gesture,created:g.created,author:g.author}))});
 }
 
 Deno.serve(async req=>{
