@@ -100,7 +100,7 @@ function roomScene(h,room){
  const names=state.settings.data.names,person=Number(state.person)||0,placed=homePlaced(homeRoom);
  return `<section class="rogue-room">
   <div class="rogue-map" data-action="home-walk" aria-label="Mapa de ${esc(room[0])}. Toca o haz clic para caminar.">
-   <div class="rpg-room-shell" aria-hidden="true" style="--default-floor:url('${homeAssetManifest.rpgFloorDefault.sheet}');--floor-x:${-homeAssetManifest.rpgFloorDefault.col*68}px;--floor-y:${-homeAssetManifest.rpgFloorDefault.row*68}px;--default-wall:url('${homeAssetManifest.rpgWallDefault.sheet}');--wall-x:${-homeAssetManifest.rpgWallDefault.col*68}px;--wall-y:${-homeAssetManifest.rpgWallDefault.row*68}px"><div class="rpg-floor-field"></div><div class="rpg-wall-band wall-north"></div><div class="rpg-wall-band wall-south"></div><div class="rpg-wall-band wall-west"></div><div class="rpg-wall-band wall-east"></div><div class="rpg-corner corner-nw"></div><div class="rpg-corner corner-ne"></div><div class="rpg-corner corner-sw"></div><div class="rpg-corner corner-se"></div></div>
+   <div class="rpg-room-shell" aria-hidden="true"><div class="rpg-floor-field"></div><div class="rpg-wall-band wall-north"></div><div class="rpg-wall-band wall-south"></div><div class="rpg-wall-band wall-west"></div><div class="rpg-wall-band wall-east"></div><div class="rpg-corner corner-nw"></div><div class="rpg-corner corner-ne"></div><div class="rpg-corner corner-sw"></div><div class="rpg-corner corner-se"></div></div>
    ${homeDoors[homeRoom].map(([to,label],i)=>`<button class="rogue-door rogue-door-${i}" data-action="home-door" data-room="${to}" aria-label="Ir a ${label}"><span class="door-pixel"></span><b>${label}</b></button>`).join('')}
    ${Array.from({length:8},(_,slot)=>{const p=placed.find(x=>Number(x.slot)===slot);return `<div class="rogue-slot rogue-slot-${slot}" data-slot="${slot}">${p?`${homeVisual(p.item,'scene')}`:(placingItem?`<button class="home-empty-slot" data-action="home-slot" data-slot="${slot}" aria-label="Colocar aquí"><i>+</i></button>`:'')}</div>`}).join('')}
    <div class="rogue-player person-${person}" style="left:${homeAvatar.x}%;top:${homeAvatar.y}%" aria-label="${esc(names[person])}"><span>${esc(names[person][0])}</span><b>${esc(names[person])}</b></div>
@@ -114,7 +114,7 @@ function homeOverlay(h){
 }
 function hogar(){
  const h=state.home||{coins:0,inventory:{},placed:[]},room=homeRooms[homeRoom];
- const hud=`<button class="home-exit" data-action="home-exit" aria-label="Volver al universo">← <span>Universo</span></button><div class="home-game-hud"><div class="home-room-label"><span>${room[2]}</span><div><b>${room[0]}</b><small>Nuestro Hogar</small></div></div><div class="sun-coins"><b>${h.coins}</b><small>☀</small></div></div>`;
+ const hud=`<button class="home-exit" data-action="home-exit" aria-label="Volver al universo">←</button><div class="home-game-hud"><div class="home-room-label"><span>${room[2]}</span><div><b>${room[0]}</b><small>Nuestro Hogar</small></div></div></div><div class="rogue-wallet" aria-label="${h.coins} monedas girasol"><span class="coin-sun">✦</span><b>${h.coins}</b></div>`;
  return `<div class="home-game rogue-game">${hud}${roomScene(h,room)}
   <div class="rogue-corner-actions">
    <button class="rogue-action rogue-action-bag ${homeMode==='inventory'?'active':''}" data-action="home-inventory" aria-label="Abrir inventario"><span class="hud-icon hud-icon-bag"><i></i></span><b>Inventario</b></button>
