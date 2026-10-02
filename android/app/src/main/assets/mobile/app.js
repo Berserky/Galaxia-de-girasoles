@@ -173,8 +173,9 @@ function go(next){
 function render(){
  renderNav();
  if(!native.paired){renderOnboarding();refreshIcons();return;}
- if(shouldShowAdriWelcome()){renderAdriWelcome();refreshIcons();return;}
+ if(shouldShowAdriWelcome()){globalPlayer.className='global-player';renderAdriWelcome();refreshIcons();return;}
  if(!cloud){app.innerHTML=header()+loading('Cargando nuestra galaxia');refreshIcons();refreshState();return;}
+ if(!media.music&&!mediaLoadedAt.music)setTimeout(()=>loadMedia('music').then(renderGlobalPlayer).catch(()=>{}),0);
  if(view==='home')app.innerHTML=header()+homeView();
  if(view==='map'){app.innerHTML=header()+mapView();setTimeout(()=>{drawMap();if(!mapData)refreshMap({detail:true});},0);}
  if(view==='moments')app.innerHTML=header()+momentsView();
