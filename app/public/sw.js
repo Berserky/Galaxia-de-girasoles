@@ -1,4 +1,4 @@
-const CACHE='galaxia-shell-v20';
+const CACHE='galaxia-shell-v21';
 const SHELL=['./','./index.html','./app.css','./app.js','./install.js','./theme.js','./dates.js','./icon.svg','./garden.svg','./manifest.webmanifest'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
