@@ -94,6 +94,7 @@ assert.ok(app.includes("document.visibilityState!=='visible'"),'La app debe paus
 assert.ok(app.includes('editingNow()'),'La sincronización automática debe respetar formularios en edición');
 assert.ok(app.includes("WELCOME_KEY='nuestra-galaxia.adri-welcome.v1'"),'Falta persistencia de la bienvenida de Adri');
 assert.ok(app.includes("String(native.person)==='1'"),'La bienvenida especial debe limitarse a Adri/person 1');
+assert.ok(app.includes("welcomePreview||(String(native.person)==='1'&&!welcomeDone())"),'El preview de Sebas debe poder abrir la bienvenida sin alterar la regla real de Adri');
 assert.ok(app.includes("data-action=\"welcome-next\""),'Falta navegación de la bienvenida');
 assert.ok(app.includes("data-action=\"welcome-skip\""),'La bienvenida debe poder omitirse');
 assert.ok(app.includes("data-action=\"welcome-replay\""),'Falta opción para volver a ver la bienvenida');
