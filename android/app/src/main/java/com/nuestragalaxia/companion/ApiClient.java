@@ -6,6 +6,10 @@ import java.net.*;
 import java.nio.charset.StandardCharsets;
 
 public final class ApiClient {
+    public static final class ApiException extends IOException {
+        public final int status;
+        ApiException(int status,String message){super(message);this.status=status;}
+    }
     public static final class PairResult { public final String token,person,name; PairResult(String t,String p,String n){token=t;person=p;name=n;} }
 
     private static JSONObject post(JSONObject body,String deviceToken) throws Exception {
@@ -20,7 +24,7 @@ public final class ApiClient {
         InputStream stream=code>=200&&code<300?c.getInputStream():c.getErrorStream();
         String text; try(BufferedReader r=new BufferedReader(new InputStreamReader(stream,StandardCharsets.UTF_8))){StringBuilder b=new StringBuilder();String line;while((line=r.readLine())!=null)b.append(line);text=b.toString();}
         JSONObject result=text.isBlank()?new JSONObject():new JSONObject(text);
-        if(code<200||code>=300)throw new IOException(result.optString("error","Error de red "+code));
+        if(code<200||code>=300)throw new ApiException(code,result.optString("error","Error de red "+code));
         return result;
     }
     public static PairResult pair(String code,String deviceName) throws Exception {
