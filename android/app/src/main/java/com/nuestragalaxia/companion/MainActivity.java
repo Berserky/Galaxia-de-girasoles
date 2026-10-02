@@ -10,11 +10,13 @@ import android.os.*;
 import android.provider.Settings;
 import android.webkit.*;
 import android.widget.Toast;
+import androidx.activity.ComponentActivity;
+import androidx.activity.OnBackPressedCallback;
 import org.json.JSONObject;
 import java.util.Set;
 import java.util.concurrent.*;
 
-public final class MainActivity extends Activity {
+public final class MainActivity extends ComponentActivity {
     private static final int REQ_LOCATION=100;
     private static final int REQ_TRACKING_NOTIFICATIONS=101;
     private static final int REQ_BOND_NOTIFICATIONS=102;
@@ -38,6 +40,15 @@ public final class MainActivity extends Activity {
 
     @Override protected void onCreate(Bundle savedInstanceState){
         super.onCreate(savedInstanceState);
+        getOnBackPressedDispatcher().addCallback(this,new OnBackPressedCallback(true){
+            @Override public void handleOnBackPressed(){
+                if(pageReady)evaluate("window.GalaxyNative&&window.GalaxyNative.back&&window.GalaxyNative.back();");
+                else{
+                    setEnabled(false);
+                    getOnBackPressedDispatcher().onBackPressed();
+                }
+            }
+        });
         setContentView(R.layout.activity_main);
         store=new DeviceStore(this);
         web=findViewById(R.id.webView);
@@ -351,11 +362,6 @@ public final class MainActivity extends Activity {
     }
 
     private void toast(String text){runOnUiThread(()->Toast.makeText(this,text,Toast.LENGTH_LONG).show());}
-
-    @Override public void onBackPressed(){
-        if(pageReady)evaluate("window.GalaxyNative&&window.GalaxyNative.back&&window.GalaxyNative.back();");
-        else super.onBackPressed();
-    }
 
     void closeApp(){runOnUiThread(this::finish);}
 
