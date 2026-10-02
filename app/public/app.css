@@ -87,6 +87,19 @@ html.home-fullscreen .scene-floor{background:repeating-linear-gradient(100deg,va
 .furniture-preview.size-xs .home-object-art{max-height:42px}.furniture-preview.size-sm .home-object-art{max-height:58px}.furniture-preview.size-md .home-object-art{max-height:78px}.furniture-preview.size-lg .home-object-art{max-height:98px}.furniture-preview.size-xl .home-object-art,.furniture-preview.size-xxl .home-object-art{max-height:112px}
 html.home-fullscreen .home-game-panel{background:linear-gradient(180deg,color-mix(in srgb,var(--highlight) 10%,var(--surface)),var(--surface))}
 @media(max-width:700px){.scene-slot.size-xxl .home-object-art{max-width:230px;max-height:195px}.scene-slot.size-xl .home-object-art{max-width:180px;max-height:165px}}
+/* Physical object sizing V7 — overrides legacy 96/110px caps */
+.scene-slot.has-item{width:260px;height:240px;display:flex;align-items:flex-end;justify-content:center}
+.scene-slot.has-item>.home-object-art{width:auto;height:auto;max-width:none;max-height:none}
+.scene-slot.size-xs>.home-object-art{width:auto;max-width:58px;max-height:48px}
+.scene-slot.size-sm>.home-object-art{width:auto;max-width:88px;max-height:76px}
+.scene-slot.size-md>.home-object-art{width:auto;max-width:130px;max-height:118px}
+.scene-slot.size-lg>.home-object-art{width:auto;max-width:175px;max-height:170px}
+.scene-slot.size-xl>.home-object-art{width:auto;max-width:230px;max-height:205px}
+.scene-slot.size-xxl>.home-object-art{width:auto;max-width:310px;max-height:245px}
+.scene-slot.size-xxl{width:330px;height:265px}.scene-slot.size-xl{width:270px;height:230px}.scene-slot.size-xs{width:90px;height:90px}.scene-slot.size-sm{width:120px;height:115px}
+.home-object-placeholder{display:grid;place-items:center;width:54px;height:54px;border:1px dashed var(--border);border-radius:12px;background:var(--surface-2);color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.08em}
+.inventory-item.size-xs>.home-object-art{width:auto;height:auto;max-width:48px;max-height:42px}.inventory-item.size-sm>.home-object-art{width:auto;height:auto;max-width:66px;max-height:58px}.inventory-item.size-md>.home-object-art{width:auto;height:auto;max-width:82px;max-height:74px}.inventory-item.size-lg>.home-object-art,.inventory-item.size-xl>.home-object-art,.inventory-item.size-xxl>.home-object-art{width:auto;height:auto;max-width:100px;max-height:88px}
+@media(max-width:700px){.scene-slot.size-xxl>.home-object-art{max-width:300px;max-height:235px}.scene-slot.size-xl>.home-object-art{max-width:225px;max-height:200px}.scene-slot.size-lg>.home-object-art{max-width:170px;max-height:165px}}
 /* Palette is the only source of literal UI colors below this line. */
 :root[data-theme="cosmic"]{--bg:#090b18;--surface:#12162a;--surface-2:#191e35;--surface-3:#0d1020;--text:#f5f2ff;--muted:#a7abc3;--border:#292f4d;--accent:#8b5cf6;--accent-2:#ec4899;--highlight:#f5b942;--danger:#ef4444;--overlay:#03040bd9;--shadow:#0006}
 :root[data-theme="halloween"]{--bg:#0c0710;--surface:#17101d;--surface-2:#211529;--surface-3:#0e0913;--text:#fff4e8;--muted:#c2a9c6;--border:#3c2345;--accent:#ff7a18;--accent-2:#9333ea;--highlight:#ffb45c;--danger:#ef4444;--overlay:#09030ddd;--shadow:#0008}
