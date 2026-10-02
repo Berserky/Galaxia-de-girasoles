@@ -277,3 +277,29 @@ textarea{min-height:110px;resize:vertical}
 @keyframes tourFocusPulse{50%{box-shadow:0 0 0 3px rgba(230,216,255,.92),0 0 0 14px rgba(143,87,255,.07),0 0 58px rgba(143,87,255,.44)}}
 @keyframes tourCardIn{from{opacity:0;transform:translateY(24px) scale(.97)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.gift-ambient,.gift-wrap,.gift-box,.gift-note,.gift-hint,.welcome-curtain,.tour-card{animation-duration:.01ms!important;animation-delay:0s!important}}
+
+/* Cinematic gift dive + staggered scene reveal */
+.gift-intro{transform-origin:50% 47%;transition:background .7s ease}
+.gift-intro .gift-wrap{transform-origin:center 43%;will-change:transform,filter,opacity}
+.gift-intro.opening .gift-box{animation:none}
+.gift-intro.opening .gift-lid{animation:giftLidOpen 1s cubic-bezier(.2,.85,.25,1) forwards;transform-origin:50% 100%}
+.gift-intro.opening .gift-body:after{content:"";position:absolute;left:50%;top:3px;width:12px;height:12px;border-radius:50%;background:#fff;transform:translateX(-50%);box-shadow:0 0 20px 12px #fff,0 0 70px 38px rgba(177,129,255,.8),0 0 140px 75px rgba(126,65,255,.35);animation:giftInnerLight 1.4s .35s ease-out forwards}
+.gift-intro.opening .gift-note,.gift-intro.opening .gift-hint{animation:giftFadeAway .4s ease forwards}
+.gift-intro.entering .gift-wrap{animation:giftCameraDive 1.05s cubic-bezier(.7,0,.9,.45) forwards}
+.gift-intro.entering .gift-ambient{animation:giftPortalBloom 1.05s ease-in forwards}
+.gift-intro.blackout{background:#000}
+.gift-intro.blackout .gift-wrap,.gift-intro.blackout .gift-ambient{opacity:0}
+.welcome-stage>.welcome-visual{opacity:0;animation:sceneRevealVisual .85s .18s cubic-bezier(.16,1,.3,1) forwards}
+.welcome-stage>.welcome-copy .welcome-eyebrow{opacity:0;animation:sceneRevealText .65s .48s ease forwards}
+.welcome-stage>.welcome-copy h1{opacity:0;animation:welcomeTextShine 6s linear infinite,sceneRevealText .8s .62s cubic-bezier(.16,1,.3,1) forwards}
+.welcome-stage>.welcome-copy>p:last-child{opacity:0;animation:sceneRevealText .75s .82s ease forwards}
+.welcome-stage>.welcome-footer{opacity:0;animation:sceneRevealFooter .7s 1.08s ease forwards}
+@keyframes giftLidOpen{0%{transform:translateY(0) rotateX(0);filter:brightness(1)}45%{transform:translateY(-12px) rotateX(-18deg);filter:brightness(1.25)}100%{transform:translateY(-58px) rotate(-8deg) rotateX(-68deg);opacity:.5;filter:brightness(1.7)}}
+@keyframes giftInnerLight{0%{opacity:0;transform:translateX(-50%) scale(.2)}45%{opacity:1}100%{opacity:.8;transform:translateX(-50%) scale(5)}}
+@keyframes giftFadeAway{to{opacity:0;transform:translateY(15px);filter:blur(5px)}}
+@keyframes giftCameraDive{0%{transform:scale(1);filter:blur(0);opacity:1}55%{transform:scale(2.8) translateY(3%);filter:blur(.5px);opacity:1}100%{transform:scale(11) translateY(8%);filter:blur(4px);opacity:0}}
+@keyframes giftPortalBloom{0%{transform:scale(1);opacity:1}100%{transform:scale(18);opacity:0}}
+@keyframes sceneRevealVisual{from{opacity:0;transform:translateY(24px) scale(.86);filter:blur(12px)}to{opacity:1;transform:none;filter:none}}
+@keyframes sceneRevealText{from{opacity:0;transform:translateY(17px);filter:blur(6px)}to{opacity:1;transform:none;filter:none}}
+@keyframes sceneRevealFooter{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.gift-intro.opening .gift-lid,.gift-intro.opening .gift-body:after,.gift-intro.entering .gift-wrap,.gift-intro.entering .gift-ambient,.welcome-stage>.welcome-visual,.welcome-stage>.welcome-copy .welcome-eyebrow,.welcome-stage>.welcome-copy h1,.welcome-stage>.welcome-copy>p:last-child,.welcome-stage>.welcome-footer{animation-duration:.01ms!important;animation-delay:0s!important}}
