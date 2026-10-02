@@ -31,3 +31,15 @@ test('Map live metadata is refreshed without rebuilding the whole view',()=>{
  assert.match(app,/id="map-distance-value"/);
  assert.doesNotMatch(app,/async function savePlace[\s\S]{0,500}draw\(\)/);
 });
+
+
+test('Live map exposes speed and conservative movement inference',()=>{
+ const app=read('app/public/app.js'),cloud=read('app/cloud/adapter.js'),schema=read('supabase/schema.sql');
+ assert.match(app,/function effectiveSpeed\(/);
+ assert.match(app,/function classifyMotion\(/);
+ assert.match(app,/km\/h/);
+ assert.match(app,/En moto · probable/);
+ assert.match(app,/En transporte público · probable/);
+ assert.match(cloud,/motion,transport_preference/);
+ assert.match(schema,/transport_preference text/);
+});
