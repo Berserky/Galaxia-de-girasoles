@@ -96,7 +96,7 @@ async function action(el,event=null){const a=el.dataset.action,id=el.dataset.id,
  case'home-map':return show(`<span class="eyebrow">NUESTRO HOGAR</span><h2 id="modal-title">¿A dónde vamos?</h2><div class="home-map-grid">${Object.entries(homeRooms).map(([id,r])=>`<button data-action="home-door" data-room="${id}" class="${id===homeRoom?'current':''}"><span>${r[2]}</span><b>${r[0]}</b></button>`).join('')}</div>`);
  case'home-door':if(modal.open)close();homeRoom=el.dataset.room;homeMode='room';homeAvatarX=50;placingItem='';draw();return;
  case'home-step':homeAvatarX=Math.max(10,Math.min(90,homeAvatarX+Number(el.dataset.dir)*14));return draw();
- case'home-walk':if(event&&event.target===el){const box=el.getBoundingClientRect();homeAvatarX=Math.max(8,Math.min(92,((event.clientX-box.left)/box.width)*100));draw();}return;
+ case'home-walk':if(event){const box=el.getBoundingClientRect();homeAvatarX=Math.max(8,Math.min(92,((event.clientX-box.left)/box.width)*100));draw();}return;
  case'home-shop':homeMode='shop';return draw();
  case'home-inventory':homeMode='inventory';return draw();
  case'home-room':homeMode='room';return draw();
