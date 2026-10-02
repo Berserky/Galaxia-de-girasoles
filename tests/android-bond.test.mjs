@@ -4,41 +4,154 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {stripTypeScriptTypes} from 'node:module';
 import {webcrypto} from 'node:crypto';
+
 const edge=readFileSync(new URL('../supabase/functions/android-companion/index.ts',import.meta.url),'utf8');
-function helper(){const match=edge.match(/function nextCalendarEvent\(items: any\[\], today: string\) \{[\s\S]*?\n\}/);assert.ok(match,'calendar helper exists');return vm.runInNewContext(match[0].replace('items: any[], today: string','items, today').replace('value: unknown','value')+'; nextCalendarEvent');}
-test('calendar excludes past dates and rolls annual dates without exposing event bodies',()=>{
- const next=helper()([{data:{title:'Pasado',date:'2020-01-01'}},{data:{title:'Aniversario',date:'2020-01-01',annual:true,body:'privado'}},{data:{title:'Pronto',date:'2026-10-03',body:'privado'}}],'2026-10-02');
- assert.equal(JSON.stringify(next),JSON.stringify({title:'Pronto',date:'2026-10-03'}));
-});
+
 function endpoint(rows={}){
- let handler;const calls=[];
- const db={from(table){calls.push({table});const query={};for(const key of ['select','eq','neq','gte','is','limit','order','update','single','maybeSingle'])query[key]=(...args)=>{calls.push({table,key,args});return query;};query.then=(resolve)=>Promise.resolve({data:rows[table]??[],error:null}).then(resolve);return query;},
-  rpc(name,args){calls.push({rpc:name,args});return Promise.resolve({data:null,error:null});},storage:{from(){return{createSignedUrl:async()=>({data:{signedUrl:'https://private.test/photo'},error:null})};}}};
+ let handler;
+ const calls=[];
+ const makeQuery=table=>{
+  let result=rows[table]??[];
+  let single=false;
+  const query={
+   select(...args){calls.push({table,key:'select',args});return query;},
+   eq(...args){calls.push({table,key:'eq',args});return query;},
+   neq(...args){calls.push({table,key:'neq',args});return query;},
+   gte(...args){calls.push({table,key:'gte',args});return query;},
+   gt(...args){calls.push({table,key:'gt',args});return query;},
+   is(...args){calls.push({table,key:'is',args});return query;},
+   in(...args){calls.push({table,key:'in',args});return query;},
+   filter(...args){calls.push({table,key:'filter',args});return query;},
+   limit(...args){calls.push({table,key:'limit',args});return query;},
+   order(...args){calls.push({table,key:'order',args});return query;},
+   update(payload){calls.push({table,key:'update',args:[payload]});return query;},
+   delete(){calls.push({table,key:'delete',args:[]});return query;},
+   insert(payload){
+    calls.push({table,key:'insert',args:[payload]});
+    const value=Array.isArray(payload)?payload[0]:payload;
+    result={id:'created',version:1,created:'2026-10-02T12:00:00Z',...value};
+    return query;
+   },
+   upsert(payload,...args){calls.push({table,key:'upsert',args:[payload,...args]});result=payload;return query;},
+   single(){calls.push({table,key:'single',args:[]});single=true;return query;},
+   maybeSingle(){calls.push({table,key:'maybeSingle',args:[]});single=true;return query;},
+   then(resolve){
+    const data=single?(Array.isArray(result)?result[0]??null:result):result;
+    return Promise.resolve({data,error:null}).then(resolve);
+   }
+  };
+  return query;
+ };
+ const db={
+  from(table){calls.push({table});return makeQuery(table);},
+  rpc(name,args){calls.push({rpc:name,args});return Promise.resolve({data:null,error:null});},
+  storage:{from(bucket){calls.push({bucket});return{
+   createSignedUrl:async path=>({data:{signedUrl:'https://private.test/'+encodeURIComponent(path)},error:null}),
+   list:async()=>({data:[],error:null}),
+   remove:async()=>({data:null,error:null}),
+   upload:async()=>({data:null,error:null})
+  };}}
+ };
  const code=stripTypeScriptTypes(edge.replace(/^import .*;\r?\n/gm,''));
- vm.runInNewContext(code,{createClient:()=>db,Deno:{env:{get:()=>''},serve:fn=>{handler=fn;}},Response,TextEncoder,crypto:webcrypto,URL,console});
- return{calls,async request(body,token){return handler(new Request('https://edge.test',{method:'POST',headers:{'content-type':'application/json',...(token?{'x-device-token':token}:{})},body:JSON.stringify(body)}));}};
+ const context={
+  createClient:()=>db,
+  Deno:{env:{get:key=>key==='SUPABASE_URL'?'https://test.supabase.co':key==='SUPABASE_SERVICE_ROLE_KEY'?'test-service-role':''},serve:fn=>{handler=fn;}},
+  Response,TextEncoder,crypto:webcrypto,URL,console
+ };
+ vm.runInNewContext(code+'\n;globalThis.__calendar=nextCalendarEvent;',context);
+ return{
+  calls,
+  calendar:context.__calendar,
+  async request(body,token){
+   return handler(new Request('https://edge.test',{method:'POST',headers:{'content-type':'application/json',...(token?{'x-device-token':token}:{})},body:JSON.stringify(body)}));
+  }
+ };
 }
+
+test('calendar excludes past dates and projects only title/date',()=>{
+ const next=endpoint().calendar([
+  {id:'past',data:{title:'Pasado',date:'2020-01-01'}},
+  {id:'annual',data:{title:'Aniversario',date:'2020-01-01',annual:true,body:'privado'}},
+  {id:'soon',data:{title:'Pronto',date:'2026-10-03',body:'privado'}}
+ ],'2026-10-02');
+ assert.equal(JSON.stringify(next),JSON.stringify({title:'Pronto',date:'2026-10-03'}));
+ assert.equal(JSON.stringify(next).includes('privado'),false);
+ assert.equal(Object.hasOwn(next,'id'),false);
+});
+
+test('calendar keeps leap anniversaries and rejects impossible dates',()=>{
+ const calendar=endpoint().calendar;
+ assert.equal(calendar([{data:{title:'Bisiesto',date:'2024-02-29',annual:true}}],'2026-10-02').date,'2028-02-29');
+ assert.equal(calendar([{data:{title:'Futuro',date:'2030-01-01',annual:true}}],'2026-10-02').date,'2030-01-01');
+ assert.equal(calendar([{data:{title:'Malo',date:'2026-02-30'}}],'2026-01-01'),null);
+ assert.equal(calendar([{data:{title:'Malo',date:'2026-99-99'}}],'2026-01-01'),null);
+});
+
 test('public key alone cannot read moments or send a gesture',async()=>{
- const server=endpoint();for(const action of ['moments','gesture']){const response=await server.request({action,gesture:'hug'});assert.equal(response.status,401);}assert.equal(server.calls.length,0);
+ const server=endpoint();
+ for(const action of ['moments','gesture']){
+  const response=await server.request({action,gesture:'hug'});
+  assert.equal(response.status,401);
+ }
+ assert.equal(server.calls.length,0);
 });
-test('gesture uses authorized device identity and rejects unknown gesture before the service RPC',async()=>{
- const server=endpoint({galaxy_devices:[{id:'device',person:'1'}]});const token='a'.repeat(64);
+
+test('gesture uses authorized device identity and rejects unknown gesture before insert',async()=>{
+ const server=endpoint({galaxy_devices:[{id:'device',person:'1',name:'Android'}],galaxy_bond:[]});
+ const token='a'.repeat(64);
  assert.equal((await server.request({action:'gesture',gesture:'teleport',person:'0'},token)).status,400);
- assert.equal(server.calls.filter(x=>x.rpc).length,0);
- assert.equal((await server.request({action:'gesture',gesture:'hug',person:'0'},token)).status,200);
- assert.equal(JSON.stringify(server.calls.find(x=>x.rpc).args),JSON.stringify({person_value:'1',gesture_value:'hug'}));
+ assert.equal(server.calls.some(x=>x.table==='galaxy_bond'&&x.key==='insert'),false);
+ const response=await server.request({action:'gesture',gesture:'hug',person:'0'},token);
+ assert.equal(response.status,201);
+ const insert=server.calls.find(x=>x.table==='galaxy_bond'&&x.key==='insert');
+ assert.ok(insert);
+ assert.equal(insert.args[0].author,'1');
+ assert.equal(insert.args[0].data.gesture,'hug');
 });
+
 test('moments projects only names, event, private signed photo and partner gestures',async()=>{
- const server=endpoint({galaxy_devices:[{id:'device',person:'0'}],galaxy_settings:{data:{names:['Uno','Dos'],albumUrl:'secret'}},galaxy_items:[{data:{title:'Fecha',date:'2090-01-01',body:'secret'}}],galaxy_bond_config:{photo_path:'album/photo.jpg'},galaxy_bond:[{id:'gesture',author:'1',created:'2026-10-02',data:{gesture:'hug',answer:'secret'}},{id:'game',author:'1',data:{answer:'hidden'}}]});
- const response=await server.request({action:'moments'},'b'.repeat(64));assert.equal(response.status,200);const output=await response.json();
- assert.deepEqual(Object.keys(output).sort(),['gestures','names','nextEvent','photoUrl']);assert.equal(output.gestures.length,1);assert.equal(JSON.stringify(output).includes('secret'),false);
+ const server=endpoint({
+  galaxy_devices:[{id:'device',person:'0',name:'Android'}],
+  galaxy_settings:{data:{names:['Uno','Dos'],albumUrl:'secret'}},
+  galaxy_items:[{id:'event',data:{title:'Fecha',date:'2090-01-01',body:'secret'}}],
+  galaxy_bond_config:{photo_path:'album/photo.jpg'},
+  galaxy_bond:[
+   {id:'gesture',author:'1',created:'2026-10-02',data:{gesture:'hug',answer:'secret'}},
+   {id:'game',author:'1',created:'2026-10-02',data:{answer:'hidden'}}
+  ]
+ });
+ const response=await server.request({action:'moments'},'b'.repeat(64));
+ assert.equal(response.status,200);
+ const output=await response.json();
+ assert.deepEqual(Object.keys(output).sort(),['gestures','names','nextEvent','photoUrl']);
+ assert.equal(output.gestures.length,1);
+ assert.equal(JSON.stringify(output).includes('secret'),false);
  assert.ok(server.calls.some(x=>x.table==='galaxy_bond'&&x.key==='neq'&&x.args[0]==='author'&&x.args[1]==='0'));
  assert.ok(server.calls.some(x=>x.table==='galaxy_bond'&&x.key==='limit'&&x.args[0]===30));
  assert.equal(server.calls.some(x=>x.table?.includes('location')||x.table?.includes('daily')),false);
 });
-test('calendar keeps leap anniversaries on February 29 and never before their original date',()=>{
- assert.equal(helper()([{data:{title:'Bisiesto',date:'2024-02-29',annual:true}}],'2026-10-02').date,'2028-02-29');
- assert.equal(helper()([{data:{title:'Futuro',date:'2030-01-01',annual:true}}],'2026-10-02').date,'2030-01-01');
- assert.equal(helper()([{data:{title:'Malo',date:'2026-02-30'}}],'2026-01-01'),null);
- assert.equal(helper()([{data:{title:'Malo',date:'2026-99-99'}}],'2026-01-01'),null);
+
+test('light map refresh avoids historical tables',async()=>{
+ const server=endpoint({
+  galaxy_devices:[{id:'device',person:'0',name:'Android'}],
+  galaxy_locations:[],galaxy_places:[],galaxy_trip_points:[],galaxy_destinations:[]
+ });
+ const response=await server.request({action:'map-state',detail:false},'c'.repeat(64));
+ assert.equal(response.status,200);
+ const output=await response.json();
+ assert.deepEqual(Object.keys(output).sort(),['destinations','locations','places','tripPoints']);
+ for(const table of ['galaxy_location_history','galaxy_trip_history','galaxy_place_events','galaxy_encounters'])
+  assert.equal(server.calls.some(x=>x.table===table),false);
+});
+
+test('transport preference is restricted and bound to device identity',async()=>{
+ const server=endpoint({galaxy_devices:[{id:'device',person:'1',name:'Android'}],galaxy_locations:[]});
+ const token='d'.repeat(64);
+ assert.equal((await server.request({action:'transport-set',preference:'plane',person:'0'},token)).status,400);
+ const response=await server.request({action:'transport-set',preference:'transit',person:'0'},token);
+ assert.equal(response.status,200);
+ const upsert=server.calls.findLast(x=>x.table==='galaxy_locations'&&x.key==='upsert');
+ assert.ok(upsert);
+ assert.equal(upsert.args[0].person,'1');
+ assert.equal(upsert.args[0].transport_preference,'transit');
 });
