@@ -22,7 +22,7 @@ for(const name of ['index.html','app.js','app.css','dates.js','icon.svg','garden
  let source=await readFile(path.join(root,'app/public',name),'utf8');
  source=source.replaceAll('="/','="./').replaceAll("url('/","url('./").replaceAll('"start_url":"/"','"start_url":"./"').replaceAll('"src":"/icon.svg"','"src":"./icon.svg"');
  if(name==='app.js'){
-  source="import {cloudApi,loginMarkup,login,signOut,googleLogin,rememberInvitation} from './cloud.js';\n"+source;
+  source="import {cloudApi,loginMarkup,login,signOut,googleLogin,rememberInvitation,subscribeLocations} from './cloud.js';\\nglobalThis.__galaxySubscribeLocations=subscribeLocations;\\n"+source;
   const apiStart=source.indexOf('async function api('),apiEnd=source.indexOf('async function refresh(',apiStart);
   source=source.slice(0,apiStart)+'const api=cloudApi;\n'+source.slice(apiEnd);
   source=source.replace("async function boot(){try", "async function boot(){try");
