@@ -22,7 +22,7 @@ public final class MainActivity extends Activity {
     private static final Set<String> MOBILE_ACTIONS=Set.of(
         "mobile-state","item-save","item-delete","settings-save","daily-save",
         "bond-save","bond-update","bond-guess","bond-delete","bond-widget",
-        "map-state","place-save","place-delete","status-set","destination-save","trip",
+        "map-state","place-save","place-delete","status-set","transport-set","destination-save","trip",
         "media-list","media-delete"
     );
 
@@ -310,7 +310,12 @@ public final class MainActivity extends Activity {
                 if(request!=null)reject(request,"La ubicación precisa es necesaria para compartir tu recorrido.");
             }
         }else if(requestCode==REQ_TRACKING_NOTIFICATIONS){
-            doStartLocation();
+            boolean granted=results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED;
+            if(granted)doStartLocation();
+            else{
+                String request=pendingLocationRequest;pendingLocationRequest=null;
+                if(request!=null)reject(request,"Activa las notificaciones para que Android muestre claramente cuándo compartes tu ubicación.");
+            }
         }else if(requestCode==REQ_BOND_NOTIFICATIONS){
             String request=pendingBondRequest;pendingBondRequest=null;
             boolean granted=results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED;
@@ -347,8 +352,16 @@ public final class MainActivity extends Activity {
 
     private void toast(String text){runOnUiThread(()->Toast.makeText(this,text,Toast.LENGTH_LONG).show());}
 
+    @Override public void onBackPressed(){
+        if(pageReady)evaluate("window.GalaxyNative&&window.GalaxyNative.back&&window.GalaxyNative.back();");
+        else super.onBackPressed();
+    }
+
+    void closeApp(){runOnUiThread(this::finish);}
+
     @Override protected void onResume(){
         super.onResume();
+        if(updater!=null)updater.resumePendingInstall();
         if(pageReady){nativeChanged();refreshMomentsInternal();}
     }
 
