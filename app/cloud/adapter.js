@@ -28,10 +28,12 @@ export async function cloudApi(url,options={}){
  if(url==='/api/logout'){await checked(client.auth.signOut());return {};}
  const p=await person();
  if(url==='/api/invite')return {token:await checked(client.rpc('galaxy_invite'))};
- if(url==='/api/locations'&&method==='GET')return checked(client.from('galaxy_locations').select('person,latitude,longitude,accuracy,speed,heading,sharing,updated_at').order('person'));
+ if(url==='/api/locations'&&method==='GET')return checked(client.from('galaxy_locations').select('person,latitude,longitude,accuracy,speed,heading,sharing,status,trip_active,trip_started_at,updated_at').order('person'));
  if(url==='/api/location'&&method==='PUT'){
   const sharing=!!data.sharing;
   const row={person:String(p),sharing,updated_at:new Date().toISOString(),latitude:null,longitude:null,accuracy:null,speed:null,heading:null};
+  if(data.status!==undefined)row.status=text(data.status,40,true);
+  if(data.trip_active!==undefined){row.trip_active=!!data.trip_active;row.trip_started_at=data.trip_active?new Date().toISOString():null;}
   if(sharing){
    const latitude=Number(data.latitude),longitude=Number(data.longitude),accuracy=Number(data.accuracy);
    if(!Number.isFinite(latitude)||latitude < -90||latitude > 90||!Number.isFinite(longitude)||longitude < -180||longitude > 180)throw Error('La ubicación recibida no es válida.');
@@ -39,6 +41,17 @@ export async function cloudApi(url,options={}){
   }
   return checked(client.from('galaxy_locations').upsert(row,{onConflict:'person'}).select().single());
  }
+ if(url==='/api/map/places'&&method==='GET')return checked(client.from('galaxy_places').select('*').order('created_at'));
+ if(url==='/api/map/place'&&method==='POST'){
+  const kind=['home','work','memory','adventure'].includes(data.kind)?data.kind:null,latitude=Number(data.latitude),longitude=Number(data.longitude),name=text(data.name,80);
+  if(!kind||!Number.isFinite(latitude)||!Number.isFinite(longitude))throw Error('Lugar no válido.');
+  if(['home','work'].includes(kind))await checked(client.from('galaxy_places').delete().eq('owner',String(p)).eq('kind',kind));
+  return checked(client.from('galaxy_places').insert({owner:String(p),kind,name,latitude,longitude,note:text(data.note,300,true)}).select().single());
+ }
+ if(url.startsWith('/api/map/place/')&&method==='DELETE')return checked(client.from('galaxy_places').delete().eq('id',url.split('/').pop()).eq('owner',String(p)));
+ if(url==='/api/map/trip'&&method==='GET')return checked(client.from('galaxy_trip_points').select('*').order('created_at'));
+ if(url==='/api/map/trip/point'&&method==='POST')return checked(client.from('galaxy_trip_points').insert({person:String(p),latitude:Number(data.latitude),longitude:Number(data.longitude)}));
+ if(url==='/api/map/trip/end'&&method==='POST'){await checked(client.from('galaxy_trip_points').delete().eq('person',String(p)));return checked(client.from('galaxy_locations').update({trip_active:false,trip_started_at:null}).eq('person',String(p)));}
  if(url==='/api/state'){
   const [s,items,daily,home]=await Promise.all([settings(),allItems(),checked(client.rpc('galaxy_daily_read')),checked(client.rpc('galaxy_home_state'))]);
   const day=today(),current=daily.filter(d=>d.day===day);
