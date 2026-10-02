@@ -269,30 +269,28 @@ function updateMarkup(){
 function renderUpdateOnly(){const el=$('#updateCard');if(el)el.innerHTML=updateMarkup();}
 
 function drawMap(){
- if(view!=='map'||!$('#map')||typeof L==='undefined'||!mapData)return;
+ if(view!=='map'||!$('#map')||typeof GalaxyMap==='undefined'||!mapData)return;
  if(map){map.remove();map=null;}
- map=L.map('map',{zoomControl:false,attributionControl:true});
- L.control.zoom({position:'bottomleft'}).addTo(map);
- L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+ map=new GalaxyMap($('#map'),{center:[4.711,-74.0721],zoom:12});
  const locs=(mapData.locations||[]).filter(x=>x.sharing&&Number.isFinite(Number(x.latitude))&&Number.isFinite(Number(x.longitude)));
  const bounds=[];
  locs.forEach(l=>{
    const mine=l.person===cloud.person,name=names()[Number(l.person)]||'Nosotros';
-   const icon=L.divIcon({className:'couple-marker '+(mine?'':'partner'),html:'<div>'+esc(name.slice(0,1))+'</div>',iconSize:[39,39],iconAnchor:[19,19]});
-   L.marker([l.latitude,l.longitude],{icon}).addTo(map).bindPopup('<b>'+esc(name)+'</b><br>'+esc(transportLabel(l))+' · '+(Number(l.speed||0)*3.6).toFixed(0)+' km/h');
-   bounds.push([l.latitude,l.longitude]);
+   map.addMarker({
+     lat:l.latitude,lon:l.longitude,label:esc(name.slice(0,1)),
+     className:mine?'mine':'partner',
+     popup:name+' · '+transportLabel(l)+' · '+(Number(l.speed||0)*3.6).toFixed(0)+' km/h'
+   });
+   bounds.push([Number(l.latitude),Number(l.longitude)]);
  });
  (mapData.places||[]).forEach(p=>{
    const symbol=p.kind==='home'?'⌂':p.kind==='work'?'▣':p.kind==='adventure'?'✦':'♡';
-   const icon=L.divIcon({className:'place-marker',html:'<div>'+symbol+'</div>',iconSize:[32,32],iconAnchor:[16,16]});
-   L.marker([p.latitude,p.longitude],{icon}).addTo(map).bindPopup('<b>'+esc(p.name)+'</b>'+(p.note?'<br>'+esc(p.note):''));
+   map.addMarker({lat:p.latitude,lon:p.longitude,label:symbol,className:'place',popup:p.name+(p.note?' · '+p.note:'')});
  });
  const grouped={};
- (mapData.tripPoints||[]).slice().reverse().forEach(p=>(grouped[p.person]??=[]).push([p.latitude,p.longitude]));
- Object.entries(grouped).forEach(([person,points])=>{if(points.length>1)L.polyline(points,{weight:5,opacity:.72,dashArray:person===cloud.person?null:'8 7'}).addTo(map);});
- if(bounds.length===1)map.setView(bounds[0],15);
- else if(bounds.length>1)map.fitBounds(bounds,{padding:[35,35],maxZoom:16});
- else map.setView([4.711,-74.0721],12);
+ (mapData.tripPoints||[]).slice().reverse().forEach(p=>(grouped[p.person]??=[]).push([Number(p.latitude),Number(p.longitude)]));
+ Object.entries(grouped).forEach(([person,points])=>{if(points.length>1)map.addPolyline(points,{className:person===cloud.person?'mine':'partner',dashed:person!==cloud.person});});
+ if(bounds.length)map.fitBounds(bounds,{maxZoom:16});
 }
 
 function showModal(title,body,formId=''){
