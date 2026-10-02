@@ -28,18 +28,36 @@ public final class TrackingService extends Service {
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         if(intent!=null&&ACTION_STOP.equals(intent.getAction())){stopTracking();return START_NOT_STICKY;}
         startVisible("Preparando GPS…");
-        if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED&&checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)!=PackageManager.PERMISSION_GRANTED){
-            updateNotification("Falta permiso de ubicación"); stopSelf(); return START_NOT_STICKY;
+        if(!hasLocationPermission()){
+            updateNotification("Falta permiso de ubicación"); store.setTracking(false); stopSelf(); return START_NOT_STICKY;
         }
         if(!store.paired()){updateNotification("Vincula este teléfono primero");stopSelf();return START_NOT_STICKY;}
         store.setTracking(true); requestLocations(); return START_STICKY;
     }
+    private boolean hasLocationPermission(){
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED
+            ||checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED;
+    }
     private void requestLocations(){
         if(callback!=null)return;
+        if(!hasLocationPermission()){
+            store.setTracking(false);
+            updateNotification("Falta permiso de ubicación");
+            stopSelf();
+            return;
+        }
         LocationRequest request=new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY,5000)
             .setMinUpdateIntervalMillis(3000).setMaxUpdateDelayMillis(10000).setMinUpdateDistanceMeters(2).build();
         callback=new LocationCallback(){@Override public void onLocationResult(LocationResult result){Location loc=result.getLastLocation();if(loc!=null)handle(loc);}};
-        fused.requestLocationUpdates(request,callback,getMainLooper());
+        try{
+            fused.requestLocationUpdates(request,callback,getMainLooper());
+        }catch(SecurityException e){
+            callback=null;
+            store.setTracking(false);
+            updateNotification("Android retiró el permiso de ubicación");
+            stopForeground(STOP_FOREGROUND_REMOVE);
+            stopSelf();
+        }
     }
     private void handle(Location loc){
         MotionClassifier.Result m=classifier.classify(loc);
