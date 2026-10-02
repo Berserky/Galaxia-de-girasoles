@@ -53,53 +53,33 @@ html.home-fullscreen .home-game-panel .home-toolbar{max-width:1100px;margin:0 au
 .scene-slot[data-action="home-tool"] span{animation:tool-pulse 2.6s ease-in-out infinite}
 @keyframes tool-pulse{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
 @media(max-width:700px){.home-exit span{display:none}.home-exit{width:46px;padding:0}.home-game-hud .sun-coins{min-width:112px;padding:8px 10px}.home-game-hud .sun-coins>span{font-size:23px}html.home-fullscreen .scene-caption{top:66px}html.home-fullscreen .home-tip{max-width:82%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.game-controls button{min-width:46px}.scene-slot[data-action="home-tool"]:after{width:18px;height:18px}}
-/* Illustrated Home Assets */
-.home-object-art{display:block;width:100%;height:100%;max-width:96px;max-height:96px;object-fit:contain;filter:drop-shadow(0 10px 8px var(--shadow));transition:transform .22s ease,filter .22s ease}.home-object-emoji{font-size:inherit}.scene-slot>.home-object-art{width:92%;height:82%;max-width:110px;max-height:110px}.scene-slot[data-action="home-tool"]:hover>.home-object-art{transform:translateY(-6px) scale(1.05);filter:drop-shadow(0 14px 10px var(--shadow))}.furniture-preview .home-object-art{width:100%;height:74px;max-width:120px;margin:auto}.inventory-item>.home-object-art{width:72px;height:62px}.scene-slot[data-route="musica"]>.home-object-art{animation:music-breathe 2.4s ease-in-out infinite}.scene-slot[data-route="album"]>.home-object-art{transform:rotate(-3deg)}.scene-slot[data-route="calendario"]>.home-object-art{transform:translateY(-8px)}@keyframes music-breathe{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-5px) rotate(1deg)}}@media(max-width:700px){.scene-slot>.home-object-art{max-width:84px;max-height:84px}.furniture-preview .home-object-art{height:65px}}
-/* Hogar Panoramic Camera V4 */
+/* Nuestro Hogar — clean scene system V8 */
+.home-object-art{display:block;object-fit:contain;filter:drop-shadow(0 8px 7px var(--shadow))}
+.furniture-preview{display:grid;place-items:center;height:92px}.furniture-preview>.home-object-art{width:auto;height:auto;max-width:118px;max-height:82px}
+.inventory-item>.home-object-art{width:auto;height:auto;max-width:94px;max-height:76px}
 .adventure-room{cursor:default}
-.home-camera{position:absolute;inset:0;overflow:hidden;touch-action:none;cursor:grab;overscroll-behavior:contain;scroll-behavior:auto}
-.home-camera.is-dragging{cursor:grabbing}
+.home-camera{position:absolute;inset:0;overflow:hidden;touch-action:none;cursor:grab;overscroll-behavior:contain}.home-camera.is-dragging{cursor:grabbing}
 .home-world{position:relative;width:max(100%,1500px);height:100%;min-height:610px;user-select:none;-webkit-user-select:none}
-.home-world .scene-sky,.home-world .scene-wall,.home-world .scene-floor{pointer-events:none}
-.home-world .scene-wall .scene-door,.home-world .scene-floor .scene-slot{pointer-events:auto}
+.home-world .scene-sky,.home-world .scene-wall,.home-world .scene-floor{pointer-events:none}.home-world .scene-wall .scene-door,.home-world .scene-floor .scene-slot{pointer-events:auto}
 .camera-hint{position:absolute;z-index:24;left:50%;top:max(72px,calc(env(safe-area-inset-top) + 62px));transform:translateX(-50%);padding:6px 10px;border:1px solid var(--border);border-radius:999px;background:color-mix(in srgb,var(--surface-3) 78%,transparent);backdrop-filter:blur(10px);color:var(--muted);font-size:8px;letter-spacing:.4px;pointer-events:none;animation:camera-hint-away 5s forwards}
 @keyframes camera-hint-away{0%,65%{opacity:1}100%{opacity:0}}
 html.home-fullscreen .home-world{min-height:100%;height:100%}
-@media(max-width:700px){.home-world{width:1450px;min-height:100%;height:100%}.camera-hint{top:max(78px,calc(env(safe-area-inset-top) + 68px))}.scene-caption{display:none}}
-@media(min-width:701px) and (max-width:1200px){.home-world{width:1500px}}
-/* Free asset integration V5 */
-.home-object-pack{image-rendering:auto;max-width:150px;max-height:132px;filter:drop-shadow(0 12px 10px var(--shadow))}
-.scene-slot>.home-object-pack{width:auto;height:auto;max-width:145px;max-height:125px}
-.scene-door{width:104px;height:42%;max-height:270px;bottom:0;border-width:5px}
-.door-panel{inset:11% 14% 28%}
-.scene-door b{bottom:9%}
-@media(max-width:700px){.scene-door{width:100px;height:40%;max-height:250px;border-width:5px}.door-0{right:7%}.door-1{right:24%}.door-2{right:41%}.scene-slot>.home-object-pack{max-width:140px;max-height:118px}}
-/* Hogar visual identity + physical scale V6 */
-html.home-fullscreen .workspace{background:linear-gradient(180deg,var(--home-sky,var(--surface-2)),var(--home-room-bg,var(--surface)))}
-html.home-fullscreen .adventure-room{--home-room-bg:color-mix(in srgb,var(--highlight) 22%,white);--home-wall:color-mix(in srgb,var(--highlight) 16%,white);--home-floor:color-mix(in srgb,var(--highlight) 26%,var(--surface-2));background:var(--home-room-bg)}
-html.home-fullscreen .scene-sky{background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 18%,white),color-mix(in srgb,var(--highlight) 22%,white));opacity:1}
-html.home-fullscreen .scene-wall,.scene-kitchen .scene-wall,.scene-shared .scene-wall,.scene-sebas .scene-wall,.scene-adri .scene-wall,.scene-bath .scene-wall,.scene-hall .scene-wall,.scene-studio .scene-wall,.scene-balcony .scene-wall{background:linear-gradient(180deg,var(--home-wall),color-mix(in srgb,var(--home-wall) 72%,white))}
-html.home-fullscreen .scene-floor{background:repeating-linear-gradient(100deg,var(--home-floor) 0 74px,color-mix(in srgb,var(--home-floor) 80%,var(--border)) 75px 78px)}
-.scene-slot.has-item{width:16%;height:36%;overflow:visible}
-.scene-slot.has-item .home-object-art{object-fit:contain}
-.scene-slot.size-xs .home-object-art{max-width:48px;max-height:42px}.scene-slot.size-sm .home-object-art{max-width:72px;max-height:66px}.scene-slot.size-md .home-object-art{max-width:105px;max-height:100px}.scene-slot.size-lg .home-object-art{max-width:145px;max-height:145px}.scene-slot.size-xl .home-object-art{max-width:190px;max-height:175px}.scene-slot.size-xxl .home-object-art{max-width:245px;max-height:205px}
+html.home-fullscreen .workspace{background:linear-gradient(180deg,color-mix(in srgb,var(--highlight) 15%,white),color-mix(in srgb,var(--accent) 7%,white))}
+html.home-fullscreen .adventure-room{--home-wall:color-mix(in srgb,var(--highlight) 13%,white);--home-floor:color-mix(in srgb,var(--highlight) 27%,white);background:white}
+html.home-fullscreen .scene-sky{background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 13%,white),color-mix(in srgb,var(--highlight) 20%,white));opacity:1}
+html.home-fullscreen .scene-wall,.scene-kitchen .scene-wall,.scene-shared .scene-wall,.scene-sebas .scene-wall,.scene-adri .scene-wall,.scene-bath .scene-wall,.scene-hall .scene-wall,.scene-studio .scene-wall,.scene-balcony .scene-wall{background:linear-gradient(180deg,var(--home-wall),color-mix(in srgb,var(--home-wall) 80%,white))}
+html.home-fullscreen .scene-floor{background:repeating-linear-gradient(100deg,var(--home-floor) 0 74px,color-mix(in srgb,var(--home-floor) 84%,var(--border)) 75px 78px)}
+.scene-slot{position:absolute;z-index:4;display:flex;align-items:flex-end;justify-content:center;width:280px;height:235px;border:0;background:transparent;color:var(--text);overflow:visible}
+.scene-slot i{display:grid;place-items:center;width:34px;height:34px;border:1px dashed var(--accent);border-radius:50%;background:var(--accent-soft);font-style:normal}
+.scene-slot>.home-object-art{width:var(--object-w);height:var(--object-h);max-width:none;max-height:none;object-fit:contain}
+.scene-slot small{position:absolute;left:50%;bottom:-16px;transform:translateX(-50%);padding:2px 6px;border-radius:8px;background:var(--surface-3);font-size:7px;opacity:0;white-space:nowrap}.scene-slot:hover small{opacity:1}
 .scene-slot.place-ground{z-index:2;transform:translateY(22%)}.scene-slot.place-wall{z-index:3;transform:translateY(-70%)}.scene-slot.place-surface{z-index:6;transform:translateY(-18%)}
-.furniture-preview.size-xs .home-object-art{max-height:42px}.furniture-preview.size-sm .home-object-art{max-height:58px}.furniture-preview.size-md .home-object-art{max-height:78px}.furniture-preview.size-lg .home-object-art{max-height:98px}.furniture-preview.size-xl .home-object-art,.furniture-preview.size-xxl .home-object-art{max-height:112px}
-html.home-fullscreen .home-game-panel{background:linear-gradient(180deg,color-mix(in srgb,var(--highlight) 10%,var(--surface)),var(--surface))}
-@media(max-width:700px){.scene-slot.size-xxl .home-object-art{max-width:230px;max-height:195px}.scene-slot.size-xl .home-object-art{max-width:180px;max-height:165px}}
-/* Physical object sizing V7 — overrides legacy 96/110px caps */
-.scene-slot.has-item{width:260px;height:240px;display:flex;align-items:flex-end;justify-content:center}
-.scene-slot.has-item>.home-object-art{width:auto;height:auto;max-width:none;max-height:none}
-.scene-slot.size-xs>.home-object-art{width:auto;max-width:58px;max-height:48px}
-.scene-slot.size-sm>.home-object-art{width:auto;max-width:88px;max-height:76px}
-.scene-slot.size-md>.home-object-art{width:auto;max-width:130px;max-height:118px}
-.scene-slot.size-lg>.home-object-art{width:auto;max-width:175px;max-height:170px}
-.scene-slot.size-xl>.home-object-art{width:auto;max-width:230px;max-height:205px}
-.scene-slot.size-xxl>.home-object-art{width:auto;max-width:310px;max-height:245px}
-.scene-slot.size-xxl{width:330px;height:265px}.scene-slot.size-xl{width:270px;height:230px}.scene-slot.size-xs{width:90px;height:90px}.scene-slot.size-sm{width:120px;height:115px}
-.home-object-placeholder{display:grid;place-items:center;width:54px;height:54px;border:1px dashed var(--border);border-radius:12px;background:var(--surface-2);color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.08em}
-.inventory-item.size-xs>.home-object-art{width:auto;height:auto;max-width:48px;max-height:42px}.inventory-item.size-sm>.home-object-art{width:auto;height:auto;max-width:66px;max-height:58px}.inventory-item.size-md>.home-object-art{width:auto;height:auto;max-width:82px;max-height:74px}.inventory-item.size-lg>.home-object-art,.inventory-item.size-xl>.home-object-art,.inventory-item.size-xxl>.home-object-art{width:auto;height:auto;max-width:100px;max-height:88px}
-@media(max-width:700px){.scene-slot.size-xxl>.home-object-art{max-width:300px;max-height:235px}.scene-slot.size-xl>.home-object-art{max-width:225px;max-height:200px}.scene-slot.size-lg>.home-object-art{max-width:170px;max-height:165px}}
+.scene-slot-0{left:6%;top:5%}.scene-slot-1{left:22%;top:17%}.scene-slot-2{left:38%;top:6%}.scene-slot-3{left:54%;top:18%}.scene-slot-4{left:70%;top:6%}.scene-slot-5{left:14%;top:54%}.scene-slot-6{left:42%;top:58%}.scene-slot-7{left:68%;top:52%}
+.scene-door{width:104px;height:42%;max-height:270px;bottom:0;border-width:5px}.door-panel{inset:11% 14% 28%}.scene-door b{bottom:9%}
+.scene-slot[data-route="musica"]>.home-object-art{animation:music-breathe 2.4s ease-in-out infinite}.scene-slot[data-route="album"]>.home-object-art{transform:rotate(-3deg)}.scene-slot[data-route="calendario"]>.home-object-art{transform:translateY(-8px)}
+@keyframes music-breathe{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-5px) rotate(1deg)}}
+@media(max-width:700px){.home-world{width:1450px;min-height:100%;height:100%}.camera-hint{top:max(78px,calc(env(safe-area-inset-top) + 68px))}.scene-caption{display:none}.scene-door{width:100px;height:40%;max-height:250px}.scene-slot{width:280px;height:235px}.furniture-preview{height:86px}.furniture-preview>.home-object-art{max-height:76px}.inventory-item>.home-object-art{max-height:72px}}
+@media(min-width:701px) and (max-width:1200px){.home-world{width:1500px}}
 /* Palette is the only source of literal UI colors below this line. */
 :root[data-theme="cosmic"]{--bg:#090b18;--surface:#12162a;--surface-2:#191e35;--surface-3:#0d1020;--text:#f5f2ff;--muted:#a7abc3;--border:#292f4d;--accent:#8b5cf6;--accent-2:#ec4899;--highlight:#f5b942;--danger:#ef4444;--overlay:#03040bd9;--shadow:#0006}
 :root[data-theme="halloween"]{--bg:#0c0710;--surface:#17101d;--surface-2:#211529;--surface-3:#0e0913;--text:#fff4e8;--muted:#c2a9c6;--border:#3c2345;--accent:#ff7a18;--accent-2:#9333ea;--highlight:#ffb45c;--danger:#ef4444;--overlay:#09030ddd;--shadow:#0008}
