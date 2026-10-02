@@ -8,6 +8,9 @@ on:
     paths: ["android/**","supabase/functions/android-companion/**",".github/workflows/android-companion.yml"]
   workflow_dispatch:
 permissions: { contents: write }
+concurrency:
+  group: android-stable-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: ubuntu-latest
