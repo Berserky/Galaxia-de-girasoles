@@ -55,6 +55,14 @@ public final class TrackingService extends Service {
                 ApiClient.location(token,loc.getLatitude(),loc.getLongitude(),accuracy,m.speedMs,heading,m.motion,history,tripPoint,captured,sampleId);
                 flush(token);
             }catch(Exception e){
+                if(e instanceof ApiClient.ApiException && ((ApiClient.ApiException)e).status==401){
+                    store.setTracking(false);
+                    updateNotification("Vinculación revocada · abre la app para volver a vincular");
+                    if(callback!=null){fused.removeLocationUpdates(callback);callback=null;}
+                    stopForeground(STOP_FOREGROUND_DETACH);
+                    stopSelf();
+                    return;
+                }
                 if(history)pending.add(sampleId,captured,loc.getLatitude(),loc.getLongitude(),accuracy,m.speedMs,heading,m.motion);
                 updateNotification("Sin conexión · "+pending.count()+" puntos pendientes");
             }
