@@ -85,6 +85,10 @@ html.home-fullscreen .scene-floor{background:repeating-linear-gradient(100deg,va
 .home-object-hitbox small{pointer-events:none}
 .home-empty-slot{display:grid;place-items:center;width:48px;height:48px;padding:0;border:0;background:transparent;pointer-events:auto}.home-empty-slot i{pointer-events:none}
 .home-world .scene-floor .scene-slot{pointer-events:none}.home-world .scene-floor .home-object-hitbox,.home-world .scene-floor .home-empty-slot{pointer-events:auto}
+/* Kenney Roguelike Indoors */
+.home-rpg-sprite{display:block;width:calc(16px * var(--rpg-scale));height:calc(16px * var(--rpg-scale));background-image:var(--rpg-sheet);background-repeat:no-repeat;background-size:calc(458px * var(--rpg-scale)) calc(305px * var(--rpg-scale));background-position:calc(var(--rpg-x) * -17px * var(--rpg-scale)) calc(var(--rpg-y) * -17px * var(--rpg-scale));image-rendering:pixelated;filter:none;flex:none}
+.scene-slot>.home-rpg-sprite,.home-object-hitbox>.home-rpg-sprite{width:var(--object-w);height:var(--object-h);background-size:calc(458px * 4) calc(305px * 4)}
+.home-shop-groups{display:grid;gap:24px}.home-shop-category{display:grid;gap:10px}.home-shop-category>h3{margin:0;padding:0 2px;font-size:14px;color:var(--text)}
 /* Palette is the only source of literal UI colors below this line. */
 :root[data-theme="cosmic"]{--bg:#090b18;--surface:#12162a;--surface-2:#191e35;--surface-3:#0d1020;--text:#f5f2ff;--muted:#a7abc3;--border:#292f4d;--accent:#8b5cf6;--accent-2:#ec4899;--highlight:#f5b942;--danger:#ef4444;--overlay:#03040bd9;--shadow:#0006}
 :root[data-theme="halloween"]{--bg:#0c0710;--surface:#17101d;--surface-2:#211529;--surface-3:#0e0913;--text:#fff4e8;--muted:#c2a9c6;--border:#3c2345;--accent:#ff7a18;--accent-2:#9333ea;--highlight:#ffb45c;--danger:#ef4444;--overlay:#09030ddd;--shadow:#0008}
