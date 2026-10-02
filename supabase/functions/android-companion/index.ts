@@ -357,19 +357,22 @@ async function gesture(req:Request,body:any){
   return bondSave(req,{type:"gesture",data:{gesture:body.gesture}});
 }
 
-async function mapState(req:Request){
+async function mapState(req:Request,body:any){
   await device(req);
-  const [locations,places,tripPoints,historyRows,trips,events,destinations,encounters]=await Promise.all([
+  const [locations,places,tripPoints,destinations]=await Promise.all([
     ok(db.from("galaxy_locations").select("*").order("person")),
     ok(db.from("galaxy_places").select("*").order("created_at",{ascending:false}).limit(100)),
-    ok(db.from("galaxy_trip_points").select("*").order("created_at",{ascending:false}).limit(700)),
-    ok(db.from("galaxy_location_history").select("*").order("captured_at",{ascending:false}).limit(400)),
-    ok(db.from("galaxy_trip_history").select("*").order("started_at",{ascending:false}).limit(60)),
-    ok(db.from("galaxy_place_events").select("*").order("happened_at",{ascending:false}).limit(60)),
-    ok(db.from("galaxy_destinations").select("*")),
-    ok(db.from("galaxy_encounters").select("*").order("started_at",{ascending:false}).limit(60))
+    ok(db.from("galaxy_trip_points").select("*").order("created_at",{ascending:false}).limit(500)),
+    ok(db.from("galaxy_destinations").select("*"))
   ]);
-  return json({locations,places,tripPoints,history:historyRows,trips,events,destinations,encounters});
+  const base={locations,places,tripPoints,destinations};
+  if(body.detail!==true)return json(base);
+  const [trips,events,encounters]=await Promise.all([
+    ok(db.from("galaxy_trip_history").select("*").order("started_at",{ascending:false}).limit(40)),
+    ok(db.from("galaxy_place_events").select("*").order("happened_at",{ascending:false}).limit(40)),
+    ok(db.from("galaxy_encounters").select("*").order("started_at",{ascending:false}).limit(40))
+  ]);
+  return json({...base,trips,events,encounters});
 }
 
 async function placeSave(req:Request,body:any){
@@ -396,6 +399,14 @@ async function setStatus(req:Request,body:any){
   const d=await device(req),status=text(body.status,40);
   await ok(db.from("galaxy_locations").update({status:status||null}).eq("person",String(d.person)));
   return json({ok:true,status});
+}
+
+async function transportSet(req:Request,body:any){
+  const d=await device(req),person=String(d.person),raw=String(body.preference||"");
+  if(!["","motorcycle","transit"].includes(raw))return json({error:"Preferencia de transporte no válida."},400);
+  const preference=raw||null;
+  await ok(db.from("galaxy_locations").upsert({person,transport_preference:preference,updated_at:new Date().toISOString()},{onConflict:"person"}));
+  return json({ok:true,transport_preference:preference});
 }
 
 async function destinationSave(req:Request,body:any){
@@ -537,10 +548,11 @@ Deno.serve(async req=>{
     if(action==="bond-guess")return await bondGuess(req,body);
     if(action==="bond-delete")return await bondDelete(req,body);
     if(action==="bond-widget")return await bondWidget(req,body);
-    if(action==="map-state")return await mapState(req);
+    if(action==="map-state")return await mapState(req,body);
     if(action==="place-save")return await placeSave(req,body);
     if(action==="place-delete")return await placeDelete(req,body);
     if(action==="status-set")return await setStatus(req,body);
+    if(action==="transport-set")return await transportSet(req,body);
     if(action==="destination-save")return await destinationSave(req,body);
     if(action==="trip")return await tripAction(req,body);
     if(action==="media-list")return await mediaList(req,body);
