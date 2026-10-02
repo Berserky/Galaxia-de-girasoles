@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
 
     <meta name="viewport"
-          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+          content="width=device-width, initial-scale=1.0">
 
-    <title>Un universo para ti 🌻</title>
+    <title>Adri, un universo para ti 🌻</title>
+    <meta name="theme-color" content="#10121d">
+    <meta name="description" content="Una pequeña galaxia de girasoles, recuerdos y una carta para Adri.">
 
     <link rel="stylesheet" href="style.css">
 </head>
@@ -18,23 +20,25 @@
 
         <div class="inicio-contenido">
 
-            <div class="estrella-principal">✦</div>
+            <div class="sello">S <span>♡</span> A</div>
+            <div class="orbita-portada" aria-hidden="true"><canvas id="florPortada" width="340" height="340"></canvas><span>✦</span></div>
 
-            <p class="pequeno">PARA ALGUIEN MUY ESPECIAL</p>
+            <p class="pequeno">DE SEBAS, PARA ADRIANA</p>
 
             <h1>
-                Tengo algo<br>
-                <span>para ti</span>
+                Una galaxia<br>
+                <span>de girasoles.</span>
             </h1>
 
             <p class="introduccion">
-                No pude comprarte flores amarillas...
+                No pude comprarte flores amarillas…<br>así que te hice un lugar donde nunca se marchitan.
             </p>
 
             <button id="btnEntrar">
-                Descubrir ✨
+                Entrar a tu universo <span aria-hidden="true">↗</span>
             </button>
-
+            <p class="nota-portada">Seis recuerdos. Una carta. Y tú, en el centro.</p>
+            <label class="opcion-musica"><input id="conMusica" type="checkbox" checked> Acompañar con música</label>
         </div>
 
     </section>
@@ -43,7 +47,9 @@
     <!-- GALAXIA -->
     <section id="galaxia" class="pantalla oculto">
 
-        <canvas id="universo"></canvas>
+        <canvas id="universo" aria-hidden="true"></canvas>
+        <div id="floresAccesibles" aria-label="Girasoles de nuestra historia"></div>
+        <p class="marca-galaxia">NUESTRO PEQUEÑO UNIVERSO</p>
 
         <div class="galaxia-ui">
 
@@ -57,14 +63,15 @@
             </h2>
 
             <p class="instruccion">
-                Toca las flores que encuentres 🌻
+                Cada girasol guarda un pedacito de nosotros.
             </p>
-<div id="progresoFlores">
-    <span id="contadorFlores">0</span> / 6 flores encontradas
+<div id="progresoFlores" role="status" aria-live="polite">
+    <span id="contadorFlores">0</span> / 6 recuerdos descubiertos
 </div>
+<div id="progresoPuntos" aria-hidden="true"></div>
         </div>
 <!-- MENSAJE DE CADA GIRASOL -->
-<div id="mensajeFlor" class="mensaje-flor oculto">
+<dialog id="mensajeFlor" class="mensaje-flor" aria-labelledby="tituloFlor" aria-describedby="textoFlor">
 
     <div class="mensaje-contenido">
 
@@ -90,10 +97,10 @@
 
     </div>
 
-</div>
+</dialog>
 
 <!-- DESBLOQUEO FINAL -->
-<div id="desbloqueoFinal" class="desbloqueo-final oculto">
+<dialog id="desbloqueoFinal" class="desbloqueo-final" aria-labelledby="tituloDesbloqueo">
 
     <div class="final-contenido">
 
@@ -103,7 +110,7 @@
             ENCONTRASTE TODAS LAS FLORES
         </p>
 
-        <h3>
+        <h3 id="tituloDesbloqueo">
             Pero todavía<br>
             <span>falta una...</span>
         </h3>
@@ -120,8 +127,8 @@
 
     </div>
 
-</div>
-      
+</dialog>
+        <p class="pie-galaxia">Hecho de recuerdos, un poquito de código y mucho cariño.</p>
     </section>
 
     <!-- CARTA FINAL -->
@@ -136,7 +143,7 @@
         PARA MI BRUJITA
     </p>
 
-    <h2>
+    <h2 id="tituloCarta" tabindex="-1">
         Adri,<br>
         <span>mi princesa hermosa.</span>
     </h2>
@@ -214,7 +221,7 @@
         P.D. Hay una última cosa...
     </p>
 
-    <button id="btnSecreto" class="btn-secreto">
+    <button id="btnSecreto" class="btn-secreto" aria-label="Descubrir el último secreto">
         🌻
     </button>
 
@@ -225,7 +232,8 @@
 </div>
 
 
-<div id="mensajeSecreto" class="mensaje-secreto oculto">
+<button id="volverGalaxia" class="boton-secundario">Volver a nuestros recuerdos ↗</button>
+<dialog id="mensajeSecreto" class="mensaje-secreto" aria-labelledby="tituloSecreto">
 
     <div class="secreto-brillo">
         ✦
@@ -235,7 +243,7 @@
         UNA ÚLTIMA COSA
     </p>
 
-    <h3>
+    <h3 id="tituloSecreto">
         Mi brujita...
     </h3>
 
@@ -271,16 +279,16 @@
         espero que estés ahí conmigo. ♡
     </p>
 
-    <button id="cerrarSecreto">
+    <button id="cerrarSecreto" aria-label="Volver a la carta">
         ♡
     </button>
 
-</div>
+</dialog>
 </div>
 
     </section>
   <!-- MÚSICA DE FONDO -->
-<audio id="musicaFondo" loop preload="auto">
+<audio id="musicaFondo" loop preload="none">
     <source src="musica.mp3" type="audio/mpeg">
 </audio>
 
@@ -289,6 +297,9 @@
         aria-label="Pausar o reproducir música">
     ♫
 </button>
+    <noscript><p class="sin-script">Este universo necesita JavaScript para abrir sus recuerdos. Actívalo y vuelve a cargar la página.</p></noscript>
+    <script src="recuerdos.js"></script>
+    <script src="girasol.js"></script>
     <script src="script.js"></script>
 
 </body>
