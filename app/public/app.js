@@ -63,26 +63,12 @@ function plans(){const list=items('plan').filter(i=>filter==='Todos'||(filter===
 function connect(){const names=state.settings.data.names,mine=state.daily.find(d=>d.person===state.person);return `${heading('CUIDAR LO NUESTRO, UN POQUITO CADA DÍA','Un ratito para dos.','Sin puntuaciones ni rachas que cumplir. Solo una invitación a escucharse.')}<section class="connection-question"><span class="pill">${icon('spark')} La pregunta de hoy</span><h2>${esc(state.question)}</h2><p>Primero respondan a su manera. Las dos respuestas se revelan cuando ambos hayan escrito.</p><form id="answer-form"><label for="answer">Tu respuesta, ${esc(names[Number(state.person)])}</label><textarea id="answer" name="answer" maxlength="3000" required placeholder="Tómate tu tiempo…">${esc(mine?.answer||'')}</textarea><button class="btn primary" type="submit">${mine?.answered?'Actualizar mi respuesta':'Guardar mi respuesta'} ${icon('heart')}</button><p class="inline-error" role="alert"></p></form><div class="answer-grid">${names.map((n,i)=>{const d=state.daily.find(d=>d.person===String(i));return `<article><span class="answer-avatar">${esc(n[0])}</span><b>${esc(n)}</b><p>${d?.answer?esc(d.answer):d?.answered?'Su respuesta está guardada. Se abrirá cuando ambos respondan.':'Todavía está pensando su respuesta.'}</p></article>`;}).join('')}</div></section><div class="section-title spaced"><div><span class="eyebrow">EL AMOR TAMBIÉN ESTÁ EN LOS DETALLES</span><h2>Pequeñas formas de estar cerca</h2></div></div><div class="ritual-grid">${state.ideas.filter(i=>i.category==='Conectar').map((i)=>`<article class="card ritual-card">${icon('heart')}<span class="pill">${i.minutes} min · Para dos</span><h3>${esc(i.title)}</h3><p class="muted">${esc(i.text)}</p>${btn('Guardar como plan','ritual','text-button',`data-index="${state.ideas.indexOf(i)}"`)}</article>`).join('')}</div><div class="section-title spaced"><h2>Te dejo una notita</h2>${btn(icon('plus')+' Escribir algo bonito','new-note','secondary')}</div><div class="note-grid">${items('note').map(n=>`<button class="note-card" data-action="detail" data-id="${n.id}"><span>${icon('note')}</span><h3>${esc(n.data.title)}</h3><p>${esc(n.data.body)}</p><small>De ${esc(names[Number(n.author)]||names[0])}, con cariño</small></button>`).join('')||'<p class="muted">Un «gracias», un «te extraño», un «qué suerte tenerte». Empieza cuando quieras.</p>'}</div>`;}
 const homeRooms={living:['Sala','Nuestro punto de encuentro','🛋️'],kitchen:['Cocina','Donde empiezan los antojos','🍳'],hall:['Pasillo','El corazón de la casa','🏠'],shared:['Nuestro cuarto','El rincón de los dos','🌙'],sebas:['Cuarto de Sebas','Su rincón personal','🎮'],adri:['Cuarto de Adri','Su rincón personal','🌻'],bath:['Baño','Un rincón tranquilo','🫧'],studio:['Estudio','Ideas, juegos y proyectos','💻'],balcony:['Balcón','Un respiro bajo el cielo','✨']};
 const homeDoors={living:[['kitchen','Cocina','→'],['hall','Pasillo','↑'],['balcony','Balcón','←']],kitchen:[['living','Sala','←'],['bath','Baño','→']],hall:[['living','Sala','↓'],['shared','Nuestro cuarto','↑'],['studio','Estudio','→']],shared:[['hall','Pasillo','↓'],['sebas','Sebas','←'],['adri','Adri','→']],sebas:[['shared','Nuestro cuarto','→']],adri:[['shared','Nuestro cuarto','←']],bath:[['kitchen','Cocina','←']],studio:[['hall','Pasillo','←']],balcony:[['living','Sala','→']]};
-const homeSemanticZones=[
- {category:'Mesas y sillas',name:'Mesa',rows:[0,1],cols:[0,1,2,3,4,5,6,7,8]},
- {category:'Mesas y sillas',name:'Silla',rows:[2,3,4,5,6,7,8,9],cols:[0,1,2,3]},
- {category:'Sala y comedor',name:'Sofá',rows:[0,1,2,3],cols:[9,10,14,15,16,17]},
- {category:'Almacenamiento',name:'Cajonera',rows:[2,3,4],cols:[4,5,6,7]},
- {category:'Almacenamiento',name:'Librería',rows:[10,11,12,13,14,15,16,17],cols:[0,1,2,3,4,5,6,7,8,9,10,11]},
- {category:'Cocina',name:'Mesón de cocina',rows:[10,11,12,13,14,15,16,17],cols:[12,13]},
- {category:'Cocina',name:'Fregadero',rows:[10,11],cols:[14,15]},
- {category:'Mesas y sillas',name:'Taburete',rows:[10,11,12,13],cols:[26]}
-];
-const semanticById=new Map();
-for(const zone of homeSemanticZones)for(const row of zone.rows)for(const col of zone.cols){const n=row*27+col;if(n<480)semanticById.set(`rpg_${String(n).padStart(3,'0')}`,zone);}
-const categoryOrder=['Cocina','Electrodomésticos','Baño','Dormitorio','Sala y comedor','Mesas y sillas','Almacenamiento','Decoración','Otros'];
-const homeCatalog={...Object.fromEntries(Object.entries(homeAssetManifest).filter(([id,a])=>id.startsWith('rpg_')&&a.kind!=='structural').map(([id,a],index)=>{
- const semantic=semanticById.get(id),category=semantic?.category||(a.kind==='prop'?'Decoración':'Otros'),base=semantic?.name||(a.kind==='prop'?'Decoración':'Objeto');
- return[id,{name:`${base} ${String(index+1).padStart(3,'0')}`,price:12+(index%9)*3,asset:id,place:a.kind==='prop'?'surface':'floor',category}];
-})),
+const categoryOrder=['Cocina','Electrodomésticos','Baño','Dormitorio','Sala y comedor','Mesas y sillas','Almacenamiento','Decoración'];
+// Curated storefront only: every entry below is an intentional product.
+// The full atlas remains available for future review, but is never auto-listed.
+const homeCatalog={
+ kitchen_sink:{name:'Fregadero',price:30,asset:'rpg_284',place:'floor',category:'Cocina',w:56,h:56},
  bath_bathtub:{name:'Bañera',price:36,asset:'ogaBath',place:'floor',category:'Baño',w:64,h:64},
- bath_sink:{name:'Lavamanos',price:28,asset:'rpg_284',place:'floor',category:'Baño',w:56,h:56},
- bath_cabinet:{name:'Mueble de baño',price:30,asset:'rpg_285',place:'floor',category:'Baño',w:56,h:56},
  kitchen_oven:{name:'Estufa y horno',price:42,asset:'ogaOven',place:'floor',category:'Electrodomésticos',w:64,h:64},
  bedroom_bed:{name:'Cama de madera',price:48,asset:'ogaBed',place:'floor',category:'Dormitorio',w:72,h:72},
  electronics_hifi:{name:'Equipo de sonido',price:32,asset:'ogaHifi',place:'surface',category:'Electrodomésticos',w:56,h:56},
