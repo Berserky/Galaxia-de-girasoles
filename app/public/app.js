@@ -1,3 +1,4 @@
+import {setupPwa} from './install.js';
 import {nextOccurrence} from './dates.js';
 const app=document.querySelector('#app'),modal=document.querySelector('#modal');
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -113,4 +114,4 @@ async function sync(){
 }
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync().catch(()=>toast('No hay conexión. Tus cambios guardados siguen a salvo.'));});
 setInterval(()=>sync().catch(()=>{}),30000);
-boot();
+setupPwa(html=>{app.innerHTML=html;}).then(blocked=>{if(!blocked)boot();});
