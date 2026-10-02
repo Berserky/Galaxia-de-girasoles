@@ -18,7 +18,8 @@ function ajustar() {
     ancho = window.innerWidth;
     alto = Math.max(window.innerHeight, 660);
     document.querySelector('.pie-galaxia').style.top = `${alto-32}px`;
-    $('volverCarta').style.top = `${alto-85}px`;
+    const botonCarta = $('volverCarta');
+    if (botonCarta) botonCarta.style.top = `${alto-85}px`;
     const dpr = Math.min(devicePixelRatio || 1, 2);
     canvas.width = Math.round(ancho*dpr);
     canvas.height = Math.round(alto*dpr);
