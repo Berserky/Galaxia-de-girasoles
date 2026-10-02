@@ -1,17 +1,37 @@
-# Nuestra Galaxia · Compañero Android
+# Nuestra Galaxia · Android
 
-Aplicación nativa complementaria de la PWA. Su única responsabilidad es mantener la ubicación autorizada mientras Android permite que el servicio en primer plano siga activo.
+Aplicación móvil de Nuestra Galaxia. Desde la versión 1.4.0 deja de ser solo un compañero de ubicación: reúne la experiencia compartida de la web en una interfaz móvil empaquetada dentro del APK, manteniendo servicios nativos para ubicación, widgets, archivos, permisos y actualización.
 
-## Privacidad
+## Arquitectura
 
-- El GPS no se inicia solo: la persona pulsa “Comenzar a compartir”.
-- Mientras está activo, Android muestra una notificación permanente.
-- Puede detenerse desde la app o desde la propia notificación.
-- El teléfono se vincula con un código temporal de 10 minutos generado desde la PWA.
-- La credencial del dispositivo se guarda cifrada con Android Keystore.
-- Revocar el dispositivo desde la PWA invalida inmediatamente su credencial.
-- No hay claves de administrador dentro del APK. La clave Supabase incluida es publicable.
-- Las muestras históricas sin conexión se conservan localmente (máximo 5.000) y se sincronizan al recuperar conectividad.
+- **UI móvil local:** HTML/CSS/JS dentro de `android_asset/mobile`. No abre una web remota para funcionar.
+- **Puente nativo:** `GalaxyBridge` expone únicamente acciones permitidas. El token del dispositivo nunca se entrega al JavaScript.
+- **API móvil:** el Edge Function `android-companion` valida el token cifrado antes de acceder a datos compartidos.
+- **Mapa:** motor local dentro del APK; OpenStreetMap solo entrega teselas gráficas.
+- **Datos:** la web y Android usan el mismo universo en Supabase.
+- **Actualizaciones:** el canal `android-stable` mantiene upgrade sobre la misma aplicación y la misma firma.
+
+## Funciones móviles
+
+- Inicio compartido, estado de ánimo y pregunta diaria.
+- Recuerdos, calendario, planes, notas, cápsulas, deseos y viajes.
+- Álbum privado y música desde archivos del teléfono.
+- Momentos: abrazo, beso, “te extraño”, girasol, juego de conocerse, ritual semanal, notas compartidas, citas sorpresa y mensajes de voz.
+- Nuestro mapa: posición voluntaria, velocidad, modo de movimiento, lugares, estados rápidos, Acompáñame, recorridos e historial.
+- Widget Android con foto, próxima fecha y envío de abrazo.
+- Ubicación en segundo plano con notificación permanente.
+- Actualización del APK desde la propia aplicación.
+
+## Privacidad y seguridad
+
+- El GPS no se inicia solo; cada persona decide cuándo compartir.
+- Android muestra una notificación permanente mientras el servicio de ubicación está activo.
+- El vínculo usa un código temporal y un token de dispositivo cifrado con Android Keystore.
+- Revocar un dispositivo invalida su token.
+- El APK solo contiene la clave **publicable** de Supabase; las credenciales privilegiadas permanecen en el servidor.
+- El WebView no recibe el token y bloquea navegación externa.
+- Multimedia privada se entrega mediante URLs firmadas temporales.
+- Las muestras sin conexión se conservan localmente con límite y se sincronizan al recuperar conectividad.
 
 ## Android
 
@@ -19,19 +39,9 @@ Aplicación nativa complementaria de la PWA. Su única responsabilidad es manten
 - targetSdk / compileSdk 36
 - Foreground Service tipo `location`
 - Google Play Services Location 21.4.0
+- AndroidX WorkManager 2.11.2
 - Java 17
 - AGP 9.2.0 / Gradle 9.4.1
-
-## Flujo
-
-1. Instalar el APK.
-2. En la PWA: Ajustes → Compañero Android → Generar código.
-3. Pegar el código en la app Android.
-4. Conceder ubicación precisa.
-5. Pulsar “Comenzar a compartir en segundo plano”.
-6. Opcionalmente habilitar “Permitir todo el tiempo” en Ajustes de Android para mejorar la resiliencia del servicio.
-
-El servicio nativo actualiza `galaxy_locations`, almacena historial con deduplicación, alimenta Acompáñame, llegadas Casa/Trabajo y encuentros.
 
 ## Compilar
 
@@ -39,9 +49,4 @@ El servicio nativo actualiza `galaxy_locations`, almacena historial con deduplic
 gradle -p android testDebugUnitTest assembleDebug
 ```
 
-GitHub Actions publica el APK instalable en la release `android-stable`.
-# Momentos para dos (1.3.0)
-
-Vincula el teléfono con el código generado en Ajustes de la web. Activa **Notificaciones de momentos** de forma independiente de los permisos de ubicación. Android revisa gestos y fechas mediante trabajo periódico de al menos 15 minutos y puede retrasarlo por batería o conectividad; no es una entrega push instantánea.
-
-Añade **Nuestra Galaxia** desde el selector de widgets del launcher o con **Añadir widget** en la app. El widget muestra nombres, la próxima fecha y la foto opcional elegida del álbum en Ajustes de la web. Su botón envía un abrazo mediante el token cifrado del dispositivo, solo tras tocarlo; el resultado aparece en el widget. No solicita GPS. La foto se descarga desde una URL privada temporal con límite de 5 MB y se reduce a 512 px en almacenamiento privado. Desvincular o detectar una revocación cancela trabajos y borra caché/notificaciones. La primera sincronización toma una referencia de los gestos existentes sin reproducirlos.
+GitHub Actions genera el APK firmado cuando los cambios llegan a `main` y actualiza la release `android-stable`.
