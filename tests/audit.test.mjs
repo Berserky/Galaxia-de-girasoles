@@ -43,3 +43,15 @@ test('Live map exposes speed and conservative movement inference',()=>{
  assert.match(cloud,/motion,transport_preference/);
  assert.match(schema,/transport_preference text/);
 });
+
+
+test('Map markers reflect movement with Lucide icons and live speed',()=>{
+ const app=read('app/public/app.js'),css=read('app/public/app.css');
+ assert.match(app,/function motionIcon\(/);
+ assert.match(app,/person-standing/);
+ assert.match(app,/bike/);
+ assert.match(app,/bus-front/);
+ assert.match(app,/motionMarkerHtml/);
+ assert.match(app,/setIcon\(markerIcon\)/);
+ assert.match(css,/\.motion-marker-speed/);
+});
