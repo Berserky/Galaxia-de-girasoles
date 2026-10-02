@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#F7F6FA">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file: data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://zqiknzivfahvvadmxrvt.supabase.co; media-src 'self' blob: https://zqiknzivfahvvadmxrvt.supabase.co; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file: data: blob:; script-src 'self' https://www.youtube.com https://open.spotify.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://zqiknzivfahvvadmxrvt.supabase.co; media-src 'self' blob: https://zqiknzivfahvvadmxrvt.supabase.co; connect-src 'none'; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://open.spotify.com; object-src 'none'; base-uri 'none';">
   <title>Nuestra Galaxia</title>
   <link rel="stylesheet" href="./app.css">
 </head>
@@ -13,7 +13,11 @@
   <nav id="bottomNav" class="bottom-nav" aria-label="Navegación principal"></nav>
   <dialog id="modal" class="modal"></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <aside id="globalPlayer" class="global-player" aria-live="polite"></aside>
+  <div id="providerPlayer" class="provider-player" aria-hidden="true"></div>
   <script src="./lucide.js"></script>
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script src="https://open.spotify.com/embed/iframe-api/v1" async></script>
   <script src="./map.js"></script>
   <script src="./app.js"></script>
 </body>
