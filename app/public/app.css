@@ -67,6 +67,13 @@ html.home-fullscreen .home-game-panel .home-toolbar{max-width:1100px;margin:0 au
 html.home-fullscreen .home-world{min-height:100%;height:100%}
 @media(max-width:700px){.home-world{width:1450px;min-height:100%;height:100%}.camera-hint{top:max(78px,calc(env(safe-area-inset-top) + 68px))}.scene-caption{display:none}}
 @media(min-width:701px) and (max-width:1200px){.home-world{width:1500px}}
+/* Free asset integration V5 */
+.home-object-pack{image-rendering:auto;max-width:150px;max-height:132px;filter:drop-shadow(0 12px 10px var(--shadow))}
+.scene-slot>.home-object-pack{width:auto;height:auto;max-width:145px;max-height:125px}
+.scene-door{width:104px;height:42%;max-height:270px;bottom:0;border-width:5px}
+.door-panel{inset:11% 14% 28%}
+.scene-door b{bottom:9%}
+@media(max-width:700px){.scene-door{width:100px;height:40%;max-height:250px;border-width:5px}.door-0{right:7%}.door-1{right:24%}.door-2{right:41%}.scene-slot>.home-object-pack{max-width:140px;max-height:118px}}
 /* Palette is the only source of literal UI colors below this line. */
 :root[data-theme="cosmic"]{--bg:#090b18;--surface:#12162a;--surface-2:#191e35;--surface-3:#0d1020;--text:#f5f2ff;--muted:#a7abc3;--border:#292f4d;--accent:#8b5cf6;--accent-2:#ec4899;--highlight:#f5b942;--danger:#ef4444;--overlay:#03040bd9;--shadow:#0006}
 :root[data-theme="halloween"]{--bg:#0c0710;--surface:#17101d;--surface-2:#211529;--surface-3:#0e0913;--text:#fff4e8;--muted:#c2a9c6;--border:#3c2345;--accent:#ff7a18;--accent-2:#9333ea;--highlight:#ffb45c;--danger:#ef4444;--overlay:#09030ddd;--shadow:#0008}
