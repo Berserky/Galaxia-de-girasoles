@@ -4,6 +4,8 @@ import {fileURLToPath} from 'node:url';
 import {readFile,writeFile,mkdir,unlink,stat} from 'node:fs/promises';
 import {randomBytes,createHash,randomUUID,timingSafeEqual} from 'node:crypto';
 import {openStore} from './store.mjs';
+import {bondStore} from './bond-store.mjs';
+import {audioMime,audioLimit} from './public/bond-domain.js';
 import {fail,text,validDate,today,questionFor,ideas,validateItem,folderId,ics} from './domain.mjs';
 import {googleClient,scopes,request} from './google.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url));
@@ -20,6 +22,7 @@ export function configuration(env=process.env,demo=process.argv.includes('--demo
 export async function createApp(config) {
  const store=openStore(config.dir),db=store.db,g=googleClient(store,config),mediaDir=path.join(config.dir,'photos');
  await mkdir(mediaDir,{recursive:true});
+ const bond=bondStore(db),voiceDir=path.join(config.dir,'voice');await mkdir(voiceDir,{recursive:true});
  db.exec(`CREATE TABLE IF NOT EXISTS photos(id TEXT PRIMARY KEY,name TEXT NOT NULL,mime TEXT NOT NULL,source TEXT NOT NULL,externalId TEXT UNIQUE,created TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS pickers(id TEXT PRIMARY KEY,email TEXT NOT NULL,expires INTEGER NOT NULL);`);
  const cookie=(name,value,maxAge=604800)=>`${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${config.base.startsWith('https:')?'; Secure':''}`;
@@ -35,7 +38,7 @@ export async function createApp(config) {
  return {demo:config.demo,person,csrf:s.csrf,settings,items:store.list(),today:day,question:questionFor(day),ideas,daily:daily.map(d=>({...d,answer:d.person===person||allAnswered?d.answer:null,answered:!!d.answer})),allAnswered,connections:{google:!!config.clientId,drive:!config.demo&&!!g.tokens(s.email).scope?.includes(scopes.drive),photos:!config.demo&&!!g.tokens(s.email).scope?.includes(scopes.photos)},photoCount:db.prepare('SELECT count(*) AS n FROM photos').get().n};}
  const server=http.createServer(async(req,res)=>{
   res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','strict-origin-when-cross-origin');res.setHeader('X-Frame-Options','DENY');
-  res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self'; connect-src 'self'; frame-src https://open.spotify.com https://www.youtube-nocookie.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
+  res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-src https://open.spotify.com https://www.youtube-nocookie.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
   try {
    const u=new URL(req.url,config.base),p=u.pathname;
    const allowedHosts=[new URL(config.base).host,...(config.demo?[`127.0.0.1:${config.port}`,`localhost:${config.port}`]:[])];
@@ -73,6 +76,23 @@ export async function createApp(config) {
      if(!origin||!allowedHosts.some(h=>origin===`${new URL(config.base).protocol}//${h}`)||!equal(req.headers['x-csrf-token'],s.csrf))fail('Vuelve a cargar la página para guardar los cambios.',403);
     }
    }
+   const bondPerson=s?String(config.emails.indexOf(s.email)):null;
+   if(p==='/api/bond'&&req.method==='GET')return json(res,bond.read(bondPerson));
+   if(p==='/api/bond'&&req.method==='POST'){const b=await body(req);return json(res,bond.add(b.type,b.data,bondPerson),201);}
+   if(p==='/api/bond/widget'&&req.method==='POST'){const b=await body(req);return json(res,bond.widget(b.photoPath));}
+   if(p==='/api/bond/audio'&&req.method==='POST'){
+    const bytes=await raw(req,audioLimit);let mime;try{mime=audioMime(bytes,req.headers['content-type']);}catch(e){fail(e.message);}
+    const name=req.headers['x-file-name'];if(typeof name!=='string'||!name||name.length>500)fail('Falta el nombre del audio.');try{decodeURIComponent(name);}catch{fail('Nombre del audio no válido.');}
+    const ext={'audio/mpeg':'mp3','audio/ogg':'ogg','audio/webm':'webm','audio/mp4':'m4a'}[mime],id=randomUUID(),audioPath=bondPerson+'/'+id+'.'+ext;
+    await writeFile(path.join(voiceDir,id+'.'+ext),bytes,{flag:'wx'});db.prepare('INSERT INTO bond_audio VALUES(?,?,?)').run(audioPath,mime,bondPerson);
+    return json(res,{path:audioPath,url:'/media/voice/'+encodeURIComponent(audioPath),mime},201);
+   }
+   if(p.startsWith('/api/bond/audio/')&&req.method==='GET'){const audioPath=decodeURIComponent(p.slice('/api/bond/audio/'.length));if(!db.prepare('SELECT path FROM bond_audio WHERE path=?').get(audioPath))fail('Audio no encontrado.',404);return json(res,{url:'/media/voice/'+encodeURIComponent(audioPath)});}
+   if(p.startsWith('/media/voice/')&&req.method==='GET'){const audioPath=decodeURIComponent(p.slice('/media/voice/'.length)),audio=db.prepare('SELECT * FROM bond_audio WHERE path=?').get(audioPath);if(!audio)fail('Audio no encontrado.',404);res.setHeader('Content-Type',audio.mime);return res.end(await readFile(path.join(voiceDir,audioPath.split('/')[1])));}
+   const bondGuess=p.match(/^\/api\/bond\/([\w-]+)\/guess$/);
+   if(bondGuess&&req.method==='POST'){const b=await body(req);return json(res,bond.guess(bondGuess[1],b.guess,bondPerson));}
+   const bondEntry=p.match(/^\/api\/bond\/([\w-]+)$/);
+   if(bondEntry&&['PUT','DELETE'].includes(req.method)){const b=await body(req);return json(res,req.method==='PUT'?bond.update(bondEntry[1],b.version,b.data,bondPerson):bond.remove(bondEntry[1],b.version,bondPerson));}
    if(p==='/api/state'&&req.method==='GET')return json(res,state(s));
    if(p==='/api/demo-person'&&req.method==='POST'&&config.demo){const b=await body(req);if(!['0','1'].includes(b.person))fail('Persona no válida.');createSession(res,config.emails[Number(b.person)]);return json(res,{ok:true});}
    if(p==='/api/logout'&&req.method==='POST'){db.prepare('DELETE FROM sessions WHERE id=?').run(s.id);res.setHeader('Set-Cookie',cookie('ng_session','',0));return json(res,{ok:true});}
@@ -89,7 +109,7 @@ export async function createApp(config) {
    }
    if(p==='/api/daily'&&req.method==='POST'){const b=await body(req),person=String(config.emails.indexOf(s.email));if(!['mood','answer'].includes(b.field))fail('Campo no válido.');const v=text(b.value,b.field==='mood'?30:3000,true);if(b.field==='mood'&&!['feliz','tranquilo','cansado','sensible','abrazo'].includes(v))fail('Elige una emoción.');store.saveDaily(today(),person,b.field,v);return json(res,{ok:true});}
    if(p==='/api/calendar.ics'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'text/calendar; charset=utf-8','Content-Disposition':'attachment; filename="nuestro-calendario.ics"'});return res.end(ics(store.list().filter(i=>i.kind==='event')));}
-   if(p==='/api/export'&&req.method==='GET'){res.setHeader('Content-Disposition','attachment; filename="nuestra-galaxia.json"');return json(res,{exportedAt:new Date().toISOString(),settings:store.settings().data,items:store.list(),daily:db.prepare('SELECT day,person,mood,answer FROM daily').all().map(d=>{const both=db.prepare('SELECT count(*) AS n FROM daily WHERE day=? AND answer IS NOT NULL').get(d.day).n===2;return {...d,answer:d.person===String(config.emails.indexOf(s.email))||both?d.answer:null};}),photos:db.prepare('SELECT id,name,source,created FROM photos').all()});}
+   if(p==='/api/export'&&req.method==='GET'){res.setHeader('Content-Disposition','attachment; filename="nuestra-galaxia.json"');return json(res,{exportedAt:new Date().toISOString(),bond:bond.read(String(config.emails.indexOf(s.email))),settings:store.settings().data,items:store.list(),daily:db.prepare('SELECT day,person,mood,answer FROM daily').all().map(d=>{const both=db.prepare('SELECT count(*) AS n FROM daily WHERE day=? AND answer IS NOT NULL').get(d.day).n===2;return {...d,answer:d.person===String(config.emails.indexOf(s.email))||both?d.answer:null};}),photos:db.prepare('SELECT id,name,source,created FROM photos').all()});}
    if(p==='/api/photos'&&req.method==='GET')return json(res,{photos:db.prepare('SELECT id,name,source,created FROM photos ORDER BY created DESC').all()});
    if(p==='/api/photos/upload'&&req.method==='POST'){const name=decodeURIComponent(req.headers['x-file-name']||'Un recuerdo');await savePhoto(await raw(req,12*1024*1024),name,'Subida por ustedes');return json(res,{ok:true},201);}
    const photo=p.match(/^\/api\/photos\/([\w-]+)$/);

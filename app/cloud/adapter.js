@@ -1,6 +1,7 @@
 import {createClient} from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm';
 import {ideas,questionFor,today,validateItem,text,validDate,ics} from './domain.js';
 import config from './config.js';
+import {validateBond,audioMime,audioLimit} from './bond-domain.js';
 import {withTimeout,boundedFetch} from './network.js';
 const configured=/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(config.url||'')&&!!config.key;
 const client=configured?createClient(config.url,config.key,{global:{fetch:boundedFetch}}):null;
@@ -28,6 +29,18 @@ export async function cloudApi(url,options={}){
  const method=options.method||'GET',data=typeof options.body==='string'?JSON.parse(options.body):{};
  if(url==='/api/logout'){await checked(client.auth.signOut());return {};}
  const p=await person();
+ if(url==='/api/bond'&&method==='GET')return checked(client.rpc('galaxy_bond_read'));
+ if(url==='/api/bond'&&method==='POST')return checked(client.rpc('galaxy_bond_save',{entry_type:data.type,payload:validateBond(data.type,data.data)}));
+ if(url==='/api/bond/widget'&&method==='POST')return checked(client.rpc('galaxy_bond_widget',{photo_path:data.photoPath}));
+ if(url==='/api/bond/audio'&&method==='POST'){
+  const file=options.body;if(!(file instanceof Blob)||file.size>audioLimit)throw Error('El audio puede pesar hasta 5 MB.');
+  const headers=new Headers(options.headers||{}),name=headers.get('X-File-Name');if(!name||name.length>500)throw Error('Falta el nombre del audio.');try{decodeURIComponent(name);}catch{throw Error('Nombre del audio no válido.');}
+  const mime=audioMime(new Uint8Array(await file.slice(0,32).arrayBuffer()),headers.get('Content-Type')||file.type),ext={'audio/mpeg':'mp3','audio/ogg':'ogg','audio/webm':'webm','audio/mp4':'m4a'}[mime],path=String(p)+'/'+crypto.randomUUID()+'.'+ext;
+  await checked(client.storage.from('galaxy-voice').upload(path,file,{contentType:mime,upsert:false}));return {path,url:'',mime};
+ }
+ if(url.startsWith('/api/bond/audio/')&&method==='GET'){const path=decodeURIComponent(url.slice('/api/bond/audio/'.length));if(!/^[01]\/[0-9a-f-]{36}\.(mp3|ogg|webm|m4a)$/.test(path))throw Error('Audio no válido.');return {url:(await checked(client.storage.from('galaxy-voice').createSignedUrl(path,600))).signedUrl};}
+ const bondGuess=url.match(/^\/api\/bond\/([\w-]+)\/guess$/);if(bondGuess&&method==='POST')return checked(client.rpc('galaxy_bond_guess',{entry_id:bondGuess[1],guess_value:data.guess}));
+ const bondEntry=url.match(/^\/api\/bond\/([\w-]+)$/);if(bondEntry&&method==='PUT')return checked(client.rpc('galaxy_bond_update',{entry_id:bondEntry[1],expected_version:data.version,payload:data.data}));if(bondEntry&&method==='DELETE')return checked(client.rpc('galaxy_bond_delete',{entry_id:bondEntry[1],expected_version:data.version}));
  if(url==='/api/invite')return {token:await checked(client.rpc('galaxy_invite'))};
  if(url==='/api/locations'&&method==='GET')return checked(client.from('galaxy_locations').select('person,latitude,longitude,accuracy,speed,heading,motion,transport_preference,sharing,status,trip_active,trip_started_at,updated_at').order('person'));
  if(url==='/api/location'&&method==='PUT'){
@@ -112,7 +125,7 @@ export async function cloudApi(url,options={}){
   await checked(bucket().upload(crypto.randomUUID()+'-'+name,file,{contentType:mime,upsert:false}));await checked(client.rpc('galaxy_reward',{reward_key:'photo',amount:8}));return {};
  }
  if(url.startsWith('/api/photos/')&&method==='DELETE'){await checked(bucket().remove([decodeURIComponent(url.slice('/api/photos/'.length))]));return {};}
- if(url==='/api/export'){const [destinations,encounters,places,trips]=await Promise.all([checked(client.from('galaxy_destinations').select('*')),checked(client.from('galaxy_encounters').select('*').order('started_at')),checked(client.from('galaxy_places').select('*')),checked(client.from('galaxy_trip_history').select('*').order('started_at'))]);return {settings:await settings(),items:await allItems(),daily:await checked(client.rpc('galaxy_daily_read')),destinations,encounters,places,trips};}
+ if(url==='/api/export'){const [destinations,encounters,places,trips]=await Promise.all([checked(client.from('galaxy_destinations').select('*')),checked(client.from('galaxy_encounters').select('*').order('started_at')),checked(client.from('galaxy_places').select('*')),checked(client.from('galaxy_trip_history').select('*').order('started_at'))]);return {bond:await checked(client.rpc('galaxy_bond_read')),settings:await settings(),items:await allItems(),daily:await checked(client.rpc('galaxy_daily_read')),destinations,encounters,places,trips};}
  if(url==='/api/calendar.ics')return ics((await allItems()).filter(i=>i.kind==='event'));
  throw Error('En la versión gratuita pueden abrir su álbum de Google Fotos y subir aquí las fotos que elijan.');
 }

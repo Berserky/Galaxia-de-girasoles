@@ -1,3 +1,3 @@
 <resources>
     <string name="app_name">Nuestra Galaxia</string>
-</resources>
+<string name="widget_description">Sus nombres, una foto, su próxima fecha y un abrazo.</string><string name="bond_notifications">Notificaciones de momentos</string><string name="bond_explanation">Recibe gestos y recordatorios discretos. Se revisan aproximadamente cada 15 minutos; Android puede retrasarlos. No requiere ubicación. La foto del widget se elige en Ajustes de la web.</string></resources>
