@@ -28,6 +28,8 @@ jobs:
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: "9.4.1" }
+      - name: Empaquetar música de bienvenida
+        run: cp musica.mp3 android/app/src/main/assets/musica.mp3
       - name: QA interfaz móvil
         run: |
           node --check android/app/src/main/assets/mobile/app.js
@@ -53,7 +55,7 @@ jobs:
           gradle -p android assembleRelease -Pandroid.injected.signing.store.file="$PWD/android/release.keystore" -Pandroid.injected.signing.store.password="$STORE_PASSWORD" -Pandroid.injected.signing.key.alias="$KEY_ALIAS" -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
           cp android/app/build/outputs/apk/release/app-release.apk NuestraGalaxia.apk
           SHA=$(sha256sum NuestraGalaxia.apk | awk '{print $1}')
-          printf '{"versionCode":10,"versionName":"1.6.0","apkUrl":"https://github.com/Berserky/Galaxia-de-girasoles/releases/download/android-stable/NuestraGalaxia.apk","sha256":"%s","notes":"Bienvenida cinematográfica para Adri: fondo negro profundo, estrellas y nebulosas animadas, parallax, partículas táctiles y transiciones interactivas."}\n' "$SHA" > update.json
+          printf '{"versionCode":11,"versionName":"1.7.0","apkUrl":"https://github.com/Berserky/Galaxia-de-girasoles/releases/download/android-stable/NuestraGalaxia.apk","sha256":"%s","notes":"Experiencia de regalo para Adri: apertura cinematográfica, música local, transiciones a negro y recorrido guiado por las funciones de Nuestra Galaxia."}\n' "$SHA" > update.json
       - name: Publicar canal estable
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env: { GH_TOKEN: "${{ github.token }}" }
