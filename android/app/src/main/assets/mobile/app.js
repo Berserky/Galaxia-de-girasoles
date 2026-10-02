@@ -2,12 +2,14 @@ const $=s=>document.querySelector(s);
 const app=$('#app'),navEl=$('#bottomNav'),modal=$('#modal'),toastEl=$('#toast');
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const attr=esc;
-const icons={home:'⌂',map:'⌖',moments:'♡',memories:'✦',more:'•••'};
+const ico=(name,cls='')=>'<i data-lucide="'+attr(name)+'" class="ui-icon '+attr(cls)+'" aria-hidden="true"></i>';
+const refreshIcons=()=>requestAnimationFrame(()=>window.lucide?.createIcons?.({attrs:{'stroke-width':1.8}}));
+const icons={home:'house',map:'map-pin',moments:'heart',memories:'images',more:'more-horizontal'};
 const nav=[['home','Inicio'],['map','Mapa'],['moments','Momentos'],['memories','Recuerdos'],['more','Más']];
-const moods={feliz:['☀️','Feliz'],tranquilo:['≈','En calma'],cansado:['🌙','Sin energía'],sensible:['♡','Sensible'],abrazo:['∞','Abrazo']};
+const moods={feliz:['smile','Feliz'],tranquilo:['waves','En calma'],cansado:['moon','Sin energía'],sensible:['heart','Sensible'],abrazo:['hand-heart','Abrazo']};
 const kindMeta={
- memory:['💜','Recuerdo'],event:['📅','Fecha especial'],plan:['✓','Plan'],note:['📝','Nota'],
- capsule:['🔒','Cápsula'],wish:['✨','Deseo'],journey:['🧭','Viaje'],song:['♫','Canción']
+ memory:['heart','Recuerdo'],event:['calendar','Fecha especial'],plan:['circle-check-big','Plan'],note:['file-text','Nota'],
+ capsule:['lock','Cápsula'],wish:['star','Deseo'],journey:['route','Viaje'],song:['music','Canción']
 };
 const gameQuestions={
  comfort:{label:'¿Qué me ayuda más cuando tengo un día difícil?',options:['Un abrazo','Hablar de todo','Un rato de calma','Algo rico']},
@@ -40,7 +42,7 @@ const surpriseIdeas=[
  {title:'Álbum del mes',body:'Elegir juntos las mejores fotos del mes y escribir una frase para cada una.',minutes:60,budget:0,where:'casa'}
 ];
 
-let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',media={photo:null,music:null},map=null;
+let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null;
 let toastTimer,refreshing=false,updateState={text:'La app está al día.',progress:0,busy:false},pendingVoiceDraft=null,lastSurprise=null;
 
 window.GalaxyNative={
@@ -62,6 +64,11 @@ window.GalaxyNative={
    let data={};try{data=JSON.parse(json||'{}');}catch{}
    if(name==='native'){native=data;render();}
    if(name==='update'){updateState=data;renderUpdateOnly();}
+ },
+ back(){
+   if(modal.open){closeModal();return;}
+   if(view!=='home'){go('home');return;}
+   try{GalaxyAndroid.closeApp();}catch{}
  }
 };
 
@@ -95,56 +102,67 @@ async function refreshState({quiet=false}={}){
  catch(e){if(!quiet)toast(e.message);}
  finally{refreshing=false;}
 }
-async function refreshMap({quiet=false}={}){
+async function refreshMap({quiet=false,detail=false}={}){
  if(!native.paired)return;
- try{mapData=await api('map-state');if(view==='map'&&!quiet)render();else if(view==='map')drawMap();}
- catch(e){if(!quiet)toast(e.message);}
+ try{
+   const next=await api('map-state',{detail});
+   mapData=detail||!mapData?next:{...mapData,...next};
+   if(view==='map'&&!quiet)render();
+   else if(view==='map')drawMap({fit:false});
+ }catch(e){if(!quiet)toast(e.message);}
 }
 async function loadMedia(kind,force=false){
- if(media[kind]&&!force)return media[kind];
+ const fresh=media[kind]&&Date.now()-(mediaLoadedAt[kind]||0)<20*60*1000;
+ if(fresh&&!force)return media[kind];
  const result=await api('media-list',{kind});
  media[kind]=result.items||[];
+ mediaLoadedAt[kind]=Date.now();
  if(view==='memories')render();
  return media[kind];
 }
 
 function header(){
- return '<header class="header"><div class="brand"><div class="brand-mark">✦</div><div><strong>Nuestra Galaxia</strong><small>'+esc(native.paired?(myName()+' & '+partnerName()):'Un espacio para dos')+'</small></div></div><div class="avatar">'+esc((native.paired?myName():'N').slice(0,1).toUpperCase())+'</div></header>';
+ return '<header class="header"><div class="brand"><div class="brand-mark">'+ico('sparkles')+'</div><div><strong>Nuestra Galaxia</strong><small>'+esc(native.paired?(myName()+' & '+partnerName()):'Un espacio para dos')+'</small></div></div><div class="avatar">'+esc((native.paired?myName():'N').slice(0,1).toUpperCase())+'</div></header>';
 }
 function renderNav(){
  navEl.style.display=native.paired?'grid':'none';
- navEl.innerHTML=nav.map(([id,label])=>'<button class="nav-btn '+(view===id?'active':'')+'" data-view="'+id+'"><span>'+icons[id]+'</span>'+label+'</button>').join('');
+ navEl.innerHTML=nav.map(([id,label])=>'<button class="nav-btn '+(view===id?'active':'')+'" data-view="'+id+'">'+ico(icons[id],'nav-icon')+'<span>'+label+'</span></button>').join('');
+}
+function go(next){
+ view=next;render();window.scrollTo(0,0);
+ if(view==='map')refreshMap({quiet:true,detail:!mapData});
 }
 function render(){
  renderNav();
- if(!native.paired){renderOnboarding();return;}
- if(!cloud){app.innerHTML=header()+loading('Cargando nuestra galaxia');refreshState();return;}
+ if(!native.paired){renderOnboarding();refreshIcons();return;}
+ if(!cloud){app.innerHTML=header()+loading('Cargando nuestra galaxia');refreshIcons();refreshState();return;}
  if(view==='home')app.innerHTML=header()+homeView();
- if(view==='map'){app.innerHTML=header()+mapView();setTimeout(()=>{drawMap();if(!mapData)refreshMap();},0);}
+ if(view==='map'){app.innerHTML=header()+mapView();setTimeout(()=>{drawMap();if(!mapData)refreshMap({detail:true});},0);}
  if(view==='moments')app.innerHTML=header()+momentsView();
  if(view==='memories'){app.innerHTML=header()+memoriesView();if((memoryTab==='album'&&!media.photo)||(memoryTab==='music'&&!media.music))setTimeout(()=>loadMedia(memoryTab==='album'?'photo':'music').catch(e=>toast(e.message)),0);}
  if(view==='more')app.innerHTML=header()+moreView();
+ refreshIcons();
 }
 function renderOnboarding(){
- app.innerHTML='<div class="onboarding"><div class="card"><div class="onboarding-logo">✦</div><p class="eyebrow">NUESTRA GALAXIA · ANDROID</p><h1>Todo lo nuestro, ahora en el teléfono.</h1><p>Vincula este dispositivo con el código generado en Ajustes de Nuestra Galaxia. El código solo sirve una vez y el token queda cifrado por Android.</p><form id="pairForm" class="stack" style="margin-top:22px"><div class="field"><label>Código de vinculación</label><input class="input" name="code" autocomplete="off" autocapitalize="characters" placeholder="Pega aquí el código" required></div><button class="btn" type="submit">Vincular este teléfono</button></form><p class="muted" style="font-size:11px;margin-top:16px">Versión '+esc(native.version||'')+'</p></div></div>';
+ app.innerHTML='<div class="onboarding"><div class="card"><div class="onboarding-logo">'+ico('sparkles')+'</div><p class="eyebrow">NUESTRA GALAXIA · ANDROID</p><h1>Todo lo nuestro, ahora en el teléfono.</h1><p>Vincula este dispositivo con el código generado en Ajustes de Nuestra Galaxia. El código solo sirve una vez y el token queda cifrado por Android.</p><form id="pairForm" class="stack" style="margin-top:22px"><div class="field"><label>Código de vinculación</label><input class="input" name="code" autocomplete="off" autocapitalize="characters" placeholder="Pega aquí el código" required></div><button class="btn" type="submit">Vincular este teléfono</button></form><p class="muted" style="font-size:11px;margin-top:16px">Versión '+esc(native.version||'')+'</p></div></div>';
 }
 
 function homeView(){
  const own=ownDaily(),partner=partnerDaily(),next=cloud.nextEvent,garden=cloud.bond?.garden||{days:0,stage:0};
  const locs=cloud.locations||[];
  return '<section class="hero"><p class="eyebrow">NUESTRO UNIVERSO</p><h1>'+esc(myName())+' & '+esc(partnerName())+'</h1><p>Un lugar para acompañarnos, guardar lo vivido y seguir construyendo lo que viene.</p><div class="hero-stats"><div class="hero-stat"><b>'+coupleDays()+'</b><small>días juntos</small></div><div class="hero-stat"><b>'+items('memory').length+'</b><small>recuerdos</small></div><div class="hero-stat"><b>'+garden.days+'</b><small>días del girasol</small></div></div></section>'+
- '<section class="section"><div class="section-head"><div><h2>¿Cómo estás hoy?</h2><p>Tu estado se comparte solo con tu persona.</p></div></div><div class="mood-grid">'+Object.entries(moods).map(([id,m])=>'<button class="mood '+(own.mood===id?'active':'')+'" data-action="mood" data-value="'+id+'"><span>'+m[0]+'</span>'+m[1]+'</button>').join('')+'</div>'+(partner.mood?'<div class="card" style="margin-top:10px"><span class="badge">'+esc(partnerName())+'</span> <b>'+esc(moods[partner.mood]?.[1]||partner.mood)+'</b></div>':'')+'</section>'+
+ '<section class="section"><div class="section-head"><div><h2>¿Cómo estás hoy?</h2><p>Tu estado se comparte solo con tu persona.</p></div></div><div class="mood-grid">'+Object.entries(moods).map(([id,m])=>'<button class="mood '+(own.mood===id?'active':'')+'" data-action="mood" data-value="'+id+'"><span>'+ico(m[0])+'</span>'+m[1]+'</button>').join('')+'</div>'+(partner.mood?'<div class="card" style="margin-top:10px"><span class="badge">'+esc(partnerName())+'</span> <b>'+esc(moods[partner.mood]?.[1]||partner.mood)+'</b></div>':'')+'</section>'+
  '<section class="section"><div class="card"><p class="eyebrow">PREGUNTA DEL DÍA</p><h3>'+esc(dailyQuestion())+'</h3>'+dailyAnswerMarkup(own,partner)+'</div></section>'+
  '<section class="section"><div class="grid">'+
- actionCard('⌖','Nuestro mapa','Ver dónde estamos y nuestros recorridos','map')+
- actionCard('♡','Enviar un gesto','Abrazo, beso o “te extraño”','moments')+
- actionCard('✦','Guardar recuerdo','Algo que no queremos olvidar','add-memory')+
- actionCard('✓','Nuevo plan','Algo para hacer juntos','add-plan')+
+ actionCard('map-pin','Nuestro mapa','Ver dónde estamos y nuestros recorridos','map')+
+ actionCard('heart','Enviar un gesto','Abrazo, beso o “te extraño”','moments')+
+ actionCard('images','Guardar recuerdo','Algo que no queremos olvidar','add-memory')+
+ actionCard('circle-check-big','Nuevo plan','Algo para hacer juntos','add-plan')+
  '</div></section>'+
  (next?'<section class="section"><div class="card"><p class="eyebrow">PRÓXIMA FECHA</p><h3>'+esc(next.title)+'</h3><p>'+esc(fmtDate(next.date))+'</p></div></section>':'')+
  '<section class="section"><div class="section-head"><div><h2>Cerca, aunque estemos lejos</h2><p>Estado actual del mapa compartido.</p></div></div><div class="stack">'+locs.map(personCard).join('')+'</div></section>';
 }
-function actionCard(icon,title,copy,action){return '<button class="action-card" data-action="'+action+'"><span class="icon">'+icon+'</span><b>'+esc(title)+'</b><small>'+esc(copy)+'</small></button>';}
+function actionCard(iconName,title,copy,action){return '<button class="action-card" data-action="'+action+'"><span class="icon">'+ico(iconName)+'</span><b>'+esc(title)+'</b><small>'+esc(copy)+'</small></button>';}
 function dailyAnswerMarkup(own,partner){
  let html='';
  if(!own.answer)html='<form id="dailyForm" class="stack" style="margin-top:14px"><textarea name="answer" placeholder="Tu respuesta…" required></textarea><button class="btn" type="submit">Guardar respuesta</button></form>';
@@ -161,7 +179,7 @@ function transportLabel(l){
  if(!l.sharing)return'Ubicación pausada';
  if(l.motion==='walking')return'Caminando';
  if(l.motion==='still')return'Quieto/a';
- if(l.motion==='vehicle')return l.transport_preference==='motorcycle'?'En moto':l.transport_preference==='transit'?'En transporte público':'En vehículo';
+ if(l.motion==='vehicle')return l.transport_preference==='motorcycle'?'En moto · probable':l.transport_preference==='transit'?'En transporte público · probable':'En vehículo';
  return'Moviéndose';
 }
 
@@ -174,36 +192,36 @@ function memoriesView(){
  return '<section><div class="section-head"><div><p class="eyebrow">LO QUE SOMOS</p><h2>Nuestros recuerdos</h2><p>Todo lo que vamos guardando juntos.</p></div></div><div class="chips">'+tabs.map(([id,label])=>'<button class="chip '+(memoryTab===id?'active':'')+'" data-tab="'+id+'">'+label+'</button>').join('')+'</div>'+body+'</section>';
 }
 function itemList(kind){
- const list=items(kind),meta=kindMeta[kind]||['✦','Contenido'];
- return '<div class="section"><div class="row between"><div><h3 style="margin:0">'+meta[1]+'</h3><small class="muted">'+list.length+' guardados</small></div><button class="btn small" data-action="item-new" data-kind="'+kind+'">+ Añadir</button></div><div class="'+(kind==='memory'||kind==='journey'?'timeline':'stack')+'" style="margin-top:12px">'+(list.length?list.map(itemCard).join(''):'<div class="empty"><span class="big">'+meta[0]+'</span>Aquí aparecerá lo que vayan guardando.</div>')+'</div></div>';
+ const list=items(kind),meta=kindMeta[kind]||['sparkles','Contenido'];
+ return '<div class="section"><div class="row between"><div><h3 style="margin:0">'+meta[1]+'</h3><small class="muted">'+list.length+' guardados</small></div><button class="btn small" data-action="item-new" data-kind="'+kind+'">+ Añadir</button></div><div class="'+(kind==='memory'||kind==='journey'?'timeline':'stack')+'" style="margin-top:12px">'+(list.length?list.map(itemCard).join(''):'<div class="empty"><span class="big">'+ico(meta[0])+'</span>Aquí aparecerá lo que vayan guardando.</div>')+'</div></div>';
 }
 function itemCard(i){
- const d=i.data||{},meta=kindMeta[i.kind]||['✦',i.kind],date=d.date?fmtDate(d.date):fmtDateTime(i.created),done=d.done?' · Hecho':'';
- return '<div class="card item"><div class="item-icon">'+meta[0]+'</div><div class="item-main"><div class="meta">'+esc(date)+esc(done)+'</div><h3>'+esc(d.title||meta[1])+'</h3>'+(d.body?'<p>'+esc(d.body)+'</p>':'')+'<div class="item-actions"><button class="btn small secondary" data-action="item-edit" data-id="'+i.id+'">Editar</button><button class="btn small ghost" data-action="item-delete" data-id="'+i.id+'">Eliminar</button></div></div></div>';
+ const d=i.data||{},meta=kindMeta[i.kind]||['sparkles',i.kind],date=d.date?fmtDate(d.date):fmtDateTime(i.created),done=d.done?' · Hecho':'';
+ return '<div class="card item"><div class="item-icon">'+ico(meta[0])+'</div><div class="item-main"><div class="meta">'+esc(date)+esc(done)+'</div><h3>'+esc(d.title||meta[1])+'</h3>'+(d.body?'<p>'+esc(d.body)+'</p>':'')+'<div class="item-actions"><button class="btn small secondary" data-action="item-edit" data-id="'+i.id+'">Editar</button><button class="btn small ghost" data-action="item-delete" data-id="'+i.id+'">Eliminar</button></div></div></div>';
 }
 function albumView(){
  const list=media.photo;
  if(!list)return loading('Cargando álbum');
- return '<div class="section"><div class="row between"><div><h3 style="margin:0">Nuestro álbum</h3><small class="muted">'+list.length+' fotos privadas</small></div><button class="btn small" data-action="media-add" data-kind="photo">+ Foto</button></div>'+(list.length?'<div class="gallery" style="margin-top:12px">'+list.map(x=>'<div class="photo"><img loading="lazy" src="'+attr(x.url)+'" alt="Foto de nuestro álbum"><button data-action="media-delete" data-kind="photo" data-path="'+attr(x.path)+'" aria-label="Eliminar foto">×</button></div>').join('')+'</div>':'<div class="empty"><span class="big">📷</span>Añade la primera foto desde tu teléfono.</div>')+'</div>';
+ return '<div class="section"><div class="row between"><div><h3 style="margin:0">Nuestro álbum</h3><small class="muted">'+list.length+' fotos privadas</small></div><button class="btn small" data-action="media-add" data-kind="photo">+ Foto</button></div>'+(list.length?'<div class="gallery" style="margin-top:12px">'+list.map(x=>'<div class="photo"><img loading="lazy" src="'+attr(x.url)+'" alt="Foto de nuestro álbum"><button data-action="media-delete" data-kind="photo" data-path="'+attr(x.path)+'" aria-label="Eliminar foto">'+ico('trash-2')+'</button></div>').join('')+'</div>':'<div class="empty"><span class="big">'+ico('camera')+'</span>Añade la primera foto desde tu teléfono.</div>')+'</div>';
 }
 function musicView(){
  const list=media.music;
  if(!list)return loading('Cargando música');
- return '<div class="section"><div class="row between"><div><h3 style="margin:0">Nuestra música</h3><small class="muted">'+list.length+' canciones</small></div><button class="btn small" data-action="media-add" data-kind="music">+ MP3</button></div><div class="stack" style="margin-top:12px">'+(list.length?list.map((x,n)=>'<div class="card audio-card"><div class="row between"><div><b>'+(esc(x.originalName||x.name||('Canción '+(n+1))))+'</b><p>'+esc(fmtDateTime(x.created))+'</p></div><button class="btn small ghost" data-action="media-delete" data-kind="music" data-path="'+attr(x.path)+'">Eliminar</button></div><audio controls preload="none" src="'+attr(x.url)+'"></audio></div>').join(''):'<div class="empty"><span class="big">♫</span>Sube una canción que sea parte de su historia.</div>')+'</div></div>';
+ return '<div class="section"><div class="row between"><div><h3 style="margin:0">Nuestra música</h3><small class="muted">'+list.length+' canciones</small></div><button class="btn small" data-action="media-add" data-kind="music">+ MP3</button></div><div class="stack" style="margin-top:12px">'+(list.length?list.map((x,n)=>'<div class="card audio-card"><div class="row between"><div><b>'+(esc(x.originalName||x.name||('Canción '+(n+1))))+'</b><p>'+esc(fmtDateTime(x.created))+'</p></div><button class="btn small ghost" data-action="media-delete" data-kind="music" data-path="'+attr(x.path)+'">Eliminar</button></div><audio controls preload="none" src="'+attr(x.url)+'"></audio></div>').join(''):'<div class="empty"><span class="big">'+ico('music')+'</span>Sube una canción que sea parte de su historia.</div>')+'</div></div>';
 }
 
 function momentsView(){
  const bond=cloud.bond||{entries:[],garden:{days:0,stage:0}},entries=bond.entries||[];
  const games=entries.filter(x=>x.type==='game'),rituals=entries.filter(x=>x.type==='ritual'),notes=entries.filter(x=>x.type==='sharednote'),voices=entries.filter(x=>x.type==='voice');
- const plant=['🌱','🌿','🌻','🌻✨','🌻🌌'][bond.garden?.stage||0];
+ const stage=Number(bond.garden?.stage||0),plant=ico(stage===0?'sprout':'flower-2')+(stage>=3?ico('sparkles','garden-sparkle'):'');
  const pct=Math.min(100,(bond.garden?.days||0)/30*100);
  return '<section><div class="section-head"><div><p class="eyebrow">MOMENTOS PARA DOS</p><h2>Conectar</h2><p>Pequeñas cosas que nos acercan.</p></div></div>'+
  '<div class="card garden"><div class="garden-plant">'+plant+'</div><div><h3>Nuestro girasol</h3><p>'+Number(bond.garden?.days||0)+' días en los que ambos dejaron algo en la galaxia.</p><div class="progress"><i style="width:'+pct+'%"></i></div></div></div>'+
  '<div class="section"><div class="gesture-grid">'+
- '<button class="gesture" data-action="gesture" data-gesture="hug"><span>🫂</span>Abrazo</button>'+
- '<button class="gesture" data-action="gesture" data-gesture="kiss"><span>💋</span>Beso</button>'+
- '<button class="gesture" data-action="gesture" data-gesture="miss"><span>💭</span>Te extraño</button></div></div>'+
- '<div class="section"><div class="grid">'+actionCard('🎲','Cita sorpresa','Una idea según el momento','surprise')+actionCard('🎯','Juego de nosotros','Adivinar lo que elegiría el otro','new-game')+actionCard('🌙','Ritual semanal','Agradecer, pedir y planear','new-ritual')+actionCard('🎙','Mensaje de voz','Dejar una voz para el otro','new-voice')+'</div></div>'+
+ '<button class="gesture" data-action="gesture" data-gesture="hug"><span>'+ico('hand-heart')+'</span>Abrazo</button>'+
+ '<button class="gesture" data-action="gesture" data-gesture="kiss"><span>'+ico('heart')+'</span>Beso</button>'+
+ '<button class="gesture" data-action="gesture" data-gesture="miss"><span>'+ico('message-circle')+'</span>Te extraño</button></div></div>'+
+ '<div class="section"><div class="grid">'+actionCard('dice-5','Cita sorpresa','Una idea según el momento','surprise')+actionCard('gamepad-2','Juego de nosotros','Adivinar lo que elegiría el otro','new-game')+actionCard('notebook-pen','Ritual semanal','Agradecer, pedir y planear','new-ritual')+actionCard('mic','Mensaje de voz','Dejar una voz para el otro','new-voice')+'</div></div>'+
  momentSection('Juego de nosotros',games,gameCard,'No hay preguntas pendientes todavía.')+
  momentSection('Ritual semanal',rituals,ritualCard,'El primer ritual puede empezar esta semana.')+
  '<section class="section"><div class="section-head"><div><h2>Notas compartidas</h2><p>Los dos pueden editarlas.</p></div><button class="btn small" data-action="new-sharednote">+ Nota</button></div><div class="stack">'+(notes.length?notes.map(sharedNoteCard).join(''):'<div class="empty">Una lista, una idea, una promesa o cualquier cosa de los dos.</div>')+'</div></section>'+
@@ -235,10 +253,13 @@ function voiceCard(e){
 function mapView(){
  const own=(cloud.locations||[]).find(l=>l.person===cloud.person)||{},partner=(cloud.locations||[]).find(l=>l.person!==cloud.person)||{};
  return '<section><div class="section-head"><div><p class="eyebrow">NUESTRO MAPA</p><h2>Acompañarnos</h2><p>Ubicación voluntaria, recorridos y lugares importantes.</p></div><button class="btn small secondary" data-action="map-refresh">Actualizar</button></div>'+
- '<div class="map-wrap"><div id="map"></div><button class="map-fab" data-action="status-menu" aria-label="Estado rápido">✦</button><div id="statusMenu" class="map-status-menu">'+['Ya voy','Voy bien','Llegué','En camino','Necesito una pausa'].map(s=>'<button data-action="status-set" data-status="'+attr(s)+'">'+esc(s)+'</button>').join('')+'<button data-action="status-custom">Otro…</button></div></div>'+
+ '<div class="map-wrap"><div id="map"></div><button class="map-fab" data-action="status-menu" aria-label="Estado rápido">'+ico('sparkles')+'</button><div id="statusMenu" class="map-status-menu">'+['Ya voy','Voy bien','Llegué','En camino','Necesito una pausa'].map(s=>'<button data-action="status-set" data-status="'+attr(s)+'">'+esc(s)+'</button>').join('')+'<button data-action="status-custom">Otro…</button></div></div>'+
  '<div class="grid" style="margin-top:12px">'+personCard(own)+personCard(partner)+'</div>'+
  '<div class="section"><div class="card"><div class="row between"><div><h3>Compartir ubicación</h3><p>'+(native.tracking?'Android la mantiene activa en segundo plano.':'Está detenida en este teléfono.')+'</p></div><span class="badge '+(native.tracking?'good':'')+'">'+(native.tracking?'Activa':'Pausada')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small" data-action="'+(native.tracking?'location-stop':'location-start')+'">'+(native.tracking?'Detener':'Comenzar')+'</button><button class="btn small secondary" data-action="app-settings">Permisos</button></div></div></div>'+
- '<div class="section"><div class="grid">'+actionCard('🏁',own.trip_active?'Terminar recorrido':'Iniciar recorrido',own.trip_active?'Guardaremos el resumen al finalizar':'Registra distancia, duración y movimiento','trip-toggle')+actionCard('📍','Guardar este lugar','Casa, trabajo, recuerdo o aventura','place-new')+actionCard('🧭','Acompáñame','Elegir a dónde voy','destination')+'</div></div>'+
+ '<div class="section"><div class="card"><h3>Cómo me muevo normalmente</h3><p>Ayuda a interpretar cuando Android detecta que vas en vehículo.</p><div class="chips" style="margin-top:12px">'+
+ ['','motorcycle','transit'].map(value=>'<button class="chip '+((own.transport_preference||'')===value?'active':'')+'" data-action="transport-set" data-value="'+value+'">'+ico(value==='motorcycle'?'bike':value==='transit'?'bus-front':'navigation')+(value==='motorcycle'?'Moto':value==='transit'?'Transporte público':'Automático')+'</button>').join('')+
+ '</div></div></div>'+
+ '<div class="section"><div class="grid">'+actionCard('route',own.trip_active?'Terminar recorrido':'Iniciar recorrido',own.trip_active?'Guardaremos el resumen al finalizar':'Registra distancia, duración y movimiento','trip-toggle')+actionCard('map-pin','Guardar este lugar','Casa, trabajo, recuerdo o aventura','place-new')+actionCard('navigation','Acompáñame','Elegir a dónde voy','destination')+'</div></div>'+
  mapHistoryView()+'</section>';
 }
 function mapHistoryView(){
@@ -247,7 +268,7 @@ function mapHistoryView(){
  return '<section class="section"><div class="section-head"><div><h2>Actividad reciente</h2><p>Recorridos, llegadas y encuentros.</p></div></div><div class="stack">'+
  (trips.slice(0,4).map(t=>'<div class="card"><span class="badge">'+(names()[Number(t.person)]||'Nosotros')+'</span><h3 style="margin-top:8px">'+fmtDistance(t.distance_m)+' · '+fmtDuration(t.duration_s)+'</h3><p>'+esc(fmtDateTime(t.started_at))+(t.max_speed?' · máx. '+(Number(t.max_speed)*3.6).toFixed(0)+' km/h':'')+'</p></div>').join('')||
  events.slice(0,4).map(e=>'<div class="card"><h3>'+(e.event==='arrived'?'Llegada':'Salida')+'</h3><p>'+esc(fmtDateTime(e.happened_at))+'</p></div>').join('')||
- encounters.slice(0,3).map(e=>'<div class="card"><h3>Nos encontramos ♡</h3><p>'+esc(fmtDateTime(e.started_at))+'</p></div>').join('')||
+ encounters.slice(0,3).map(e=>'<div class="card"><h3 class="icon-title">'+ico('heart')+'Nos encontramos</h3><p>'+esc(fmtDateTime(e.started_at))+'</p></div>').join('')||
  '<div class="empty">Aquí aparecerán los recorridos y encuentros que vayamos guardando.</div>')+
  '</div></section>';
 }
@@ -268,8 +289,9 @@ function updateMarkup(){
 }
 function renderUpdateOnly(){const el=$('#updateCard');if(el)el.innerHTML=updateMarkup();}
 
-function drawMap(){
+function drawMap({fit=true}={}){
  if(view!=='map'||!$('#map')||typeof GalaxyMap==='undefined'||!mapData)return;
+ const previous=map?{center:{...map.center},zoom:map.zoom}:null;
  if(map){map.remove();map=null;}
  map=new GalaxyMap($('#map'),{center:[4.711,-74.0721],zoom:12});
  const locs=(mapData.locations||[]).filter(x=>x.sharing&&Number.isFinite(Number(x.latitude))&&Number.isFinite(Number(x.longitude)));
@@ -284,23 +306,25 @@ function drawMap(){
    bounds.push([Number(l.latitude),Number(l.longitude)]);
  });
  (mapData.places||[]).forEach(p=>{
-   const symbol=p.kind==='home'?'⌂':p.kind==='work'?'▣':p.kind==='adventure'?'✦':'♡';
-   map.addMarker({lat:p.latitude,lon:p.longitude,label:symbol,className:'place',popup:p.name+(p.note?' · '+p.note:'')});
+   const markerIcon=p.kind==='home'?'house':p.kind==='work'?'briefcase':p.kind==='adventure'?'compass':'heart';
+   map.addMarker({lat:p.latitude,lon:p.longitude,icon:markerIcon,className:'place',popup:p.name+(p.note?' · '+p.note:'')});
  });
  const grouped={};
  (mapData.tripPoints||[]).slice().reverse().forEach(p=>(grouped[p.person]??=[]).push([Number(p.latitude),Number(p.longitude)]));
  Object.entries(grouped).forEach(([person,points])=>{if(points.length>1)map.addPolyline(points,{className:person===cloud.person?'mine':'partner',dashed:person!==cloud.person});});
- if(bounds.length)map.fitBounds(bounds,{maxZoom:16});
+ if(fit||!previous){if(bounds.length)map.fitBounds(bounds,{maxZoom:16});}
+ else map.setView([previous.center.lat,previous.center.lon],previous.zoom);
 }
 
 function showModal(title,body,formId=''){
- modal.innerHTML='<div class="modal-inner"><button class="close" data-action="modal-close" aria-label="Cerrar">×</button><h2>'+esc(title)+'</h2>'+body+'</div>';
+ modal.innerHTML='<div class="modal-inner"><button class="close" data-action="modal-close" aria-label="Cerrar">'+ico('x')+'</button><h2>'+esc(title)+'</h2>'+body+'</div>';
  if(formId)modal.dataset.form=formId;else delete modal.dataset.form;
  modal.showModal();
+ refreshIcons();
 }
 function closeModal(){if(modal.open)modal.close();delete modal.dataset.editId;delete modal.dataset.version;delete modal.dataset.kind;delete modal.dataset.form;}
 function openItemForm(kind,item){
- const d=item?.data||{},meta=kindMeta[kind]||['✦','Contenido'];
+ const d=item?.data||{},meta=kindMeta[kind]||['sparkles','Contenido'];
  modal.dataset.editId=item?.id||'';modal.dataset.version=item?.version||'';modal.dataset.kind=kind;
  const needsDate=['memory','event','capsule','journey'].includes(kind);
  const body='<form id="itemForm" class="stack" style="margin-top:16px"><div class="field"><label>Título</label><input class="input" name="title" value="'+attr(d.title||'')+'" required maxlength="160"></div><div class="field"><label>Texto</label><textarea name="body" placeholder="Escribe aquí…">'+esc(d.body||'')+'</textarea></div>'+
@@ -359,7 +383,7 @@ async function deleteItem(id){
  await api('item-delete',{id,version:item.version});await refreshState();toast('Eliminado.');
 }
 async function saveDaily(field,value){await api('daily-save',{field,value});await refreshState();}
-async function sendGesture(gesture){await api('bond-save',{type:'gesture',data:{gesture}});await refreshState({quiet:true});render();toast(gesture==='hug'?'Abrazo enviado ♡':gesture==='kiss'?'Beso enviado ♡':'Le contaste que le extrañas ♡');}
+async function sendGesture(gesture){await api('bond-save',{type:'gesture',data:{gesture}});await refreshState({quiet:true});render();toast(gesture==='hug'?'Abrazo enviado.':gesture==='kiss'?'Beso enviado.':'Le contaste que le extrañas.');}
 async function bondDelete(id){
  const e=cloud.bond.entries.find(x=>x.id===id);if(!e||!confirm('¿Eliminar este momento?'))return;
  await api('bond-delete',{id,version:e.version});await refreshState();toast('Momento eliminado.');
@@ -372,13 +396,13 @@ async function chooseWidgetPhoto(){
 
 document.addEventListener('click',async e=>{
  const btn=e.target.closest('[data-view],[data-tab],[data-action]');if(!btn)return;
- if(btn.dataset.view){view=btn.dataset.view;render();if(view==='map')refreshMap({quiet:true});return;}
+ if(btn.dataset.view){go(btn.dataset.view);return;}
  if(btn.dataset.tab){memoryTab=btn.dataset.tab;render();return;}
  const a=btn.dataset.action;
  try{
   if(a==='modal-close'){closeModal();return;}
-  if(a==='map'){view='map';render();return;}
-  if(a==='moments'){view='moments';render();return;}
+  if(a==='map'){go('map');return;}
+  if(a==='moments'){go('moments');return;}
   if(a==='add-memory'){openItemForm('memory');return;}
   if(a==='add-plan'){openItemForm('plan');return;}
   if(a==='item-new'){openItemForm(btn.dataset.kind);return;}
@@ -397,17 +421,18 @@ document.addEventListener('click',async e=>{
   if(a==='surprise'){openSurprise();return;}
   if(a==='surprise-again'){openSurprise();return;}
   if(a==='surprise-save'&&lastSurprise){await busy(async()=>{await api('item-save',{kind:'plan',data:{title:lastSurprise.title,body:lastSurprise.body,category:'Cita sorpresa',done:false}});closeModal();await refreshState();},'Cita guardada en Planes.');return;}
-  if(a==='media-add'){const result=await GalaxyNative.call('pickMedia',btn.dataset.kind);media[btn.dataset.kind]=null;await loadMedia(btn.dataset.kind,true);toast('Archivo añadido.');return;}
-  if(a==='media-delete'){if(confirm('¿Eliminar este archivo?')){await api('media-delete',{kind:btn.dataset.kind,path:btn.dataset.path});media[btn.dataset.kind]=null;await loadMedia(btn.dataset.kind,true);toast('Archivo eliminado.');}return;}
-  if(a==='map-refresh'){await refreshMap();return;}
+  if(a==='media-add'){await GalaxyNative.call('pickMedia',btn.dataset.kind);media[btn.dataset.kind]=null;mediaLoadedAt[btn.dataset.kind]=0;await loadMedia(btn.dataset.kind,true);toast('Archivo añadido.');return;}
+  if(a==='media-delete'){if(confirm('¿Eliminar este archivo?')){await api('media-delete',{kind:btn.dataset.kind,path:btn.dataset.path});media[btn.dataset.kind]=null;mediaLoadedAt[btn.dataset.kind]=0;await loadMedia(btn.dataset.kind,true);toast('Archivo eliminado.');}return;}
+  if(a==='map-refresh'){await refreshMap({detail:true});return;}
   if(a==='status-menu'){$('#statusMenu')?.classList.toggle('open');return;}
   if(a==='status-set'){await api('status-set',{status:btn.dataset.status});$('#statusMenu')?.classList.remove('open');await refreshMap();toast('Estado actualizado.');return;}
   if(a==='status-custom'){const value=prompt('¿Qué estado quieres mostrar?','');if(value){await api('status-set',{status:value});await refreshMap();}return;}
   if(a==='location-start'){await GalaxyNative.call('startLocation');native=nativeState();render();toast('Ubicación activa.');return;}
   if(a==='location-stop'){await GalaxyNative.call('stopLocation');native=nativeState();render();toast('Ubicación detenida.');return;}
-  if(a==='trip-toggle'){const own=(cloud.locations||[]).find(l=>l.person===cloud.person)||{};await api('trip',{operation:own.trip_active?'stop':'start'});await refreshState();await refreshMap();toast(own.trip_active?'Recorrido guardado.':'Recorrido iniciado.');return;}
-  if(a==='place-new'){if(!mapData)await refreshMap({quiet:true});openPlace();return;}
-  if(a==='destination'){if(!mapData)await refreshMap({quiet:true});openDestination();return;}
+  if(a==='trip-toggle'){const own=(cloud.locations||[]).find(l=>l.person===cloud.person)||{};await api('trip',{operation:own.trip_active?'stop':'start'});await refreshState();await refreshMap({detail:true});toast(own.trip_active?'Recorrido guardado.':'Recorrido iniciado.');return;}
+  if(a==='place-new'){if(!mapData)await refreshMap({quiet:true,detail:true});openPlace();return;}
+  if(a==='destination'){if(!mapData)await refreshMap({quiet:true,detail:true});openDestination();return;}
+  if(a==='transport-set'){await api('transport-set',{preference:btn.dataset.value});await refreshState({quiet:true});await refreshMap({quiet:true});render();toast('Preferencia de transporte actualizada.');return;}
   if(a==='app-settings'){await GalaxyNative.call('openAppSettings');return;}
   if(a==='widget-add'){await GalaxyNative.call('addWidget');toast('Android abrió la solicitud del widget.');return;}
   if(a==='widget-photo'){await chooseWidgetPhoto();return;}
@@ -450,8 +475,23 @@ document.addEventListener('submit',async e=>{
 });
 
 modal.addEventListener('click',e=>{if(e.target===modal)closeModal();});
-setInterval(()=>{if(native.paired)refreshState({quiet:true}).then(()=>{if(view!=='map')render();}).catch(()=>{});},45000);
-setInterval(()=>{if(native.paired&&view==='map')refreshMap({quiet:true}).catch(()=>{});},12000);
+function editingNow(){
+ const el=document.activeElement;
+ return modal.open||!!(el&&['INPUT','TEXTAREA','SELECT'].includes(el.tagName));
+}
+setInterval(()=>{
+ if(!native.paired||document.visibilityState!=='visible')return;
+ refreshState({quiet:true}).then(()=>{if(view!=='map'&&!editingNow())render();}).catch(()=>{});
+},45000);
+setInterval(()=>{
+ if(native.paired&&view==='map'&&document.visibilityState==='visible')refreshMap({quiet:true,detail:false}).catch(()=>{});
+},12000);
+document.addEventListener('visibilitychange',()=>{
+ if(document.visibilityState==='visible'&&native.paired){
+   refreshState({quiet:true}).then(()=>{if(view!=='map'&&!editingNow())render();}).catch(()=>{});
+   if(view==='map')refreshMap({quiet:true,detail:false}).catch(()=>{});
+ }
+});
 
 render();
 if(native.paired)refreshState();
