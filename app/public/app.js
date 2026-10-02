@@ -12,7 +12,8 @@ async function tryMusic(){if(!bgAudio.paused)return true;try{await bgAudio.play(
 function unlockMusic(){if(musicUnlocked)return;tryMusic();}
 function setTrack(src,title,id){if(!src)return;if(bgAudio.src!==new URL(src,location.href).href){bgAudio.src=src;bgAudio.load();}currentTrack={src,title,id};tryMusic();updateMiniPlayer();}
 function updateMiniPlayer(){const el=document.querySelector('#global-player');if(!el)return;el.innerHTML=`<button class="icon-button" data-action="music-toggle" aria-label="${bgAudio.paused?'Reproducir':'Pausar'}">${icon(bgAudio.paused?'play':'close')}</button><div><small>SONANDO AHORA</small><b>${esc(currentTrack.title)}</b></div><a href="#musica" class="text-link">Música</a>`;}
-let mapInstance=null,mapMarkers={},mapAccuracy={},locationWatch=null,locationPoll=null,locationUnsubscribe=null,lastLocationSent=0,locationRows=[];\nlet state,view=location.hash.slice(1)||'inicio',filter='Todos',month=new Date().getMonth(),year=new Date().getFullYear(),photos=[],drivePhotos=[],drivePage='',photoSource='local',ideaIndex=0,pickerId=sessionStorage.getItem('pickerId')||'',search='',toastTimer;
+let mapInstance=null,mapMarkers={},mapAccuracy={},locationWatch=null,locationPoll=null,locationUnsubscribe=null,lastLocationSent=0,locationRows=[];
+let state,view=location.hash.slice(1)||'inicio',filter='Todos',month=new Date().getMonth(),year=new Date().getFullYear(),photos=[],drivePhotos=[],drivePage='',photoSource='local',ideaIndex=0,pickerId=sessionStorage.getItem('pickerId')||'',search='',toastTimer;
 const moods={feliz:['☀','Feliz'],tranquilo:['≈','En calma'],cansado:['☾','Sin energía'],sensible:['♡','Sensible'],abrazo:['∞','Necesito un abrazo']};
 const items=kind=>state.items.filter(i=>i.kind===kind);
 function toast(message){const t=document.querySelector('#toast');t.textContent=message;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),5000);}
