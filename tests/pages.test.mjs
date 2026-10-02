@@ -22,3 +22,11 @@ test('Pages build supports project subpaths and never publishes server data',()=
  const secret=spawnSync(process.execPath,['scripts/build-pages.mjs'],{cwd:root,env:{...process.env,CI:'',SUPABASE_PUBLISHABLE_KEY:'sb_secret_test'}});
  assert.notEqual(secret.status,0);
 });
+
+
+test('published map and icon libraries are local and cannot block on a third-party CDN',()=>{
+ const html=readFileSync(new URL('../app/public/index.html',import.meta.url),'utf8');
+ const scripts=[...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m=>m[1]);
+ assert.ok(scripts.every(src=>!src.startsWith('https:')));
+ for(const file of ['vendor/leaflet.js','vendor/lucide.js','vendor/leaflet.css'])assert.ok(existsSync(new URL('../app/public/'+file,import.meta.url)),file);
+});

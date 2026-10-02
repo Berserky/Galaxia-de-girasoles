@@ -39,4 +39,4 @@ El servicio nativo actualiza `galaxy_locations`, almacena historial con deduplic
 gradle -p android testDebugUnitTest assembleDebug
 ```
 
-GitHub Actions publica el APK instalable en la release `android-v1.0.0`.
+GitHub Actions publica el APK instalable en la release `android-stable`.
