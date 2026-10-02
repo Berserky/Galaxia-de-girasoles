@@ -111,8 +111,9 @@ async function refreshMap({quiet=false,detail=false}={}){
    else if(view==='map')drawMap({fit:false});
  }catch(e){if(!quiet)toast(e.message);}
 }
+const mediaFresh=kind=>!!media[kind]&&Date.now()-(mediaLoadedAt[kind]||0)<20*60*1000;
 async function loadMedia(kind,force=false){
- const fresh=media[kind]&&Date.now()-(mediaLoadedAt[kind]||0)<20*60*1000;
+ const fresh=mediaFresh(kind);
  if(fresh&&!force)return media[kind];
  const result=await api('media-list',{kind});
  media[kind]=result.items||[];
@@ -129,8 +130,9 @@ function renderNav(){
  navEl.innerHTML=nav.map(([id,label])=>'<button class="nav-btn '+(view===id?'active':'')+'" data-view="'+id+'">'+ico(icons[id],'nav-icon')+'<span>'+label+'</span></button>').join('');
 }
 function go(next){
+ const hadMap=!!mapData;
  view=next;render();window.scrollTo(0,0);
- if(view==='map')refreshMap({quiet:true,detail:!mapData});
+ if(view==='map'&&hadMap)refreshMap({quiet:true,detail:false});
 }
 function render(){
  renderNav();
@@ -139,7 +141,7 @@ function render(){
  if(view==='home')app.innerHTML=header()+homeView();
  if(view==='map'){app.innerHTML=header()+mapView();setTimeout(()=>{drawMap();if(!mapData)refreshMap({detail:true});},0);}
  if(view==='moments')app.innerHTML=header()+momentsView();
- if(view==='memories'){app.innerHTML=header()+memoriesView();if((memoryTab==='album'&&!media.photo)||(memoryTab==='music'&&!media.music))setTimeout(()=>loadMedia(memoryTab==='album'?'photo':'music').catch(e=>toast(e.message)),0);}
+ if(view==='memories'){app.innerHTML=header()+memoriesView();if((memoryTab==='album'&&!mediaFresh('photo'))||(memoryTab==='music'&&!mediaFresh('music')))setTimeout(()=>loadMedia(memoryTab==='album'?'photo':'music').catch(e=>toast(e.message)),0);}
  if(view==='more')app.innerHTML=header()+moreView();
  refreshIcons();
 }
@@ -476,8 +478,8 @@ document.addEventListener('submit',async e=>{
 
 modal.addEventListener('click',e=>{if(e.target===modal)closeModal();});
 function editingNow(){
- const el=document.activeElement;
- return modal.open||!!(el&&['INPUT','TEXTAREA','SELECT'].includes(el.tagName));
+ const el=document.activeElement,playing=[...document.querySelectorAll('audio')].some(audio=>!audio.paused);
+ return modal.open||playing||!!(el&&['INPUT','TEXTAREA','SELECT'].includes(el.tagName));
 }
 setInterval(()=>{
  if(!native.paired||document.visibilityState!=='visible')return;
