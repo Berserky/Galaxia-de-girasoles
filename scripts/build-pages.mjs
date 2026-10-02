@@ -40,6 +40,14 @@ await writeFile(path.join(out,'config.js'),'export default '+JSON.stringify({url
 await writeFile(path.join(out,'.nojekyll'),'');
 await mkdir(path.join(out,'regalo'),{recursive:true});
 for(const name of ['index.html','style.css','script.js','recuerdos.js','girasol.js','musica.mp3'])await copyFile(path.join(root,name),path.join(out,'regalo',name));
+// Cada publicación renueva los recursos para evitar mezclar pantallas antiguas y nuevas.
+const revision=(process.env.GITHUB_SHA||Date.now().toString(36)).slice(0,12);
+for(const name of ['app.js','cloud.js']){
+ const source=await readFile(path.join(out,name),'utf8');
+ await writeFile(path.join(out,name),source.replace(/from '(\.\/[^']+\.js)'/g,`from '$1?v=${revision}'`));
+}
+const html=await readFile(path.join(out,'index.html'),'utf8');
+await writeFile(path.join(out,'index.html'),html.replace(/(\.\/app\.(?:js|css))"/g,`$1?v=${revision}"`));
 console.log('Sitio generado en dist. Los datos privados se guardan en Supabase, nunca en GitHub.');
 
 
