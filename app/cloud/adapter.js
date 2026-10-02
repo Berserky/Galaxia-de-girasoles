@@ -5,8 +5,10 @@ const configured=/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(config.url||'')&&!!
 const client=configured?createClient(config.url,config.key):null;
 const checked=async request=>{const {data,error}=await request;if(error)throw Error(error.message);return data;};
 const bucket=()=>client.storage.from('galaxy-photos');
+const musicBucket=()=>client.storage.from('galaxy-music');
+async function signedMusic(path){if(!path)return '';return (await checked(musicBucket().createSignedUrl(path,3600))).signedUrl;}
 function albumUrl(raw){if(!raw)return '';const u=new URL(raw);if(u.protocol!=='https:'||u.username||u.password||!['photos.app.goo.gl','photos.google.com'].includes(u.hostname))throw Error('Usa el enlace de tu álbum de Google Fotos.');return u.href;}
-async function allItems(){return (await checked(client.from('galaxy_items').select('*').order('created',{ascending:false}))).map(i=>({...i,data:validateItem({...i.data,kind:i.kind})}));}
+async function allItems(){const rows=(await checked(client.from('galaxy_items').select('*').order('created',{ascending:false}))).map(i=>({...i,data:validateItem({...i.data,kind:i.kind})}));for(const i of rows){if(i.kind==='song'&&i.data.audioPath)i.data.audioUrl=await signedMusic(i.data.audioPath);}return rows;}
 async function settings(){const s=await checked(client.from('galaxy_settings').select('*').eq('id',1).single());s.data.albumUrl=albumUrl(s.data.albumUrl);return s;}
 async function person(){let p=await checked(client.rpc('galaxy_person'));const token=sessionStorage.getItem('galaxy-invitation');if(p===null&&token){await checked(client.rpc('galaxy_claim',{token}));sessionStorage.removeItem('galaxy-invitation');p=await checked(client.rpc('galaxy_person'));}if(p===null)throw Error('Este correo no está invitado. Introduce la invitación que te compartió tu pareja.');return p;}
 async function photoList(){let files=[],offset=0;for(;;){const page=await checked(bucket().list('',{limit:100,offset,sortBy:{column:'created_at',order:'desc'}}));files.push(...page.filter(f=>f.id));if(page.length<100)break;offset+=100;}if(!files.length)return [];
@@ -26,8 +28,8 @@ export async function cloudApi(url,options={}){
   const day=today(),current=daily.filter(d=>d.day===day);
   return {demo:false,cloud:true,person:p,settings:s,items,today:day,question:questionFor(day),ideas,daily:current,allAnswered:current.filter(d=>d.answered).length===2,connections:{google:false,photos:false,drive:false},photoCount:0};
  }
- if(url==='/api/items'&&method==='POST'){const d=validateItem(data);return checked(client.from('galaxy_items').insert({kind:d.kind,data:d,author:p}).select().single());}
- if(url.startsWith('/api/items/')){const id=url.split('/').pop();if(method==='DELETE')return updateOne(client.from('galaxy_items').delete().eq('id',id).eq('version',data.version));if(method==='PUT')return updateOne(client.from('galaxy_items').update({data:validateItem(data)}).eq('id',id).eq('version',data.version));}
+ if(url==='/api/items'&&method==='POST'){const d=validateItem(data);if(data.audioPath)d.audioPath=text(data.audioPath,300,true);return checked(client.from('galaxy_items').insert({kind:d.kind,data:d,author:p}).select().single());}
+ if(url.startsWith('/api/items/')){const id=url.split('/').pop();if(method==='DELETE')return updateOne(client.from('galaxy_items').delete().eq('id',id).eq('version',data.version));if(method==='PUT'){const d=validateItem(data);if(data.audioPath)d.audioPath=text(data.audioPath,300,true);return updateOne(client.from('galaxy_items').update({data:d}).eq('id',id).eq('version',data.version));}}
  if(url==='/api/settings'&&method==='PUT'){
   if(!Array.isArray(data.names)||data.names.length!==2)throw Error('Completa los dos nombres.');
   const d={names:data.names.map(n=>text(n,40,true)),startDate:data.startDate||'',albumUrl:albumUrl(data.albumUrl)};
@@ -35,6 +37,15 @@ export async function cloudApi(url,options={}){
   return updateOne(client.from('galaxy_settings').update({data:d}).eq('id',1).eq('version',data.version));
  }
  if(url==='/api/daily')return checked(client.rpc('galaxy_daily_save',data));
+ if(url==='/api/music/upload'){
+  const file=options.body,b=new Uint8Array(await file.slice(0,3).arrayBuffer());
+  const mime=(b[0]===73&&b[1]===68&&b[2]===51)||(b[0]===255&&(b[1]&224)===224)?'audio/mpeg':null;
+  if(!mime||file.size>20971520)throw Error('Sube un MP3 válido de hasta 20 MB.');
+  const raw=decodeURIComponent(options.headers['X-File-Name']||'cancion.mp3').replace(/[^\p{L}\p{N} ._-]/gu,'_').slice(0,100)||'cancion.mp3';
+  const path=crypto.randomUUID()+'-'+raw;
+  await checked(musicBucket().upload(path,file,{contentType:mime,upsert:false}));
+  return {path,url:await signedMusic(path)};
+ }
  if(url==='/api/photos')return {photos:await photoList()};
  if(url==='/api/photos/upload'){
   const file=options.body,b=new Uint8Array(await file.slice(0,12).arrayBuffer());
