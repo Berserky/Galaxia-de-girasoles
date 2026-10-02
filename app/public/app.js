@@ -38,7 +38,7 @@ function draw(){
  app.innerHTML=`<aside class="sidebar"><a class="brand" href="#inicio"><img src="/icon.svg" alt="" width="39" height="39"><span>Nuestra<br><strong>galaxia</strong></span></a><div class="couple-card"><div class="avatars"><span>${esc(names[0][0])}</span><span>${esc(names[1][0])}</span></div><b>${esc(names.join(' & '))}</b><small>Un pequeño universo, solo nuestro</small></div><p class="nav-label">LO QUE SOMOS</p><nav aria-label="Navegación principal">${nav.map(([id,i,label])=>`<a href="#${id}" ${view===id?'aria-current="page"':''}>${icon(i)}<span>${label}</span>${view===id?'<i></i>':''}</a>`).join('')}</nav><a class="gift-link" href="/regalo/">${icon('sun')}<span>Donde todo floreció<small>Volver a tu regalo original</small></span>${icon('arrow')}</a><div class="sidebar-bottom"><a href="#ajustes" ${view==='ajustes'?'aria-current="page"':''}>${icon('settings')} Nuestro espacio</a><span>${icon('lock')} Privado, como lo nuestro</span></div></aside>
  <div class="workspace"><div id="global-player" class="global-player"></div><header class="topbar"><div class="breadcrumb">Nuestro universo <span>/</span> ${esc(nav.find(n=>n[0]===view)?.[2]||'Ajustes')}</div><div class="topbar-right">${state.demo?`<label class="demo-person">Vista local <select id="demo-person" aria-label="Probar como">${names.map((n,i)=>`<option value="${i}" ${String(i)===state.person?'selected':''}>${esc(n)}</option>`).join('')}</select></label>`:`<span class="session-name">Hola, ${esc(names[Number(state.person)])}</span>`}<button class="avatar-button" data-action="settings" aria-label="Abrir ajustes">${esc(names[Number(state.person)][0])}</button></div></header><main id="main" tabindex="-1">${renderView()}</main><footer class="footer">Hecho para nosotros. Para lo cotidiano y lo extraordinario. ${icon('heart')}</footer></div>`;
  const more=document.createElement('button');more.className='mobile-more';more.dataset.action='more';more.innerHTML=icon('plus')+'<span>Más</span>';document.querySelector('nav').append(more);
- if(view==='album')loadPhotos();updateMiniPlayer();if(view==='hogar'&&homeMode==='room')restoreHomeCamera();
+ if(view==='album')loadPhotos();updateMiniPlayer();
 }
 function renderView(){switch(view){case'album':return album();case'recuerdos':return memories();case'musica':return music();case'calendario':return calendar();case'planes':return plans();case'conectar':return connect();case'hogar':return hogar();case'ajustes':return settings();default:return dashboard();}}
 function dashboard(){const names=state.settings.data.names,start=state.settings.data.startDate,next=upcoming()[0],mine=state.daily.find(d=>d.person===state.person);return `
@@ -76,28 +76,35 @@ function homeVisual(id,context='catalog'){const item=homeCatalog[id],entry=item&
 function homeCatalogEntries(){return Object.entries(homeCatalog).filter(([,item])=>homeAssetSrc(item.asset)||homeAssetManifest[item.asset]?.sheet);}
 function homeCategory(id){if(id.startsWith('rpg'))return 'RPG · Interior';if(['fridge','stove','coffee','kitchensink','kitchencabinet','microwave'].includes(id))return 'Cocina';if(['bed','nightstand','wardrobe'].includes(id))return 'Dormitorio';if(['shower','mirror','toilet','bathroomsink','bathtub'].includes(id))return 'Baño';if(['laptop','monitor','speaker','tv','vintagetv','recordplayer'].includes(id))return 'Tecnología';if(['rug','ruground','sunflower','frame','catbed','plant','smallplant','lamp','floorlamp','tablelamp','books'].includes(id))return 'Decoración';if(['album','wallcalendar','memorybox','planner','telephone'].includes(id))return 'Especiales';return 'Sala';}
 function homeShopGroups(){return homeCatalogEntries().reduce((groups,entry)=>{const category=homeCategory(entry[0]);(groups[category]??=[]).push(entry);return groups;},{});}
-let homeRoom='living',homeMode='room',placingItem='',homeAvatarX=48,homeCameraX=.5,homeDrag=null,homeDragSuppressUntil=0;
-function restoreHomeCamera(){
- const viewport=document.querySelector('.home-camera');
- if(!viewport)return;
- requestAnimationFrame(()=>{const max=Math.max(0,viewport.scrollWidth-viewport.clientWidth);viewport.scrollLeft=max*homeCameraX;});
-}
-function rememberHomeCamera(viewport){const max=Math.max(1,viewport.scrollWidth-viewport.clientWidth);homeCameraX=Math.max(0,Math.min(1,viewport.scrollLeft/max));}
+let homeRoom='living',homeMode='room',placingItem='',homeAvatar={x:50,y:62},homeMoveFrame=0;
 function homePlaced(room){return(state.home?.placed||[]).filter(x=>x.room===room);}
+function setHomeAvatarTarget(x,y){
+ const map=document.querySelector('.rogue-map'),avatar=map?.querySelector('.rogue-player');
+ if(!map||!avatar)return;
+ const target={x:Math.max(5,Math.min(95,x)),y:Math.max(8,Math.min(92,y))};
+ cancelAnimationFrame(homeMoveFrame);
+ const step=()=>{
+  const dx=target.x-homeAvatar.x,dy=target.y-homeAvatar.y,dist=Math.hypot(dx,dy);
+  if(dist<.35){homeAvatar=target;avatar.style.left=homeAvatar.x+'%';avatar.style.top=homeAvatar.y+'%';return;}
+  const speed=Math.min(.9,dist);
+  homeAvatar.x+=dx/dist*speed;homeAvatar.y+=dy/dist*speed;
+  avatar.style.left=homeAvatar.x+'%';avatar.style.top=homeAvatar.y+'%';
+  homeMoveFrame=requestAnimationFrame(step);
+ };
+ homeMoveFrame=requestAnimationFrame(step);
+}
 function roomScene(h,room){
  const names=state.settings.data.names,person=Number(state.person)||0,placed=homePlaced(homeRoom);
- return `<section class="adventure-room scene-${homeRoom}"><div class="home-camera" aria-label="Habitación panorámica: arrastra para explorar"><div class="home-world" data-action="home-walk">
-  <div class="scene-sky"></div><div class="scene-wall">
-   <div class="scene-window"><span></span><i></i></div>
-   <div class="scene-picture">♡<small>${esc(names.join(' + '))}</small></div>
-   ${homeDoors[homeRoom].map(([to,label,arrow],i)=>`<button class="scene-door door-${i}" data-action="home-door" data-room="${to}" aria-label="Ir a ${label}"><span class="door-panel"></span><b>${label}</b><i>${arrow}</i></button>`).join('')}
+ return `<section class="rogue-room">
+  <div class="rogue-map" data-action="home-walk" aria-label="Mapa de ${esc(room[0])}. Toca o haz clic para caminar.">
+   <div class="rogue-floor" aria-hidden="true"></div>
+   <div class="rogue-wall rogue-wall-top"></div><div class="rogue-wall rogue-wall-left"></div><div class="rogue-wall rogue-wall-right"></div><div class="rogue-wall rogue-wall-bottom"></div>
+   ${homeDoors[homeRoom].map(([to,label],i)=>`<button class="rogue-door rogue-door-${i}" data-action="home-door" data-room="${to}" aria-label="Ir a ${label}"><span></span><b>${label}</b></button>`).join('')}
+   ${Array.from({length:8},(_,slot)=>{const p=placed.find(x=>Number(x.slot)===slot);return `<div class="rogue-slot rogue-slot-${slot}" data-slot="${slot}">${p?(homeCatalog[p.item]?.route?`<button class="home-object-hitbox" data-action="home-tool" data-route="${homeCatalog[p.item].route}" aria-label="Abrir ${homeCatalog[p.item].name}">${homeVisual(p.item,'scene')}</button>`:`${homeVisual(p.item,'scene')}`):(placingItem?`<button class="home-empty-slot" data-action="home-slot" data-slot="${slot}" aria-label="Colocar aquí"><i>+</i></button>`:'')}</div>`}).join('')}
+   <div class="rogue-player person-${person}" style="left:${homeAvatar.x}%;top:${homeAvatar.y}%" aria-label="${esc(names[person])}"><span>${esc(names[person][0])}</span><b>${esc(names[person])}</b></div>
   </div>
-  <div class="scene-floor">
-   ${Array.from({length:8},(_,slot)=>{const p=placed.find(x=>Number(x.slot)===slot);return`<div class="scene-slot scene-slot-${slot} ${p?`has-item place-${homeCatalog[p.item]?.place||'floor'}`:''}" data-slot="${slot}">${p?(homeCatalog[p.item]?.route?`<button class="home-object-hitbox" data-action="home-tool" data-route="${homeCatalog[p.item].route}" aria-label="Abrir ${homeCatalog[p.item].name}" style="--hit-w:${Math.max(48,homeCatalog[p.item].w+14)}px;--hit-h:${Math.max(48,homeCatalog[p.item].h+14)}px">${homeVisual(p.item,'scene')}<small>Abrir ${homeCatalog[p.item].name}</small></button>`:`${homeVisual(p.item,'scene')}<small>${homeCatalog[p.item]?.name||''}</small>`):(placingItem?`<button class="home-empty-slot" data-action="home-slot" data-slot="${slot}" aria-label="Colocar aquí"><i>+</i></button>`:'')}</div>`}).join('')}
-   <div class="home-avatar person-${person}" style="--walk-x:${homeAvatarX}%"><span class="avatar-head">${esc(names[person][0])}</span><span class="avatar-body"></span><b>${esc(names[person])}</b></div>
-  </div>
-  <div class="scene-caption"><span>${room[2]}</span><div><b>${room[0]}</b><small>${room[1]}</small></div></div>
- </div></div><div class="camera-hint" aria-hidden="true">↔ Arrastra para explorar</div></section>`;
+  <div class="rogue-hint">Toca cualquier punto del suelo para caminar</div>
+ </section>`;
 }
 function hogar(){
  const h=state.home||{coins:0,inventory:{},placed:[]},room=homeRooms[homeRoom];
@@ -116,13 +123,13 @@ async function action(el,event=null){const a=el.dataset.action,id=el.dataset.id,
  case'home-tool':location.hash=el.dataset.route;return;
  case'home-rooms':homeMode='room';placingItem='';return draw();
  case'home-map':return show(`<span class="eyebrow">NUESTRO HOGAR</span><h2 id="modal-title">¿A dónde vamos?</h2><div class="home-map-grid">${Object.entries(homeRooms).map(([id,r])=>`<button data-action="home-door" data-room="${id}" class="${id===homeRoom?'current':''}"><span>${r[2]}</span><b>${r[0]}</b></button>`).join('')}</div>`);
- case'home-door':if(modal.open)close();homeRoom=el.dataset.room;homeMode='room';homeAvatarX=50;homeCameraX=.5;placingItem='';draw();return;
- case'home-step':homeAvatarX=Math.max(10,Math.min(90,homeAvatarX+Number(el.dataset.dir)*14));return draw();
- case'home-walk':if(event&&Date.now()>homeDragSuppressUntil){const box=el.getBoundingClientRect();homeAvatarX=Math.max(8,Math.min(92,((event.clientX-box.left)/box.width)*100));draw();}return;
+ case'home-door':if(modal.open)close();homeRoom=el.dataset.room;homeMode='room';homeAvatar={x:50,y:62};placingItem='';draw();return;
+ case'home-step':return;
+ case'home-walk':if(event){const box=el.getBoundingClientRect();setHomeAvatarTarget(((event.clientX-box.left)/box.width)*100,((event.clientY-box.top)/box.height)*100);}return;
  case'home-shop':homeMode='shop';return draw();
  case'home-inventory':homeMode='inventory';return draw();
  case'home-room':homeMode='room';return draw();
- case'home-open':homeRoom=el.dataset.room;homeMode='room';homeCameraX=.5;placingItem='';return draw();
+ case'home-open':homeRoom=el.dataset.room;homeMode='room';homeAvatar={x:50,y:62};placingItem='';return draw();
  case'home-select-item':placingItem=el.dataset.item;homeMode='room';draw();return toast('Ahora toca un espacio vacío del cuarto.');
  case'home-buy':await api('/api/home/buy',{method:'POST',body:JSON.stringify({item:el.dataset.item,cost:Number(el.dataset.cost)})});await refresh(false);return draw();
  case'home-slot':if(!placingItem)return toast('Elige primero un mueble del inventario.');await api('/api/home/place',{method:'POST',body:JSON.stringify({item:placingItem,room:homeRoom,slot:Number(el.dataset.slot)})});placingItem='';await refresh(false);return draw();
@@ -155,26 +162,6 @@ async function action(el,event=null){const a=el.dataset.action,id=el.dataset.id,
  case'confirm-disconnect':await api('/api/google/disconnect',{method:'POST',body:'{}'});close();await refresh();return toast('Google desconectado.');
  case'logout':await api('/api/logout',{method:'POST',body:'{}'});location.reload();return;
  }}
-document.addEventListener('pointerdown',event=>{
- const viewport=event.target.closest?.('.home-camera');
- if(!viewport||event.button!==0||event.target.closest('button,a,input,select,textarea'))return;
- homeDrag={viewport,id:event.pointerId,startX:event.clientX,startScroll:viewport.scrollLeft,moved:false};
- viewport.classList.add('is-dragging');viewport.setPointerCapture?.(event.pointerId);
-});
-document.addEventListener('pointermove',event=>{
- if(!homeDrag||homeDrag.id!==event.pointerId)return;
- const dx=event.clientX-homeDrag.startX;
- if(Math.abs(dx)>5)homeDrag.moved=true;
- homeDrag.viewport.scrollLeft=homeDrag.startScroll-dx;
- rememberHomeCamera(homeDrag.viewport);
-});
-function endHomeCameraDrag(event){
- if(!homeDrag||homeDrag.id!==event.pointerId)return;
- if(homeDrag.moved){homeDragSuppressUntil=Date.now()+350;rememberHomeCamera(homeDrag.viewport);}
- homeDrag.viewport.classList.remove('is-dragging');homeDrag.viewport.releasePointerCapture?.(event.pointerId);homeDrag=null;
-}
-document.addEventListener('pointerup',endHomeCameraDrag);document.addEventListener('pointercancel',endHomeCameraDrag);
-document.addEventListener('wheel',event=>{const viewport=event.target.closest?.('.home-camera');if(!viewport)return;if(Math.abs(event.deltaY)>Math.abs(event.deltaX)){viewport.scrollLeft+=event.deltaY;rememberHomeCamera(viewport);event.preventDefault();}},{passive:false});
 document.addEventListener('pointerdown',unlockMusic,{once:true});
 bgAudio.addEventListener('play',updateMiniPlayer);bgAudio.addEventListener('pause',updateMiniPlayer);
 document.addEventListener('click',async event=>{const el=event.target.closest('[data-action]');if(!el)return;event.preventDefault();if(el.disabled)return;el.disabled=true;try{await action(el,event);}catch(e){if(modal.open)formError(e.message);else toast(e.message);}finally{el.disabled=false;}});
