@@ -26,7 +26,7 @@ export async function cloudApi(url,options={}){
  if(url==='/api/locations'&&method==='GET')return checked(client.from('galaxy_locations').select('person,latitude,longitude,accuracy,speed,heading,sharing,updated_at').order('person'));
  if(url==='/api/location'&&method==='PUT'){
   const sharing=!!data.sharing;
-  const row={person:String(p),sharing,updated_at:new Date().toISOString()};
+  const row={person:String(p),sharing,updated_at:new Date().toISOString(),latitude:null,longitude:null,accuracy:null,speed:null,heading:null};
   if(sharing){
    const latitude=Number(data.latitude),longitude=Number(data.longitude),accuracy=Number(data.accuracy);
    if(!Number.isFinite(latitude)||latitude < -90||latitude > 90||!Number.isFinite(longitude)||longitude < -180||longitude > 180)throw Error('La ubicación recibida no es válida.');
