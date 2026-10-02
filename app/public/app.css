@@ -15,3 +15,8 @@
 @media(max-width:480px){.cloud-entry{padding:38px 20px 28px;justify-content:center}.cloud-entry h1{font-size:37px;letter-spacing:-1px}.entry-intro .eyebrow{margin-top:22px}.cloud-entry .entry-subtitle{font-size:14px;margin-bottom:25px}.entry-card{padding:22px;border-radius:18px}.cloud-entry .entry-privacy{font-size:10px}.entry-disclosure summary{font-size:12px}}
 @media(max-width:350px){.cloud-entry{padding:28px 16px}.cloud-entry h1{font-size:31px}.entry-card{padding:18px}.entry-card .entry-google{font-size:13px}}
 
+
+.install-gate{min-height:100dvh;display:grid;place-items:center;padding:32px 20px;background:radial-gradient(circle at 50% 5%,#e6ecdc 0,transparent 40%),radial-gradient(circle at 10% 90%,#f0e5ce 0,transparent 45%),var(--paper);text-align:center}
+.install-card{width:min(430px,100%);padding:42px 30px;background:#ffffffc7;border:1px solid #fff;border-radius:26px;box-shadow:0 22px 80px #354c3d14;backdrop-filter:blur(12px)}
+.install-card>img{border-radius:22px;box-shadow:0 12px 30px #354c3d16}.install-card .eyebrow{margin:26px 0 14px}.install-card h1{font-size:clamp(38px,9vw,54px);margin:0 0 18px}.install-copy{color:var(--muted);font-size:14px;line-height:1.75;margin:0 auto 28px;max-width:340px}.install-action{width:100%;min-height:52px;font-size:13px}.install-card>.text-button{margin-top:12px}.install-help{min-height:20px;color:#7b866f;font-size:11px;line-height:1.6;margin:18px 0 0}.install-card small{display:block;color:#9aa08f;font-size:10px;line-height:1.6;margin-top:18px}
+@media(max-width:480px){.install-gate{padding:20px}.install-card{padding:34px 22px;border-radius:22px}.install-card h1{font-size:40px}}
