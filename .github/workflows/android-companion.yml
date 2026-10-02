@@ -40,7 +40,7 @@ jobs:
           gradle -p android assembleRelease -Pandroid.injected.signing.store.file="$PWD/android/release.keystore" -Pandroid.injected.signing.store.password="$STORE_PASSWORD" -Pandroid.injected.signing.key.alias="$KEY_ALIAS" -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
           cp android/app/build/outputs/apk/release/app-release.apk NuestraGalaxia-Companion.apk
           SHA=$(sha256sum NuestraGalaxia-Companion.apk | awk '{print $1}')
-          printf '{"versionCode":3,"versionName":"1.2.0","apkUrl":"https://github.com/Berserky/Galaxia-de-girasoles/releases/download/android-stable/NuestraGalaxia-Companion.apk","sha256":"%s","notes":"Nueva interfaz contemporánea, navegación flotante, creación rápida y pantalla Android renovada."}\n' "$SHA" > update.json
+          printf '{"versionCode":4,"versionName":"1.3.0","apkUrl":"https://github.com/Berserky/Galaxia-de-girasoles/releases/download/android-stable/NuestraGalaxia-Companion.apk","sha256":"%s","notes":"Momentos para dos: widget con foto y próxima fecha, abrazos y notificaciones periódicas opcionales."}\n' "$SHA" > update.json
       - name: Publicar canal estable
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env: { GH_TOKEN: "${{ github.token }}" }
