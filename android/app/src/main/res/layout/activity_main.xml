@@ -1,51 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/rootView" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/galaxy_bg" android:fillViewport="true" android:clipToPadding="false">
- <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
-  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:layout_marginTop="12dp" android:layout_marginBottom="28dp">
-   <ImageView android:layout_width="44dp" android:layout_height="44dp" android:src="@drawable/ic_galaxy" android:contentDescription="Nuestra Galaxia"/>
-   <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical" android:layout_marginStart="12dp">
-    <TextView style="@style/GalaxyHeading" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Nuestra galaxia" android:textSize="18sp"/>
-    <TextView style="@style/GalaxyBody" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Un espacio para dos" android:textSize="12sp"/>
-   </LinearLayout>
-   <TextView android:id="@+id/versionLabel" style="@style/GalaxyBody" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="12sp"/>
-  </LinearLayout>
-  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="@drawable/galaxy_hero" android:padding="24dp">
-   <TextView style="@style/GalaxyEyebrow" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="CERCA, AUNQUE ESTEMOS LEJOS"/>
-   <TextView style="@style/GalaxyHeading" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:text="Tu galaxia, siempre contigo." android:textSize="30sp"/>
-   <TextView style="@style/GalaxyBody" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Nuestra historia, nuestros planes y un lugar al que siempre volver."/>
-   <Button android:id="@+id/openGalaxyButton" style="@style/GalaxyButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:text="Abrir nuestro espacio"/>
-  </LinearLayout>
-  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:layout_marginTop="20dp" android:background="@drawable/galaxy_card" android:padding="24dp">
-   <TextView style="@style/GalaxyEyebrow" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="NUESTRO MAPA"/>
-   <TextView style="@style/GalaxyHeading" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Comparte tu camino"/>
-   <TextView android:id="@+id/status" style="@style/GalaxyBody" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:text="Este teléfono todavía no está vinculado." android:accessibilityLiveRegion="polite"/>
-   <Button android:id="@+id/startButton" style="@style/GalaxyButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="22dp" android:text="Compartir ubicación"/>
-   <Button android:id="@+id/stopButton" style="@style/GalaxyButton.Secondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Detener ubicación"/>
-   <TextView style="@style/GalaxyBody" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="Mientras compartes, Android mantiene una notificación visible. Puedes detenerlo cuando quieras." android:textSize="12sp"/>
-   <Button android:id="@+id/backgroundButton" style="@style/GalaxyButton.Secondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="Revisar permisos"/>
-  </LinearLayout>
-  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:layout_marginTop="20dp" android:background="@drawable/galaxy_card" android:padding="24dp">
-   <TextView style="@style/GalaxyEyebrow" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="MOMENTOS PARA DOS"/>
-   <TextView style="@style/GalaxyHeading" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Un abrazo cerca de ti"/>
-   <TextView style="@style/GalaxyBody" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="@string/bond_explanation"/>
-   <Switch android:id="@+id/bondNotifications" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="52dp" android:layout_marginTop="16dp" android:text="@string/bond_notifications" android:textColor="@color/galaxy_text"/>
-   <Button android:id="@+id/addWidgetButton" style="@style/GalaxyButton.Secondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Añadir widget"/>
-   <Button android:id="@+id/unpairButton" style="@style/GalaxyButton.Secondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Desvincular este teléfono"/>
-  </LinearLayout>
-  <LinearLayout android:id="@+id/pairPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:layout_marginTop="20dp" android:background="@drawable/galaxy_card" android:padding="24dp">
-   <TextView style="@style/GalaxyEyebrow" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="SOLO LA PRIMERA VEZ"/>
-   <TextView style="@style/GalaxyHeading" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Vincula este teléfono"/>
-   <TextView style="@style/GalaxyBody" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Abre los ajustes de nuestro espacio y genera un código de vinculación para Android."/>
-   <EditText android:id="@+id/pairCode" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="52dp" android:layout_marginTop="20dp" android:hint="Código de vinculación" android:inputType="textCapCharacters" android:singleLine="true" android:background="@drawable/galaxy_input" android:textSize="16sp" android:textColor="@color/galaxy_text" android:textColorHint="@color/galaxy_muted"/>
-   <Button android:id="@+id/pairButton" style="@style/GalaxyButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="Vincular teléfono"/>
-  </LinearLayout>
-  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:layout_marginTop="20dp" android:background="@drawable/galaxy_card" android:padding="24dp">
-   <TextView style="@style/GalaxyEyebrow" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="SIEMPRE AL DÍA"/>
-   <TextView style="@style/GalaxyHeading" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Lo nuevo de nuestra galaxia"/>
-   <TextView android:id="@+id/updateStatus" style="@style/GalaxyBody" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:text="Las nuevas versiones llegan aquí, sin perder lo que ya guardamos." android:accessibilityLiveRegion="polite"/>
-   <ProgressBar android:id="@+id/updateProgress" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:max="100" android:visibility="gone"/>
-   <Button android:id="@+id/updateButton" style="@style/GalaxyButton.Secondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:text="Buscar actualización"/>
-  </LinearLayout>
-  <TextView style="@style/GalaxyBody" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="28dp" android:layout_marginBottom="16dp" android:gravity="center" android:text="Un pequeño universo. Solo para ustedes dos." android:textSize="12sp"/>
- </LinearLayout>
-</ScrollView>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rootView"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/galaxy_bg"
+    android:fitsSystemWindows="true">
+
+    <WebView
+        android:id="@+id/webView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/galaxy_bg"
+        android:overScrollMode="never"
+        android:scrollbarStyle="outsideOverlay" />
+</FrameLayout>
