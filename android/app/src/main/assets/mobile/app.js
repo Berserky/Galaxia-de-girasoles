@@ -43,7 +43,7 @@ const surpriseIdeas=[
 ];
 
 let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null;
-let toastTimer,refreshing=false,updateState={text:'La app está al día.',progress:0,busy:false},pendingVoiceDraft=null,voiceReady=false,voiceRecording=false,voiceResumeMusic=false,lastSurprise=null;
+let toastTimer,refreshing=false,updateState={text:'La app está al día.',progress:0,busy:false},pendingVoiceDraft=null,voiceReady=false,voiceRecording=false,voiceResumeMusic=false,voiceTimer=null,voiceSeconds=0,lastSurprise=null,lastPresenceSignature='';
 let welcomeStep=0,welcomePreview=false,welcomeGift=true,welcomeEntering=false,tourStep=-1;
 const welcomeMusic=new Audio('../musica.mp3');welcomeMusic.loop=true;welcomeMusic.volume=.32;
 const globalPlayer=document.getElementById('globalPlayer'),providerPlayer=document.getElementById('providerPlayer');
@@ -61,7 +61,7 @@ function renderGlobalPlayer(){
  globalPlayer.innerHTML='<button class="player-main" data-action="player-toggle" aria-label="'+(musicPlaying?'Pausar':'Reproducir')+'">'+ico(playerIcon())+'</button><button class="player-info" data-action="player-expand"><span class="player-eq '+(musicPlaying?'playing':'')+'"><i></i><i></i><i></i></span><span><b>'+esc(t.title)+'</b><small>'+esc(t.platform==='youtube'?'YouTube / YouTube Music':t.platform==='spotify'?'Spotify':t.platform==='mp3'?'MP3':'Audio')+'</small></span></button><button class="player-skip" data-action="player-next" aria-label="Siguiente">'+ico('skip-forward')+'</button>';
  refreshIcons();
 }
-function setMusicPlaying(v){musicPlaying=!!v;renderGlobalPlayer();}
+function setMusicPlaying(v){musicPlaying=!!v;renderGlobalPlayer();syncPresence().catch(()=>{});}
 function playMusicAt(index){
  rebuildMusicQueue();if(!musicQueue.length)return;musicIndex=(index+musicQueue.length)%musicQueue.length;const t=musicQueue[musicIndex];
  musicAudio.pause();if(ytPlayer?.pauseVideo)try{ytPlayer.pauseVideo();}catch{}if(spotifyController?.pause)try{spotifyController.pause();}catch{}
@@ -100,6 +100,8 @@ window.GalaxyNative={
    let data={};try{data=JSON.parse(json||'{}');}catch{}
    if(name==='native'){native=data;render();}
    if(name==='update'){updateState=data;renderUpdateOnly();}
+   if(name==='voice'&&data.previewEnded&&voiceResumeMusic){voiceResumeMusic=false;if(!musicPlaying)toggleMusic();}
+   if(name==='voice'&&data.ready){stopVoiceTimer();}
    if(name==='voice'&&data.ready&&modal.open){voiceRecording=false;voiceReady=true;const status=modal.querySelector('[data-role="voice-status"]');if(status)status.textContent='Grabación lista. Escúchala antes de guardar.';modal.querySelector('[data-action="voice-record-stop"]')?.setAttribute('hidden','');modal.querySelector('[data-action="voice-preview"]')?.removeAttribute('hidden');modal.querySelector('[data-action="voice-discard"]')?.removeAttribute('hidden');modal.querySelector('[data-action="voice-record-start"]')?.removeAttribute('hidden');}
  },
  back(){
@@ -128,10 +130,38 @@ const partnerName=()=>names()[Number(cloud?.person||0)===0?1:0]||'Mi persona';
 const todayRows=()=>cloud?.daily?.filter(r=>r.day===cloud.today)||[];
 const ownDaily=()=>todayRows().find(r=>r.person===cloud?.person)||{};
 const partnerDaily=()=>todayRows().find(r=>r.person!==cloud?.person)||{};
+const ownPresence=()=>cloud?.presence?.find?.(r=>String(r.person)===String(cloud?.person))||{};
+const partnerPresence=()=>cloud?.presence?.find?.(r=>String(r.person)!==String(cloud?.person))||{};
+const ownLocation=()=>cloud?.locations?.find?.(r=>String(r.person)===String(cloud?.person))||{};
+const partnerLocation=()=>cloud?.locations?.find?.(r=>String(r.person)!==String(cloud?.person))||{};
+async function syncPresence(force=false){
+ if(!cloud||!native.paired)return;
+ const p=ownPresence(),track=musicQueue[musicIndex],songTitle=musicPlaying&&track?track.title:'',battery=Number(native.batteryLevel);
+ const signature=[!!p.share_battery,!!p.share_song,Number.isFinite(battery)?battery:'',p.share_song?songTitle:''].join('|');
+ if(!force&&signature===lastPresenceSignature)return;
+ lastPresenceSignature=signature;
+ try{await api('presence-set',{shareBattery:!!p.share_battery,shareSong:!!p.share_song,...(Number.isFinite(battery)?{battery}:{}),songTitle:p.share_song?songTitle:''});}catch{}
+}
+function nowCard(){
+ const daily=partnerDaily(),loc=partnerLocation(),p=partnerPresence(),parts=[];
+ if(daily.mood)parts.push({icon:moods[daily.mood]?.[0]||'heart-pulse',label:'Ánimo',value:moods[daily.mood]?.[1]||daily.mood});
+ if(loc.sharing)parts.push({icon:loc.motion==='walking'?'person-standing':loc.motion==='vehicle'?'navigation':'map-pin',label:'Movimiento',value:transportLabel(loc)+(loc.status?' · '+loc.status:'')});
+ if(p.share_song&&p.song_title)parts.push({icon:'music',label:'Escuchando',value:p.song_title});
+ if(p.share_battery&&Number.isFinite(Number(p.battery)))parts.push({icon:'battery-medium',label:'Batería',value:Number(p.battery)+'%'});
+ if(!parts.length)return '<section class="section"><div class="card now-card"><p class="eyebrow">AHORA</p><h3>'+esc(partnerName())+'</h3><p class="muted">Todavía no hay información compartida de este momento.</p></div></section>';
+ return '<section class="section"><div class="card now-card"><div class="section-head compact"><div><p class="eyebrow">AHORA</p><h3>'+esc(partnerName())+'</h3></div><span class="status-dot live"></span></div><div class="now-grid">'+parts.map(x=>'<div class="now-item"><span>'+ico(x.icon)+'</span><small>'+esc(x.label)+'</small><b>'+esc(x.value)+'</b></div>').join('')+'</div></div></section>';
+}
+
 const dailyQuestion=()=>{const d=cloud?.today||new Date().toISOString().slice(0,10);let n=0;for(const c of d)n+=c.charCodeAt(0);return dailyQuestions[n%dailyQuestions.length];};
 const currentMonday=()=>{const d=new Date((cloud?.today||new Date().toISOString().slice(0,10))+'T12:00:00');const day=d.getDay()||7;d.setDate(d.getDate()-day+1);return d.toISOString().slice(0,10);};
 const coupleDays=()=>{const s=cloud?.settings?.data?.startDate;if(!s)return 0;return Math.max(0,Math.floor((Date.parse((cloud?.today||s)+'T12:00:00Z')-Date.parse(s+'T12:00:00Z'))/86400000));};
 const dateDistance=d=>Math.round((Date.parse(d+'T12:00:00Z')-Date.parse((cloud?.today||d)+'T12:00:00Z'))/86400000);
+function stopVoiceTimer(){if(voiceTimer){clearInterval(voiceTimer);voiceTimer=null;}voiceSeconds=0;}
+function startVoiceTimer(){
+ stopVoiceTimer();voiceSeconds=0;
+ const paint=()=>{const el=modal.querySelector('[data-role="voice-timer"]');if(el)el.textContent=String(Math.floor(voiceSeconds/60)).padStart(2,'0')+':'+String(voiceSeconds%60).padStart(2,'0');};
+ paint();voiceTimer=setInterval(()=>{voiceSeconds=Math.min(60,voiceSeconds+1);paint();if(voiceSeconds>=60)stopVoiceTimer();},1000);
+}
 function livingMoment(){
  const memories=items('memory').filter(x=>x.data?.date),today=cloud?.today||'',sameDay=memories.find(x=>x.data.date.slice(5)===today.slice(5)&&x.data.date!==today);
  const next=cloud?.nextEvent,partner=partnerDaily();
@@ -151,7 +181,7 @@ function surpriseNotesView(){const list=surpriseNotes();return '<section class="
 async function refreshState({quiet=false}={}){
  if(!native.paired||refreshing)return;
  refreshing=true;
- try{cloud=await api('mobile-state');native=nativeState();if(!quiet)render();}
+ try{cloud=await api('mobile-state');native=nativeState();syncPresence().catch(()=>{});if(!quiet)render();}
  catch(e){if(!quiet)toast(e.message);}
  finally{refreshing=false;}
 }
@@ -256,7 +286,7 @@ function renderTourOverlay(){
 function homeView(){
  const own=ownDaily(),partner=partnerDaily(),next=cloud.nextEvent,garden=cloud.bond?.garden||{days:0,stage:0};
  const locs=cloud.locations||[];
- return anniversaryBanner()+'<section class="hero"><p class="eyebrow">NUESTRO UNIVERSO</p><h1>'+esc(myName())+' & '+esc(partnerName())+'</h1><p>Un lugar para acompañarnos, guardar lo vivido y seguir construyendo lo que viene.</p><div class="hero-stats"><div class="hero-stat"><b>'+coupleDays()+'</b><small>días juntos</small></div><div class="hero-stat"><b>'+items('memory').length+'</b><small>recuerdos</small></div><div class="hero-stat"><b>'+garden.days+'</b><small>días del girasol</small></div></div></section>'+
+ return anniversaryBanner()+'<section class="hero"><p class="eyebrow">NUESTRO UNIVERSO</p><h1>'+esc(myName())+' & '+esc(partnerName())+'</h1><p>Un lugar para acompañarnos, guardar lo vivido y seguir construyendo lo que viene.</p><div class="hero-stats"><div class="hero-stat"><b>'+coupleDays()+'</b><small>días juntos</small></div><div class="hero-stat"><b>'+items('memory').length+'</b><small>recuerdos</small></div><div class="hero-stat"><b>'+garden.days+'</b><small>días del girasol</small></div></div></section>'+nowCard()+
  '<section class="section"><div class="section-head"><div><h2>¿Cómo estás hoy?</h2><p>Tu estado se comparte solo con tu persona.</p></div></div><div class="mood-grid">'+Object.entries(moods).map(([id,m])=>'<button class="mood '+(own.mood===id?'active':'')+'" data-action="mood" data-value="'+id+'"><span>'+ico(m[0])+'</span>'+m[1]+'</button>').join('')+'</div>'+(partner.mood?'<div class="card" style="margin-top:10px"><span class="badge">'+esc(partnerName())+'</span> <b>'+esc(moods[partner.mood]?.[1]||partner.mood)+'</b></div>':'')+'</section>'+
  '<section class="section"><div class="card"><p class="eyebrow">PREGUNTA DEL DÍA</p><h3>'+esc(dailyQuestion())+'</h3>'+dailyAnswerMarkup(own,partner)+'</div></section>'+
  '<section class="section"><div class="grid">'+
@@ -310,7 +340,7 @@ function constellationView(){
 function itemCard(i){
  const d=i.data||{},meta=kindMeta[i.kind]||['sparkles',i.kind],date=d.date?fmtDate(d.date):fmtDateTime(i.created),done=d.done?' · Hecho':'',locked=i.kind==='capsule'&&String(d.date||d.unlockDate||'')>String(cloud.today||''),voices=locked?[]:linkedVoices(i.id);
  if(locked)return '<div class="card item"><div class="item-icon">'+ico('lock')+'</div><div class="item-main"><div class="meta">Se abre '+esc(date)+'</div><h3>'+esc(d.title||'Cápsula')+'</h3><p class="muted">Este contenido seguirá guardado hasta la fecha elegida.</p></div></div>';
- return '<div class="card item"><div class="item-icon">'+ico(meta[0])+'</div><div class="item-main"><div class="meta">'+esc(date)+esc(done)+'</div><h3>'+esc(d.title||meta[1])+'</h3>'+(d.body?'<p>'+esc(d.body)+'</p>':'')+(voices.length?'<div class="stack" style="margin-top:10px">'+voices.map(voiceCard).join('')+'</div>':'')+'<div class="item-actions">'+(['memory','capsule','journey'].includes(i.kind)?'<button class="btn small secondary" data-action="voice-for-item" data-id="'+i.id+'">'+ico('mic')+' Añadir voz</button>':'')+'<button class="btn small secondary" data-action="item-edit" data-id="'+i.id+'">Editar</button><button class="btn small ghost" data-action="item-delete" data-id="'+i.id+'">Eliminar</button></div></div></div>';
+ return '<div class="card item"><div class="item-icon">'+ico(meta[0])+'</div><div class="item-main"><div class="meta">'+esc(date)+esc(done)+'</div><h3>'+esc(d.title||meta[1])+'</h3>'+(d.body?'<p>'+esc(d.body)+'</p>':'')+(d.placeName?'<p class="place-link">'+ico('map-pin')+' '+esc(d.placeName)+'</p>':'')+(voices.length?'<div class="stack" style="margin-top:10px">'+voices.map(voiceCard).join('')+'</div>':'')+'<div class="item-actions">'+(['memory','capsule','journey'].includes(i.kind)?'<button class="btn small secondary" data-action="voice-for-item" data-id="'+i.id+'">'+ico('mic')+' Añadir voz</button>':'')+'<button class="btn small secondary" data-action="item-edit" data-id="'+i.id+'">Editar</button><button class="btn small ghost" data-action="item-delete" data-id="'+i.id+'">Eliminar</button></div></div></div>';
 }
 function storyTimeline(){
  const entries=(cloud?.items||[]).filter(x=>['memory','journey','event','capsule','song'].includes(x.kind)).filter(x=>x.kind!=='capsule'||String(x.data?.date||'')<=String(cloud.today||'')).slice().sort((a,b)=>String(b.data?.date||b.created).localeCompare(String(a.data?.date||a.created))).slice(0,12);
@@ -387,8 +417,10 @@ function mapView(){
 }
 function mapHistoryView(){
  if(!mapData)return '<div class="section">'+loading('Cargando recorridos')+'</div>';
- const trips=mapData.trips||[],events=mapData.events||[],encounters=mapData.encounters||[];
- return '<section class="section"><div class="section-head"><div><h2>Actividad reciente</h2><p>Recorridos, llegadas y encuentros.</p></div></div><div class="stack">'+
+ const trips=mapData.trips||[],events=mapData.events||[],encounters=mapData.encounters||[],places=mapData.places||[];
+ const placesWithHistory=places.map(p=>({place:p,stories:(cloud.items||[]).filter(i=>Number(i.data?.placeId)===Number(p.id)&&['memory','journey'].includes(i.kind))})).filter(x=>x.stories.length);
+ return (placesWithHistory.length?'<section class="section"><div class="section-head"><div><h2>Mapa de nuestra historia</h2><p>Lugares enlazados con recuerdos y viajes.</p></div></div><div class="stack">'+placesWithHistory.slice(0,8).map(x=>'<div class="card place-history"><span>'+ico('map-pin')+'</span><div><h3>'+esc(x.place.name)+'</h3><p>'+x.stories.map(i=>esc(i.data?.title||'Recuerdo')).join(' · ')+'</p></div></div>').join('')+'</div></section>':'')+
+ '<section class="section"><div class="section-head"><div><h2>Actividad reciente</h2><p>Recorridos, llegadas y encuentros.</p></div></div><div class="stack">'+
  (trips.slice(0,4).map(t=>'<div class="card"><span class="badge">'+(names()[Number(t.person)]||'Nosotros')+'</span><h3 style="margin-top:8px">'+fmtDistance(t.distance_m)+' · '+fmtDuration(t.duration_s)+'</h3><p>'+esc(fmtDateTime(t.started_at))+(t.max_speed?' · máx. '+(Number(t.max_speed)*3.6).toFixed(0)+' km/h':'')+'</p></div>').join('')||
  events.slice(0,4).map(e=>'<div class="card"><h3>'+(e.event==='arrived'?'Llegada':'Salida')+'</h3><p>'+esc(fmtDateTime(e.happened_at))+'</p></div>').join('')||
  encounters.slice(0,3).map(e=>'<div class="card"><h3 class="icon-title">'+ico('heart')+'Nos encontramos</h3><p>'+esc(fmtDateTime(e.started_at))+'</p></div>').join('')||
@@ -396,12 +428,29 @@ function mapHistoryView(){
  '</div></section>';
 }
 
+function relationshipAnswer(raw){
+ const q=String(raw||'').trim().toLowerCase();if(!q)return {title:'Pregúntame algo de ustedes',body:'Puedo buscar entre recuerdos, viajes, canciones, notas, planes, lugares y fechas guardadas.'};
+ const all=(cloud.items||[]).filter(i=>!i.data?.locked),words=q.normalize('NFD').replace(/[\u0300-\u036f]/g,'').split(/\s+/).filter(w=>w.length>2);
+ const normalize=v=>String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+ if(/proxim|fecha|anivers/.test(normalize(q))&&cloud.nextEvent)return {title:'Lo próximo',body:cloud.nextEvent.title+' · '+fmtDate(cloud.nextEvent.date)};
+ if(/ultimo|reciente/.test(normalize(q))&&/recuerdo|viaje|momento/.test(normalize(q))){const hit=all.filter(i=>['memory','journey'].includes(i.kind)).sort((a,b)=>String(b.data?.date||b.created).localeCompare(String(a.data?.date||a.created)))[0];if(hit)return {title:hit.data?.title||'Último recuerdo',body:hit.data?.body||fmtDate(hit.data?.date)};}
+ if(/lugar|donde|sitio/.test(normalize(q))){const ps=(cloud.places||[]).slice(0,5);if(ps.length)return {title:'Lugares de ustedes',body:ps.map(p=>p.name).join(' · ')};}
+ const scored=all.map(i=>{const hay=normalize([i.data?.title,i.data?.body,i.data?.category,i.data?.placeName,kindMeta[i.kind]?.[1]].join(' '));return {i,score:words.reduce((n,w)=>n+(hay.includes(w)?1:0),0)};}).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,5);
+ if(scored.length)return {title:'Encontré '+scored.length+' coincidencia'+(scored.length===1?'':'s'),body:scored.map(x=>(x.i.data?.title||kindMeta[x.i.kind]?.[1]||'Momento')+(x.i.data?.date?' · '+fmtDate(x.i.data.date):'')).join('\n')};
+ return {title:'No encontré algo exacto',body:'Prueba con una palabra del recuerdo, un lugar, una canción, “último recuerdo” o “próxima fecha”.'};
+}
+function openRelationshipAI(){
+ showModal('Nuestra IA · beta privada','<div class="card compact"><p>Busca únicamente dentro de lo que ustedes guardaron en Nuestra Galaxia. La pregunta se procesa en este teléfono.</p></div><form id="aiForm" class="stack" style="margin-top:14px"><div class="field"><label>¿Qué quieres recordar?</label><input class="input" name="question" placeholder="Ej. ¿Cuál fue nuestro último viaje?" required></div><button class="btn" type="submit">'+ico('sparkles')+' Buscar en nuestra historia</button></form><div data-role="ai-answer"></div>');
+}
 function moreView(){
  const settings=cloud.settings||{data:{},version:1},data=settings.data||{};
  return '<section><div class="section-head"><div><p class="eyebrow">NUESTRA APP</p><h2>Más</h2><p>Widget, ajustes, permisos y actualización.</p></div></div>'+
  '<div class="card"><div class="row between"><div><h3>Widget “Nuestra Galaxia”</h3><p>Foto, próxima fecha y un abrazo desde el escritorio.</p></div><span class="badge '+(native.canPinWidget?'good':'')+'">'+(native.canPinWidget?'Disponible':'Manual')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small" data-action="widget-add">Añadir widget</button><button class="btn small secondary" data-action="widget-photo">Elegir foto</button><button class="btn small ghost" data-action="widget-photo-clear">Quitar foto</button></div></div>'+
  '<div class="card"><div class="row between"><div><h3>Notificaciones de momentos</h3><p>Gestos y fechas especiales, sin depender del GPS.</p></div><span class="badge '+(native.momentNotifications?'good':'')+'">'+(native.momentNotifications?'Activas':'Pausadas')+'</span></div><button class="btn small secondary" style="margin-top:14px" data-action="moment-notifications">'+(native.momentNotifications?'Desactivar':'Activar')+'</button></div>'+
  '<div class="card"><h3>Nuestros datos</h3><form id="settingsForm" class="stack" style="margin-top:12px"><div class="grid"><div class="field"><label>Nombre 1</label><input class="input" name="name0" value="'+attr(data.names?.[0]||'')+'" required></div><div class="field"><label>Nombre 2</label><input class="input" name="name1" value="'+attr(data.names?.[1]||'')+'" required></div></div><div class="field"><label>Inicio de nuestra historia</label><input class="input" type="date" name="startDate" value="'+attr(data.startDate||'')+'"></div><div class="field"><label>Álbum de Google Fotos (opcional)</label><input class="input" name="albumUrl" value="'+attr(data.albumUrl||'')+'" placeholder="https://photos.app.goo.gl/…"></div><button class="btn" type="submit">Guardar ajustes</button></form></div>'+
+ '<div class="card"><h3>Ahora · privacidad</h3><p>Elige qué información temporal puede ver '+esc(partnerName())+'. La ubicación sigue controlándose por separado desde el mapa.</p><div class="privacy-grid"><button class="privacy-toggle '+(ownPresence().share_battery?'active':'')+'" data-action="presence-battery-toggle">'+ico('battery-medium')+'<span><b>Batería</b><small>'+(ownPresence().share_battery?'Compartida':'Privada')+'</small></span></button><button class="privacy-toggle '+(ownPresence().share_song?'active':'')+'" data-action="presence-song-toggle">'+ico('music')+'<span><b>Lo que escucho</b><small>'+(ownPresence().share_song?'Compartido':'Privado')+'</small></span></button></div></div>'+
+ '<div class="card"><div class="row between"><div><h3>Nuestra IA · beta privada</h3><p>Busca y conecta lo que ya han guardado, sin enviar la pregunta a un servicio externo.</p></div>'+ico('sparkles')+'</div><button class="btn small secondary" style="margin-top:14px" data-action="relationship-ai">Preguntar por nuestra historia</button></div>'+
+ '<div class="card"><h3>Copia de seguridad</h3><p>Exporta recuerdos, planes, notas, fechas, momentos y lugares a un archivo JSON. Restaurar combina la copia sin borrar lo que ya existe.</p><div class="row wrap" style="margin-top:14px"><button class="btn small secondary" data-action="backup-export">'+ico('download')+' Exportar copia</button><button class="btn small ghost" data-action="backup-import">'+ico('upload')+' Restaurar copia</button></div></div>'+
  (Number(cloud?.person)===0?'<div class="card"><div class="row between"><div><h3>Previsualización de Adri</h3><p>Solo tú puedes ver este control. Abre la bienvenida exactamente como la verá Adri, sin marcarla como completada.</p></div>'+ico('sparkles')+'</div><button class="btn small secondary" style="margin-top:14px" data-action="welcome-replay">Previsualizar bienvenida</button></div>':'')+
  '<div class="card"><h3>Permisos de Android</h3><p>Ubicación: '+(native.locationGranted?'concedida':'pendiente')+' · Segundo plano: '+(native.backgroundLocationGranted?'concedido':'opcional')+' · Notificaciones: '+(native.notificationsGranted?'concedidas':'pendientes')+'</p><button class="btn small secondary" style="margin-top:14px" data-action="app-settings">Abrir ajustes del sistema</button></div>'+
  '<div class="card" id="updateCard">'+updateMarkup()+'</div>'+
@@ -431,7 +480,8 @@ function drawMap({fit=true}={}){
  });
  (mapData.places||[]).forEach(p=>{
    const markerIcon=p.kind==='home'?'house':p.kind==='work'?'briefcase':p.kind==='adventure'?'compass':'heart';
-   map.addMarker({lat:p.latitude,lon:p.longitude,icon:markerIcon,className:'place',popup:p.name+(p.note?' · '+p.note:'')});
+   const linked=(cloud.items||[]).filter(i=>Number(i.data?.placeId)===Number(p.id)&&['memory','journey'].includes(i.kind));
+   map.addMarker({lat:p.latitude,lon:p.longitude,icon:markerIcon,className:'place',popup:p.name+(p.note?' · '+p.note:'')+(linked.length?' · '+linked.length+' recuerdo'+(linked.length===1?'':'s'):'')});
  });
  const grouped={};
  (mapData.tripPoints||[]).slice().reverse().forEach(p=>(grouped[p.person]??=[]).push([Number(p.latitude),Number(p.longitude)]));
@@ -454,6 +504,7 @@ function openItemForm(kind,item){
  const needsDate=['memory','event','capsule','journey'].includes(kind);
  const body='<form id="itemForm" class="stack" style="margin-top:16px"><div class="field"><label>Título</label><input class="input" name="title" value="'+attr(d.title||'')+'" required maxlength="160"></div><div class="field"><label>Texto</label><textarea name="body" placeholder="Escribe aquí…">'+esc(d.body||'')+'</textarea></div>'+
  (needsDate?'<div class="field"><label>Fecha</label><input class="input" type="date" name="date" value="'+attr(d.date||'')+'"></div>':'')+
+ (['memory','journey'].includes(kind)?'<div class="field"><label>Lugar relacionado (opcional)</label><select name="placeId"><option value="">Sin lugar</option>'+(cloud.places||[]).map(p=>'<option value="'+p.id+'" '+(String(d.placeId||'')===String(p.id)?'selected':'')+'>'+esc(p.name)+'</option>').join('')+'</select></div>':'')+
  '<div class="field"><label>Categoría</label><input class="input" name="category" value="'+attr(d.category||'')+'" placeholder="'+attr(meta[1])+'"></div>'+
  (kind==='event'?'<label class="row"><input type="checkbox" name="annual" '+(d.annual?'checked':'')+'> Se repite cada año</label>':'')+
  (kind==='plan'||kind==='wish'?'<label class="row"><input type="checkbox" name="done" '+(d.done?'checked':'')+'> Ya lo hicimos</label>':'')+
@@ -474,12 +525,12 @@ function openSharedNote(entry){
 }
 function openVoice(referenceId=''){
  pendingVoiceDraft={};voiceReady=false;voiceRecording=false;
- const refs=(cloud.items||[]).filter(i=>['memory','song','capsule'].includes(i.kind)&&!(i.kind==='capsule'&&String(i.data?.date||'')>cloud.today));
- showModal('Mensaje de voz','<form id="voiceForm" class="stack" style="margin-top:16px"><div class="field"><label>Título</label><input class="input" name="title" placeholder="Te pienso…" required></div><div class="field"><label>Dedicatoria</label><textarea name="body" placeholder="Unas palabras antes del audio…"></textarea></div><div class="field"><label>Relacionar con un recuerdo (opcional)</label><select name="referenceId"><option value="">Sin referencia</option>'+refs.map(i=>'<option value="'+i.id+'" '+(String(i.id)===String(referenceId)?'selected':'')+'>'+esc(i.data?.title||'Recuerdo')+'</option>').join('')+'</select></div><div class="card compact" data-role="voice-recorder"><b>Grábalo aquí</b><small class="muted" data-role="voice-status">Toca el micrófono cuando estés listo.</small><div class="row wrap" style="margin-top:10px"><button class="btn" type="button" data-action="voice-record-start">'+ico('mic')+' Grabar</button><button class="btn secondary" type="button" data-action="voice-record-stop" hidden>'+ico('square')+' Detener</button><button class="btn secondary" type="button" data-action="voice-preview" hidden>'+ico('play')+' Escuchar</button><button class="btn secondary" type="button" data-action="voice-discard" hidden>'+ico('rotate-ccw')+' Repetir</button></div></div><button class="btn secondary" type="button" data-action="voice-file">'+ico('folder-open')+' Elegir audio del teléfono</button><button class="btn" type="submit">Guardar mensaje de voz</button></form>','voice');
+ const refs=(cloud.items||[]).filter(i=>(['memory','song','capsule','journey'].includes(i.kind)||(i.kind==='note'&&i.data?.surprise))&&!(i.kind==='capsule'&&String(i.data?.date||'')>cloud.today)&&!i.data?.locked);
+ showModal('Mensaje de voz','<form id="voiceForm" class="stack" style="margin-top:16px"><div class="field"><label>Título</label><input class="input" name="title" placeholder="Te pienso…" required></div><div class="field"><label>Dedicatoria</label><textarea name="body" placeholder="Unas palabras antes del audio…"></textarea></div><div class="field"><label>Relacionar con un recuerdo (opcional)</label><select name="referenceId"><option value="">Sin referencia</option>'+refs.map(i=>'<option value="'+i.id+'" '+(String(i.id)===String(referenceId)?'selected':'')+'>'+esc(i.data?.title||'Recuerdo')+'</option>').join('')+'</select></div><div class="card compact" data-role="voice-recorder"><b>Grábalo aquí</b><small class="muted" data-role="voice-status">Toca el micrófono cuando estés listo.</small><strong class="voice-timer" data-role="voice-timer">00:00</strong><div class="row wrap" style="margin-top:10px"><button class="btn" type="button" data-action="voice-record-start">'+ico('mic')+' Grabar</button><button class="btn secondary" type="button" data-action="voice-record-stop" hidden>'+ico('square')+' Detener</button><button class="btn secondary" type="button" data-action="voice-preview" hidden>'+ico('play')+' Escuchar</button><button class="btn secondary" type="button" data-action="voice-discard" hidden>'+ico('rotate-ccw')+' Repetir</button></div></div><button class="btn secondary" type="button" data-action="voice-file">'+ico('folder-open')+' Elegir audio del teléfono</button><button class="btn" type="submit">Guardar mensaje de voz</button></form>','voice');
 }
 function openSurpriseNote(){
- const own=(cloud.locations||[]).find(l=>l.person===cloud.person&&l.sharing);
- showModal('Nueva nota sorpresa','<form id="surpriseNoteForm" class="stack" style="margin-top:16px"><div class="field"><label>Título</label><input class="input" name="title" required maxlength="160"></div><div class="field"><label>Mensaje</label><textarea name="body" required></textarea></div><div class="field"><label>Desbloquear</label><select name="unlockType" data-role="surprise-unlock"><option value="date">En una fecha</option>'+(own?'<option value="place">Al llegar a este lugar</option>':'')+'</select></div><div class="field" data-role="surprise-date"><label>Fecha</label><input class="input" type="date" name="unlockDate" value="'+attr(cloud.today)+'"></div><input type="hidden" name="latitude" value="'+attr(own?.latitude||'')+'"><input type="hidden" name="longitude" value="'+attr(own?.longitude||'')+'"><button class="btn" type="submit">Guardar sorpresa</button></form>','surprise-note');
+ const own=ownLocation(),places=cloud.places||[],canPlace=places.length||own.sharing;
+ showModal('Nueva nota sorpresa','<form id="surpriseNoteForm" class="stack" style="margin-top:16px"><div class="field"><label>Título</label><input class="input" name="title" required maxlength="160"></div><div class="field"><label>Mensaje</label><textarea name="body" required></textarea></div><div class="field"><label>Desbloquear</label><select name="unlockType" data-role="surprise-unlock"><option value="date">En una fecha</option>'+(canPlace?'<option value="place">Al llegar a un lugar</option>':'')+'</select></div><div class="field" data-role="surprise-date"><label>Fecha</label><input class="input" type="date" name="unlockDate" value="'+attr(cloud.today)+'"></div><div class="stack" data-role="surprise-place" hidden><div class="field"><label>Lugar</label><select name="placeId">'+places.map(p=>'<option value="'+p.id+'">'+esc(p.name)+'</option>').join('')+(own.sharing?'<option value="current">Mi ubicación actual</option>':'')+'</select></div><div class="field"><label>Radio de desbloqueo</label><select name="radius"><option value="75">75 m</option><option value="150" selected>150 m</option><option value="300">300 m</option></select></div></div><button class="btn" type="submit">Guardar sorpresa</button></form>','surprise-note');
 }
 function openSurprise(){
  const idea=surpriseIdeas[Math.floor(Math.random()*surpriseIdeas.length)];lastSurprise=idea;
@@ -503,6 +554,7 @@ async function submitItem(form){
  const fd=new FormData(form),kind=modal.dataset.kind,id=modal.dataset.editId,version=Number(modal.dataset.version||0);
  const data={title:fd.get('title'),body:fd.get('body'),category:fd.get('category')};
  if(fd.has('date'))data.date=fd.get('date');
+ if(fd.has('placeId')){const place=(cloud.places||[]).find(p=>String(p.id)===String(fd.get('placeId')));data.placeId=place?place.id:null;data.placeName=place?place.name:'';}
  if(kind==='event')data.annual=fd.get('annual')==='on';
  if(kind==='plan'||kind==='wish')data.done=fd.get('done')==='on';
  await api('item-save',{...(id?{id,version}:{}),kind,data});closeModal();await refreshState();toast('Guardado en nuestra galaxia.');
@@ -597,7 +649,7 @@ document.addEventListener('click',async e=>{
 });
 
 document.addEventListener('change',e=>{
- if(e.target.matches('[data-role="surprise-unlock"]')){const box=modal.querySelector('[data-role="surprise-date"]');if(box)box.hidden=e.target.value!=='date';}
+ if(e.target.matches('[data-role="surprise-unlock"]')){const dateBox=modal.querySelector('[data-role="surprise-date"]'),placeBox=modal.querySelector('[data-role="surprise-place"]');if(dateBox)dateBox.hidden=e.target.value!=='date';if(placeBox)placeBox.hidden=e.target.value!=='place';}
  if(e.target.matches('[data-role="game-question"]')){
    const q=gameQuestions[e.target.value],answer=modal.querySelector('[data-role="game-answer"]');
    answer.innerHTML=q.options.map(o=>'<option>'+esc(o)+'</option>').join('');
@@ -616,7 +668,7 @@ document.addEventListener('submit',async e=>{
   if(e.target.id==='gameForm'){const fd=new FormData(e.target);await api('bond-save',{type:'game',data:{questionId:fd.get('questionId'),answer:fd.get('answer')}});closeModal();await refreshState();toast('Pregunta guardada.');return;}
   if(e.target.id==='ritualForm'){const fd=new FormData(e.target),data={week:fd.get('week'),gratitude:fd.get('gratitude'),need:fd.get('need'),plan:fd.get('plan')},id=modal.dataset.editId,version=Number(modal.dataset.version||0);if(id)await api('bond-update',{id,version,data});else await api('bond-save',{type:'ritual',data});closeModal();await refreshState();toast('Ritual guardado.');return;}
   if(e.target.id==='sharedNoteForm'){const fd=new FormData(e.target),data={title:fd.get('title'),body:fd.get('body')},id=modal.dataset.editId,version=Number(modal.dataset.version||0);if(id)await api('bond-update',{id,version,data});else await api('bond-save',{type:'sharednote',data});closeModal();await refreshState();toast('Nota compartida guardada.');return;}
-  if(e.target.id==='surpriseNoteForm'){const fd=new FormData(e.target),unlockType=String(fd.get('unlockType')||'date'),data={title:String(fd.get('title')||''),body:String(fd.get('body')||''),category:'Sorpresa',surprise:true,unlockType,unlockDate:unlockType==='date'?String(fd.get('unlockDate')||''):'',latitude:unlockType==='place'?Number(fd.get('latitude')):null,longitude:unlockType==='place'?Number(fd.get('longitude')):null,radius:150};await api('item-save',{kind:'note',data});closeModal();await refreshState();toast('Sorpresa guardada.');return;}
+  if(e.target.id==='surpriseNoteForm'){const fd=new FormData(e.target),unlockType=String(fd.get('unlockType')||'date');let place=null;if(unlockType==='place'){const value=String(fd.get('placeId')||'');place=value==='current'?ownLocation():(cloud.places||[]).find(p=>String(p.id)===value);if(!place)throw new Error('Elige un lugar válido.');}const data={title:String(fd.get('title')||''),body:String(fd.get('body')||''),category:'Sorpresa',surprise:true,unlockType,unlockDate:unlockType==='date'?String(fd.get('unlockDate')||''):'',latitude:unlockType==='place'?Number(place.latitude):null,longitude:unlockType==='place'?Number(place.longitude):null,placeId:unlockType==='place'&&place.id?place.id:null,placeName:unlockType==='place'?(place.name||'Ubicación actual'):'',radius:unlockType==='place'?Number(fd.get('radius')||150):150};await api('item-save',{kind:'note',data});closeModal();await refreshState();toast('Sorpresa guardada.');return;}
   if(e.target.id==='voiceForm'){
    const fd=new FormData(e.target);pendingVoiceDraft={title:String(fd.get('title')||''),body:String(fd.get('body')||''),referenceId:String(fd.get('referenceId')||'')};
    if(voiceRecording)throw new Error('Detén la grabación antes de guardarla.');
