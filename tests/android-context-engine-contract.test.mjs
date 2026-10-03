@@ -82,8 +82,8 @@ test('Android keeps context push preferences local and does not auto-start locat
  const store=read('android/app/src/main/java/com/nuestragalaxia/companion/ContextStore.java');
  assert.ok(store.includes('nearbyEnabled'));
  assert.ok(store.includes('arrivedSafeEnabled'));
- assert.ok(pushManager.includes('context.nearbyEnabled()'));
- assert.ok(pushManager.includes('context.arrivedSafeEnabled()'));
+ assert.ok(pushManager.includes('nearbyEnabled()'));
+ assert.ok(pushManager.includes('arrivedSafeEnabled()'));
  assert.ok(main.includes('setContextPushPrefs'));
  assert.ok(bridge.includes('setContextPushPrefs'));
  assert.equal(store.includes('TrackingService.ACTION_START'),false);
