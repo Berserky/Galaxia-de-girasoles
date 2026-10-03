@@ -127,3 +127,23 @@ test('achievements render from backend-derived catalog without creating a parall
  assert.ok(css.includes('.achievement-card'));
  assert.equal(appSource.includes('achievement-save'),false);
 });
+
+
+test('week and month surface songs events journeys voices and answered questions explicitly',()=>{
+ assert.ok(appSource.includes('function insightExtras('),'generic Insights needs a compact secondary metrics renderer');
+ const extrasStart=appSource.indexOf('function insightExtras(');
+ const extrasEnd=appSource.indexOf('function insightHighlights(',extrasStart);
+ const extras=appSource.slice(extrasStart,extrasEnd);
+ for(const token of ['counts.songs','counts.events','counts.journeys','bond.voices','connection.answer_days'])
+  assert.ok(extras.includes(token),'missing secondary insight metric: '+token);
+ const summaryStart=appSource.indexOf('function insightsSummaryMarkup(');
+ const summaryEnd=appSource.indexOf('function monthlySummaryMarkup(',summaryStart);
+ assert.ok(appSource.slice(summaryStart,summaryEnd).includes('insightExtras(summary)'));
+});
+
+test('Wrapped cards explicitly include music moods gestures questions places and journeys',()=>{
+ const start=appSource.indexOf('function wrappedCards('),end=appSource.indexOf('function comparisonMarkup(',start);
+ const wrapped=appSource.slice(start,end);
+ for(const token of ['summary.counts?.songs','summary.connection?.mood_days','summary.bond?.gestures','summary.questions?.answered_together_days','summary.places?.visits','summary.counts?.journeys'])
+  assert.ok(wrapped.includes(token),'Wrapped missing '+token);
+});
