@@ -60,8 +60,9 @@ test('Goals conversion validates source kind and preserves source by default',()
  assert.ok(edge.includes('source-wish'));
 });
 
-test('Goals mobile UI has dedicated view, goal/savings forms, steps, links and manual contribution history',()=>{
- assert.ok(app.includes("if(view==='goals')"));
+test('Goals mobile UI has dedicated rendered view, goal/savings forms, steps, links and manual contribution history',()=>{
+ assert.ok(app.includes("if(view==='goals'){app.innerHTML=header()+goalsView()"),'Goals debe estar cableado en render(), no solo existir como estado interno');
+ assert.ok(app.includes("if(a==='goals-open'){go('goals');await loadGoals(true);return;}"),'El acceso visible debe navegar y cargar Goals');
  assert.ok(app.includes('function goalsView('));
  assert.ok(app.includes('function openGoalForm('));
  assert.ok(app.includes('function openGoalDetail('));

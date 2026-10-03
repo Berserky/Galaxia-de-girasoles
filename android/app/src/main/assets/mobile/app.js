@@ -4,8 +4,8 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const attr=esc;
 const ico=(name,cls='')=>'<i data-lucide="'+attr(name)+'" class="ui-icon '+attr(cls)+'" aria-hidden="true"></i>';
 const refreshIcons=()=>requestAnimationFrame(()=>window.lucide?.createIcons?.({attrs:{'stroke-width':1.8}}));
-const icons={home:'house',map:'map-pin',moments:'heart',memories:'images',more:'more-horizontal'};
-const nav=[['home','Inicio'],['map','Mapa'],['moments','Momentos'],['memories','Recuerdos'],['more','Más']];
+const icons={home:'house',map:'map-pin',moments:'heart',ai:'sparkles',memories:'images',more:'more-horizontal'};
+const nav=[['home','Inicio'],['map','Mapa'],['moments','Momentos'],['ai','IA'],['memories','Recuerdos'],['more','Más']];
 const moods={feliz:['smile','Feliz'],tranquilo:['waves','En calma'],cansado:['moon','Sin energía'],sensible:['heart','Sensible'],abrazo:['hand-heart','Abrazo']};
 const kindMeta={
  memory:['heart','Recuerdo'],event:['calendar','Fecha especial'],plan:['circle-check-big','Plan'],note:['file-text','Nota'],
@@ -312,6 +312,8 @@ function render(){
  if(view==='map'){app.innerHTML=header()+mapView();setTimeout(()=>{drawMap();if(!mapData)refreshMap({detail:true});if(!frequentPlacesFresh())loadFrequentPlaces().catch(()=>{});},0);}
  if(view==='moments')app.innerHTML=header()+momentsView();
  if(view==='memories'){app.innerHTML=header()+memoriesView();requestAnimationFrame(()=>{const tabs=$('.memories-tabs');if(tabs)tabs.scrollLeft=memoriesTabsScroll;});if((memoryTab==='album'&&!mediaFresh('photo'))||(memoryTab==='music'&&!mediaFresh('music')))setTimeout(()=>loadMedia(memoryTab==='album'?'photo':'music').catch(e=>toast(e.message)),0);}
+ if(view==='goals'){app.innerHTML=header()+goalsView();if(!goalsState)setTimeout(()=>loadGoals().catch(e=>toast(e.message)),0);}
+ if(view==='ai'){app.innerHTML=header()+intelligenceHubView();if(!mapData)setTimeout(()=>refreshMap({quiet:true,detail:true}).catch(()=>{}),0);}
  if(view==='more')app.innerHTML=header()+moreView();
  refreshIcons();
  renderGlobalPlayer();
@@ -1195,6 +1197,13 @@ function themeSettingsCard(){
  return '<div class="card theme-settings-card"><div class="row between"><div><p class="eyebrow">APARIENCIA</p><h3>Temas de Nuestra Galaxia</h3><p>'+(automatic?'Automático está activo. Ahora se ve como <b>'+esc(engine.LABELS[state.active])+'</b>.':'Elegiste <b>'+esc(engine.LABELS[state.active])+'</b> manualmente.')+'</p></div>'+ico(themeIcon(state.active))+'</div><div class="theme-grid">'+engine.options().map(option=>'<button class="theme-option '+(choice===option.id?'active':'')+'" data-action="theme-set" data-value="'+attr(option.id)+'"><span class="theme-preview" data-preview="'+attr(option.id)+'">'+ico(themeIcon(option.id))+'</span><span><b>'+esc(option.label)+'</b><small>'+(option.id==='auto'?'Cambia con la fecha':option.id===state.active?'Vista actual':'Elegir tema')+'</small></span>'+(choice===option.id?ico('circle-check-big'):'')+'</button>').join('')+'</div><p class="theme-local-note">'+ico('smartphone')+' La apariencia se guarda en este teléfono. No cambia el tema del teléfono de '+esc(partnerName())+'.</p></div>';
 }
 
+function intelligenceHubView(){
+ return '<section class="ai-hub"><div class="ai-hub-hero card"><span class="ai-hub-orbit">'+ico('sparkles')+'</span><div><p class="eyebrow">GALAXY INTELLIGENCE</p><h2>Nuestra IA</h2><p>Busca en su historia, conecta momentos y organiza recuerdos usando únicamente el contenido privado de Nuestra Galaxia.</p></div></div>'+
+ '<button class="card ai-hub-primary" type="button" data-action="our-ai"><span>'+ico('message-circle')+'</span><div><p class="eyebrow">PREGÚNTALE A SU HISTORIA</p><h3>Buscar y preguntar</h3><p>Búsqueda híbrida con coincidencias exactas, texto completo y contexto semántico.</p></div>'+ico('chevron-right')+'</button>'+
+ '<div class="intelligence-tools ai-hub-tools"><button class="card intelligence-tool" type="button" data-action="intelligence-connections-open"><span>'+ico('git-branch')+'</span><div><b>IA de conexiones</b><small>Descubre relaciones entre recuerdos, canciones, lugares y planes.</small></div></button><button class="card intelligence-tool" type="button" data-action="intelligence-narrator-open"><span>'+ico('book-open-text')+'</span><div><b>IA narradora</b><small>Crea capítulos sustentados únicamente en recuerdos reales.</small></div></button><button class="card intelligence-tool" type="button" data-action="intelligence-book-open"><span>'+ico('book-heart')+'</span><div><b>Libro de Nuestra Galaxia</b><small>Explora su historia organizada por capítulos.</small></div></button></div>'+
+ '<div class="card ai-hub-privacy"><span>'+ico('shield-check')+'</span><div><b>Privada por diseño</b><p>Las fuentes bloqueadas no se muestran ni se usan antes de tiempo. Si la IA no está disponible, la búsqueda clásica sigue funcionando.</p></div></div></section>';
+}
+
 function moreView(){
  const settings=cloud.settings||{data:{},version:1},data=settings.data||{},presence=ownPresence();
  return '<section><div class="section-head"><div><p class="eyebrow">NUESTRA APP</p><h2>Más</h2><p>Privacidad, respaldo, nuestra historia inteligente y ajustes.</p></div></div>'+
@@ -1525,7 +1534,7 @@ document.addEventListener('click',async e=>{
   if(a==='welcome-skip'){finishAdriWelcome();return;}
   if(a==='welcome-replay'){welcomePreview=true;welcomeStep=0;welcomeGift=true;welcomeEntering=false;tourStep=-1;render();window.scrollTo(0,0);return;}
   if(a==='modal-close'){closeModal();return;}
-  if(a==='goals-open'){view='goals';render();await loadGoals(true);return;}
+  if(a==='goals-open'){go('goals');await loadGoals(true);return;}
   if(a==='goals-filter'){goalsFilter=btn.dataset.value||'active';render();return;}
   if(a==='goal-new'){openGoalForm('goal');return;}
   if(a==='goal-savings-new'){openGoalForm('savings');return;}
