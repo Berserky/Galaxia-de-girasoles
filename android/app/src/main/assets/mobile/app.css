@@ -550,3 +550,17 @@ textarea{min-height:110px;resize:vertical}
  .eta-card>.btn,.eta-actions{grid-column:2}
  .eta-actions{display:flex;flex-wrap:wrap}
 }
+
+/* Super Update · Frequent places */
+.frequent-places{margin-top:4px}
+.frequent-place-card{display:grid;gap:12px}
+.frequent-place-card.near{border-color:rgba(80,164,116,.3);background:linear-gradient(135deg,var(--surface),rgba(80,164,116,.07))}
+.frequent-place-head{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start}
+.frequent-place-icon{width:44px;height:44px;border-radius:15px;display:grid;place-items:center;background:var(--surface2);color:var(--accent)}
+.frequent-place-card.near .frequent-place-icon{background:#eaf6ef;color:var(--good)}
+.frequent-place-icon .ui-icon{width:20px;height:20px}
+.frequent-place-head>div{min-width:0}
+.frequent-place-head h3,.frequent-place-head p{margin:5px 0 2px}
+.frequent-place-head small{font-size:9px;color:var(--muted)}
+.frequent-place-privacy{display:flex;align-items:flex-start;gap:7px;margin:11px 2px 0!important;font-size:9px!important;line-height:1.45;color:var(--muted)}
+.frequent-place-privacy .ui-icon{width:14px;height:14px;flex:0 0 auto;color:var(--accent)}
