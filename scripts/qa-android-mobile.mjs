@@ -90,7 +90,7 @@ assert.ok(app.includes('data-action="monthly-summary-open"')&&app.includes("api(
 assert.ok(mainActions.has('monthly-summary')&&edgeActions.has('monthly-summary'),'Falta resumen mensual end-to-end');
 assert.ok(edge.includes('async function monthlySummary(')&&edge.includes('together_seconds')&&edge.includes('mood_days'),'El backend mensual debe incluir recorridos, encuentros y conexión');
 assert.ok(css.includes('.monthly-metrics')&&css.includes('.monthly-highlight'),'Faltan estilos del resumen mensual');
-assert.ok(todayHistory.includes('function sameMonthDay(')&&todayHistory.includes('function anniversaryLabel('),'Falta módulo independiente de Un día como hoy');
+assert.ok(todayHistory.includes('sameMonthDay')&&todayHistory.includes('function anniversaryLabel(')&&todayHistory.includes('function groupHasActivity('),'Falta módulo independiente de Un día como hoy');
 assert.ok(app.includes('function todayHistoryTeaser()')&&app.includes('function openTodayHistory(')&&app.includes('function openTodayHistoryItem('),'Falta experiencia completa de Un día como hoy');
 assert.ok(app.includes('data-action="today-history-open"')&&app.includes("api('today-history'"),'Falta acceso a Un día como hoy');
 assert.ok(mainActions.has('today-history')&&edgeActions.has('today-history'),'Falta Un día como hoy end-to-end');
