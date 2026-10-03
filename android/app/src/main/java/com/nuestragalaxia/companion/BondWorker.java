@@ -117,7 +117,7 @@ public final class BondWorker extends Worker {
                     for(int i=0;i<gestures.length();i++){
                         JSONObject g=gestures.optJSONObject(i);
                         if(g!=null&&fresh.contains(g.optString("id"))){
-                            notify(c,g.optString("id"),"Un gesto para ti",gestureText(g.optString("gesture")));
+                            notify(c,g.optString("id"),"Un gesto para ti",gestureText(g));
                         }
                     }
                     JSONObject next=data.optJSONObject("nextEvent");
@@ -178,10 +178,19 @@ public final class BondWorker extends Worker {
         notify(c,"test-"+System.currentTimeMillis(),"Nuestra Galaxia está lista","Las notificaciones de momentos ya pueden aparecer en este teléfono.");
     }
 
-    private static String gestureText(String gesture){
-        return "kiss".equals(gesture)?"Tu pareja te envió un beso.":
-            "miss".equals(gesture)?"Tu pareja te extraña.":
+    private static String gestureText(JSONObject gesture){
+        String custom=gesture.optString("text","").trim();
+        if(!custom.isEmpty())return custom;
+        String id=gesture.optString("gesture","");
+        return "kiss".equals(id)?"Tu pareja te envió un beso.":
+            "miss".equals(id)?"Tu pareja te extraña.":
+            "tap".equals(id)?"Un toque de tu persona.":
             "Tu pareja te envió un abrazo.";
+    }
+
+    public static void showPushNotification(Context c,String id,String title,String body){
+        if(!notificationsAllowed(c))return;
+        notify(c,id,title,body);
     }
 
     private static void notify(Context c,String id,String title,String body){
