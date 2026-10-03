@@ -58,11 +58,12 @@ public final class PushManager {
 
     public static JSONObject events(Context context){
         BondStore bond=new BondStore(context);
+        ContextStore contextPrefs=new ContextStore(context);
         JSONObject value=new JSONObject();
         try{
             value.put("gesture",bond.enabled()||bond.hapticEnabled());
-            value.put("arrived_safe",false);
-            value.put("nearby",false);
+            value.put("arrived_safe",contextPrefs.arrivedSafeEnabled());
+            value.put("nearby",contextPrefs.nearbyEnabled());
             value.put("capsule",false);
             value.put("note",false);
             value.put("reminder",false);
