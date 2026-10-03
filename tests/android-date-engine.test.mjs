@@ -13,7 +13,7 @@ if(exists){
  const source=readFileSync(engineUrl,'utf8');
  const code=stripTypeScriptTypes(source.replace(/\bexport\s+/g,''));
  const context={module:{exports:{}},exports:{},Intl,Date,Math,Set,Map,Object,Number,String,Array,JSON};
- vm.runInNewContext(code+'\n;module.exports={QUESTION_DECKS,normalizeConstraints,normalizePlanCategory,selectQuestion,roulettePendingPlans,buildCandidates,scoreCandidates,buildSurpriseExperience,buildSequentialPlan,buildDateRecap};',context);
+ vm.runInNewContext(code+'\n;module.exports={QUESTION_DECKS,normalizeConstraints,normalizePlanCategory,selectQuestion,roulettePendingPlans,buildCandidates,scoreCandidates,buildSurpriseExperience,buildSequentialPlan,buildDateRecap,questionById};',context);
  api=context.module.exports;
 }
 
@@ -142,4 +142,13 @@ test('Date Mode recap stores references instead of copying source plan/photo/son
  assert.deepEqual(Array.from(recap.dateMode.photoPaths),['0/a.jpg','1/b.jpg']);
  assert.equal(Object.hasOwn(recap.dateMode,'planBody'),false);
  assert.equal(Object.hasOwn(recap.dateMode,'photoData'),false);
+});
+
+
+test('assigned question ids resolve back to the exact catalog entry',()=>{
+ const selected=api.selectQuestion(ctx(),{seed:'stable-id'});
+ const resolved=api.questionById(selected.id);
+ assert.equal(resolved.id,selected.id);
+ assert.equal(resolved.text,selected.text);
+ assert.equal(resolved.deck,selected.deck);
 });
