@@ -12,6 +12,7 @@ vm.runInNewContext(source,context);
 const {durationLabel,countLabel,activeElapsed,totalWithActive}=context.module.exports;
 
 test('encounter helpers format durations and counts',()=>{
+ assert.equal(durationLabel(0),'0 min');
  assert.equal(durationLabel(90),'1 min');
  assert.equal(durationLabel(3900),'1 h 5 min');
  assert.equal(durationLabel(90000),'1 d 1 h');
