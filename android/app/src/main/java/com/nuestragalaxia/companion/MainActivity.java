@@ -41,7 +41,7 @@ public final class MainActivity extends ComponentActivity {
         "bond-save","bond-update","bond-guess","bond-delete","bond-widget",
         "map-state","place-save","place-delete","status-set","transport-set","destination-save","trip",
         "media-list","media-delete","presence-set","backup-export","backup-import",
-        "pair-code-create","profile-repair","device-revoke","monthly-summary","today-history","encounter-stats","frequent-places","gps-history-export","gps-history-delete"
+        "pair-code-create","profile-repair","device-revoke","insights-summary","monthly-summary","today-history","encounter-stats","frequent-places","gps-history-export","gps-history-delete"
     );
 
     private DeviceStore store;
