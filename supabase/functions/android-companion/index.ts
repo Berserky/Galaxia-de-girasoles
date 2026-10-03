@@ -193,32 +193,41 @@ function maskedDaily(rows:any[],person:string){
 }
 
 async function mobileState(req:Request){
-  const d=await device(req);
-  const [settings,items,daily,locations,bond]=await Promise.all([
+  const d=await device(req),person=String(d.person);
+  const [settings,items,daily,locations,bond,places,presence]=await Promise.all([
     ok(db.from("galaxy_settings").select("id,data,version").eq("id",1).single()),
     ok(db.from("galaxy_items").select("*").order("created",{ascending:false}).limit(500)),
     ok(db.from("galaxy_daily").select("day,person,mood,answer").order("day",{ascending:false}).limit(120)),
     ok(db.from("galaxy_locations").select("*").order("person")),
-    bondState(String(d.person))
+    bondState(person),
+    ok(db.from("galaxy_places").select("*").order("created_at",{ascending:false}).limit(100)),
+    ok(db.from("galaxy_presence").select("*").order("person"))
   ]);
   const day=today();
   const safeItems=(items||[]).map((row:any)=>{
     const copy=structuredClone(row),data=copy.data||{};
-    if(copy.kind==="capsule"&&data.date&&data.date>day&&String(copy.author)!==String(d.person))copy.data={title:"Cápsula cerrada",date:data.date,locked:true};
-    if(copy.kind==="note"&&data.surprise&&String(copy.author)!==String(d.person)){
+    if(copy.kind==="capsule"&&data.date&&data.date>day&&String(copy.author)!==person)copy.data={title:"Cápsula cerrada",date:data.date,locked:true};
+    if(copy.kind==="note"&&data.surprise&&String(copy.author)!==person){
       let unlocked=data.unlockType!=="date"||!data.unlockDate||data.unlockDate<=day;
       if(data.unlockType==="place"){
-        const own=(locations||[]).find((x:any)=>String(x.person)===String(d.person)&&x.sharing);
+        const own=(locations||[]).find((x:any)=>String(x.person)===person&&x.sharing);
         unlocked=!!own&&meters(Number(own.latitude),Number(own.longitude),Number(data.latitude),Number(data.longitude))<=Number(data.radius||150);
       }
-      if(!unlocked)copy.data={title:"Sorpresa guardada",surprise:true,unlockType:data.unlockType,unlockDate:data.unlockType==="date"?data.unlockDate:"",locked:true};
+      if(!unlocked)copy.data={title:"Sorpresa guardada",surprise:true,unlockType:data.unlockType,unlockDate:data.unlockType==="date"?data.unlockDate:"",placeName:data.unlockType==="place"?text(data.placeName,80):"",locked:true};
     }
     return copy;
   });
+  const safePresence=(presence||[]).map((row:any)=>{
+    if(String(row.person)===person)return row;
+    return {
+      person:String(row.person),share_battery:!!row.share_battery,share_song:!!row.share_song,updated_at:row.updated_at,
+      battery:row.share_battery?row.battery:null,song_title:row.share_song?row.song_title:null
+    };
+  });
   return json({
-    person:String(d.person),device:{id:d.id,name:d.name},today:day,settings,items:safeItems,daily:maskedDaily(daily||[],String(d.person)),
-    bond,locations,nextEvent:nextCalendarEvent(safeItems.filter((i:any)=>i.kind==="event"),day),
-    capabilities:{photos:true,music:true,voice:true,widget:true,backgroundLocation:true,trips:true}
+    person,device:{id:d.id,name:d.name},today:day,settings,items:safeItems,daily:maskedDaily(daily||[],person),
+    bond,locations,places,presence:safePresence,nextEvent:nextCalendarEvent(safeItems.filter((i:any)=>i.kind==="event"),day),
+    capabilities:{photos:true,music:true,voice:true,widget:true,backgroundLocation:true,trips:true,backup:true,presence:true}
   });
 }
 
@@ -284,6 +293,86 @@ async function dailySave(req:Request,body:any){
   return json({ok:true});
 }
 
+async function presenceSet(req:Request,body:any){
+  const d=await device(req),person=String(d.person),current=(await ok(db.from("galaxy_presence").select("*").eq("person",person).limit(1)))?.[0]||{};
+  const patch:any={person,updated_at:new Date().toISOString()};
+  if(Object.hasOwn(body,"shareBattery"))patch.share_battery=!!body.shareBattery;
+  if(Object.hasOwn(body,"shareSong"))patch.share_song=!!body.shareSong;
+  if(Object.hasOwn(body,"battery")){
+    const battery=Number(body.battery);
+    if(Number.isFinite(battery))patch.battery=Math.max(0,Math.min(100,Math.round(battery)));
+  }
+  if(Object.hasOwn(body,"songTitle"))patch.song_title=text(body.songTitle,160)||null;
+  await ok(db.from("galaxy_presence").upsert({...current,...patch},{onConflict:"person"}));
+  return json({ok:true});
+}
+
+async function backupExport(req:Request){
+  await device(req);
+  const [settings,items,daily,bond,places]=await Promise.all([
+    ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
+    ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:true}).limit(2000)),
+    ok(db.from("galaxy_daily").select("day,person,mood,answer").order("day",{ascending:true}).limit(1000)),
+    ok(db.from("galaxy_bond").select("id,type,author,data,created").order("created",{ascending:true}).limit(2000)),
+    ok(db.from("galaxy_places").select("id,owner,name,kind,latitude,longitude,note,created_at").order("created_at",{ascending:true}).limit(500))
+  ]);
+  return json({format:"nuestra-galaxia-backup",version:1,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:items||[],daily:daily||[],bond:bond||[],places:places||[]});
+}
+
+function uuidish(v:unknown){return /^[0-9a-f-]{36}$/i.test(String(v||""));}
+
+async function backupRestore(req:Request,body:any){
+  await device(req);
+  const backup=body?.backup;
+  if(!backup||backup.format!=="nuestra-galaxia-backup"||Number(backup.version)!==1)return json({error:"La copia no pertenece a Nuestra Galaxia."},400);
+  const items=Array.isArray(backup.items)?backup.items.slice(0,2000):[];
+  const daily=Array.isArray(backup.daily)?backup.daily.slice(0,1000):[];
+  const bond=Array.isArray(backup.bond)?backup.bond.slice(0,2000):[];
+  const places=Array.isArray(backup.places)?backup.places.slice(0,500):[];
+  let restoredItems=0,restoredDaily=0,restoredBond=0,restoredPlaces=0;
+
+  if(backup.settings&&typeof backup.settings==="object"&&!Array.isArray(backup.settings)){
+    const current=await ok(db.from("galaxy_settings").select("data").eq("id",1).single());
+    const names=Array.isArray(backup.settings.names)?backup.settings.names.slice(0,2).map((x:any)=>text(x,40)):[];
+    const startDate=text(backup.settings.startDate,10),albumUrl=text(backup.settings.albumUrl,500);
+    const data={...(current?.data||{}),...(names.length===2?{names}:{}),...(startDate&&validDate(startDate)?{startDate}:{}),albumUrl};
+    await ok(db.from("galaxy_settings").update({data}).eq("id",1));
+  }
+
+  for(const row of places){
+    const id=Number(row?.id),owner=String(row?.owner||""),name=text(row?.name,80),kind=String(row?.kind||"memory"),latitude=Number(row?.latitude),longitude=Number(row?.longitude);
+    if(!Number.isFinite(id)||!["0","1"].includes(owner)||!name||!["home","work","memory","adventure"].includes(kind)||!Number.isFinite(latitude)||!Number.isFinite(longitude))continue;
+    await ok(db.from("galaxy_places").upsert({id,owner,name,kind,latitude,longitude,note:text(row?.note,300)||null},{onConflict:"id",ignoreDuplicates:true}));
+    restoredPlaces++;
+  }
+
+  for(const row of items){
+    const id=String(row?.id||""),kind=String(row?.kind||""),author=String(row?.author||"");
+    if(!uuidish(id)||!allowedKinds.has(kind)||!["0","1"].includes(author))continue;
+    let data;try{data=cleanItem(kind,row.data);}catch{continue;}
+    await ok(db.from("galaxy_items").upsert({id,kind,data,author,created:row.created||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
+    restoredItems++;
+  }
+
+  for(const row of daily){
+    const day=String(row?.day||""),person=String(row?.person||""),mood=text(row?.mood,30),answer=text(row?.answer,3000);
+    if(!validDate(day)||!["0","1"].includes(person))continue;
+    const value:any={day,person};
+    if(["feliz","tranquilo","cansado","sensible","abrazo"].includes(mood))value.mood=mood;
+    if(answer)value.answer=answer;
+    if(Object.keys(value).length>2){await ok(db.from("galaxy_daily").upsert(value,{onConflict:"day,person",ignoreDuplicates:true}));restoredDaily++;}
+  }
+
+  for(const row of bond){
+    const id=String(row?.id||""),type=String(row?.type||""),author=String(row?.author||"");
+    if(!uuidish(id)||!["0","1"].includes(author))continue;
+    let data;try{data=validateBond(type,row.data);}catch{continue;}
+    await ok(db.from("galaxy_bond").upsert({id,type,author,data,created:row.created||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
+    restoredBond++;
+  }
+  return json({ok:true,restored:{items:restoredItems,daily:restoredDaily,bond:restoredBond,places:restoredPlaces}});
+}
+
 async function recordParticipation(person:string){
   await ok(db.from("galaxy_bond_participation").upsert({day:today(),person},{onConflict:"day,person"}));
 }
@@ -324,7 +413,7 @@ async function validateVoice(person:string,payload:any){
   if(!test)throw new Error("Audio no encontrado");
   if(payload.referenceId){
     const item=(await ok(db.from("galaxy_items").select("kind,data").eq("id",payload.referenceId).limit(1)))?.[0];
-    if(!item||!["memory","song","capsule"].includes(item.kind))throw new Error("Referencia no válida");
+    if(!item||!["memory","song","capsule","journey","note"].includes(item.kind)||item.kind==="note"&&!item.data?.surprise)throw new Error("Referencia no válida");
     if(item.kind==="capsule"&&String(item.data?.date||"")>today())throw new Error("La cápsula aún está cerrada");
   }
 }
@@ -553,15 +642,21 @@ async function upload(req:Request){
 async function moments(req:Request){
   const d=await device(req);
   if(!["0","1"].includes(String(d.person)))return json({error:"Dispositivo no válido"},401);
-  const [settings,events,config,gestures]=await Promise.all([
+  const [settings,events,config,gestures,daily,locations,presence,songs]=await Promise.all([
     ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
     ok(db.from("galaxy_items").select("id,data").eq("kind","event")),
     ok(db.from("galaxy_bond_config").select("photo_path").eq("id",1).maybeSingle()),
-    ok(db.from("galaxy_bond").select("id,author,created,data").eq("type","gesture").neq("author",d.person).gte("created",new Date(Date.now()-7*86400000).toISOString()).order("created",{ascending:false}).limit(30))
+    ok(db.from("galaxy_bond").select("id,author,created,data").eq("type","gesture").neq("author",d.person).gte("created",new Date(Date.now()-7*86400000).toISOString()).order("created",{ascending:false}).limit(30)),
+    ok(db.from("galaxy_daily").select("person,mood").eq("day",today())),
+    ok(db.from("galaxy_locations").select("person,sharing,motion,status").order("person")),
+    ok(db.from("galaxy_presence").select("*").order("person")),
+    ok(db.from("galaxy_items").select("data,created").eq("kind","song").order("created",{ascending:false}).limit(1))
   ]);
   const names=(Array.isArray(settings?.data?.names)?settings.data.names:["Nosotros","Dos"]).slice(0,2).map((name:unknown)=>text(name,40));
   let photoUrl=null;if(config?.photo_path)photoUrl=await signed("galaxy-photos",config.photo_path,300);
-  return json({names,nextEvent:nextCalendarEvent(events||[],today()),photoUrl,gestures:(gestures||[]).filter((g:any)=>["hug","kiss","miss"].includes(g.data?.gesture)).map((g:any)=>({id:g.id,gesture:g.data.gesture,created:g.created,author:g.author}))});
+  const partner=String(d.person)==="0"?"1":"0",mood=(daily||[]).find((x:any)=>String(x.person)===partner)?.mood||null,loc=(locations||[]).find((x:any)=>String(x.person)===partner),p=(presence||[]).find((x:any)=>String(x.person)===partner);
+  const now={mood,motion:loc?.sharing?loc?.motion:null,status:loc?.sharing?loc?.status:null,battery:p?.share_battery?p?.battery:null,songTitle:p?.share_song?p?.song_title:null,latestSong:songs?.[0]?.data?.title||null};
+  return json({names,nextEvent:nextCalendarEvent(events||[],today()),photoUrl,now,gestures:(gestures||[]).filter((g:any)=>["hug","kiss","miss"].includes(g.data?.gesture)).map((g:any)=>({id:g.id,gesture:g.data.gesture,created:g.created,author:g.author}))});
 }
 
 Deno.serve(async req=>{
@@ -579,6 +674,9 @@ Deno.serve(async req=>{
     if(action==="item-delete")return await itemDelete(req,body);
     if(action==="settings-save")return await settingsSave(req,body);
     if(action==="daily-save")return await dailySave(req,body);
+    if(action==="presence-set")return await presenceSet(req,body);
+    if(action==="backup-export")return await backupExport(req);
+    if(action==="backup-restore")return await backupRestore(req,body);
     if(action==="bond-save")return await bondSave(req,body);
     if(action==="bond-update")return await bondUpdate(req,body);
     if(action==="bond-guess")return await bondGuess(req,body);
