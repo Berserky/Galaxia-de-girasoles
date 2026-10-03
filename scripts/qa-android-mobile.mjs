@@ -13,6 +13,7 @@ const search=read('android/app/src/main/assets/mobile/search.js');
 const monthly=read('android/app/src/main/assets/mobile/monthly.js');
 const todayHistory=read('android/app/src/main/assets/mobile/today-history.js');
 const encounters=read('android/app/src/main/assets/mobile/encounters.js');
+const distance=read('android/app/src/main/assets/mobile/distance.js');
 const css=read('android/app/src/main/assets/mobile/app.css');
 const index=read('android/app/src/main/assets/mobile/index.html');
 const lucideSource=read('android/app/src/main/assets/mobile/lucide.js');
@@ -33,7 +34,7 @@ assert.equal(emoji.test(widget),false,'El widget no debe usar emojis/dingbats co
 assert.ok(existsSync(resolve(root,'android/app/src/main/assets/mobile/lucide.js')),'Falta Lucide local');
 assert.ok(existsSync(resolve(root,'android/app/src/main/assets/mobile/LICENSE-lucide')),'Falta licencia de Lucide');
 const scriptSources=[...index.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m=>m[1]);
-assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./monthly.js','./today-history.js','./encounters.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
+assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
 assert.ok(index.includes("connect-src 'none'"),'La UI local no debe hacer fetch directo ni recibir credenciales');
 assert.equal(/leaflet/i.test(css+index),false,'No deben quedar estilos o assets muertos de Leaflet');
 
@@ -104,6 +105,11 @@ assert.ok(mainActions.has('encounter-stats')&&edgeActions.has('encounter-stats')
 assert.ok(edge.includes('async function encounterStats(')&&edge.includes('average_seconds')&&edge.includes('current_month')&&edge.includes('longest'),'El backend debe calcular estadísticas completas de encuentros');
 assert.ok(edge.includes('if(!locs||locs.length!==2')&&edge.includes('update({ended_at:new Date().toISOString()})'),'El detector debe cerrar encuentros cuando deja de existir presencia mutua');
 assert.ok(css.includes('.encounter-metrics')&&css.includes('.encounter-live')&&css.includes('.encounter-recent'),'Faltan estilos del contador de encuentros');
+assert.ok(distance.includes('function metersBetween(')&&distance.includes('function coupleDistance(')&&distance.includes('function distanceMood('),'Falta motor independiente de distancia de pareja');
+assert.ok(app.includes('function coupleDistanceCard(')&&app.includes('function focusCoupleOnMap('),'Falta distancia entre Sebas y Adri en Android');
+assert.ok(app.includes('data-action="couple-distance-map"')&&app.includes('data-action="couple-distance-focus"'),'Faltan acciones de distancia de pareja');
+assert.ok(app.includes('distancia en línea recta'),'La UI debe aclarar que la distancia no es una ruta vial');
+assert.ok(css.includes('.couple-distance')&&css.includes('.couple-distance-value'),'Faltan estilos de distancia de pareja');
 assert.ok(edge.includes('async function backupExport')&&edge.includes('async function backupRestore'),'Falta backup seguro en backend');
 const backupSection=edge.slice(edge.indexOf('async function backupExport'),edge.indexOf('async function recordParticipation'));
 assert.ok(!backupSection.includes('galaxy_presence')&&!backupSection.includes('share_battery')&&!backupSection.includes('share_song'),'El backup no debe restaurar permisos de presencia');
