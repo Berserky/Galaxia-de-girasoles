@@ -546,6 +546,8 @@ function insightMetricSnapshot(summary:any){
     together_seconds:Number(summary?.encounters?.together_seconds||0),
     mood_days:Number(summary?.connection?.mood_days||0),
     answer_days:Number(summary?.connection?.answer_days||0),
+    exact_mood_days:Number(summary?.connection?.exact_mood_days||0),
+    compatible_mood_days:Number(summary?.connection?.compatible_mood_days||0),
     gestures:Number(summary?.bond?.gestures||0)
   };
 }
@@ -595,7 +597,7 @@ async function buildInsights(req:Request,options:any){
   return {
     ...current,
     achievements,
-    comparison:prior?{period:previous,deltas:insightDeltas(current,prior),summary:insightMetricSnapshot(prior)}:null,
+    comparison:prior?{period:previous,deltas:insightDeltas(current,prior),summary:insightMetricSnapshot(prior),moods:prior.moods}:null,
     relationship:{startDate}
   };
 }
