@@ -24,6 +24,10 @@ public final class GalaxyBridge {
         activity.unpair(requestId);
     }
 
+    @JavascriptInterface public void copyText(String requestId,String label,String value){
+        activity.copyText(requestId,label,value);
+    }
+
     @JavascriptInterface public void pickMedia(String requestId,String kind){
         activity.pickMedia(requestId,kind);
     }
