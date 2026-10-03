@@ -40,6 +40,7 @@ public final class GalaxyBridge {
 
     @JavascriptInterface public void exportJson(String requestId,String fileName,String json){ activity.exportJson(requestId,fileName,json); }
     @JavascriptInterface public void importJson(String requestId){ activity.importJson(requestId); }
+    @JavascriptInterface public void clearPendingGps(String requestId){ activity.clearPendingGps(requestId); }
 
     @JavascriptInterface public void startLocation(String requestId){
         activity.startLocation(requestId);
