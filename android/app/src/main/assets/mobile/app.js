@@ -425,6 +425,9 @@ function insightExtras(summary){
  if(Number(connection.answer_days||0))rows.push('<span>'+ico('message-circle')+Number(connection.answer_days||0)+' preguntas respondidas por ambos</span>');
  if(Number(counts.notes||0))rows.push('<span>'+ico('file-text')+Number(counts.notes||0)+' notas</span>');
  if(Number(counts.wishesDone||0))rows.push('<span>'+ico('star')+Number(counts.wishesDone||0)+' deseos vividos</span>');
+ if(Number(counts.goalsCompleted||0))rows.push('<span>'+ico('target')+Number(counts.goalsCompleted||0)+' objetivos completados</span>');
+ if(Number(counts.savingsAchieved||0))rows.push('<span>'+ico('piggy-bank')+Number(counts.savingsAchieved||0)+' metas de ahorro logradas</span>');
+ if(Number(summary.goals?.goal_contribution_amount||0))rows.push('<span>'+ico('coins')+moneyLabel(summary.goals.goal_contribution_amount)+' en aportes manuales</span>');
  return rows.length?'<div class="card insights-extra"><h3>También pasó</h3><div class="insight-extra-row">'+rows.join('')+'</div></div>':'';
 }
 function insightHighlights(summary){
@@ -489,6 +492,7 @@ function wrappedCards(summary){
   '<article class="wrapped-card"><p class="eyebrow">CÓMO ESTUVIMOS</p><h2>'+Number(summary.connection?.mood_days||0)+' días con mood</h2><p>'+Number(summary.questions?.answered_together_days||0)+' preguntas respondidas por ambos.</p></article>'+
   '<article class="wrapped-card"><p class="eyebrow">PEQUEÑOS GESTOS</p><h2>'+Number(summary.bond?.gestures||0)+' gestos</h2><p>Momentos rápidos para decir “estoy aquí”.</p></article>'+
   '<article class="wrapped-card"><p class="eyebrow">LUGARES Y VIAJES</p><h2>'+places+' lugares</h2><p>'+Number(summary.counts?.journeys||0)+' viajes guardados dentro de la galaxia.</p></article>'+
+  '<article class="wrapped-card"><p class="eyebrow">OBJETIVOS COMPARTIDOS</p><h2>'+Number(summary.counts?.goalsCompleted||0)+' logrados</h2><p>'+Number(summary.goals?.active_progress_pct||0)+'% de progreso promedio en los objetivos activos.</p></article>'+
   (active?'<article class="wrapped-card"><p class="eyebrow">MES CON MÁS HISTORIA</p><h2>'+esc(monthName||active[0])+'</h2><p>El mes con más actividad guardada dentro de Nuestra Galaxia.</p></article>':'')+
  '</div>';
 }
@@ -502,7 +506,7 @@ function comparisonMarkup(summary){
  return rows.length?'<div class="card insight-comparison"><h3>Frente al periodo anterior</h3><ul>'+rows.slice(0,3).map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul></div>':'';
 }
 function insightsSummaryMarkup(summary){
- const counts=summary.counts||{},trips=summary.trips||{},encounters=summary.encounters||{},connection=summary.connection||{},bond=summary.bond||{},has=Number(counts.saved||0)+Number(trips.count||0)+Number(encounters.count||0)+Number(bond.gestures||0)+Number(bond.voices||0)>0;
+ const counts=summary.counts||{},trips=summary.trips||{},encounters=summary.encounters||{},connection=summary.connection||{},bond=summary.bond||{},has=Number(counts.saved||0)+Number(trips.count||0)+Number(encounters.count||0)+Number(bond.gestures||0)+Number(bond.voices||0)+Number(counts.goalsCompleted||0)+Number(counts.savingsAchieved||0)+Number(summary.goals?.goal_contribution_amount||0)>0;
  return '<div class="insights-summary">'+insightPeriodNav(summary)+wrappedCards(summary)+
  (has?'<div class="insights-hero"><span>'+ico('sparkles')+'</span><div><b>'+Number(counts.saved||0)+' momentos guardados</b><p>Una lectura del periodo construida con su propia historia.</p></div></div>'+
  '<div class="insights-metrics">'+
@@ -1383,7 +1387,7 @@ document.addEventListener('click',async e=>{
   if(a==='goal-new'){openGoalForm('goal');return;}
   if(a==='goal-savings-new'){openGoalForm('savings');return;}
   if(a==='goal-open'){openGoalDetail(btn.dataset.id);return;}
-  if(a==='goal-edit'){openGoalForm(goalById(btn.dataset.id));return;}
+  if(a==='goal-edit'){const goal=goalById(btn.dataset.id);if(goal)openGoalForm(goal.kind,goal);return;}
   if(a==='goal-delete'){const goal=goalById(btn.dataset.id);if(goal&&confirm('¿Eliminar este objetivo? Sus planes, deseos, notas y recuerdos relacionados se conservarán.')){const result=await api('goals-engine',{operation:'delete',goalId:goal.id,expectedVersion:goal.version});goalsState=null;closeModal();await loadGoals(true);toast(result.ok?'Objetivo eliminado.':'No se pudo eliminar.');}return;}
   if(a==='goal-step-add'){openGoalStepAdd(btn.dataset.id);return;}
   if(a==='goal-step-toggle'){const goal=goalById(btn.dataset.goalId);if(goal){await api('goals-engine',{operation:'step-toggle',goalId:goal.id,expectedVersion:goal.version,stepId:btn.dataset.stepId,completed:btn.dataset.completed!=='true'});await refreshGoal(goal.id);}return;}
