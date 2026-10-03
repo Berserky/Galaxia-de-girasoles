@@ -979,11 +979,11 @@ as $$
   limit 100
  ),
  semantic as (
-  select p.id,(1-(p.embedding <=> query_embedding))::double precision semantic_score,
-   row_number() over(order by p.embedding <=> query_embedding,p.occurred_on desc nulls last,p.id) semantic_rank
+  select p.id,(1-(p.embedding OPERATOR(extensions.<=>) query_embedding))::double precision semantic_score,
+   row_number() over(order by p.embedding OPERATOR(extensions.<=>) query_embedding,p.occurred_on desc nulls last,p.id) semantic_rank
   from permitted p
   where query_embedding is not null and p.embedding is not null and p.embedding_status='ready'
-  order by p.embedding <=> query_embedding
+  order by p.embedding OPERATOR(extensions.<=>) query_embedding
   limit 100
  ),
  ids as (
