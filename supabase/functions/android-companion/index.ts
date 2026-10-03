@@ -516,9 +516,18 @@ function dateQuestionContextKind(context:any){
  if((context?.memories||[]).length)return "memory";
  return "daily";
 }
+async function goalSuggestionsForDate(){
+ const [goals,steps,contributions]=await Promise.all([
+  ok(db.from("galaxy_goals").select("*").in("status",["active","paused"]).limit(500)),
+  ok(db.from("galaxy_goal_steps").select("*").limit(3000)),
+  ok(db.from("galaxy_goal_contributions").select("*").limit(5000))
+ ]);
+ const views=(goals||[]).map((goal:any)=>({...goal,...computeGoalProgress(goal,steps||[],contributions||[])}));
+ return buildGoalDateSuggestions(views);
+}
 async function buildDateContext(req:Request,knownDevice:any=null){
  const d=knownDevice||await device(req),person=String(d.person),day=today(),since=new Date(Date.now()-90*86400000).toISOString();
- const [settings,items,locations,places,trips,encounters,questionRows,placeEvents]=await Promise.all([
+ const [settings,items,locations,places,trips,encounters,questionRows,placeEvents,goalSuggestions]=await Promise.all([
   ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
   ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:false}).limit(1000)),
   ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude,transport_preference,updated_at").order("person")),
@@ -526,7 +535,8 @@ async function buildDateContext(req:Request,knownDevice:any=null){
   ok(db.from("galaxy_trip_history").select("id,person,started_at,ended_at,distance_m,duration_s,dominant_motion").order("started_at",{ascending:false}).limit(250)),
   ok(db.from("galaxy_encounters").select("id,started_at,ended_at").order("started_at",{ascending:false}).limit(250)),
   ok(db.from("galaxy_daily_questions").select("day,question_id,deck,context_kind,favorite,memory_id").order("day",{ascending:false}).limit(40)),
-  ok(db.from("galaxy_place_events").select("place_id,event,happened_at").eq("event","arrived").gte("happened_at",since).order("happened_at",{ascending:false}).limit(1000))
+  ok(db.from("galaxy_place_events").select("place_id,event,happened_at").eq("event","arrived").gte("happened_at",since).order("happened_at",{ascending:false}).limit(1000)),
+  goalSuggestionsForDate()
  ]);
  const allItems=items||[],plans=allItems.filter((row:any)=>row.kind==="plan").map(datePlanView);
  const own=(locations||[]).find((row:any)=>String(row.person)===person&&row.sharing&&row.latitude!=null&&row.longitude!=null);
@@ -548,6 +558,7 @@ async function buildDateContext(req:Request,knownDevice:any=null){
   trips:trips||[],encounters:encounters||[],
   location:own?{available:true,latitude:Number(own.latitude),longitude:Number(own.longitude)}:{available:false},
   transport:text(own?.transport_preference||"auto",24)||"auto",
+  goalSuggestions:goalSuggestions||[],
   questionRows:questionRows||[]
  };
 }
