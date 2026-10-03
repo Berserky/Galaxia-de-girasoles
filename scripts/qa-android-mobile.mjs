@@ -39,6 +39,8 @@ const dateEngine=read('supabase/functions/android-companion/date-engine.ts');
 const goalsEngine=read('supabase/functions/android-companion/goals-engine.ts');
 const bondEngine=read('supabase/functions/android-companion/bond-engine.ts');
 const pushEngine=read('supabase/functions/android-companion/push-engine.ts');
+const contextEngine=read('supabase/functions/android-companion/context-engine.ts');
+const contextStore=read('android/app/src/main/java/com/nuestragalaxia/companion/ContextStore.java');
 const schema=read('supabase/schema.sql');
 const build=read('android/app/build.gradle.kts');
 const manifest=read('android/app/src/main/AndroidManifest.xml');
@@ -288,5 +290,21 @@ assert.ok(app.includes('Nuestro jardín')&&app.includes('currentStreak')&&app.in
 assert.ok(css.includes('/* Mega Update 3.0 · Galaxy Bond Engine 2.0 */')&&css.includes('.bond-garden-scene'),'Faltan estilos del jardín 2.0');
 assert.ok(serverInsights.includes('current_streak')&&serverInsights.includes('record_streak')&&serverInsights.includes('gestures'),'Insights debe consumir métricas Bond 2.0');
 assert.equal(build.includes('FCM_SERVICE_ACCOUNT_JSON')||main.includes('FCM_SERVICE_ACCOUNT_JSON')||app.includes('FCM_SERVICE_ACCOUNT_JSON'),false,'La credencial privada FCM jamás puede entrar al cliente');
+
+
+// Galaxy Context Engine
+assert.ok(contextEngine.includes('contextStep')&&contextEngine.includes('SHARED_TRIP_DETECTED')&&contextEngine.includes('DESTINATION_REACHED'),'Galaxy Context Engine requiere máquina común de eventos derivados');
+assert.ok(schema.includes('galaxy_context_events')&&schema.includes('galaxy_context_sessions')&&schema.includes('galaxy_context_eta_history'),'Falta persistencia privada de Context Engine');
+assert.ok(edge.includes('async function contextTick(')&&edge.includes('await contextTick(d)'),'La ubicación debe alimentar un único Context Engine');
+const locationBlock=edge.slice(edge.indexOf('async function location('),edge.indexOf('function nextCalendarEvent'));
+assert.equal(locationBlock.includes('await smartPlaces(')||locationBlock.includes('await encounter('),false,'Location no debe ejecutar detectores GPS independientes');
+assert.ok(main.includes('context-state')&&main.includes('context-settings')&&main.includes('context-session'),'Android debe permitir las acciones de Context Engine');
+assert.ok(contextStore.includes('nearbyEnabled')&&contextStore.includes('arrivedSafeEnabled'),'ContextStore debe preservar opt-ins push');
+assert.ok(pushManager.includes('context.nearbyEnabled()')&&pushManager.includes('context.arrivedSafeEnabled()'),'FCM debe respetar preferencias Context locales');
+assert.equal(contextStore.includes('TrackingService.ACTION_START'),false,'ContextStore jamás puede encender ubicación');
+assert.ok(app.includes('Galaxy Context Engine')&&app.includes('Estamos cerca')&&app.includes('Regreso a casa')&&app.includes('Acompáñame 2.0'),'Faltan superficies Context Engine');
+assert.ok(css.includes('/* Mega Update 3.0 · Galaxy Context Engine */'),'Faltan estilos Context Engine');
+assert.ok(edge.includes('buildDateContextRecap')&&edge.includes('buildTripContextRecap'),'Faltan recaps contextuales');
+assert.ok(edge.includes('galaxy_context_suggestions')&&app.includes('¿Esto fue una cita?'),'El detector de cita debe pedir confirmación humana');
 
 console.log('QA móvil Nuestra Galaxia: OK');
