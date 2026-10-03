@@ -55,6 +55,47 @@ async function pair(body:any){
   return json({device_token:secret,device:created});
 }
 
+
+async function pairCodeCreate(req:Request,body:any){
+  const d=await device(req),caller=String(d.person),target=String(body.target_person??caller);
+  if(!["0","1"].includes(target))return json({error:"Perfil no válido"},400);
+  if(target!==caller&&caller!=="0")return json({error:"Solo Sebas puede generar un código para el perfil de su pareja."},403);
+  const deviceName=text(body.device_name||"Android",80)||"Android",now=new Date().toISOString();
+  await ok(db.from("galaxy_device_pair_codes").delete().eq("person",target).lt("expires_at",now));
+  await ok(db.from("galaxy_device_pair_codes").delete().eq("person",target).not("used_at","is",null));
+  const code=(crypto.randomUUID().replaceAll("-","")+(crypto.randomUUID().replaceAll("-","")).slice(0,8)).toUpperCase();
+  await ok(db.from("galaxy_device_pair_codes").insert({
+    code_hash:await sha(code),person:target,device_name:deviceName,
+    expires_at:new Date(Date.now()+10*60*1000).toISOString()
+  }));
+  const settings=await ok(db.from("galaxy_settings").select("data").eq("id",1).single());
+  const names=Array.isArray(settings?.data?.names)?settings.data.names:["Sebas","Adri"];
+  return json({code,target_person:target,profile_name:text(names[Number(target)]||("Perfil "+target),40),expires_minutes:10});
+}
+
+async function profileRepair(req:Request,body:any){
+  const d=await device(req),current=String(d.person),target=String(body.target_person||"1");
+  if(current===target)return json({ok:true,person:current});
+  if(current!=="0"||target!=="1")return json({error:"Este cambio de perfil no está permitido."},403);
+  await ok(db.from("galaxy_device_place_presence").delete().eq("device_id",d.id));
+  const updated=await ok(db.from("galaxy_devices").update({person:target,last_seen_at:new Date().toISOString()}).eq("id",d.id).select("id,person,name").single());
+  const settings=await ok(db.from("galaxy_settings").select("data").eq("id",1).single());
+  const names=Array.isArray(settings?.data?.names)?settings.data.names:["Sebas","Adri"];
+  return json({ok:true,person:String(updated.person),profile_name:text(names[Number(updated.person)]||"Adri",40)});
+}
+
+async function deviceRevoke(req:Request,body:any){
+  const d=await device(req),targetId=String(body.id||"");
+  if(!targetId)return json({error:"Dispositivo no válido."},400);
+  if(targetId===String(d.id))return json({error:"Usa “Desvincular este teléfono” para quitar el dispositivo actual."},400);
+  const row=(await ok(db.from("galaxy_devices").select("id,person,revoked_at").eq("id",targetId).limit(1)))?.[0];
+  if(!row||row.revoked_at)return json({ok:true});
+  if(String(d.person)!=="0"&&String(row.person)!==String(d.person))return json({error:"No puedes administrar ese dispositivo."},403);
+  await ok(db.from("galaxy_devices").update({revoked_at:new Date().toISOString()}).eq("id",targetId));
+  await ok(db.from("galaxy_device_place_presence").delete().eq("device_id",targetId));
+  return json({ok:true});
+}
+
 function point(body:any){
   const lat=Number(body.latitude),lon=Number(body.longitude),accuracy=Number(body.accuracy),speed=Number(body.speed),heading=Number(body.heading),motion=["still","walking","vehicle"].includes(body.motion)?body.motion:null;
   if(!Number.isFinite(lat)||lat<-90||lat>90||!Number.isFinite(lon)||lon<-180||lon>180)throw new Error("Ubicación no válida");
@@ -193,32 +234,44 @@ function maskedDaily(rows:any[],person:string){
 }
 
 async function mobileState(req:Request){
-  const d=await device(req);
-  const [settings,items,daily,locations,bond]=await Promise.all([
+  const d=await device(req),person=String(d.person);
+  const [settings,items,daily,locations,bond,places,presence]=await Promise.all([
     ok(db.from("galaxy_settings").select("id,data,version").eq("id",1).single()),
     ok(db.from("galaxy_items").select("*").order("created",{ascending:false}).limit(500)),
     ok(db.from("galaxy_daily").select("day,person,mood,answer").order("day",{ascending:false}).limit(120)),
     ok(db.from("galaxy_locations").select("*").order("person")),
-    bondState(String(d.person))
+    bondState(person),
+    ok(db.from("galaxy_places").select("*").order("created_at",{ascending:false}).limit(100)),
+    ok(db.from("galaxy_presence").select("*").order("person"))
   ]);
   const day=today();
   const safeItems=(items||[]).map((row:any)=>{
     const copy=structuredClone(row),data=copy.data||{};
-    if(copy.kind==="capsule"&&data.date&&data.date>day&&String(copy.author)!==String(d.person))copy.data={title:"Cápsula cerrada",date:data.date,locked:true};
-    if(copy.kind==="note"&&data.surprise&&String(copy.author)!==String(d.person)){
+    if(copy.kind==="capsule"&&data.date&&data.date>day&&String(copy.author)!==person)copy.data={title:"Cápsula cerrada",date:data.date,locked:true};
+    if(copy.kind==="note"&&data.surprise&&String(copy.author)!==person){
       let unlocked=data.unlockType!=="date"||!data.unlockDate||data.unlockDate<=day;
       if(data.unlockType==="place"){
-        const own=(locations||[]).find((x:any)=>String(x.person)===String(d.person)&&x.sharing);
+        const own=(locations||[]).find((x:any)=>String(x.person)===person&&x.sharing);
         unlocked=!!own&&meters(Number(own.latitude),Number(own.longitude),Number(data.latitude),Number(data.longitude))<=Number(data.radius||150);
       }
-      if(!unlocked)copy.data={title:"Sorpresa guardada",surprise:true,unlockType:data.unlockType,unlockDate:data.unlockType==="date"?data.unlockDate:"",locked:true};
+      if(!unlocked)copy.data={title:"Sorpresa guardada",surprise:true,unlockType:data.unlockType,unlockDate:data.unlockType==="date"?data.unlockDate:"",placeName:data.unlockType==="place"?text(data.placeName,80):"",locked:true};
     }
     return copy;
   });
+  const safePresence=(presence||[]).map((row:any)=>{
+    if(String(row.person)===person)return row;
+    return {
+      person:String(row.person),share_battery:!!row.share_battery,share_song:!!row.share_song,updated_at:row.updated_at,
+      battery:row.share_battery?row.battery:null,song_title:row.share_song?row.song_title:null
+    };
+  });
+  let devicesQuery=db.from("galaxy_devices").select("id,person,name,created_at,last_seen_at").is("revoked_at",null).order("created_at",{ascending:false}).limit(30);
+  if(person!=="0")devicesQuery=devicesQuery.eq("person",person);
+  const devices=await ok(devicesQuery);
   return json({
-    person:String(d.person),device:{id:d.id,name:d.name},today:day,settings,items:safeItems,daily:maskedDaily(daily||[],String(d.person)),
-    bond,locations,nextEvent:nextCalendarEvent(safeItems.filter((i:any)=>i.kind==="event"),day),
-    capabilities:{photos:true,music:true,voice:true,widget:true,backgroundLocation:true,trips:true}
+    person,device:{id:d.id,name:d.name},today:day,settings,items:safeItems,daily:maskedDaily(daily||[],person),
+    bond,locations,places,presence:safePresence,devices,nextEvent:nextCalendarEvent(safeItems.filter((i:any)=>i.kind==="event"),day),
+    capabilities:{photos:true,music:true,voice:true,widget:true,backgroundLocation:true,trips:true,backup:true,presence:true,profileManagement:true}
   });
 }
 
@@ -271,127 +324,6 @@ async function settingsSave(req:Request,body:any){
   return json({settings:updated});
 }
 
-
-async function presenceSet(req:Request,body:any){
-  const d=await device(req),person=String(d.person),row=await ok(db.from("galaxy_settings").select("*").eq("id",1).single());
-  const old=row.data||{},presence={...(old.presence||{})},prev=presence[person]||{};
-  const shareBattery=body.shareBattery===true,shareListening=body.shareListening===true;
-  const rawBattery=body.battery,battery=rawBattery===null||rawBattery===undefined||rawBattery===""?NaN:Number(rawBattery),listening=text(body.listening,180);
-  presence[person]={
-    ...prev,
-    shareBattery,
-    shareListening,
-    battery:shareBattery&&Number.isFinite(battery)?Math.max(0,Math.min(100,Math.round(battery))):null,
-    listening:shareListening?listening:"",
-    updatedAt:new Date().toISOString()
-  };
-  const data={...old,presence};
-  const updated=await ok(db.from("galaxy_settings").update({data}).eq("id",1).select("id,data,version").single());
-  return json({presence:updated.data?.presence?.[person]||{}});
-}
-
-function backupBondData(row:any){
-  const data=structuredClone(row.data||{});
-  delete data.audioUrl;
-  delete data.locked;
-  return data;
-}
-
-async function backupExport(req:Request){
-  await device(req);
-  const [settings,items,daily,bond,places]=await Promise.all([
-    ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
-    ok(db.from("galaxy_items").select("kind,data,author,created").order("created",{ascending:true}).limit(1000)),
-    ok(db.from("galaxy_daily").select("day,person,mood,answer").order("day",{ascending:true}).limit(1000)),
-    ok(db.from("galaxy_bond").select("type,author,data,created").order("created",{ascending:true}).limit(1000)),
-    ok(db.from("galaxy_places").select("owner,name,kind,latitude,longitude,note,created_at").order("created_at",{ascending:true}).limit(500))
-  ]);
-  const backupSettings=structuredClone(settings?.data||{});
-  delete backupSettings.presence;
-  return json({
-    schema:1,
-    exportedAt:new Date().toISOString(),
-    settings:backupSettings,
-    items:(items||[]).map((x:any)=>({kind:x.kind,data:x.data||{},author:String(x.author),created:x.created})),
-    daily:daily||[],
-    bond:(bond||[]).map((x:any)=>({type:x.type,author:String(x.author),data:backupBondData(x),created:x.created})),
-    places:places||[]
-  });
-}
-
-async function backupImport(req:Request,body:any){
-  await device(req);
-  const backup=body?.backup;
-  if(!backup||typeof backup!=="object"||Array.isArray(backup)||Number(backup.schema)!==1||JSON.stringify(backup).length>2_000_000)return json({error:"Copia de seguridad no válida."},400);
-  const itemsIn=Array.isArray(backup.items)?backup.items.slice(0,1000):[];
-  const dailyIn=Array.isArray(backup.daily)?backup.daily.slice(0,1000):[];
-  const bondIn=Array.isArray(backup.bond)?backup.bond.slice(0,1000):[];
-  const placesIn=Array.isArray(backup.places)?backup.places.slice(0,500):[];
-  let itemsAdded=0,dailyAdded=0,bondAdded=0,placesAdded=0;
-
-  if(backup.settings&&typeof backup.settings==="object"&&!Array.isArray(backup.settings)){
-    const row=await ok(db.from("galaxy_settings").select("*").eq("id",1).single());
-    const source=backup.settings||{},names=Array.isArray(source.names)?source.names.map((x:any)=>text(x,40)).slice(0,2):null;
-    const merged={...row.data};
-    if(names?.length===2&&names.every((x:string)=>!!x))merged.names=names;
-    if(!source.startDate||validDate(source.startDate))merged.startDate=text(source.startDate,10);
-    if("albumUrl" in source)merged.albumUrl=text(source.albumUrl,500);
-    await ok(db.from("galaxy_settings").update({data:merged}).eq("id",1));
-  }
-
-  const existingItems=await ok(db.from("galaxy_items").select("kind,data,author").limit(2000));
-  const itemKeys=new Set((existingItems||[]).map((x:any)=>x.kind+"|"+String(x.author)+"|"+JSON.stringify(x.data||{})));
-  for(const row of itemsIn){
-    try{
-      const kind=String(row?.kind||""),author=["0","1"].includes(String(row?.author))?String(row.author):"0",data=cleanItem(kind,row?.data);
-      const key=kind+"|"+author+"|"+JSON.stringify(data);
-      if(itemKeys.has(key))continue;
-      await ok(db.from("galaxy_items").insert({kind,data,author}));
-      itemKeys.add(key);itemsAdded++;
-    }catch{}
-  }
-
-  for(const row of dailyIn){
-    try{
-      const day=String(row?.day||""),person=String(row?.person||""),mood=String(row?.mood||""),answer=text(row?.answer,3000);
-      if(!validDate(day)||!["0","1"].includes(person))continue;
-      const payload:any={day,person};
-      if(["feliz","tranquilo","cansado","sensible","abrazo"].includes(mood))payload.mood=mood;
-      if(answer)payload.answer=answer;
-      await ok(db.from("galaxy_daily").upsert(payload,{onConflict:"day,person"}));dailyAdded++;
-    }catch{}
-  }
-
-  const existingBond=await ok(db.from("galaxy_bond").select("type,author,data").limit(2000));
-  const bondKeys=new Set((existingBond||[]).map((x:any)=>x.type+"|"+String(x.author)+"|"+JSON.stringify(x.data||{})));
-  for(const row of bondIn){
-    try{
-      const type=String(row?.type||""),author=["0","1"].includes(String(row?.author))?String(row.author):"0",data=validateBond(type,row?.data);
-      if(type==="voice"){
-        const test=await signed("galaxy-voice",data.audioPath,30);if(!test)continue;
-      }
-      const key=type+"|"+author+"|"+JSON.stringify(data);
-      if(bondKeys.has(key))continue;
-      await ok(db.from("galaxy_bond").insert({type,author,data}));
-      bondKeys.add(key);bondAdded++;
-    }catch{}
-  }
-
-  const existingPlaces=await ok(db.from("galaxy_places").select("owner,name,kind,latitude,longitude").limit(1000));
-  const placeKeys=new Set((existingPlaces||[]).map((x:any)=>String(x.owner)+"|"+x.name+"|"+Number(x.latitude).toFixed(5)+"|"+Number(x.longitude).toFixed(5)));
-  for(const row of placesIn){
-    try{
-      const owner=["0","1"].includes(String(row?.owner))?String(row.owner):"0",name=text(row?.name,80),kind=String(row?.kind||"memory"),lat=Number(row?.latitude),lon=Number(row?.longitude),note=text(row?.note,300);
-      if(!name||!["home","work","memory","adventure"].includes(kind)||!Number.isFinite(lat)||!Number.isFinite(lon)||lat<-90||lat>90||lon<-180||lon>180)continue;
-      const key=owner+"|"+name+"|"+lat.toFixed(5)+"|"+lon.toFixed(5);
-      if(placeKeys.has(key))continue;
-      await ok(db.from("galaxy_places").insert({owner,name,kind,latitude:lat,longitude:lon,note:note||null}));
-      placeKeys.add(key);placesAdded++;
-    }catch{}
-  }
-  return json({ok:true,restored:{items:itemsAdded,daily:dailyAdded,bond:bondAdded,places:placesAdded}});
-}
-
 async function dailySave(req:Request,body:any){
   const d=await device(req),field=String(body.field||""),value=text(body.value,3000),day=today();
   if(field==="mood"){
@@ -403,6 +335,86 @@ async function dailySave(req:Request,body:any){
   }else return json({error:"Campo no válido."},400);
   await recordParticipation(String(d.person));
   return json({ok:true});
+}
+
+async function presenceSet(req:Request,body:any){
+  const d=await device(req),person=String(d.person),current=(await ok(db.from("galaxy_presence").select("*").eq("person",person).limit(1)))?.[0]||{};
+  const patch:any={person,updated_at:new Date().toISOString()};
+  if(Object.hasOwn(body,"shareBattery"))patch.share_battery=!!body.shareBattery;
+  if(Object.hasOwn(body,"shareSong"))patch.share_song=!!body.shareSong;
+  if(Object.hasOwn(body,"battery")){
+    const battery=Number(body.battery);
+    if(Number.isFinite(battery))patch.battery=Math.max(0,Math.min(100,Math.round(battery)));
+  }
+  if(Object.hasOwn(body,"songTitle"))patch.song_title=text(body.songTitle,160)||null;
+  await ok(db.from("galaxy_presence").upsert({...current,...patch},{onConflict:"person"}));
+  return json({ok:true});
+}
+
+async function backupExport(req:Request){
+  await device(req);
+  const [settings,items,daily,bond,places]=await Promise.all([
+    ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
+    ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:true}).limit(2000)),
+    ok(db.from("galaxy_daily").select("day,person,mood,answer").order("day",{ascending:true}).limit(1000)),
+    ok(db.from("galaxy_bond").select("id,type,author,data,created").order("created",{ascending:true}).limit(2000)),
+    ok(db.from("galaxy_places").select("id,owner,name,kind,latitude,longitude,note,created_at").order("created_at",{ascending:true}).limit(500))
+  ]);
+  return json({format:"nuestra-galaxia-backup",version:1,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:items||[],daily:daily||[],bond:bond||[],places:places||[]});
+}
+
+function uuidish(v:unknown){return /^[0-9a-f-]{36}$/i.test(String(v||""));}
+
+async function backupRestore(req:Request,body:any){
+  await device(req);
+  const backup=body?.backup;
+  if(!backup||backup.format!=="nuestra-galaxia-backup"||Number(backup.version)!==1)return json({error:"La copia no pertenece a Nuestra Galaxia."},400);
+  const items=Array.isArray(backup.items)?backup.items.slice(0,2000):[];
+  const daily=Array.isArray(backup.daily)?backup.daily.slice(0,1000):[];
+  const bond=Array.isArray(backup.bond)?backup.bond.slice(0,2000):[];
+  const places=Array.isArray(backup.places)?backup.places.slice(0,500):[];
+  let restoredItems=0,restoredDaily=0,restoredBond=0,restoredPlaces=0;
+
+  if(backup.settings&&typeof backup.settings==="object"&&!Array.isArray(backup.settings)){
+    const current=await ok(db.from("galaxy_settings").select("data").eq("id",1).single());
+    const names=Array.isArray(backup.settings.names)?backup.settings.names.slice(0,2).map((x:any)=>text(x,40)):[];
+    const startDate=text(backup.settings.startDate,10),albumUrl=text(backup.settings.albumUrl,500);
+    const data={...(current?.data||{}),...(names.length===2?{names}:{}),...(startDate&&validDate(startDate)?{startDate}:{}),albumUrl};
+    await ok(db.from("galaxy_settings").update({data}).eq("id",1));
+  }
+
+  for(const row of places){
+    const id=Number(row?.id),owner=String(row?.owner||""),name=text(row?.name,80),kind=String(row?.kind||"memory"),latitude=Number(row?.latitude),longitude=Number(row?.longitude);
+    if(!Number.isFinite(id)||!["0","1"].includes(owner)||!name||!["home","work","memory","adventure"].includes(kind)||!Number.isFinite(latitude)||!Number.isFinite(longitude))continue;
+    await ok(db.from("galaxy_places").upsert({id,owner,name,kind,latitude,longitude,note:text(row?.note,300)||null},{onConflict:"id",ignoreDuplicates:true}));
+    restoredPlaces++;
+  }
+
+  for(const row of items){
+    const id=String(row?.id||""),kind=String(row?.kind||""),author=String(row?.author||"");
+    if(!uuidish(id)||!allowedKinds.has(kind)||!["0","1"].includes(author))continue;
+    let data;try{data=cleanItem(kind,row.data);}catch{continue;}
+    await ok(db.from("galaxy_items").upsert({id,kind,data,author,created:row.created||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
+    restoredItems++;
+  }
+
+  for(const row of daily){
+    const day=String(row?.day||""),person=String(row?.person||""),mood=text(row?.mood,30),answer=text(row?.answer,3000);
+    if(!validDate(day)||!["0","1"].includes(person))continue;
+    const value:any={day,person};
+    if(["feliz","tranquilo","cansado","sensible","abrazo"].includes(mood))value.mood=mood;
+    if(answer)value.answer=answer;
+    if(Object.keys(value).length>2){await ok(db.from("galaxy_daily").upsert(value,{onConflict:"day,person",ignoreDuplicates:true}));restoredDaily++;}
+  }
+
+  for(const row of bond){
+    const id=String(row?.id||""),type=String(row?.type||""),author=String(row?.author||"");
+    if(!uuidish(id)||!["0","1"].includes(author))continue;
+    let data;try{data=validateBond(type,row.data);}catch{continue;}
+    await ok(db.from("galaxy_bond").upsert({id,type,author,data,created:row.created||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
+    restoredBond++;
+  }
+  return json({ok:true,restored:{items:restoredItems,daily:restoredDaily,bond:restoredBond,places:restoredPlaces}});
 }
 
 async function recordParticipation(person:string){
@@ -445,7 +457,7 @@ async function validateVoice(person:string,payload:any){
   if(!test)throw new Error("Audio no encontrado");
   if(payload.referenceId){
     const item=(await ok(db.from("galaxy_items").select("kind,data").eq("id",payload.referenceId).limit(1)))?.[0];
-    if(!item||!["memory","song","capsule"].includes(item.kind))throw new Error("Referencia no válida");
+    if(!item||!["memory","song","capsule","journey","note"].includes(item.kind)||item.kind==="note"&&!item.data?.surprise)throw new Error("Referencia no válida");
     if(item.kind==="capsule"&&String(item.data?.date||"")>today())throw new Error("La cápsula aún está cerrada");
   }
 }
@@ -674,28 +686,20 @@ async function upload(req:Request){
 async function moments(req:Request){
   const d=await device(req);
   if(!["0","1"].includes(String(d.person)))return json({error:"Dispositivo no válido"},401);
-  const partner=String(d.person)==="0"?"1":"0";
-  const [settings,events,config,gestures,daily,locations]=await Promise.all([
+  const [settings,events,config,gestures,daily,locations,presence,songs]=await Promise.all([
     ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
     ok(db.from("galaxy_items").select("id,data").eq("kind","event")),
     ok(db.from("galaxy_bond_config").select("photo_path").eq("id",1).maybeSingle()),
     ok(db.from("galaxy_bond").select("id,author,created,data").eq("type","gesture").neq("author",d.person).gte("created",new Date(Date.now()-7*86400000).toISOString()).order("created",{ascending:false}).limit(30)),
     ok(db.from("galaxy_daily").select("person,mood").eq("day",today())),
-    ok(db.from("galaxy_locations").select("person,sharing,motion,speed,status,updated_at"))
+    ok(db.from("galaxy_locations").select("person,sharing,motion,status").order("person")),
+    ok(db.from("galaxy_presence").select("*").order("person")),
+    ok(db.from("galaxy_items").select("data,created").eq("kind","song").order("created",{ascending:false}).limit(1))
   ]);
   const names=(Array.isArray(settings?.data?.names)?settings.data.names:["Nosotros","Dos"]).slice(0,2).map((name:unknown)=>text(name,40));
   let photoUrl=null;if(config?.photo_path)photoUrl=await signed("galaxy-photos",config.photo_path,300);
-  const pDaily=(daily||[]).find((x:any)=>String(x.person)===partner)||{},pLoc=(locations||[]).find((x:any)=>String(x.person)===partner)||{},pPresence=settings?.data?.presence?.[partner]||{};
-  const now={
-    mood:pDaily.mood||null,
-    sharing:!!pLoc.sharing,
-    motion:pLoc.sharing?pLoc.motion||null:null,
-    speed:pLoc.sharing?Number(pLoc.speed||0):null,
-    status:pLoc.sharing?text(pLoc.status,80):"",
-    battery:pPresence.shareBattery===true&&pPresence.battery!==null&&pPresence.battery!==undefined&&Number.isFinite(Number(pPresence.battery))?Number(pPresence.battery):null,
-    listening:pPresence.shareListening===true?text(pPresence.listening,180):"",
-    updatedAt:pPresence.updatedAt||pLoc.updated_at||null
-  };
+  const partner=String(d.person)==="0"?"1":"0",mood=(daily||[]).find((x:any)=>String(x.person)===partner)?.mood||null,loc=(locations||[]).find((x:any)=>String(x.person)===partner),p=(presence||[]).find((x:any)=>String(x.person)===partner);
+  const now={mood,motion:loc?.sharing?loc?.motion:null,status:loc?.sharing?loc?.status:null,battery:p?.share_battery?p?.battery:null,songTitle:p?.share_song?p?.song_title:null,latestSong:songs?.[0]?.data?.title||null};
   return json({names,nextEvent:nextCalendarEvent(events||[],today()),photoUrl,now,gestures:(gestures||[]).filter((g:any)=>["hug","kiss","miss"].includes(g.data?.gesture)).map((g:any)=>({id:g.id,gesture:g.data.gesture,created:g.created,author:g.author}))});
 }
 
@@ -705,6 +709,9 @@ Deno.serve(async req=>{
     if(req.headers.get("x-mobile-action")==="upload")return await upload(req);
     const body=await req.json(),action=String(body.action||"");
     if(action==="pair")return await pair(body);
+    if(action==="pair-code-create")return await pairCodeCreate(req,body);
+    if(action==="profile-repair")return await profileRepair(req,body);
+    if(action==="device-revoke")return await deviceRevoke(req,body);
     if(action==="moments")return await moments(req);
     if(action==="gesture")return await gesture(req,body);
     if(action==="history")return await history(req,body);
@@ -716,7 +723,7 @@ Deno.serve(async req=>{
     if(action==="daily-save")return await dailySave(req,body);
     if(action==="presence-set")return await presenceSet(req,body);
     if(action==="backup-export")return await backupExport(req);
-    if(action==="backup-import")return await backupImport(req,body);
+    if(action==="backup-restore"||action==="backup-import")return await backupRestore(req,body);
     if(action==="bond-save")return await bondSave(req,body);
     if(action==="bond-update")return await bondUpdate(req,body);
     if(action==="bond-guess")return await bondGuess(req,body);
