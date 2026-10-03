@@ -250,8 +250,16 @@ function go(next){
  view=next;render();window.scrollTo(0,0);
  if(view==='map'&&hadMap)refreshMap({quiet:true,detail:false});
 }
+let nativeThemeSent='';
+function syncSystemTheme(themeState){
+ const active=themeState?.active||'daylight';
+ if(nativeThemeSent===active)return;
+ nativeThemeSent=active;
+ GalaxyNative.call('setSystemTheme',active).catch(()=>{nativeThemeSent='';});
+}
 function render(){
- window.GalaxyTheme?.applyTheme(window.GalaxyTheme.getChoice());
+ const themeState=window.GalaxyTheme?.applyTheme(window.GalaxyTheme.getChoice());
+ syncSystemTheme(themeState);
  renderNav();
  if(!native.paired){renderOnboarding();refreshIcons();return;}
  if(shouldShowAdriWelcome()){globalPlayer.className='global-player';renderAdriWelcome();refreshIcons();return;}
