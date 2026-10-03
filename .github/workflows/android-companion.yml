@@ -1,5 +1,5 @@
 name: Nuestra Galaxia Android
-# Release 2.1.1
+# Release 2.2.0
 on:
   pull_request:
     branches: [main]
@@ -56,7 +56,7 @@ jobs:
           gradle -p android assembleRelease -Pandroid.injected.signing.store.file="$PWD/android/release.keystore" -Pandroid.injected.signing.store.password="$STORE_PASSWORD" -Pandroid.injected.signing.key.alias="$KEY_ALIAS" -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
           cp android/app/build/outputs/apk/release/app-release.apk NuestraGalaxia.apk
           SHA=$(sha256sum NuestraGalaxia.apk | awk '{print $1}')
-          printf '{"versionCode":18,"versionName":"2.1.1","apkUrl":"https://github.com/Berserky/Galaxia-de-girasoles/releases/download/android-stable/NuestraGalaxia.apk","sha256":"%s","notes":"Nuestra Galaxia 2.1.1 corrige por completo la vinculación Sebas/Adri: perfiles visibles por teléfono, código específico para Adri, reparación del teléfono vinculado al perfil equivocado, administración y revocación de dispositivos, y compatibilidad de restauración de copias."}\n' "$SHA" > update.json
+          printf '{"versionCode":19,"versionName":"2.2.0","apkUrl":"https://github.com/Berserky/Galaxia-de-girasoles/releases/download/android-stable/NuestraGalaxia.apk","sha256":"%s","notes":"Nuestra Galaxia 2.2.0 Super Update: buscador universal, resumen mensual, Un día como hoy, estadísticas de encuentros, distancia y ETA, lugares frecuentes, privacidad GPS individual, temas estacionales, Google Photos Picker y carpeta compartida de Google Drive."}\n' "$SHA" > update.json
       - name: Publicar canal estable
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env: { GH_TOKEN: "${{ github.token }}" }
