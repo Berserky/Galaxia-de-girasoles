@@ -536,6 +536,12 @@ async function gesture(req:Request,body:any){
 
 function meters(lat1:number,lon1:number,lat2:number,lon2:number){if(![lat1,lon1,lat2,lon2].every(Number.isFinite))return Infinity;const R=6371000,p=Math.PI/180,dLat=(lat2-lat1)*p,dLon=(lon2-lon1)*p,a=Math.sin(dLat/2)**2+Math.cos(lat1*p)*Math.cos(lat2*p)*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(a));}
 
+function bogotaDay(value:unknown){
+  const date=new Date(String(value||""));
+  if(!Number.isFinite(date.getTime()))return"";
+  return new Intl.DateTimeFormat("en-CA",{timeZone:"America/Bogota",year:"numeric",month:"2-digit",day:"2-digit"}).format(date);
+}
+
 function insightMetricSnapshot(summary:any){
   return {
     memories:Number(summary?.counts?.memories||0),
@@ -561,6 +567,36 @@ function jointParticipationDays(rows:any[]){
   for(const row of rows||[]){const day=String(row.day||"");if(!day)continue;const people=days.get(day)||new Set<string>();people.add(String(row.person));days.set(day,people);}
   return [...days.values()].filter(people=>people.has("0")&&people.has("1")).length;
 }
+async function listInsightPhotoMetadata(){
+  const found:any[]=[];
+  for(const prefix of ["","0","1"]){
+    const {data,error}=await db.storage.from("galaxy-photos").list(prefix,{limit:100,sortBy:{column:"created_at",order:"desc"}});
+    if(error)continue;
+    for(const file of data||[]){
+      if(!file.id||file.name===".emptyFolderPlaceholder")continue;
+      const path=prefix?prefix+"/"+file.name:file.name;
+      found.push({
+        path,
+        name:file.name,
+        originalName:file.metadata?.originalName||file.metadata?.original_name||file.name,
+        mime:file.metadata?.mimetype||"",
+        size:file.metadata?.size||0,
+        created:file.created_at||file.updated_at||null
+      });
+    }
+  }
+  return found;
+}
+async function signInsightPhotos(rows:any[]){
+  const signedRows:any[]=[];
+  for(const row of rows||[]){
+    if(!row?.path)continue;
+    const url=await signed("galaxy-photos",String(row.path),1800);
+    if(url)signedRows.push({...row,url});
+  }
+  return signedRows;
+}
+
 async function buildInsights(req:Request,options:any){
   const d=await device(req),person=String(d.person),day=today();
   const settings=await ok(db.from("galaxy_settings").select("data").eq("id",1).single());
@@ -580,10 +616,11 @@ async function buildInsights(req:Request,options:any){
     ok(db.from("galaxy_bond_participation").select("day,person").order("day",{ascending:true}).limit(10000)),
     ok(db.from("galaxy_place_events").select("id,person,place_id,event,happened_at").gte("happened_at",rangeStart).lt("happened_at",rangeEnd).order("happened_at",{ascending:true}).limit(5000)),
     ok(db.from("galaxy_places").select("id,name").limit(1000)),
-    listBucket("galaxy-photos")
+    listInsightPhotoMetadata()
   ]);
   const nowMs=Date.now(),source={items:items||[],trips:trips||[],encounters:encounters||[],daily:daily||[],bond:bond||[],participation:participation||[],placeEvents:placeEvents||[],places:places||[],photos:photos||[],person,nowMs};
   const current=aggregateInsightRows({...source,period});
+  current.photos=await signInsightPhotos(current.photos||[]);
   const prior=previous?aggregateInsightRows({...source,period:previous}):null;
   const visibleAll=(items||[]).filter((row:any)=>isInsightVisibleItem(row,person,day));
   const achievements=evaluateAchievements({
