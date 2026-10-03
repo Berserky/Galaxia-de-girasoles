@@ -109,26 +109,35 @@ test('gesture uses authorized device identity and rejects unknown gesture before
  assert.equal(insert.args[0].data.gesture,'hug');
 });
 
-test('moments projects only names, event, private signed photo and partner gestures',async()=>{
+test('moments projects private widget context plus event photo and partner gestures',async()=>{
  const server=endpoint({
   galaxy_devices:[{id:'device',person:'0',name:'Android'}],
   galaxy_settings:{data:{names:['Uno','Dos'],albumUrl:'secret'}},
-  galaxy_items:[{id:'event',data:{title:'Fecha',date:'2090-01-01',body:'secret'}}],
+  galaxy_items:[{id:'event',kind:'event',created:'2026-10-01',data:{title:'Fecha',date:'2090-01-01',body:'secret'}}],
   galaxy_bond_config:{photo_path:'album/photo.jpg'},
   galaxy_bond:[
    {id:'gesture',author:'1',created:'2026-10-02',data:{gesture:'hug',answer:'secret'}},
    {id:'game',author:'1',created:'2026-10-02',data:{answer:'hidden'}}
-  ]
+  ],
+  galaxy_daily:[{person:'1',mood:'feliz'}],
+  galaxy_locations:[{person:'1',sharing:true,motion:'walking',status:'De camino'}],
+  galaxy_presence:[{person:'1',share_battery:false,battery:75,share_song:false,song_title:'secret'}]
  });
  const response=await server.request({action:'moments'},'b'.repeat(64));
  assert.equal(response.status,200);
  const output=await response.json();
- assert.deepEqual(Object.keys(output).sort(),['gestures','names','nextEvent','photoUrl']);
+ assert.deepEqual(Object.keys(output).sort(),['gestures','names','nextEvent','now','photoUrl']);
  assert.equal(output.gestures.length,1);
+ assert.equal(output.now.mood,'feliz');
+ assert.equal(output.now.motion,'walking');
+ assert.equal(output.now.battery,null);
+ assert.equal(output.now.songTitle,null);
  assert.equal(JSON.stringify(output).includes('secret'),false);
  assert.ok(server.calls.some(x=>x.table==='galaxy_bond'&&x.key==='neq'&&x.args[0]==='author'&&x.args[1]==='0'));
  assert.ok(server.calls.some(x=>x.table==='galaxy_bond'&&x.key==='limit'&&x.args[0]===30));
- assert.equal(server.calls.some(x=>x.table?.includes('location')||x.table?.includes('daily')),false);
+ assert.ok(server.calls.some(x=>x.table==='galaxy_daily'));
+ assert.ok(server.calls.some(x=>x.table==='galaxy_locations'));
+ assert.ok(server.calls.some(x=>x.table==='galaxy_presence'));
 });
 
 test('light map refresh avoids historical tables',async()=>{
