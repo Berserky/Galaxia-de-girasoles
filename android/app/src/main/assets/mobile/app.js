@@ -230,7 +230,7 @@ function render(){
  if(view==='home')app.innerHTML=header()+homeView();
  if(view==='map'){app.innerHTML=header()+mapView();setTimeout(()=>{drawMap();if(!mapData)refreshMap({detail:true});},0);}
  if(view==='moments')app.innerHTML=header()+momentsView();
- if(view==='memories'){app.innerHTML=header()+memoriesView();if((memoryTab==='album'&&!mediaFresh('photo'))||(memoryTab==='music'&&!mediaFresh('music')))setTimeout(()=>loadMedia(memoryTab==='album'?'photo':'music').catch(e=>toast(e.message)),0);}
+ if(view==='memories'){app.innerHTML=header()+memoriesView();if(((memoryTab==='album'||memoryTab==='memory')&&!mediaFresh('photo'))||(memoryTab==='music'&&!mediaFresh('music')))setTimeout(()=>loadMedia(memoryTab==='music'?'music':'photo').catch(e=>toast(e.message)),0);}
  if(view==='more')app.innerHTML=header()+moreView();
  refreshIcons();
  renderGlobalPlayer();
@@ -347,8 +347,12 @@ function itemCard(i){
  return '<div class="card item"><div class="item-icon">'+ico(meta[0])+'</div><div class="item-main"><div class="meta">'+esc(date)+esc(done)+'</div><h3>'+esc(d.title||meta[1])+'</h3>'+(d.body?'<p>'+esc(d.body)+'</p>':'')+(d.placeName?'<p class="place-link">'+ico('map-pin')+' '+esc(d.placeName)+'</p>':'')+(voices.length?'<div class="stack" style="margin-top:10px">'+voices.map(voiceCard).join('')+'</div>':'')+'<div class="item-actions">'+(['memory','capsule','journey'].includes(i.kind)?'<button class="btn small secondary" data-action="voice-for-item" data-id="'+i.id+'">'+ico('mic')+' Añadir voz</button>':'')+'<button class="btn small secondary" data-action="item-edit" data-id="'+i.id+'">Editar</button><button class="btn small ghost" data-action="item-delete" data-id="'+i.id+'">Eliminar</button></div></div></div>';
 }
 function storyTimeline(){
- const entries=(cloud?.items||[]).filter(x=>['memory','journey','event','capsule','song'].includes(x.kind)).filter(x=>x.kind!=='capsule'||String(x.data?.date||'')<=String(cloud.today||'')).slice().sort((a,b)=>String(b.data?.date||b.created).localeCompare(String(a.data?.date||a.created))).slice(0,12);
- return '<section class="section"><div class="section-head"><div><h2>Nuestra historia</h2><p>Recuerdos, viajes, fechas, canciones y cápsulas abiertas en una sola línea del tiempo.</p></div></div><div class="timeline">'+(entries.length?entries.map(itemCard).join(''):'<div class="empty">La historia irá apareciendo aquí a medida que guarden momentos.</div>')+'</div></section>';
+ const content=(cloud?.items||[]).filter(x=>['memory','journey','event','capsule','song'].includes(x.kind)).filter(x=>x.kind!=='capsule'||String(x.data?.date||'')<=String(cloud.today||'')).map(i=>({type:'item',date:i.data?.date||i.created,value:i}));
+ const photos=(media.photo||[]).slice(0,8).map(p=>({type:'photo',date:p.created||'',value:p}));
+ const start=cloud?.settings?.data?.startDate?[{type:'start',date:cloud.settings.data.startDate,value:{}}]:[];
+ const entries=[...content,...photos,...start].sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,16);
+ const renderEntry=e=>e.type==='item'?itemCard(e.value):e.type==='photo'?'<div class="card item timeline-photo"><div class="item-icon">'+ico('image')+'</div><div class="item-main"><div class="meta">'+esc(fmtDateTime(e.date))+'</div><h3>Una foto de ustedes</h3><img loading="lazy" src="'+attr(e.value.url)+'" alt="Foto dentro de nuestra historia"></div></div>':'<div class="card item relationship-start"><div class="item-icon">'+ico('heart')+'</div><div class="item-main"><div class="meta">'+esc(fmtDate(e.date))+'</div><h3>Aquí empezó lo de ustedes</h3><p>El primer día de los '+coupleDays()+' que la galaxia cuenta hasta hoy.</p></div></div>';
+ return '<section class="section"><div class="section-head"><div><h2>Nuestra historia</h2><p>Recuerdos, viajes, fechas, canciones, cápsulas, fotos y el inicio de ustedes en una sola línea del tiempo.</p></div></div><div class="timeline">'+(entries.length?entries.map(renderEntry).join(''):'<div class="empty">La historia irá apareciendo aquí a medida que guarden momentos.</div>')+'</div></section>';
 }
 function albumView(){
  const list=media.photo;
