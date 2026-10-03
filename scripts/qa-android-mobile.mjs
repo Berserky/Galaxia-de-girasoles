@@ -224,7 +224,7 @@ assert.ok(updater.includes('BuildConfig.APPLICATION_ID.equals(info.packageName)'
 assert.ok(updater.includes('version<=BuildConfig.VERSION_CODE'),'El updater debe rechazar APK no superior');
 assert.ok(updater.includes('resumePendingInstall'),'El updater debe retomar la instalación tras conceder permisos');
 assert.ok(updater.includes('MAX_APK_BYTES'),'El updater debe limitar el tamaño de descarga');
-assert.ok(widget.includes('widgetNow')&&widget.includes('nowText'),'El widget debe mostrar el estado Ahora');
+assert.ok(widget.includes('widgetModules')&&widget.includes('moduleValue')&&widget.includes('"mood"'),'El Widget 2.0 debe conservar el estado Ahora mediante módulos dinámicos');
 assert.ok(edge.includes('p.share_battery?p.battery:null')&&edge.includes('p.share_song?text(p.song_title,160):""'),'El widget no debe exponer batería o música sin opt-in');
 assert.ok(edge.includes('sharing:!!loc?.sharing')&&edge.includes('listening'),'El widget debe conservar el contrato sharing/listening');
 
