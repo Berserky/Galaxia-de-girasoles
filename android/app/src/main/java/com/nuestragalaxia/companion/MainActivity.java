@@ -270,7 +270,7 @@ public final class MainActivity extends ComponentActivity {
     }
 
     void discardVoiceRecording(String requestId){
-        runOnUiThread(()->{cleanupVoice(true);resolve(requestId,new JSONObject().put("ready",false));});
+        runOnUiThread(()->{cleanupVoice(true);try{resolve(requestId,new JSONObject().put("ready",false));}catch(Exception e){reject(requestId,"No pudimos descartar la grabación.");}});
     }
 
     void saveVoiceRecording(String requestId){
