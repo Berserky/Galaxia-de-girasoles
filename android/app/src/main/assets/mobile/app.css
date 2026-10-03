@@ -694,3 +694,55 @@ html:not([data-theme="daylight"]) .gmap-attrib{backdrop-filter:blur(6px)}
 .notification-health span{display:inline-flex;align-items:center;gap:5px;padding:6px 9px;border-radius:999px;background:var(--surface2);color:var(--muted);font-size:10px}
 .notification-health span.good{background:var(--good-surface);color:var(--good)}
 @media(prefers-reduced-motion:reduce){#app>section{animation:none}}
+
+
+/* Mega Update 3.0 · Galaxy Insights Engine */
+.relationship-clock{display:grid;grid-template-columns:48px minmax(0,1fr);gap:13px;align-items:center}
+.relationship-clock-icon{width:48px;height:48px;border-radius:16px;display:grid;place-items:center;background:var(--surface2);color:var(--accent)}
+.relationship-clock h3,.relationship-clock p{margin:2px 0}
+.insights-teaser-grid{display:grid;grid-template-columns:1fr;gap:9px}
+.insight-period-card{width:100%;display:grid;grid-template-columns:44px minmax(0,1fr) 18px;gap:12px;align-items:center;text-align:left;color:var(--text)}
+.insight-period-card>span:first-child{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:var(--surface2);color:var(--accent)}
+.insight-period-card>span:nth-child(2){min-width:0}
+.insight-period-card h3,.insight-period-card p{margin:2px 0}
+.insight-period-card>.ui-icon{width:16px;height:16px;color:var(--muted)}
+.insights-summary{padding-top:4px}
+.insights-nav{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;gap:10px;align-items:center;text-align:center}
+.insights-nav h2,.insights-nav p{margin:2px 0}.insights-nav .btn{min-width:42px;padding:8px}.insights-nav .btn:disabled{opacity:.28}
+.insights-hero{margin-top:18px;padding:17px;border-radius:20px;background:color-mix(in srgb,var(--accent) 10%,var(--surface));display:flex;gap:12px;align-items:center}
+.insights-hero>span{width:43px;height:43px;border-radius:14px;background:var(--surface);display:grid;place-items:center;color:var(--accent);flex:0 0 auto}
+.insights-hero b{display:block;font-size:15px}.insights-hero p{margin:3px 0 0}
+.insights-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:12px}
+.insights-metric{min-height:116px;border:1px solid var(--border);border-radius:18px;background:var(--surface);padding:14px;display:flex;flex-direction:column;align-items:flex-start}
+.insights-metric>span{width:34px;height:34px;border-radius:12px;background:var(--surface2);display:grid;place-items:center;color:var(--accent);margin-bottom:10px}
+.insights-metric>span .ui-icon{width:17px;height:17px}.insights-metric b{font-size:21px;line-height:1}
+.insights-metric small{font-size:11px;color:var(--muted);margin-top:5px}.insights-metric em{font-style:normal;font-size:9px;color:var(--muted);margin-top:3px}
+.insight-comparison,.insight-trends,.insights-places{margin-top:12px}.insight-comparison ul,.insight-trends ul{margin:10px 0 0;padding-left:19px;color:var(--muted);display:grid;gap:6px}
+.insight-chip-row{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.insight-chip-row span{display:inline-flex;gap:5px;align-items:center;border:1px solid var(--border);border-radius:999px;padding:7px 9px;background:var(--surface2);font-size:10px;color:var(--muted)}
+.insight-chip-row .ui-icon{width:13px;height:13px;color:var(--accent)}
+.insights-highlights,.insight-photos,.insights-emotions,.insights-achievements{margin-top:20px}
+.insight-photos .gallery{margin-top:10px}
+.emotion-legend{display:flex;gap:12px;flex-wrap:wrap;margin:10px 0}.emotion-legend span{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--muted)}.emotion-legend i{width:9px;height:9px;border-radius:50%;background:var(--accent)}
+.emotion-legend span:nth-child(2) i{background:var(--good)}
+.emotion-heatmap{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
+.emotion-day{min-width:0;border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:6px 4px;display:grid;grid-template-columns:1fr 1fr;gap:3px;text-align:center}
+.emotion-day time{grid-column:1/-1;font-size:9px;color:var(--muted)}
+.emotion-person{min-height:25px;border-radius:8px;display:grid;place-items:center;background:var(--surface2);color:var(--muted)}
+.emotion-person[data-mood="feliz"],.emotion-person[data-mood="tranquilo"]{background:color-mix(in srgb,var(--good) 13%,var(--surface));color:var(--good)}
+.emotion-person[data-mood="sensible"],.emotion-person[data-mood="abrazo"]{background:color-mix(in srgb,var(--accent) 13%,var(--surface));color:var(--accent)}
+.emotion-person[data-mood="cansado"]{background:color-mix(in srgb,var(--muted) 13%,var(--surface));color:var(--muted)}
+.emotion-person .ui-icon{width:13px;height:13px}
+.achievement-grid{display:grid;grid-template-columns:1fr;gap:8px}
+.achievement-card{border:1px solid var(--border);border-radius:17px;background:var(--surface);padding:12px;display:grid;grid-template-columns:38px minmax(0,1fr);gap:10px;align-items:start;opacity:.7}
+.achievement-card.unlocked{opacity:1;border-color:color-mix(in srgb,var(--accent) 30%,var(--border))}
+.achievement-card>span{width:38px;height:38px;border-radius:12px;background:var(--surface2);display:grid;place-items:center;color:var(--accent)}
+.achievement-card b{font-size:12px}.achievement-card p{font-size:10px;margin:3px 0 8px}
+.achievement-progress{height:5px;border-radius:999px;background:var(--surface2);overflow:hidden}.achievement-progress i{display:block;height:100%;background:var(--accent);border-radius:inherit}
+.wrapped-deck{display:grid;grid-auto-flow:column;grid-auto-columns:min(84vw,330px);gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:12px 1px 5px;margin-top:8px}
+.wrapped-card{min-height:190px;border:1px solid var(--border);border-radius:24px;padding:22px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 14%,var(--surface)),var(--surface));scroll-snap-align:center;display:flex;flex-direction:column;justify-content:flex-end;animation:wrappedRise .45s ease both}
+.wrapped-card:nth-child(2){animation-delay:.06s}.wrapped-card:nth-child(3){animation-delay:.12s}.wrapped-card:nth-child(4){animation-delay:.18s}
+.wrapped-card h2{font-size:30px;margin:5px 0}.wrapped-card p{margin:3px 0}
+@keyframes wrappedRise{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+@media(max-width:360px){.insights-metrics{grid-template-columns:1fr}.insights-metric{min-height:96px}.emotion-heatmap{gap:3px}.emotion-day{padding:5px 2px}}
+@media(min-width:700px){.insights-teaser-grid{grid-template-columns:repeat(3,1fr)}.achievement-grid{grid-template-columns:repeat(2,1fr)}}
+@media(prefers-reduced-motion:reduce){.wrapped-card{animation:none}.wrapped-deck{scroll-behavior:auto}}
