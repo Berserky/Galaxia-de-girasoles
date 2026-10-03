@@ -58,8 +58,16 @@ public final class GalaxyBridge {
         activity.setMomentNotifications(requestId,enabled);
     }
 
+    @JavascriptInterface public void testMomentNotification(String requestId){
+        activity.testMomentNotification(requestId);
+    }
+
     @JavascriptInterface public void addWidget(String requestId){
         activity.addWidget(requestId);
+    }
+
+    @JavascriptInterface public void setSystemTheme(String requestId,String theme){
+        activity.setSystemTheme(requestId,theme);
     }
 
     @JavascriptInterface public void openAppSettings(String requestId){

@@ -6,12 +6,14 @@ import android.appwidget.AppWidgetManager;
 import android.content.*;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.graphics.Color;
 import android.net.Uri;
 import android.media.MediaPlayer;
 import android.media.MediaRecorder;
 import android.os.*;
 import android.provider.DocumentsContract;
 import android.provider.Settings;
+import android.view.View;
 import android.webkit.*;
 import android.widget.Toast;
 import androidx.activity.ComponentActivity;
@@ -152,6 +154,7 @@ public final class MainActivity extends ComponentActivity {
             state.put("tracking",paired&&store.tracking());
             state.put("momentNotifications",new BondStore(this).enabled());
             state.put("notificationsGranted",Build.VERSION.SDK_INT<33||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED);
+            state.put("notificationsEnabled",BondWorker.notificationsAllowed(this));
             state.put("locationGranted",checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED);
             state.put("backgroundLocationGranted",Build.VERSION.SDK_INT<29||checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION)==PackageManager.PERMISSION_GRANTED);
             state.put("canPinWidget",Build.VERSION.SDK_INT>=26&&getSystemService(AppWidgetManager.class).isRequestPinAppWidgetSupported());
@@ -608,11 +611,22 @@ public final class MainActivity extends ComponentActivity {
 
     private void applyMomentNotifications(String requestId,boolean enabled){
         new BondStore(this).enabled(enabled);
+        if(enabled)BondWorker.prepareNotifications(this);
         io.execute(()->{
             try{BondWorker.schedule(getApplicationContext());if(enabled)BondWorker.refresh(getApplicationContext());}catch(Exception ignored){}
         });
         resolve(requestId,nativeState());
         nativeChanged();
+    }
+
+    void testMomentNotification(String requestId){
+        runOnUiThread(()->{
+            if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+            if(!new BondStore(this).enabled()){reject(requestId,"Activa primero las notificaciones de momentos.");return;}
+            if(!BondWorker.notificationsAllowed(this)){reject(requestId,"Android está bloqueando las notificaciones. Ábrelas desde Ajustes del sistema.");return;}
+            try{BondWorker.testNotification(this);resolve(requestId,new JSONObject().put("sent",true));}
+            catch(Exception e){reject(requestId,"Android no pudo mostrar la notificación de prueba.");}
+        });
     }
 
     void addWidget(String requestId){
@@ -626,6 +640,31 @@ public final class MainActivity extends ComponentActivity {
             }else{
                 reject(requestId,"Mantén pulsado el escritorio y elige Widgets → Nuestra Galaxia.");
             }
+        });
+    }
+
+    void setSystemTheme(String requestId,String theme){
+        runOnUiThread(()->{
+            try{
+                String key=theme==null?"daylight":theme;
+                String hex=switch(key){
+                    case "cosmic" -> "#10101D";
+                    case "halloween" -> "#100913";
+                    case "christmas" -> "#071510";
+                    case "valentine" -> "#180810";
+                    case "friendship" -> "#120B22";
+                    case "easter" -> "#11162C";
+                    default -> "#F7F6FA";
+                };
+                boolean light="daylight".equals(key);
+                getWindow().setStatusBarColor(Color.parseColor(hex));
+                getWindow().setNavigationBarColor(Color.parseColor(hex));
+                int flags=getWindow().getDecorView().getSystemUiVisibility();
+                if(light)flags|=View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                else flags&=~(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+                getWindow().getDecorView().setSystemUiVisibility(flags);
+                resolve(requestId,new JSONObject().put("theme",key));
+            }catch(Exception e){reject(requestId,"No pudimos sincronizar el tema con Android.");}
         });
     }
 

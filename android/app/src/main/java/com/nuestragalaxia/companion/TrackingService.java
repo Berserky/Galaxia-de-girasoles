@@ -20,7 +20,7 @@ public final class TrackingService extends Service {
     private MotionClassifier classifier;
     private PendingPointStore pending;
     private DeviceStore store;
-    private long lastHistory=0,lastTrip=0;
+    private long lastHistory=0,lastTrip=0,lastMoments=0;
 
     @Override public void onCreate(){
         super.onCreate(); fused=LocationServices.getFusedLocationProviderClient(this); classifier=new MotionClassifier(); pending=new PendingPointStore(this); store=new DeviceStore(this); createChannel();
@@ -64,6 +64,7 @@ public final class TrackingService extends Service {
         long now=System.currentTimeMillis(),historyEvery="still".equals(m.motion)?60000:15000;
         boolean history=now-lastHistory>=historyEvery,tripPoint=now-lastTrip>=15000;
         if(history)lastHistory=now;if(tripPoint)lastTrip=now;
+        if(now-lastMoments>=120000&&new BondStore(this).enabled()){lastMoments=now;BondWorker.refresh(getApplicationContext());}
         double heading=loc.hasBearing()?loc.getBearing():-1,accuracy=loc.hasAccuracy()?loc.getAccuracy():-1;
         String captured=Instant.ofEpochMilli(loc.getTime()>0?loc.getTime():now).toString(),sampleId=UUID.randomUUID().toString();
         updateNotification(label(m.motion,m.speedMs,pending.count()));
