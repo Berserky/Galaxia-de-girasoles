@@ -839,3 +839,20 @@ html:not([data-theme="daylight"]) .gmap-attrib{backdrop-filter:blur(6px)}
 @keyframes gardenSway{from{rotate:-2deg}to{rotate:2deg}}
 @media(min-width:700px){.bond-gesture-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.bond-garden{display:grid;grid-template-columns:minmax(260px,.9fr) 1.1fr}.bond-garden-scene{min-height:100%;border-bottom:0;border-right:1px solid var(--border)}}
 @media(prefers-reduced-motion:reduce){.bond-garden-scene,.garden-flower,.garden-glow,.plan-roulette,.plan-roulette.result,.wrapped-card,.goal-progress i,.goal-card,.goal-step{animation:none!important;transition:none!important}.garden-flower{rotate:0deg}.wrapped-deck{scroll-behavior:auto}}
+
+
+/* Mega Update 3.0 · Galaxy Context Engine */
+.context-engine{display:grid;gap:12px}
+.context-controls{gap:10px}.context-controls .card{display:grid;gap:10px}.context-detail{font-size:11px;color:var(--muted);margin:0}
+.context-session{border:1px solid var(--border);background:var(--surface);border-radius:18px;padding:14px;display:grid;gap:10px}
+.context-session.empty-session{grid-template-columns:38px 1fr;align-items:center}.context-session.empty-session>span{width:38px;height:38px;border-radius:12px;background:var(--surface2);display:grid;place-items:center;color:var(--accent)}
+.context-session small{display:block;color:var(--muted);margin-top:2px}
+.context-progress{height:8px;border-radius:99px;background:var(--surface2);overflow:hidden}.context-progress i{display:block;height:100%;border-radius:inherit;background:var(--accent);transition:width .35s ease}
+.context-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.context-metrics span{padding:9px;border:1px solid var(--border);border-radius:13px;background:var(--surface2);text-align:center}.context-metrics b,.context-metrics small{display:block}.context-metrics b{font-size:14px}.context-metrics small{font-size:8px}
+.context-actions{gap:8px}.context-suggestions .stack{gap:9px}.context-suggestion{display:grid;grid-template-columns:40px minmax(0,1fr);gap:10px;align-items:start}.context-suggestion .item-actions{grid-column:1/-1}
+.context-suggestion .item-icon{width:40px;height:40px;border-radius:13px;background:var(--surface2);display:grid;place-items:center;color:var(--accent)}
+.context-recap{display:grid;gap:14px}.context-recap-hero{display:grid;grid-template-columns:46px 1fr;gap:10px;align-items:start}.context-recap-hero>span{width:46px;height:46px;border-radius:15px;background:var(--surface2);display:grid;place-items:center;color:var(--accent)}
+.context-recap-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.context-recap-grid span{padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--surface2);text-align:center}.context-recap-grid b,.context-recap-grid small{display:block}.context-recap-grid small{color:var(--muted);font-size:9px}
+.toggle-row{display:grid;grid-template-columns:22px 1fr;gap:10px;align-items:start;padding:10px;border:1px solid var(--border);border-radius:14px;background:var(--surface2)}.toggle-row input{margin-top:3px}.toggle-row b,.toggle-row small{display:block}.toggle-row small{color:var(--muted);margin-top:2px}
+@media(min-width:700px){.context-recap-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.context-suggestion{grid-template-columns:42px minmax(0,1fr) auto}.context-suggestion .item-actions{grid-column:auto}}
+@media(prefers-reduced-motion:reduce){.context-progress i{transition:none!important}}
