@@ -1116,13 +1116,13 @@ create table if not exists public.galaxy_context_suggestions (
  id uuid primary key default gen_random_uuid(),
  kind text not null check(kind in ('date','memory')),
  source_event_id uuid references public.galaxy_context_events(id) on delete cascade,
- person text check(person is null or person in ('0','1')),
+ person text not null check(person in ('0','1')),
  status text not null default 'pending' check(status in ('pending','accepted','dismissed')),
  payload jsonb not null default '{}'::jsonb check(jsonb_typeof(payload)='object' and octet_length(payload::text)<=16384),
  created_at timestamptz not null default now(),
  resolved_at timestamptz
 );
-create unique index if not exists galaxy_context_suggestions_source_kind_idx on public.galaxy_context_suggestions(source_event_id,kind) where source_event_id is not null;
+create unique index if not exists galaxy_context_suggestions_source_kind_person_idx on public.galaxy_context_suggestions(source_event_id,kind,person) where source_event_id is not null;
 create index if not exists galaxy_context_suggestions_status_idx on public.galaxy_context_suggestions(status,created_at desc);
 
 create table if not exists public.galaxy_shared_trips (
