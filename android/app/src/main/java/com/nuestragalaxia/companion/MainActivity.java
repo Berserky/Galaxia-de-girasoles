@@ -152,7 +152,7 @@ public final class MainActivity extends ComponentActivity {
             state.put("tracking",paired&&store.tracking());
             state.put("momentNotifications",new BondStore(this).enabled());
             state.put("notificationsGranted",Build.VERSION.SDK_INT<33||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED);
-            state.put("notificationsEnabled",getSystemService(NotificationManager.class).areNotificationsEnabled());
+            state.put("notificationsEnabled",BondWorker.notificationsAllowed(this));
             state.put("locationGranted",checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED);
             state.put("backgroundLocationGranted",Build.VERSION.SDK_INT<29||checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION)==PackageManager.PERMISSION_GRANTED);
             state.put("canPinWidget",Build.VERSION.SDK_INT>=26&&getSystemService(AppWidgetManager.class).isRequestPinAppWidgetSupported());
