@@ -6,6 +6,8 @@ import {stripTypeScriptTypes} from 'node:module';
 import {webcrypto} from 'node:crypto';
 
 const edge=readFileSync(new URL('../supabase/functions/android-companion/index.ts',import.meta.url),'utf8');
+const bondEngine=readFileSync(new URL('../supabase/functions/android-companion/bond-engine.ts',import.meta.url),'utf8');
+const pushEngine=readFileSync(new URL('../supabase/functions/android-companion/push-engine.ts',import.meta.url),'utf8');
 
 function endpoint(rows={}){
  let handler;
@@ -52,9 +54,18 @@ function endpoint(rows={}){
    upload:async()=>({data:null,error:null})
   };}}
  };
+ const loadModule=(source,names)=>{
+  const moduleContext={module:{exports:{}},exports:{},Intl,Date,Math,Set,Map,Object,Number,String,Array,JSON,TextEncoder,URL,URLSearchParams,fetch,crypto:webcrypto,btoa,atob};
+  const stripped=stripTypeScriptTypes(source.replace(/\bexport\s+/g,''));
+  vm.runInNewContext(stripped+'\n;module.exports={'+names.join(',')+'};',moduleContext);
+  return moduleContext.module.exports;
+ };
+ const bondApi=loadModule(bondEngine,['BUILTIN_GESTURES','computeBondProgress','gestureSnapshot','normalizeCustomGesture','resolveGesture']);
+ const pushApi=loadModule(pushEngine,['PUSH_EVENT_TYPES','sanitizePushPayload','sendFcmData']);
  const code=stripTypeScriptTypes(edge.replace(/^import .*;\r?\n/gm,''));
  const context={
   createClient:()=>db,
+  ...bondApi,...pushApi,
   Deno:{env:{get:key=>key==='SUPABASE_URL'?'https://test.supabase.co':key==='SUPABASE_SERVICE_ROLE_KEY'?'test-service-role':''},serve:fn=>{handler=fn;}},
   Response,TextEncoder,crypto:webcrypto,URL,console
  };
@@ -125,7 +136,10 @@ test('moments projects widget-safe partner state and respects presence privacy',
  const response=await server.request({action:'moments'},'b'.repeat(64));
  assert.equal(response.status,200);
  const output=await response.json();
- assert.deepEqual(Object.keys(output).sort(),['gestures','names','nextEvent','now','photoUrl']);
+ assert.deepEqual(Object.keys(output).sort(),['distanceM','etaMinutes','garden','gestures','names','nextEvent','nextPlan','now','photoUrl']);
+ assert.equal(output.distanceM,null);
+ assert.equal(output.etaMinutes,null);
+ assert.ok(output.garden&&Number.isFinite(output.garden.totalDays));
  assert.equal(output.gestures.length,1);
  assert.equal(output.now.mood,'feliz');
  assert.equal(output.now.sharing,true);
