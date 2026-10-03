@@ -311,8 +311,10 @@ async function bondGestureDelete(req:Request,body:any){
 }
 async function bondSendGesture(req:Request,body:any){
  const d=await device(req),person=String(d.person),id=String(body.gestureId||body.gesture||"");
- const custom=await ok(db.from("galaxy_bond_gestures").select("*").eq("enabled",true).limit(50));
- const definition=resolveGesture(id,custom||[]);
+ const builtin=resolveGesture(id,[]);
+ if(!builtin&&!uuidish(id))return json({error:"Gesto no válido."},400);
+ const custom=builtin?[]:await ok(db.from("galaxy_bond_gestures").select("*").eq("enabled",true).limit(50));
+ const definition=builtin||resolveGesture(id,custom||[]);
  if(!definition)return json({error:"Gesto no válido."},400);
  const recent=await ok(db.from("galaxy_bond").select("id").eq("author",person).eq("type","gesture").gt("created",new Date(Date.now()-60000).toISOString()).limit(20));
  if((recent?.length||0)>=20)return json({error:"Espera un momento antes de enviar otro gesto"},429);
