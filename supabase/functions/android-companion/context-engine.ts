@@ -71,6 +71,7 @@ export function emptyContextState(){
  return {
   version:1,
   near:{candidateSince:null,farSince:null,inside:false,lastEmittedAt:null},
+  nearProfiles:{},
   encounter:{nearSince:null,farSince:null,active:false,startedAt:null,lastBothSeenAt:null,longEmitted:false},
   people:{},
   places:{},
@@ -104,7 +105,7 @@ function coherentShared(a:any,b:any,distance:number){
 export function contextStep(previous:any,frame:any,config:any={}){
  const state=previous?clone(previous):emptyContextState(),events:any[]=[];
  state.version=1;state.people=state.people||{};state.places=state.places||{};state.destinations=state.destinations||{};
- state.near=state.near||emptyContextState().near;state.encounter=state.encounter||emptyContextState().encounter;state.shared=state.shared||emptyContextState().shared;
+ state.near=state.near||emptyContextState().near;state.nearProfiles=state.nearProfiles||{};state.encounter=state.encounter||emptyContextState().encounter;state.shared=state.shared||emptyContextState().shared;
  const atMs=toMs(frame?.at)||Date.now();
  const people=(frame?.people||[]).map((x:any)=>cleanSample(x,config)).filter(Boolean);
  const byPerson=new Map(people.map((x:any)=>[String(x.person),x]));
@@ -135,21 +136,30 @@ export function contextStep(previous:any,frame:any,config:any={}){
   const [a,b]=both as any[],distance=haversineM(a,b);
   state.encounter.lastBothSeenAt=iso(atMs);
 
-  // USER_NEAR_PARTNER: opt-in, stable entry, hysteresis and cooldown.
-  const nearDistance=Math.max(80,Math.min(5000,Number(config.nearDistanceM)||300));
-  if(config.nearEnabled===true&&distance<=nearDistance){
-   state.near.farSince=null;
-   if(!state.near.candidateSince)state.near.candidateSince=iso(atMs);
-   const stable=atMs-toMs(state.near.candidateSince)>=Math.max(10,Number(config.nearHoldS)||30)*1000;
-   const cooldown=Math.max(60,Number(config.nearCooldownS)||3600)*1000;
-   if(stable&&!state.near.inside&&(!state.near.lastEmittedAt||atMs-toMs(state.near.lastEmittedAt)>=cooldown)){
-    emit(events,"USER_NEAR_PARTNER",atMs,{distanceM:Math.round(distance),thresholdM:nearDistance});
-    state.near.inside=true;state.near.lastEmittedAt=iso(atMs);
+  // USER_NEAR_PARTNER: independent opt-in/cooldown per recipient.
+  const profiles=config.nearProfiles&&typeof config.nearProfiles==="object"
+   ?Object.entries(config.nearProfiles)
+   :[["*",{enabled:config.nearEnabled===true,distanceM:config.nearDistanceM,cooldownS:config.nearCooldownS}]];
+  for(const [profileId,profileValue] of profiles as any[]){
+   const profile:any=profileValue||{};
+   if(profile.enabled!==true)continue;
+   const nearDistance=Math.max(80,Math.min(5000,Number(profile.distanceM)||300));
+   const nearKey=String(profileId),ns=nearKey==="*"?state.near:(state.nearProfiles[nearKey]||{candidateSince:null,farSince:null,inside:false,lastEmittedAt:null});
+   if(distance<=nearDistance){
+    ns.farSince=null;
+    if(!ns.candidateSince)ns.candidateSince=iso(atMs);
+    const stable=atMs-toMs(ns.candidateSince)>=Math.max(10,Number(profile.holdS??config.nearHoldS)||30)*1000;
+    const cooldown=Math.max(60,Number(profile.cooldownS)||3600)*1000;
+    if(stable&&!ns.inside&&(!ns.lastEmittedAt||atMs-toMs(ns.lastEmittedAt)>=cooldown)){
+     emit(events,"USER_NEAR_PARTNER",atMs,{targetPerson:nearKey==="*"?null:nearKey,distanceM:Math.round(distance),thresholdM:nearDistance,candidateSince:ns.candidateSince});
+     ns.inside=true;ns.lastEmittedAt=iso(atMs);
+    }
+   }else if(distance>nearDistance*1.5){
+    ns.candidateSince=null;
+    if(!ns.farSince)ns.farSince=iso(atMs);
+    if(atMs-toMs(ns.farSince)>=15000)ns.inside=false;
    }
-  }else if(distance>nearDistance*1.5){
-   state.near.candidateSince=null;
-   if(!state.near.farSince)state.near.farSince=iso(atMs);
-   if(atMs-toMs(state.near.farSince)>=15000)state.near.inside=false;
+   if(nearKey!=="*")state.nearProfiles[nearKey]=ns;
   }
 
   // Encounter state machine. 80m entry / 150m exit.
