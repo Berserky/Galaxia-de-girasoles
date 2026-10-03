@@ -29,6 +29,10 @@ public final class BondWidget extends AppWidgetProvider {
             paired&&names!=null?names.optString(0,"Nosotros")+" & "+names.optString(1,"Dos"):"Nuestra galaxia"
         );
 
+        JSONObject now=data.optJSONObject("now");
+        views.setTextViewText(R.id.widgetNow,paired?nowText(now):"");
+        views.setViewVisibility(R.id.widgetNow,paired?View.VISIBLE:View.GONE);
+
         JSONObject event=data.optJSONObject("nextEvent");
         views.setTextViewText(
             R.id.widgetDate,
@@ -58,6 +62,31 @@ public final class BondWidget extends AppWidgetProvider {
         views.setBoolean(R.id.widgetHug,"setEnabled",paired);
         views.setTextViewText(R.id.widgetHug,paired?"Enviar abrazo":"Vincula la app");
         manager.updateAppWidget(id,views);
+    }
+
+    private static String nowText(JSONObject now){
+        if(now==null)return "Ahora · nada compartido";
+        java.util.ArrayList<String> parts=new java.util.ArrayList<>();
+        String mood=now.optString("mood","");
+        if(!mood.isEmpty()){
+            String label="feliz".equals(mood)?"Feliz":"tranquilo".equals(mood)?"En calma":"cansado".equals(mood)?"Sin energía":"sensible".equals(mood)?"Sensible":"abrazo".equals(mood)?"Quiere abrazo":mood;
+            parts.add(label);
+        }
+        String status=now.optString("status","");
+        if(!status.isEmpty())parts.add(status);
+        else{
+            String motion=now.optString("motion","");
+            if("walking".equals(motion))parts.add("Caminando");
+            else if("vehicle".equals(motion))parts.add("En movimiento");
+            else if("still".equals(motion))parts.add("Quieto/a");
+        }
+        String song=now.optString("songTitle","");
+        if(!song.isEmpty())parts.add("Escucha: "+song);
+        if(!now.isNull("battery")){
+            int battery=now.optInt("battery",-1);
+            if(battery>=0)parts.add("Batería "+battery+"%");
+        }
+        return parts.isEmpty()?"Ahora · nada compartido":"Ahora · "+String.join(" · ",parts);
     }
 
     @Override public void onUpdate(Context c,AppWidgetManager m,int[] ids){
