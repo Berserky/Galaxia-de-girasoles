@@ -42,7 +42,7 @@ public final class MainActivity extends ComponentActivity {
     private static final Set<String> MOBILE_ACTIONS=Set.of(
         "mobile-state","item-save","item-delete","settings-save","daily-save",
         "bond-save","bond-update","bond-guess","bond-delete","bond-widget","bond-send-gesture","bond-gesture-list","bond-gesture-save","bond-gesture-delete",
-        "map-state","place-save","place-delete","status-set","transport-set","destination-save","trip",
+        "map-state","place-save","place-delete","status-set","transport-set","destination-save","trip","context-state","context-settings","context-session","context-events","context-suggestion","context-recap",
         "media-list","media-delete","presence-set","backup-export","backup-import",
         "pair-code-create","profile-repair","device-revoke","push-token-register","push-token-unregister","push-preferences","goals-engine","date-engine","insights-summary","monthly-summary","today-history","encounter-stats","frequent-places","gps-history-export","gps-history-delete"
     );
@@ -162,6 +162,9 @@ public final class MainActivity extends ComponentActivity {
             state.put("momentNotifications",new BondStore(this).enabled());
             state.put("bondHaptics",new BondStore(this).hapticEnabled());
             state.put("pushConfigured",PushManager.configured());
+            ContextStore contextPrefs=new ContextStore(this);
+            state.put("contextNearbyPush",contextPrefs.nearbyEnabled());
+            state.put("contextArrivedSafePush",contextPrefs.arrivedSafeEnabled());
             state.put("notificationsGranted",Build.VERSION.SDK_INT<33||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED);
             state.put("notificationsEnabled",BondWorker.notificationsAllowed(this));
             state.put("locationGranted",checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED);
@@ -195,7 +198,7 @@ public final class MainActivity extends ComponentActivity {
                 }
                 resolve(requestId,result);
             }catch(ApiClient.ApiException e){
-                if(e.status==401){PushManager.cancel(this);store.clear();new BondStore(this).clear();nativeChanged();}
+                if(e.status==401){PushManager.cancel(this);store.clear();new BondStore(this).clear();new ContextStore(this).clear();nativeChanged();}
                 reject(requestId,e.getMessage());
             }catch(Exception e){
                 reject(requestId,e.getMessage()==null?"No pudimos completar la acción.":e.getMessage());
@@ -228,6 +231,7 @@ public final class MainActivity extends ComponentActivity {
                 PushManager.cancel(this);
                 store.clear();
                 new BondStore(this).clear();
+                new ContextStore(this).clear();
                 resolve(requestId,nativeState());
                 nativeChanged();
             }catch(Exception e){reject(requestId,"No pudimos desvincular este teléfono.");}
@@ -675,6 +679,16 @@ public final class MainActivity extends ComponentActivity {
         runOnUiThread(()->{
             if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
             new BondStore(this).hapticEnabled(enabled);
+            PushManager.schedule(this);
+            resolve(requestId,nativeState());
+            nativeChanged();
+        });
+    }
+
+    void setContextPushPrefs(String requestId,boolean nearby,boolean arrivedSafe){
+        runOnUiThread(()->{
+            if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+            new ContextStore(this).pushPrefs(nearby,arrivedSafe);
             PushManager.schedule(this);
             resolve(requestId,nativeState());
             nativeChanged();
