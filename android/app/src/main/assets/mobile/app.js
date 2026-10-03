@@ -193,7 +193,7 @@ function cloudRenderFingerprint(data=cloud){
  if(!data)return '';
  const compactItems=(data.items||[]).map(i=>[i.id,i.version,i.kind]).join('|');
  const compactBond=(data.bond?.entries||[]).map(i=>[i.id,i.version,i.type]).join('|');
- const compactDevices=(data.devices||[]).map(i=>[i.id,i.person,i.revoked_at||'',i.last_seen||'']).join('|');
+ const compactDevices=(data.devices||[]).map(i=>[i.id,i.person,i.revoked_at||'',i.name||'']).join('|');
  return JSON.stringify({
    today:data.today,person:data.person,settings:data.settings?.version||0,nextEvent:data.nextEvent||null,
    items:compactItems,daily:data.daily||[],locations:data.locations||[],presence:data.presence||[],
