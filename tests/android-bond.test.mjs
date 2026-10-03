@@ -161,7 +161,9 @@ test('light map refresh avoids historical tables',async()=>{
  const response=await server.request({action:'map-state',detail:false},'c'.repeat(64));
  assert.equal(response.status,200);
  const output=await response.json();
- assert.deepEqual(Object.keys(output).sort(),['destinations','locations','places','tripPoints']);
+ assert.deepEqual(Object.keys(output).sort(),['context','destinations','locations','places','tripPoints']);
+ assert.equal(output.context.settings.near_enabled,false);
+ assert.equal(output.context.session,null);
  for(const table of ['galaxy_location_history','galaxy_trip_history','galaxy_place_events','galaxy_encounters'])
   assert.equal(server.calls.some(x=>x.table===table),false);
 });
