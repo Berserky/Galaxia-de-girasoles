@@ -777,3 +777,38 @@ html:not([data-theme="daylight"]) .gmap-attrib{backdrop-filter:blur(6px)}
 .date-mode-save{width:100%;min-height:48px}.plan-pick{text-align:left;width:100%}.plan-pick b,.plan-pick small{display:block}.plan-pick small{color:var(--muted);margin-top:3px}
 @media(max-width:360px){.date-plan-grid,.date-mode-grid{grid-template-columns:1fr}.date-mode-tool{min-height:92px}}
 @media(prefers-reduced-motion:reduce){.plan-roulette,.plan-roulette.result,.wrapped-card{animation:none!important}.wrapped-deck{scroll-behavior:auto}.question-deck,.date-mode-tool{transition:none!important}}
+
+
+/* Mega Update 3.0 · Galaxy Goals Engine */
+.goals-page{padding-bottom:12px}
+.goals-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}
+.goals-summary .card{min-height:105px;display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.goals-summary .card>span{width:32px;height:32px;border-radius:10px;background:var(--surface2);display:grid;place-items:center;color:var(--accent);margin-bottom:4px}
+.goals-summary .card b{font-size:21px}.goals-summary .card small{color:var(--muted)}
+.goals-create{margin:14px 0}.goals-filter{margin-bottom:12px}
+.goals-list{gap:9px}.goal-card{width:100%;text-align:left;color:var(--text);display:block}
+.goal-card h3{margin:10px 0 5px;font-size:17px}.goal-card p{margin:0 0 9px;color:var(--muted)}
+.goal-status{font-size:10px;color:var(--muted)}.goal-money{font-size:12px}.goal-money b{font-size:18px;color:var(--text)}
+.goal-progress{height:7px;border-radius:999px;background:var(--surface2);overflow:hidden;margin:12px 0 7px}
+.goal-progress.large{height:10px;margin:14px 0 8px}.goal-progress i{display:block;height:100%;border-radius:inherit;background:var(--accent);transition:width .28s ease}
+.goal-meta small{font-size:9px;color:var(--muted)}
+.goal-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.goal-participants{display:flex;flex-wrap:wrap;gap:8px}.goal-participants label{display:flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid var(--border);border-radius:12px;background:var(--surface2)}
+.goal-detail{display:grid;gap:12px;margin-top:8px}.goal-detail>p{margin:0}
+.goal-detail-section{border-top:1px solid var(--border);padding-top:14px}.goal-detail-section h3,.goal-detail-section p{margin:0}.goal-detail-section .row>div p{font-size:10px;color:var(--muted);margin-top:2px}
+.goal-steps,.goal-links{display:grid;gap:7px;margin-top:10px}
+.goal-step{display:grid;grid-template-columns:34px minmax(0,1fr) 64px;gap:8px;align-items:center;padding:9px;border:1px solid var(--border);border-radius:14px;background:var(--surface)}
+.goal-step.done{opacity:.72}.goal-step.done b{text-decoration:line-through}
+.goal-step-check,.goal-step-order button,.goal-link>button,.goal-contribution>button{border:0;background:transparent;color:var(--muted);display:grid;place-items:center;padding:6px;border-radius:9px}
+.goal-step-check{color:var(--accent)}.goal-step span b,.goal-step span small{display:block}.goal-step span small{font-size:9px;color:var(--muted)}
+.goal-step-order{display:flex;justify-content:flex-end}.goal-step-order button:disabled{opacity:.25}
+.goal-link{display:grid;grid-template-columns:34px minmax(0,1fr) 32px;gap:8px;align-items:center;padding:9px;border-radius:13px;background:var(--surface2)}
+.goal-link>span{width:34px;height:34px;border-radius:10px;background:var(--surface);color:var(--accent);display:grid;place-items:center}
+.goal-link b,.goal-link small{display:block}.goal-link small{color:var(--muted);font-size:9px}
+.goal-money-hero{display:flex;align-items:baseline;gap:7px;padding:14px;margin-top:10px;border-radius:17px;background:color-mix(in srgb,var(--accent) 9%,var(--surface2))}
+.goal-money-hero b{font-size:25px}.goal-money-hero span{color:var(--muted);font-size:11px}
+.goal-contribution{display:flex;align-items:center;justify-content:space-between;padding:9px 10px;border:1px solid var(--border);border-radius:13px;background:var(--surface)}
+.goal-contribution b,.goal-contribution small{display:block}.goal-contribution small{color:var(--muted);font-size:9px;margin-top:2px}
+@media(max-width:360px){.goal-form-grid{grid-template-columns:1fr}.goal-step{grid-template-columns:32px minmax(0,1fr) 58px}}
+@media(min-width:700px){.goals-summary{grid-template-columns:repeat(4,minmax(0,1fr))}.goals-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(prefers-reduced-motion:reduce){.goal-progress i,.goal-card,.goal-step{transition:none!important;animation:none!important}}
