@@ -724,8 +724,9 @@ async function mobileState(req:Request){
 
 function intelligenceVisible(row:any,person:string,day=today()){
  if(!row||row.searchable===false)return false;
- if(row.owner_person&&String(row.owner_person)!==String(person))return false;
- if(row.visible_after&&String(row.visible_after)>day&&String(row.owner_person)!==String(person))return false;
+ if(row.owner_person&&String(row.owner_person)!==String(person)){
+  if(!row.visible_after||String(row.visible_after)>day)return false;
+ }
  return true;
 }
 function minimalContext(rows:any[]){
