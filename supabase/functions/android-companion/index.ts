@@ -1638,8 +1638,8 @@ async function moments(req:Request){
   const progress=computeBondProgress(participation||[],new Date());
   const garden={...progress.garden,currentStreak:progress.currentStreak,recordStreak:progress.recordStreak};
   const now={mood,sharing:!!loc?.sharing,motion:loc?.sharing?loc?.motion:null,status:loc?.sharing?loc?.status:null,battery,listening,updatedAt:p?.updated_at||loc?.updated_at||legacy.updatedAt||null};
-  const visibleGestures=(gestures||[]).map((g:any)=>({
-    id:g.id,gesture:g.data?.gesture||g.data?.gestureId||"hug",created:g.created,author:g.author,
+  const visibleGestures=(gestures||[]).filter((g:any)=>!!(g?.data?.gesture||g?.data?.gestureId)).map((g:any)=>({
+    id:g.id,gesture:g.data?.gesture||g.data?.gestureId,created:g.created,author:g.author,
     name:text(g.data?.name||"",40),icon:text(g.data?.icon||"",40),text:text(g.data?.text||"",180),behavior:text(g.data?.behavior||"message",30)
   }));
   return json({
