@@ -5,18 +5,23 @@ import android.app.*;
 import android.appwidget.AppWidgetManager;
 import android.content.*;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.net.Uri;
 import android.media.MediaPlayer;
 import android.media.MediaRecorder;
 import android.os.*;
+import android.provider.DocumentsContract;
 import android.provider.Settings;
 import android.webkit.*;
 import android.widget.Toast;
 import androidx.activity.ComponentActivity;
 import androidx.activity.OnBackPressedCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.PickVisualMediaRequest;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.webkit.WebViewAssetLoader;
 import org.json.JSONObject;
-import java.util.Set;
+import java.util.*;
 import java.io.*;
 import java.util.concurrent.*;
 
@@ -28,6 +33,7 @@ public final class MainActivity extends ComponentActivity {
     private static final int REQ_MICROPHONE=201;
     private static final int REQ_BACKUP_EXPORT=202;
     private static final int REQ_BACKUP_IMPORT=203;
+    private static final int REQ_DRIVE_FOLDER=204;
     private static final Set<String> MOBILE_ACTIONS=Set.of(
         "mobile-state","item-save","item-delete","settings-save","daily-save",
         "bond-save","bond-update","bond-guess","bond-delete","bond-widget",
@@ -50,6 +56,10 @@ public final class MainActivity extends ComponentActivity {
     private String pendingBackupExportRequest;
     private String pendingBackupJson;
     private String pendingBackupImportRequest;
+    private String pendingDriveFolderRequest;
+    private String pendingPhotoPickerRequest;
+    private ActivityResultLauncher<PickVisualMediaRequest> photoPickerLauncher;
+    private CloudMediaStore cloudMedia;
     private MediaRecorder voiceRecorder;
     private MediaPlayer voicePlayer;
     private File voiceFile;
@@ -66,8 +76,10 @@ public final class MainActivity extends ComponentActivity {
                 }
             }
         });
+        photoPickerLauncher=registerForActivityResult(new ActivityResultContracts.PickMultipleVisualMedia(30),this::handlePhotoPickerResult);
         setContentView(R.layout.activity_main);
         store=new DeviceStore(this);
+        cloudMedia=new CloudMediaStore(this);
         web=findViewById(R.id.webView);
         setupWeb();
 
@@ -143,6 +155,8 @@ public final class MainActivity extends ComponentActivity {
             state.put("locationGranted",checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED);
             state.put("backgroundLocationGranted",Build.VERSION.SDK_INT<29||checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION)==PackageManager.PERMISSION_GRANTED);
             state.put("canPinWidget",Build.VERSION.SDK_INT>=26&&getSystemService(AppWidgetManager.class).isRequestPinAppWidgetSupported());
+            state.put("driveFolderConnected",cloudMedia!=null&&cloudMedia.connected());
+            state.put("driveFolderName",cloudMedia==null?"":cloudMedia.driveName());
             BatteryManager battery=getSystemService(BatteryManager.class);
             int batteryPct=battery==null?-1:battery.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
             state.put("battery",batteryPct>=0&&batteryPct<=100?batteryPct:JSONObject.NULL);
@@ -230,8 +244,150 @@ public final class MainActivity extends ComponentActivity {
         });
     }
 
+    void pickPhotos(String requestId){
+        if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+        runOnUiThread(()->{
+            if(pendingPhotoPickerRequest!=null){reject(requestId,"Ya hay un selector de fotos abierto.");return;}
+            pendingPhotoPickerRequest=requestId;
+            try{
+                photoPickerLauncher.launch(new PickVisualMediaRequest.Builder().setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly.INSTANCE).build());
+            }catch(Exception e){
+                pendingPhotoPickerRequest=null;
+                reject(requestId,"Android no pudo abrir el selector de fotos.");
+            }
+        });
+    }
+
+    private void handlePhotoPickerResult(java.util.List<Uri> uris){
+        String request=pendingPhotoPickerRequest;pendingPhotoPickerRequest=null;
+        if(request==null)return;
+        if(uris==null||uris.isEmpty()){reject(request,"Selección cancelada.");return;}
+        io.execute(()->{
+            int imported=0,skipped=0;String lastError="";
+            try{
+                String token=store.token();
+                if(token==null)throw new ApiClient.ApiException(401,"El vínculo del dispositivo ya no es válido.");
+                for(Uri uri:uris.subList(0,Math.min(30,uris.size()))){
+                    try{MobileApiClient.upload(this,token,uri,"photo");imported++;}
+                    catch(Exception e){skipped++;lastError=e.getMessage()==null?"Formato no compatible.":e.getMessage();}
+                }
+                JSONObject out=new JSONObject().put("imported",imported).put("skipped",skipped);
+                if(!lastError.isBlank())out.put("lastError",lastError);
+                resolve(request,out);
+            }catch(Exception e){reject(request,e.getMessage()==null?"No pudimos importar las fotos seleccionadas.":e.getMessage());}
+        });
+    }
+
+    void pickDriveFolder(String requestId){
+        if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+        runOnUiThread(()->{
+            if(pendingDriveFolderRequest!=null){reject(requestId,"Ya hay un selector de carpeta abierto.");return;}
+            pendingDriveFolderRequest=requestId;
+            Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION|Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+            try{startActivityForResult(intent,REQ_DRIVE_FOLDER);}
+            catch(Exception e){pendingDriveFolderRequest=null;reject(requestId,"Android no pudo abrir el selector de carpetas.");}
+        });
+    }
+
+    void disconnectDriveFolder(String requestId){
+        if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+        runOnUiThread(()->{
+            try{
+                Uri tree=cloudMedia.driveTree();
+                if(tree!=null)try{getContentResolver().releasePersistableUriPermission(tree,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}
+                cloudMedia.clearDrive();nativeChanged();
+                resolve(requestId,new JSONObject().put("connected",false));
+            }catch(Exception e){reject(requestId,"No pudimos desconectar la carpeta.");}
+        });
+    }
+
+    private String documentName(Uri uri){
+        try(Cursor cursor=getContentResolver().query(uri,new String[]{DocumentsContract.Document.COLUMN_DISPLAY_NAME},null,null,null)){
+            if(cursor!=null&&cursor.moveToFirst()){
+                int i=cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME);
+                if(i>=0&&!cursor.isNull(i))return cursor.getString(i);
+            }
+        }catch(Exception ignored){}
+        return "Carpeta de Google Drive";
+    }
+
+    private static final class DriveImage{
+        final Uri uri; final String key;
+        DriveImage(Uri uri,String key){this.uri=uri;this.key=key;}
+    }
+
+    private void collectDriveImages(Uri tree,String parentId,java.util.List<DriveImage> out,int depth) throws Exception{
+        if(depth>5||out.size()>=250)return;
+        Uri children=DocumentsContract.buildChildDocumentsUriUsingTree(tree,parentId);
+        String[] projection={
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_SIZE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED
+        };
+        try(Cursor cursor=getContentResolver().query(children,projection,null,null,null)){
+            if(cursor==null)return;
+            int idIx=cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID);
+            int mimeIx=cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE);
+            int sizeIx=cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE);
+            int modifiedIx=cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED);
+            while(cursor.moveToNext()&&out.size()<250){
+                String id=idIx>=0?cursor.getString(idIx):null,mime=mimeIx>=0?cursor.getString(mimeIx):null;
+                if(id==null)continue;
+                if(DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)){collectDriveImages(tree,id,out,depth+1);continue;}
+                if(!Set.of("image/jpeg","image/png","image/webp").contains(mime))continue;
+                long size=sizeIx>=0&&!cursor.isNull(sizeIx)?cursor.getLong(sizeIx):-1;
+                if(size>12L*1024L*1024L)continue;
+                long modified=modifiedIx>=0&&!cursor.isNull(modifiedIx)?cursor.getLong(modifiedIx):0;
+                Uri doc=DocumentsContract.buildDocumentUriUsingTree(tree,id);
+                out.add(new DriveImage(doc,id+"|"+modified+"|"+size));
+            }
+        }
+    }
+
+    void syncDriveFolder(String requestId){
+        if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+        Uri tree=cloudMedia.driveTree();
+        if(tree==null){reject(requestId,"Primero elige una carpeta de Google Drive.");return;}
+        io.execute(()->{
+            try{
+                String token=store.token();if(token==null)throw new ApiClient.ApiException(401,"El vínculo del dispositivo ya no es válido.");
+                String rootId=DocumentsContract.getTreeDocumentId(tree);
+                java.util.List<DriveImage> images=new ArrayList<>();
+                collectDriveImages(tree,rootId,images,0);
+                Set<String> importedKeys=cloudMedia.imported();
+                int imported=0,skipped=0,failed=0;
+                for(DriveImage image:images){
+                    if(importedKeys.contains(image.key)){skipped++;continue;}
+                    try{
+                        MobileApiClient.upload(this,token,image.uri,"photo");
+                        importedKeys.add(image.key);imported++;
+                    }catch(Exception e){failed++;}
+                }
+                cloudMedia.markImported(importedKeys);
+                resolve(requestId,new JSONObject().put("imported",imported).put("skipped",skipped).put("failed",failed).put("found",images.size()).put("limited",images.size()>=250));
+            }catch(SecurityException e){
+                cloudMedia.clearDrive();nativeChanged();reject(requestId,"Android perdió el permiso de esa carpeta. Vuelve a conectarla.");
+            }catch(Exception e){reject(requestId,e.getMessage()==null?"No pudimos sincronizar la carpeta de Drive.":e.getMessage());}
+        });
+    }
+
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==REQ_DRIVE_FOLDER){
+            String request=pendingDriveFolderRequest;pendingDriveFolderRequest=null;
+            if(request==null)return;
+            if(resultCode!=RESULT_OK||data==null||data.getData()==null){reject(request,"Selección cancelada.");return;}
+            Uri uri=data.getData();
+            try{
+                int flags=data.getFlags()&Intent.FLAG_GRANT_READ_URI_PERMISSION;
+                getContentResolver().takePersistableUriPermission(uri,flags);
+                String name=documentName(uri);cloudMedia.saveDrive(uri,name);nativeChanged();
+                resolve(request,new JSONObject().put("connected",true).put("name",name));
+            }catch(Exception e){reject(request,"La carpeta seleccionada no permite acceso persistente. Elige la carpeta desde Google Drive o Archivos.");}
+            return;
+        }
         if(requestCode==REQ_MEDIA){
             String request=pendingMediaRequest,kind=pendingMediaKind;
             pendingMediaRequest=null;pendingMediaKind=null;
