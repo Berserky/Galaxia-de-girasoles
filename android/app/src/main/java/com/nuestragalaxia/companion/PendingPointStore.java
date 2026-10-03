@@ -28,5 +28,6 @@ public final class PendingPointStore extends SQLiteOpenHelper {
         return out;
     }
     public synchronized void remove(long id){getWritableDatabase().delete("pending","id=?",new String[]{String.valueOf(id)});}
+    public synchronized int clear(){int count=count();getWritableDatabase().delete("pending",null,null);return count;}
     public synchronized int count(){try(Cursor c=getReadableDatabase().rawQuery("select count(*) from pending",null)){return c.moveToFirst()?c.getInt(0):0;}}
 }

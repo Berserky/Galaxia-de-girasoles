@@ -42,7 +42,7 @@ const surpriseIdeas=[
  {title:'Álbum del mes',body:'Elegir juntos las mejores fotos del mes y escribir una frase para cada una.',minutes:60,budget:0,where:'casa'}
 ];
 
-let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null;
+let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
 let toastTimer,refreshing=false,updateState={text:'La app está al día.',progress:0,busy:false},pendingVoiceDraft=null,voiceReady=false,voiceRecording=false,voiceResumeMusic=false,lastSurprise=null;
 let presenceLastSignature='',voiceTimer=null,voiceSeconds=0;
 let welcomeStep=0,welcomePreview=false,welcomeGift=true,welcomeEntering=false,tourStep=-1;
@@ -176,9 +176,7 @@ const currentMonday=()=>{const d=new Date((cloud?.today||new Date().toISOString(
 const coupleDays=()=>{const s=cloud?.settings?.data?.startDate;if(!s)return 0;return Math.max(0,Math.floor((Date.parse((cloud?.today||s)+'T12:00:00Z')-Date.parse(s+'T12:00:00Z'))/86400000));};
 const dateDistance=d=>Math.round((Date.parse(d+'T12:00:00Z')-Date.parse((cloud?.today||d)+'T12:00:00Z'))/86400000);
 function livingMoment(){
- const memories=items('memory').filter(x=>x.data?.date),today=cloud?.today||'',sameDay=memories.find(x=>x.data.date.slice(5)===today.slice(5)&&x.data.date!==today);
- const next=cloud?.nextEvent,partner=partnerDaily();
- if(sameDay)return {icon:'history',label:'UN DÍA COMO HOY',title:sameDay.data.title,body:'Este recuerdo volvió a aparecer en su historia.',action:'memory',id:sameDay.id};
+ const memories=items('memory').filter(x=>x.data?.date),next=cloud?.nextEvent,partner=partnerDaily();
  if(next&&dateDistance(next.date)>=0&&dateDistance(next.date)<=14)return {icon:'calendar-heart',label:'SE ACERCA ALGO ESPECIAL',title:next.title,body:'Faltan '+dateDistance(next.date)+' días.',action:'memory'};
  if(partner.mood)return {icon:'heart-pulse',label:'AHORA',title:partnerName()+' está '+(moods[partner.mood]?.[1]||partner.mood).toLowerCase(),body:'Un pequeño gesto puede hacer el día más cercano.',action:'moments'};
  const last=memories.slice().sort((a,b)=>String(b.data.date).localeCompare(String(a.data.date)))[0];
@@ -204,7 +202,7 @@ async function refreshMap({quiet=false,detail=false}={}){
    const next=await api('map-state',{detail});
    mapData=detail||!mapData?next:{...mapData,...next};
    if(view==='map'&&!quiet)render();
-   else if(view==='map')drawMap({fit:false});
+   else if(view==='map'){drawMap({fit:false});updateCoupleDistanceDom();updateEtaDom();}
  }catch(e){if(!quiet)toast(e.message);}
 }
 const mediaFresh=kind=>!!media[kind]&&Date.now()-(mediaLoadedAt[kind]||0)<20*60*1000;
@@ -219,7 +217,7 @@ async function loadMedia(kind,force=false){
 }
 
 function header(){
- return '<header class="header"><div class="brand"><div class="brand-mark">'+ico('sparkles')+'</div><div><strong>Nuestra Galaxia</strong><small>'+esc(native.paired?(myName()+' & '+partnerName()):'Un espacio para dos')+'</small></div></div><div class="avatar">'+esc((native.paired?myName():'N').slice(0,1).toUpperCase())+'</div></header>';
+ return '<header class="header"><div class="brand"><div class="brand-mark">'+ico('sparkles')+'</div><div><strong>Nuestra Galaxia</strong><small>'+esc(native.paired?(myName()+' & '+partnerName()):'Un espacio para dos')+'</small></div></div><div class="header-actions"><button class="header-search" data-action="universal-search-open" aria-label="Buscar en nuestra galaxia">'+ico('search')+'</button><div class="avatar">'+esc((native.paired?myName():'N').slice(0,1).toUpperCase())+'</div></div></header>';
 }
 function renderNav(){
  navEl.style.display=native.paired&&!shouldShowAdriWelcome()?'grid':'none';
@@ -231,18 +229,20 @@ function go(next){
  if(view==='map'&&hadMap)refreshMap({quiet:true,detail:false});
 }
 function render(){
+ window.GalaxyTheme?.applyTheme(window.GalaxyTheme.getChoice());
  renderNav();
  if(!native.paired){renderOnboarding();refreshIcons();return;}
  if(shouldShowAdriWelcome()){globalPlayer.className='global-player';renderAdriWelcome();refreshIcons();return;}
  if(!cloud){app.innerHTML=header()+loading('Cargando nuestra galaxia');refreshIcons();refreshState();return;}
  if(!media.music&&!mediaLoadedAt.music)setTimeout(()=>loadMedia('music').then(renderGlobalPlayer).catch(()=>{}),0);
  if(view==='home')app.innerHTML=header()+homeView();
- if(view==='map'){app.innerHTML=header()+mapView();setTimeout(()=>{drawMap();if(!mapData)refreshMap({detail:true});},0);}
+ if(view==='map'){app.innerHTML=header()+mapView();setTimeout(()=>{drawMap();if(!mapData)refreshMap({detail:true});if(!frequentPlacesFresh())loadFrequentPlaces().catch(()=>{});},0);}
  if(view==='moments')app.innerHTML=header()+momentsView();
  if(view==='memories'){app.innerHTML=header()+memoriesView();if((memoryTab==='album'&&!mediaFresh('photo'))||(memoryTab==='music'&&!mediaFresh('music')))setTimeout(()=>loadMedia(memoryTab==='album'?'photo':'music').catch(e=>toast(e.message)),0);}
  if(view==='more')app.innerHTML=header()+moreView();
  refreshIcons();
  renderGlobalPlayer();
+ if(view==='home'&&!encounterStatsCache&&!encounterStatsLoading)setTimeout(()=>loadEncounterStats().catch(()=>{}),0);
  if(tourStep>=0)setTimeout(renderTourOverlay,30);
 }
 function renderOnboarding(){
@@ -299,7 +299,7 @@ function renderTourOverlay(){
 function homeView(){
  const own=ownDaily(),partner=partnerDaily(),next=cloud.nextEvent,garden=cloud.bond?.garden||{days:0,stage:0};
  const locs=cloud.locations||[];
- return anniversaryBanner()+'<section class="hero"><p class="eyebrow">NUESTRO UNIVERSO</p><h1>'+esc(myName())+' & '+esc(partnerName())+'</h1><p>Un lugar para acompañarnos, guardar lo vivido y seguir construyendo lo que viene.</p><div class="hero-stats"><div class="hero-stat"><b>'+coupleDays()+'</b><small>días juntos</small></div><div class="hero-stat"><b>'+items('memory').length+'</b><small>recuerdos</small></div><div class="hero-stat"><b>'+garden.days+'</b><small>días del girasol</small></div></div></section>'+nowCard()+
+ return anniversaryBanner()+'<section class="hero"><p class="eyebrow">NUESTRO UNIVERSO</p><h1>'+esc(myName())+' & '+esc(partnerName())+'</h1><p>Un lugar para acompañarnos, guardar lo vivido y seguir construyendo lo que viene.</p><div class="hero-stats"><div class="hero-stat"><b>'+coupleDays()+'</b><small>días juntos</small></div><div class="hero-stat"><b>'+items('memory').length+'</b><small>recuerdos</small></div><div class="hero-stat"><b>'+garden.days+'</b><small>días del girasol</small></div></div></section>'+monthlySummaryTeaser()+todayHistoryTeaser()+coupleDistanceCard()+encounterStatsTeaser()+nowCard()+
  '<section class="section"><div class="section-head"><div><h2>¿Cómo estás hoy?</h2><p>Tu estado se comparte solo con tu persona.</p></div></div><div class="mood-grid">'+Object.entries(moods).map(([id,m])=>'<button class="mood '+(own.mood===id?'active':'')+'" data-action="mood" data-value="'+id+'"><span>'+ico(m[0])+'</span>'+m[1]+'</button>').join('')+'</div>'+(partner.mood?'<div class="card" style="margin-top:10px"><span class="badge">'+esc(partnerName())+'</span> <b>'+esc(moods[partner.mood]?.[1]||partner.mood)+'</b></div>':'')+'</section>'+
  '<section class="section"><div class="card"><p class="eyebrow">PREGUNTA DEL DÍA</p><h3>'+esc(dailyQuestion())+'</h3>'+dailyAnswerMarkup(own,partner)+'</div></section>'+
  '<section class="section"><div class="grid">'+
@@ -312,6 +312,267 @@ function homeView(){
  '<section class="section"><div class="section-head"><div><h2>Cerca, aunque estemos lejos</h2><p>Estado actual del mapa compartido.</p></div></div><div class="stack">'+locs.map(personCard).join('')+'</div></section>';
 }
 function actionCard(iconName,title,copy,action){return '<button class="action-card" data-action="'+action+'"><span class="icon">'+ico(iconName)+'</span><b>'+esc(title)+'</b><small>'+esc(copy)+'</small></button>';}
+function monthlySummaryTeaser(){
+ const month=String(cloud?.today||'').slice(0,7),label=window.GalaxyMonthly?.monthLabel(month)||'Nuestro mes';
+ return '<section class="section"><button class="card monthly-teaser" data-action="monthly-summary-open" data-month="'+attr(month)+'"><span class="monthly-teaser-icon">'+ico('calendar-heart')+'</span><span><p class="eyebrow">NUESTRO MES</p><h3>'+esc(label)+'</h3><p>Recuerdos, planes, kilómetros, encuentros y pequeños gestos en un solo lugar.</p></span>'+ico('chevron-right')+'</button></section>';
+}
+function monthlyMetric(iconName,value,label,detail=''){
+ return '<div class="monthly-metric"><span>'+ico(iconName)+'</span><b>'+esc(value)+'</b><small>'+esc(label)+'</small>'+(detail?'<em>'+esc(detail)+'</em>':'')+'</div>';
+}
+function monthlySummaryMarkup(summary){
+ const month=summary.month,current=String(cloud?.today||'').slice(0,7),counts=summary.counts||{},trips=summary.trips||{},encounters=summary.encounters||{},connection=summary.connection||{},bond=summary.bond||{};
+ const label=window.GalaxyMonthly?.monthLabel(month)||month,has=window.GalaxyMonthly?.summaryHasActivity(summary);
+ const km=(Number(trips.distance_m||0)/1000).toFixed(Number(trips.distance_m||0)>=10000?0:1);
+ const together=fmtDuration(Number(encounters.together_seconds||0));
+ const previous=window.GalaxyMonthly?.shiftMonth(month,-1)||'',next=window.GalaxyMonthly?.shiftMonth(month,1)||'',canNext=window.GalaxyMonthly?.canGoNext(month,current);
+ const highlights=(summary.highlights||[]).map(i=>'<button class="monthly-highlight" data-action="universal-search-result" data-type="item" data-id="'+attr(i.id)+'" data-kind="'+attr(i.kind)+'"><span>'+ico(kindMeta[i.kind]?.[0]||'sparkles')+'</span><span><b>'+esc(i.title||'Parte de nuestra historia')+'</b><small>'+esc(fmtDate(i.date))+'</small></span>'+ico('chevron-right')+'</button>').join('');
+ return '<div class="monthly-summary"><div class="monthly-nav"><button class="btn small ghost" data-action="monthly-summary-month" data-month="'+attr(previous)+'" aria-label="Mes anterior">'+ico('chevron-left')+'</button><div><p class="eyebrow">NUESTRO MES</p><h2>'+esc(label)+'</h2></div><button class="btn small ghost" data-action="monthly-summary-month" data-month="'+attr(next)+'" aria-label="Mes siguiente" '+(canNext?'':'disabled')+'>'+ico('chevron-right')+'</button></div>'+
+ (has?'<div class="monthly-hero"><span>'+ico('sparkles')+'</span><div><b>'+Number(counts.saved||0)+' cosas guardadas</b><p>Un vistazo a lo que construyeron juntos este mes.</p></div></div>'+
+ '<div class="monthly-metrics">'+
+ monthlyMetric('images',counts.memories||0,'recuerdos')+
+ monthlyMetric('circle-check-big',counts.plansDone||0,'planes vividos')+
+ monthlyMetric('calendar-heart',counts.events||0,'fechas especiales')+
+ monthlyMetric('route',km+' km','recorridos',Number(trips.count||0)+' rutas')+
+ monthlyMetric('heart-handshake',encounters.count||0,'encuentros',together+' juntos')+
+ monthlyMetric('smile',connection.mood_days||0,'días conectados',Number(connection.answer_days||0)+' preguntas de ambos')+
+ monthlyMetric('hand-heart',bond.gestures||0,'gestos enviados')+
+ monthlyMetric('mic',bond.voices||0,'mensajes de voz')+
+ '</div>'+
+ ((Number(counts.songs||0)+Number(counts.notes||0)+Number(counts.journeys||0)+Number(counts.wishesDone||0))?'<div class="monthly-extra card"><h3>También pasó</h3><div class="monthly-extra-row">'+
+ (counts.songs?'<span>'+ico('music')+counts.songs+' canciones</span>':'')+
+ (counts.notes?'<span>'+ico('file-text')+counts.notes+' notas</span>':'')+
+ (counts.journeys?'<span>'+ico('route')+counts.journeys+' viajes</span>':'')+
+ (counts.wishesDone?'<span>'+ico('star')+counts.wishesDone+' deseos vividos</span>':'')+
+ '</div></div>':'')+
+ (highlights?'<div class="monthly-highlights"><div class="section-head"><div><h3>Momentos del mes</h3><p>Algunas cosas para volver a mirar.</p></div></div>'+highlights+'</div>':'')
+ :'<div class="universal-search-empty">'+ico('moon-star')+'<h3>Este mes todavía está empezando</h3><p>Cuando guarden recuerdos, recorridos, planes o gestos, su historia mensual aparecerá aquí.</p></div>')+
+ '</div>';
+}
+async function openMonthlySummary(month=String(cloud?.today||'').slice(0,7)){
+ if(!window.GalaxyMonthly?.validMonth(month))return;
+ const cached=monthlyCache.get(month);
+ showModal('Nuestro mes',cached?monthlySummaryMarkup(cached):'<div class="monthly-loading">'+loading('Preparando nuestro mes')+'<p>Reuniendo recuerdos, recorridos y momentos…</p></div>');
+ if(cached)return;
+ try{
+  const summary=await api('monthly-summary',{month});
+  monthlyCache.set(month,summary);
+  if(modal.open)showModal('Nuestro mes',monthlySummaryMarkup(summary));
+ }catch(error){if(modal.open)showModal('Nuestro mes','<div class="universal-search-empty">'+ico('circle-alert')+'<h3>No pudimos preparar este mes</h3><p>'+esc(error.message||'Intenta nuevamente.')+'</p></div>');}
+}
+
+function todayHistoryTeaser(){
+ const day=String(cloud?.today||''),matches=(cloud?.items||[]).filter(i=>{
+  const d=String(i.data?.date||i.data?.unlockDate||'');
+  return d&&d<day&&d.slice(5)===day.slice(5);
+ }).length;
+ const label=window.GalaxyTodayHistory?.dayLabel(day)||'Hoy';
+ return '<section class="section"><button class="card today-history-teaser" data-action="today-history-open"><span class="today-history-icon">'+ico('history')+'</span><span><p class="eyebrow">UN DÍA COMO HOY</p><h3>'+esc(matches?matches+' '+(matches===1?'recuerdo vuelve':'recuerdos vuelven')+' hoy':'¿Qué pasó un día como hoy?')+'</h3><p>'+esc(matches?'Abre la historia completa de otros '+label.toLowerCase()+'.':'Cuando esta fecha tenga historia, podrás volver a vivirla aquí.')+'</p></span>'+ico('chevron-right')+'</button></section>';
+}
+function todayHistoryChip(iconName,textValue){
+ return '<span class="today-history-chip">'+ico(iconName)+esc(textValue)+'</span>';
+}
+function todayHistoryMarkup(result){
+ const day=result.day,label=window.GalaxyTodayHistory?.dayLabel(day)||day,groups=(result.groups||[]).filter(g=>window.GalaxyTodayHistory?.groupHasActivity(g));
+ if(!groups.length)return '<div class="today-history-view"><div class="today-history-head"><span>'+ico('history')+'</span><div><p class="eyebrow">UN DÍA COMO HOY</p><h2>'+esc(label)+'</h2></div><button class="btn small ghost" data-action="today-history-refresh" aria-label="Actualizar">'+ico('refresh-cw')+'</button></div><div class="universal-search-empty">'+ico('moon-star')+'<h3>Esta fecha todavía no tiene pasado</h3><p>Con el tiempo, todo lo que vivan un '+esc(label.toLowerCase())+' volverá a aparecer aquí.</p><button class="btn small" data-action="add-memory">Guardar algo de hoy</button></div></div>';
+ const years=groups.map(g=>{
+  const s=g.stats||{},age=window.GalaxyTodayHistory?.anniversaryLabel(g.year,day)||g.year,km=(Number(s.distance_m||0)/1000).toFixed(Number(s.distance_m||0)>=10000?0:1),chips=[];
+  if(g.items?.length)chips.push(todayHistoryChip('images',g.items.length+' '+(g.items.length===1?'historia':'historias')));
+  if(s.trips)chips.push(todayHistoryChip('route',s.trips+' '+(s.trips===1?'recorrido':'recorridos')+' · '+km+' km'));
+  if(s.encounters)chips.push(todayHistoryChip('heart-handshake',s.encounters+' '+(s.encounters===1?'encuentro':'encuentros')+' · '+fmtDuration(Number(s.together_seconds||0))));
+  if(s.gestures)chips.push(todayHistoryChip('hand-heart',s.gestures+' '+(s.gestures===1?'gesto':'gestos')));
+  if(s.voices)chips.push(todayHistoryChip('mic',s.voices+' '+(s.voices===1?'audio':'audios')));
+  if(s.shared_notes)chips.push(todayHistoryChip('file-text',s.shared_notes+' '+(s.shared_notes===1?'nota':'notas')));
+  if(s.rituals)chips.push(todayHistoryChip('sparkles',s.rituals+' '+(s.rituals===1?'ritual':'rituales')));
+  if(s.arrivals)chips.push(todayHistoryChip('map-pin',s.arrivals+' '+(s.arrivals===1?'llegada':'llegadas')));
+  if(s.mood_together)chips.push(todayHistoryChip('smile','Ambos compartieron cómo estaban'));
+  if(s.answer_together)chips.push(todayHistoryChip('message-circle','Ambos respondieron la pregunta'));
+  const itemRows=(g.items||[]).map(i=>{
+   todayHistoryItems.set(String(i.id),i);
+   const meta=kindMeta[i.kind]||['sparkles','Historia'],when=i.origin==='saved'?'Guardado en la galaxia':meta[1];
+   return '<button class="today-history-item" data-action="today-history-item" data-id="'+attr(i.id)+'"><span class="today-history-item-icon">'+ico(meta[0])+'</span><span><b>'+esc(i.title||meta[1])+'</b><small>'+esc(when+(i.placeName?' · '+i.placeName:''))+'</small></span>'+ico('chevron-right')+'</button>';
+  }).join('');
+  const places=(g.places||[]).length?'<div class="today-history-places">'+ico('map-pin')+'<span>'+esc((g.places||[]).join(' · '))+'</span></div>':'';
+  return '<section class="today-history-year"><div class="today-history-year-head"><div><strong>'+esc(g.year)+'</strong><span>'+esc(age)+'</span></div><span class="today-history-year-line"></span></div>'+(chips.length?'<div class="today-history-chips">'+chips.join('')+'</div>':'')+places+(itemRows?'<div class="today-history-items">'+itemRows+'</div>':'')+'</section>';
+ }).join('');
+ return '<div class="today-history-view"><div class="today-history-head"><span>'+ico('history')+'</span><div><p class="eyebrow">UN DÍA COMO HOY</p><h2>'+esc(label)+'</h2><p>'+groups.length+' '+(groups.length===1?'año volvió':'años volvieron')+' a encontrarlos.</p></div><button class="btn small ghost" data-action="today-history-refresh" aria-label="Actualizar">'+ico('refresh-cw')+'</button></div>'+years+'</div>';
+}
+async function openTodayHistory(force=false){
+ const day=String(cloud?.today||'');if(!window.GalaxyTodayHistory?.validDay(day))return;
+ const cached=!force&&todayHistoryCache.get(day);
+ showModal('Un día como hoy',cached?todayHistoryMarkup(cached):'<div class="monthly-loading">'+loading('Buscando en nuestra historia')+'<p>Volviendo a otros '+esc((window.GalaxyTodayHistory?.dayLabel(day)||day).toLowerCase())+'…</p></div>');
+ if(cached)return;
+ try{
+  const result=await api('today-history',{day});
+  todayHistoryCache.set(day,result);todayHistoryItems.clear();
+  if(modal.open)showModal('Un día como hoy',todayHistoryMarkup(result));
+ }catch(error){if(modal.open)showModal('Un día como hoy','<div class="universal-search-empty">'+ico('circle-alert')+'<h3>No pudimos volver a esta fecha</h3><p>'+esc(error.message||'Intenta nuevamente.')+'</p></div>');}
+}
+async function openTodayHistoryItem(btn){
+ const id=String(btn.dataset.id||''),live=cloud?.items?.find(i=>String(i.id)===id);
+ if(live){await openUniversalSearchResult({dataset:{type:'item',id}});return;}
+ const item=todayHistoryItems.get(id);if(!item)return;
+ const meta=kindMeta[item.kind]||['sparkles','Historia'];
+ showModal(item.title||meta[1],'<div class="card today-history-detail"><span class="badge">'+esc(meta[1])+'</span><p class="muted" style="margin-top:8px">'+esc(fmtDate(item.date))+(item.placeName?' · '+esc(item.placeName):'')+'</p>'+(item.body?'<p style="margin-top:14px">'+esc(item.body)+'</p>':'')+(item.category?'<p class="muted" style="margin-top:10px">'+esc(item.category)+'</p>':'')+'</div>');
+}
+
+function coupleDistanceLocations(){
+ const rows=mapData?.locations?.length?mapData.locations:(cloud?.locations||[]);
+ return rows;
+}
+function distanceAgeLabel(value){
+ const age=Math.max(0,Date.now()-Date.parse(value||''));
+ if(!Number.isFinite(age))return'';
+ if(age<60000)return'Actualizado hace menos de 1 min';
+ const min=Math.floor(age/60000);
+ if(min<60)return'Actualizado hace '+min+' min';
+ const h=Math.floor(min/60);return'Actualizado hace '+h+' h';
+}
+function coupleDistanceState(){
+ return window.GalaxyDistance?.coupleDistance(coupleDistanceLocations())||{available:false,reason:'missing'};
+}
+function coupleDistanceCard({mapMode=false}={}){
+ const state=coupleDistanceState(),title='Distancia entre '+myName()+' y '+partnerName();
+ if(!state.available){
+   const stale=state.reason==='stale',copy=stale?'Una de las ubicaciones lleva demasiado tiempo sin actualizarse.':'Ambos deben compartir ubicación para calcular la distancia.';
+   return '<section class="section"><div class="card couple-distance unavailable" id="coupleDistanceCard"><span class="couple-distance-icon">'+ico(stale?'refresh-cw':'map-pin')+'</span><div><p class="eyebrow">'+esc(title.toUpperCase())+'</p><h3>'+(stale?'Esperando una ubicación reciente':'Distancia no disponible')+'</h3><p>'+esc(copy)+'</p></div>'+(mapMode?'<button class="btn small ghost" data-action="map-refresh">'+ico('refresh-cw')+' Actualizar</button>':'<button class="btn small ghost" data-action="couple-distance-map">'+ico('map-pin')+' Abrir mapa</button>')+'</div></section>';
+ }
+ const mood=state.mood||{},distance=window.GalaxyDistance.formatDistance(state.meters),together=mood.key==='together';
+ return '<section class="section"><div class="card couple-distance '+(together?'together':'')+'" id="coupleDistanceCard"><span class="couple-distance-icon">'+ico(together?'heart-handshake':'navigation')+'</span><div class="couple-distance-main"><p class="eyebrow">'+esc(title.toUpperCase())+'</p><div class="couple-distance-value"><strong>'+esc(distance)+'</strong><span>'+esc(mood.title||'')+'</span></div><p>'+esc(mood.copy||'')+'</p><small>'+esc(distanceAgeLabel(state.updated_at))+' · distancia en línea recta</small></div>'+(mapMode?'<button class="btn small secondary" data-action="couple-distance-focus">'+ico('navigation')+' Ver ambos</button>':'<button class="btn small ghost" data-action="couple-distance-map">'+ico('map-pin')+' Ver mapa</button>')+'</div></section>';
+}
+function updateCoupleDistanceDom(){
+ const current=document.querySelector('#coupleDistanceCard');if(!current)return;
+ const wrapper=document.createElement('div');wrapper.innerHTML=coupleDistanceCard({mapMode:view==='map'});
+ const next=wrapper.querySelector('#coupleDistanceCard');if(next)current.replaceWith(next);
+ refreshIcons();
+}
+function focusCoupleOnMap(){
+ const rows=coupleDistanceLocations().filter(l=>l.sharing&&Number.isFinite(Number(l.latitude))&&Number.isFinite(Number(l.longitude)));
+ if(!map||rows.length<2)return;
+ map.fitBounds(rows.map(l=>[Number(l.latitude),Number(l.longitude)]),{maxZoom:16});
+}
+
+function etaData(){
+ return {locations:mapData?.locations||cloud?.locations||[],places:mapData?.places||[],destinations:mapData?.destinations||[]};
+}
+function etaState(){return window.GalaxyEta?.eta(etaData(),String(cloud?.person??''))||{available:false,reason:'engine'};}
+function etaUnavailableCopy(reason){
+ if(reason==='none')return {title:'Elige a dónde vas',copy:'Usa Acompáñame para seleccionar a '+partnerName()+' o uno de sus lugares guardados.'};
+ if(reason==='own-paused')return {title:'Activa tu ubicación',copy:'Necesitamos tu posición para calcular cuánto falta.'};
+ if(reason==='own-stale')return {title:'Esperando tu ubicación',copy:'Tu posición necesita una actualización reciente para calcular el ETA.'};
+ if(reason==='target-paused')return {title:partnerName()+' pausó su ubicación',copy:'No calcularemos un ETA hacia una posición que ya no se comparte.'};
+ if(reason==='target-stale')return {title:'Esperando a '+partnerName(),copy:'Su última posición es demasiado antigua para estimar una llegada fiable.'};
+ if(reason==='place-missing')return {title:'Ese lugar ya no está disponible',copy:'Elige otro destino desde Acompáñame.'};
+ return {title:'ETA no disponible',copy:'Actualiza el mapa o elige nuevamente el destino.'};
+}
+function etaCard(){
+ const e=etaState();
+ if(!e.available){
+  const message=etaUnavailableCopy(e.reason),hasDestination=e.reason!=='none';
+  return '<section class="section"><div class="card eta-card unavailable" id="etaCard"><span class="eta-icon">'+ico('timer')+'</span><div><p class="eyebrow">ETA APROXIMADO</p><h3>'+esc(message.title)+'</h3><p>'+esc(message.copy)+'</p></div><button class="btn small '+(hasDestination?'ghost':'secondary')+'" data-action="'+(hasDestination?'map-refresh':'destination')+'">'+ico(hasDestination?'refresh-cw':'navigation')+' '+(hasDestination?'Actualizar':'Acompáñame')+'</button></div></section>';
+ }
+ const modeIcon=e.mode==='walking'?'person-standing':e.mode==='motorcycle'?'bike':e.mode==='transit'?'bus-front':'navigation';
+ const distance=window.GalaxyDistance?.formatDistance(e.meters)||fmtDistance(e.meters),eta=window.GalaxyEta.etaLabel(e.seconds);
+ const source=e.speed_source==='live'?'con tu velocidad actual':'con ritmo estimado';
+ const targetNote=e.target_moving?' · el destino también está en movimiento':'';
+ return '<section class="section"><div class="card eta-card '+(e.arrived?'arrived':'')+'" id="etaCard"><span class="eta-icon">'+ico(e.arrived?'map-pin-check':modeIcon)+'</span><div class="eta-main"><p class="eyebrow">ETA HACIA '+esc(String(e.label||'DESTINO').toUpperCase())+'</p><div class="eta-value"><strong>'+esc(eta)+'</strong><span>'+esc(distance)+'</span></div><p>'+esc(e.arrived?'Ya estás en el destino.':'Estimado '+e.mode_label+', '+source+'.')+'</p><small>Ruta aproximada desde distancia geográfica'+esc(targetNote)+'. No reemplaza navegación vial.</small></div><div class="eta-actions"><button class="btn small secondary" data-action="eta-focus">'+ico('crosshair')+' Ver ruta</button><button class="btn small ghost" data-action="destination">'+ico('shuffle')+' Cambiar</button></div></div></section>';
+}
+function updateEtaDom(){
+ const current=document.querySelector('#etaCard');if(!current)return;
+ const wrapper=document.createElement('div');wrapper.innerHTML=etaCard();
+ const next=wrapper.querySelector('#etaCard');if(next)current.replaceWith(next);
+ refreshIcons();
+}
+function focusEtaOnMap(){
+ const e=etaState();if(!e.available||!map)return;
+ const own=e.own;
+ map.fitBounds([[Number(own.latitude),Number(own.longitude)],[Number(e.latitude),Number(e.longitude)]],{maxZoom:16});
+}
+
+function encounterStatsTeaser(){
+ const s=encounterStatsCache;
+ if(!s)return '<section class="section"><button class="card encounter-teaser" data-action="encounter-stats-open"><span class="encounter-teaser-icon">'+ico('heart-handshake')+'</span><span><p class="eyebrow">NUESTROS ENCUENTROS</p><h3>Construyendo el contador…</h3><p>Veces que hemos coincidido y tiempo compartido.</p></span>'+ico('chevron-right')+'</button></section>';
+ const total=window.GalaxyEncounters?.totalWithActive(s)||Number(s.total_seconds||0),count=Number(s.total_count||0),active=s.active;
+ const title=active?'Juntos ahora · '+(window.GalaxyEncounters?.durationLabel(window.GalaxyEncounters.activeElapsed(active))||fmtDuration(active.elapsed_seconds)):count?(window.GalaxyEncounters?.countLabel(count)||count+' encuentros'):'El primer encuentro todavía espera';
+ const copy=count?(window.GalaxyEncounters?.durationLabel(total)||fmtDuration(total))+' compartidos · '+Number(s.current_month?.count||0)+' este mes':'Cuando estén cerca durante un rato, la galaxia empezará a contarlo.';
+ return '<section class="section"><button class="card encounter-teaser '+(active?'active':'')+'" data-action="encounter-stats-open"><span class="encounter-teaser-icon">'+ico(active?'heart-pulse':'heart-handshake')+'</span><span><p class="eyebrow">NUESTROS ENCUENTROS</p><h3>'+esc(title)+'</h3><p>'+esc(copy)+'</p></span>'+ico('chevron-right')+'</button></section>';
+}
+async function loadEncounterStats(force=false){
+ if(encounterStatsLoading)return encounterStatsCache;
+ if(encounterStatsCache&&!force)return encounterStatsCache;
+ encounterStatsLoading=true;
+ try{
+  encounterStatsCache=await api('encounter-stats');
+  if(view==='home'&&!modal.open)render();
+  return encounterStatsCache;
+ }finally{encounterStatsLoading=false;}
+}
+function encounterStatsMarkup(s){
+ const helper=window.GalaxyEncounters,total=helper?.totalWithActive(s)||Number(s.total_seconds||0),month=s.current_month||{},active=s.active,recent=s.recent||[];
+ const duration=v=>helper?.durationLabel(v)||fmtDuration(v),count=Number(s.total_count||0),avg=Number(s.average_seconds||0),longest=Number(s.longest?.duration_seconds||0);
+ const activeBlock=active?'<div class="encounter-live"><span>'+ico('heart-pulse')+'</span><div><p class="eyebrow">JUNTOS AHORA</p><h3 data-encounter-live>'+esc(duration(helper?.activeElapsed(active)||active.elapsed_seconds||0))+'</h3><p>'+(Number.isFinite(Number(active.current_distance_m))?'Aproximadamente '+Math.round(Number(active.current_distance_m))+' m entre ustedes.':'El encuentro sigue activo.')+'</p></div></div>':'';
+ const recentRows=recent.map(r=>'<div class="encounter-recent '+(r.active?'active':'')+'"><span>'+ico(r.active?'heart-pulse':'heart')+'</span><div><b>'+esc(r.active?'Ahora mismo':fmtDateTime(r.started_at))+'</b><small>'+esc(duration(r.active?(helper?.activeElapsed(r)||r.duration_seconds):r.duration_seconds))+(Number.isFinite(Number(r.distance_m))?' · inicio a '+Math.round(Number(r.distance_m))+' m':'')+'</small></div></div>').join('');
+ return '<div class="encounter-stats">'+activeBlock+
+ '<div class="encounter-metrics">'+
+ '<div><span>'+ico('heart-handshake')+'</span><b>'+count+'</b><small>encuentros</small></div>'+
+ '<div><span>'+ico('clock-3')+'</span><b>'+esc(duration(total))+'</b><small>tiempo juntos</small></div>'+
+ '<div><span>'+ico('calendar-heart')+'</span><b>'+Number(month.count||0)+'</b><small>este mes · '+esc(duration(Number(month.seconds||0)))+'</small></div>'+
+ '<div><span>'+ico('timer')+'</span><b>'+esc(duration(avg))+'</b><small>promedio</small></div>'+
+ '<div><span>'+ico('trophy')+'</span><b>'+esc(duration(longest))+'</b><small>encuentro más largo</small></div>'+
+ '</div>'+
+ '<div class="encounter-note"><span>'+ico('info')+'</span><p>La galaxia registra un encuentro cuando ambos comparten ubicación, permanecen a unos 80 m o menos durante al menos un minuto, y lo cierra al separarse.</p></div>'+
+ (recentRows?'<div class="encounter-recent-list"><div class="section-head"><div><h3>Encuentros recientes</h3><p>Los últimos momentos detectados juntos.</p></div></div>'+recentRows+'</div>':'<div class="universal-search-empty">'+ico('heart-handshake')+'<h3>Aún no hay encuentros registrados</h3><p>Cuando la app detecte que están juntos, aparecerán aquí.</p></div>')+
+ '<div class="form-actions"><button class="btn secondary" data-action="encounter-map">'+ico('map-pin')+' Ver actividad en el mapa</button><button class="btn ghost" data-action="encounter-stats-refresh">'+ico('refresh-cw')+' Actualizar</button></div></div>';
+}
+async function openEncounterStats(force=false){
+ showModal('Nuestros encuentros',encounterStatsCache&&!force?encounterStatsMarkup(encounterStatsCache):'<div class="monthly-loading">'+loading('Contando nuestros encuentros')+'<p>Sumando tiempo, encuentros y lo vivido este mes…</p></div>');
+ try{
+  const stats=await loadEncounterStats(force||!encounterStatsCache);
+  if(modal.open)showModal('Nuestros encuentros',encounterStatsMarkup(stats));
+ }catch(error){if(modal.open)showModal('Nuestros encuentros','<div class="universal-search-empty">'+ico('circle-alert')+'<h3>No pudimos contar los encuentros</h3><p>'+esc(error.message||'Intenta nuevamente.')+'</p></div>');}
+}
+
+function universalSearchData(){return {items:cloud?.items||[],places:cloud?.places||mapData?.places||[]};}
+function universalSearchRows(query){
+ if(!window.GalaxySearch?.searchUniverse)return[];
+ return window.GalaxySearch.searchUniverse(universalSearchData(),query,40);
+}
+function universalSearchResultsMarkup(query){
+ const q=String(query||'').trim();
+ if(!q)return '<div class="universal-search-empty">'+ico('search')+'<h3>Todo lo nuestro, en una búsqueda</h3><p>Busca recuerdos, planes, notas, canciones, cápsulas, deseos, viajes, fechas o lugares.</p></div>';
+ const rows=universalSearchRows(q);
+ if(!rows.length)return '<div class="universal-search-empty">'+ico('search-x')+'<h3>No encontramos nada</h3><p>Prueba con otra palabra, un lugar, una fecha o el nombre de un recuerdo.</p></div>';
+ return '<div class="universal-search-list">'+rows.map(r=>{
+  const iconName=r.type==='place'?'map-pin':(kindMeta[r.kind]?.[0]||'file-text');
+  return '<button class="universal-search-result" data-action="universal-search-result" data-type="'+attr(r.type)+'" data-id="'+attr(r.id)+'" data-kind="'+attr(r.kind||'')+'"><span class="search-result-icon">'+ico(iconName)+'</span><span class="search-result-copy"><b>'+esc(r.title)+'</b><small>'+esc(r.subtitle||'')+'</small></span>'+ico('chevron-right')+'</button>';
+ }).join('')+'</div><p class="universal-search-count">'+rows.length+' resultado'+(rows.length===1?'':'s')+'</p>';
+}
+function renderUniversalSearchResults(query){
+ const el=document.querySelector('#universalSearchResults');if(!el)return;
+ el.innerHTML=universalSearchResultsMarkup(query);refreshIcons();
+}
+function openUniversalSearch(){
+ showModal('Buscar en nuestra galaxia','<div class="universal-search"><label class="universal-search-box">'+ico('search')+'<input id="universalSearchInput" class="input" autocomplete="off" autocapitalize="sentences" placeholder="Un recuerdo, lugar, canción, plan…" aria-label="Buscar en nuestra galaxia"></label><div id="universalSearchResults" aria-live="polite"></div></div>');
+ renderUniversalSearchResults('');
+ setTimeout(()=>document.querySelector('#universalSearchInput')?.focus(),80);
+}
+async function openUniversalSearchResult(btn){
+ const type=String(btn.dataset.type||''),id=String(btn.dataset.id||'');
+ if(type==='place'){
+  const known=(cloud?.places||mapData?.places||[]).find(p=>String(p.id)===id);
+  closeModal();go('map');
+  if(!mapData)await refreshMap({detail:true});
+  const place=(mapData?.places||cloud?.places||[]).find(p=>String(p.id)===id)||known;
+  setTimeout(()=>{if(place&&map){map.setView([Number(place.latitude),Number(place.longitude)],16);document.querySelector('#map')?.scrollIntoView({behavior:'smooth',block:'center'});}},180);
+  return;
+ }
+ const item=cloud?.items?.find(i=>String(i.id)===id);if(!item)return;
+ closeModal();memoryTab=item.kind==='song'?'music':item.kind;go('memories');
+ setTimeout(()=>{
+  const target=[...document.querySelectorAll('[data-item-id]')].find(el=>String(el.dataset.itemId)===id);
+  if(target){target.classList.add('search-hit');target.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>target.classList.remove('search-hit'),1800);}
+ },100);
+}
+
 function dailyAnswerMarkup(own,partner){
  let html='';
  if(!own.answer)html='<form id="dailyForm" class="stack" style="margin-top:14px"><textarea name="answer" placeholder="Tu respuesta…" required></textarea><button class="btn" type="submit">Guardar respuesta</button></form>';
@@ -352,17 +613,50 @@ function constellationView(){
 }
 function itemCard(i){
  const d=i.data||{},meta=kindMeta[i.kind]||['sparkles',i.kind],date=d.date?fmtDate(d.date):fmtDateTime(i.created),done=d.done?' · Hecho':'',locked=i.kind==='capsule'&&String(d.date||d.unlockDate||'')>String(cloud.today||''),voices=locked?[]:linkedVoices(i.id);
- if(locked)return '<div class="card item"><div class="item-icon">'+ico('lock')+'</div><div class="item-main"><div class="meta">Se abre '+esc(date)+'</div><h3>'+esc(d.title||'Cápsula')+'</h3><p class="muted">Este contenido seguirá guardado hasta la fecha elegida.</p></div></div>';
- return '<div class="card item"><div class="item-icon">'+ico(meta[0])+'</div><div class="item-main"><div class="meta">'+esc(date)+esc(done)+'</div><h3>'+esc(d.title||meta[1])+'</h3>'+(d.body?'<p>'+esc(d.body)+'</p>':'')+(voices.length?'<div class="stack" style="margin-top:10px">'+voices.map(voiceCard).join('')+'</div>':'')+'<div class="item-actions">'+(['memory','capsule','journey'].includes(i.kind)?'<button class="btn small secondary" data-action="voice-for-item" data-id="'+i.id+'">'+ico('mic')+' Añadir voz</button>':'')+'<button class="btn small secondary" data-action="item-edit" data-id="'+i.id+'">Editar</button><button class="btn small ghost" data-action="item-delete" data-id="'+i.id+'">Eliminar</button></div></div></div>';
+ if(locked)return '<div class="card item" data-item-id="'+attr(i.id)+'"><div class="item-icon">'+ico('lock')+'</div><div class="item-main"><div class="meta">Se abre '+esc(date)+'</div><h3>'+esc(d.title||'Cápsula')+'</h3><p class="muted">Este contenido seguirá guardado hasta la fecha elegida.</p></div></div>';
+ return '<div class="card item" data-item-id="'+attr(i.id)+'"><div class="item-icon">'+ico(meta[0])+'</div><div class="item-main"><div class="meta">'+esc(date)+esc(done)+'</div><h3>'+esc(d.title||meta[1])+'</h3>'+(d.body?'<p>'+esc(d.body)+'</p>':'')+(voices.length?'<div class="stack" style="margin-top:10px">'+voices.map(voiceCard).join('')+'</div>':'')+'<div class="item-actions">'+(['memory','capsule','journey'].includes(i.kind)?'<button class="btn small secondary" data-action="voice-for-item" data-id="'+i.id+'">'+ico('mic')+' Añadir voz</button>':'')+'<button class="btn small secondary" data-action="item-edit" data-id="'+i.id+'">Editar</button><button class="btn small ghost" data-action="item-delete" data-id="'+i.id+'">Eliminar</button></div></div></div>';
 }
 function storyTimeline(){
  const entries=(cloud?.items||[]).filter(x=>['memory','journey','event','capsule','song'].includes(x.kind)).filter(x=>x.kind!=='capsule'||String(x.data?.date||'')<=String(cloud.today||'')).slice().sort((a,b)=>String(b.data?.date||b.created).localeCompare(String(a.data?.date||a.created))).slice(0,12);
  return '<section class="section"><div class="section-head"><div><h2>Nuestra historia</h2><p>Recuerdos, viajes, fechas, canciones y cápsulas abiertas en una sola línea del tiempo.</p></div></div><div class="timeline">'+(entries.length?entries.map(itemCard).join(''):'<div class="empty">La historia irá apareciendo aquí a medida que guarden momentos.</div>')+'</div></section>';
 }
+function driveAlbumCard(){
+ const connected=!!native.driveFolderConnected,name=String(native.driveFolderName||'');
+ return '<div class="card cloud-album-card '+(connected?'connected':'')+'"><div class="row between"><div><p class="eyebrow">GOOGLE DRIVE COMPARTIDO</p><h3>'+(connected?esc(name||'Carpeta conectada'):'Sin carpeta conectada')+'</h3><p>'+(connected?'Sincroniza las imágenes nuevas de esta carpeta y sus subcarpetas al álbum privado.':'Elige una carpeta desde Google Drive o el selector de archivos de Android.')+'</p></div>'+ico(connected?'folder-sync':'folder-plus')+'</div><div class="row wrap" style="margin-top:12px">'+(connected?'<button class="btn small secondary" data-action="drive-sync">'+ico('refresh-cw')+' Sincronizar</button><button class="btn small ghost" data-action="drive-folder-connect">'+ico('folder-open')+' Cambiar carpeta</button><button class="btn small ghost" data-action="drive-folder-disconnect">'+ico('unlink')+' Desconectar</button>':'<button class="btn small secondary" data-action="drive-folder-connect">'+ico('folder-open')+' Elegir carpeta Drive</button>')+'</div></div>';
+}
+function openAlbumAdd(){
+ showModal('Añadir fotos al álbum','<div class="music-source-grid album-source-grid"><button class="source-card" data-action="photos-picker">'+ico('images')+'<b>Google Photos Picker</b><span>Fotos locales o de tu proveedor cloud disponible</span></button><button class="source-card" data-action="photo-file">'+ico('image-plus')+'<b>Archivo del teléfono</b><span>Elegir una imagen desde Archivos</span></button><button class="source-card" data-action="drive-folder-connect">'+ico('folder-open')+'<b>Google Drive compartido</b><span>'+(native.driveFolderConnected?'Cambiar la carpeta conectada':'Elegir una carpeta para sincronizar')+'</span></button></div><p class="cloud-source-note">'+ico('shield-check')+' Las fotos elegidas o sincronizadas se copian al álbum privado de Nuestra Galaxia. La app no obtiene acceso completo a tu biblioteca de Google Photos.</p>');
+}
+async function refreshPhotoAlbum(){
+ media.photo=null;mediaLoadedAt.photo=0;await loadMedia('photo',true);
+ if(view==='memories'&&memoryTab==='album')render();
+}
+async function importPhotosPicker(){
+ closeModal();
+ const result=await GalaxyNative.call('pickPhotos');
+ await refreshPhotoAlbum();
+ toast('Google Photos Picker: '+Number(result.imported||0)+' fotos añadidas'+(result.skipped?' · '+Number(result.skipped)+' omitidas':'')+'.');
+}
+async function connectDriveFolder(){
+ closeModal();
+ const result=await GalaxyNative.call('pickDriveFolder');
+ native=nativeState();
+ if(view==='memories'&&memoryTab==='album')render();
+ toast('Carpeta conectada: '+String(result.name||native.driveFolderName||'Google Drive')+'.');
+}
+async function syncDriveAlbum(){
+ showModal('Sincronizando Google Drive','<div class="cloud-sync-progress">'+loading('Leyendo carpeta compartida')+'<h3>Buscando fotos nuevas…</h3><p>Recorreremos la carpeta y sus subcarpetas sin modificar los archivos originales.</p></div>');
+ try{
+  const result=await GalaxyNative.call('syncDriveFolder');
+  await refreshPhotoAlbum();
+  closeModal();
+  toast('Drive: '+Number(result.imported||0)+' nuevas · '+Number(result.skipped||0)+' ya sincronizadas'+(result.failed?' · '+Number(result.failed)+' omitidas':'')+'.');
+ }catch(error){if(modal.open)closeModal();throw error;}
+}
 function albumView(){
  const list=media.photo;
  if(!list)return loading('Cargando álbum');
- return '<div class="section"><div class="row between"><div><h3 style="margin:0">Nuestro álbum</h3><small class="muted">'+list.length+' fotos privadas</small></div><button class="btn small" data-action="media-add" data-kind="photo">+ Foto</button></div>'+(list.length?'<div class="gallery" style="margin-top:12px">'+list.map(x=>'<div class="photo"><img loading="lazy" src="'+attr(x.url)+'" alt="Foto de nuestro álbum"><button data-action="media-delete" data-kind="photo" data-path="'+attr(x.path)+'" aria-label="Eliminar foto">'+ico('trash-2')+'</button></div>').join('')+'</div>':'<div class="empty"><span class="big">'+ico('camera')+'</span>Añade la primera foto desde tu teléfono.</div>')+'</div>';
+ return '<div class="section"><div class="row between"><div><h3 style="margin:0">Nuestro álbum</h3><small class="muted">'+list.length+' fotos privadas</small></div><button class="btn small" data-action="album-add">+ Añadir</button></div>'+driveAlbumCard()+(list.length?'<div class="gallery" style="margin-top:12px">'+list.map(x=>'<div class="photo"><img loading="lazy" src="'+attr(x.url)+'" alt="Foto de nuestro álbum"><button data-action="media-delete" data-kind="photo" data-path="'+attr(x.path)+'" aria-label="Eliminar foto">'+ico('trash-2')+'</button></div>').join('')+'</div>':'<div class="empty"><span class="big">'+ico('camera')+'</span>Añade la primera foto desde Google Photos, Drive o este teléfono.</div>')+'</div>';
 }
 function musicView(){
  rebuildMusicQueue();
@@ -420,14 +714,48 @@ function mapView(){
  const own=(cloud.locations||[]).find(l=>l.person===cloud.person)||{},partner=(cloud.locations||[]).find(l=>l.person!==cloud.person)||{};
  return '<section><div class="section-head"><div><p class="eyebrow">NUESTRO MAPA</p><h2>Acompañarnos</h2><p>Ubicación voluntaria, recorridos y lugares importantes.</p></div><button class="btn small secondary" data-action="map-refresh">Actualizar</button></div>'+
  '<div class="map-wrap"><div id="map"></div><button class="map-fab" data-action="status-menu" aria-label="Estado rápido">'+ico('sparkles')+'</button><div id="statusMenu" class="map-status-menu">'+['Ya voy','Voy bien','Llegué','En camino','Necesito una pausa'].map(s=>'<button data-action="status-set" data-status="'+attr(s)+'">'+esc(s)+'</button>').join('')+'<button data-action="status-custom">Otro…</button></div></div>'+
- '<div class="grid" style="margin-top:12px">'+personCard(own)+personCard(partner)+'</div>'+
+ '<div class="grid" style="margin-top:12px">'+personCard(own)+personCard(partner)+'</div>'+coupleDistanceCard({mapMode:true})+etaCard()+
  '<div class="section"><div class="card"><div class="row between"><div><h3>Compartir ubicación</h3><p>'+(native.tracking?'Android la mantiene activa en segundo plano.':'Está detenida en este teléfono.')+'</p></div><span class="badge '+(native.tracking?'good':'')+'">'+(native.tracking?'Activa':'Pausada')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small" data-action="'+(native.tracking?'location-stop':'location-start')+'">'+(native.tracking?'Detener':'Comenzar')+'</button><button class="btn small secondary" data-action="app-settings">Permisos</button></div></div></div>'+
  '<div class="section"><div class="card"><h3>Cómo me muevo normalmente</h3><p>Ayuda a interpretar cuando Android detecta que vas en vehículo.</p><div class="chips" style="margin-top:12px">'+
  ['','motorcycle','transit'].map(value=>'<button class="chip '+((own.transport_preference||'')===value?'active':'')+'" data-action="transport-set" data-value="'+value+'">'+ico(value==='motorcycle'?'bike':value==='transit'?'bus-front':'navigation')+(value==='motorcycle'?'Moto':value==='transit'?'Transporte público':'Automático')+'</button>').join('')+
  '</div></div></div>'+
  '<div class="section"><div class="grid">'+actionCard('route',own.trip_active?'Terminar recorrido':'Iniciar recorrido',own.trip_active?'Guardaremos el resumen al finalizar':'Registra distancia, duración y movimiento','trip-toggle')+actionCard('map-pin','Guardar este lugar','Casa, trabajo, recuerdo o aventura','place-new')+actionCard('navigation','Acompáñame','Elegir a dónde voy','destination')+'</div></div>'+
- mapHistoryView()+'</section>';
+ frequentPlacesView()+mapHistoryView()+'</section>';
 }
+function frequentPlacesFresh(){return !!frequentPlacesData&&Date.now()-frequentPlacesLoadedAt<15*60*1000;}
+async function loadFrequentPlaces(force=false){
+ if(frequentPlacesLoading)return frequentPlacesData;
+ if(frequentPlacesFresh()&&!force)return frequentPlacesData;
+ frequentPlacesLoading=true;
+ try{
+  frequentPlacesData=await api('frequent-places');frequentPlacesLoadedAt=Date.now();
+  if(view==='map'&&!editingNow())render();
+  return frequentPlacesData;
+ }finally{frequentPlacesLoading=false;}
+}
+function dwellLabel(minutes){
+ const m=Math.max(0,Number(minutes)||0);if(m<60)return Math.round(m)+' min acumulados';
+ const h=Math.floor(m/60),rest=Math.round(m%60);return h+' h'+(rest?' '+rest+' min':'')+' acumuladas';
+}
+function visibleFrequentSuggestions(){
+ return window.GalaxyFrequentPlaces?.visibleSuggestions(frequentPlacesData?.suggestions||[])||[];
+}
+function frequentPlacesView(){
+ const list=visibleFrequentSuggestions();if(!list.length)return'';
+ const own=(mapData?.locations||cloud?.locations||[]).find(l=>String(l.person)===String(cloud.person))||{};
+ return '<section class="section frequent-places"><div class="section-head"><div><p class="eyebrow">LUGARES QUE SE REPITEN</p><h2>Quizás este lugar importa</h2><p>La galaxia detectó zonas donde pasas tiempo en varios días distintos. Nada se guarda sin que tú lo decidas.</p></div></div><div class="stack">'+list.slice(0,3).map((s,n)=>{
+   const near=window.GalaxyFrequentPlaces?.isNearby(s,own),confidence=window.GalaxyFrequentPlaces?.confidenceLabel(s)||'Lugar frecuente';
+   return '<article class="card frequent-place-card '+(near?'near':'')+'"><div class="frequent-place-head"><span class="frequent-place-icon">'+ico(near?'locate-fixed':'map-pin')+'</span><div><span class="badge '+(near?'good':'')+'">'+esc(near?'Estás por aquí ahora':confidence)+'</span><h3>Zona frecuente '+(n+1)+'</h3><p>'+Number(s.days||0)+' días distintos · '+Number(s.visits||0)+' visitas · '+esc(dwellLabel(s.dwell_minutes))+'</p><small>Última visita: '+esc(fmtDateTime(s.last_visit))+'</small></div></div><div class="item-actions"><button class="btn small" data-action="frequent-place-save" data-lat="'+attr(s.latitude)+'" data-lon="'+attr(s.longitude)+'">Guardar lugar</button><button class="btn small secondary" data-action="frequent-place-focus" data-lat="'+attr(s.latitude)+'" data-lon="'+attr(s.longitude)+'">Ver zona</button><button class="btn small ghost" data-action="frequent-place-dismiss" data-lat="'+attr(s.latitude)+'" data-lon="'+attr(s.longitude)+'">Ahora no</button></div></article>';
+  }).join('')+'</div><p class="frequent-place-privacy">'+ico('shield-check')+' Solo analiza el historial de ubicación de este perfil. No guarda lugares automáticamente.</p></section>';
+}
+function frequentSuggestionFromButton(btn){
+ const lat=Number(btn.dataset.lat),lon=Number(btn.dataset.lon);
+ return (frequentPlacesData?.suggestions||[]).find(s=>Math.abs(Number(s.latitude)-lat)<0.00001&&Math.abs(Number(s.longitude)-lon)<0.00001)||{latitude:lat,longitude:lon};
+}
+function openFrequentPlaceSuggestion(s){
+ showModal('Guardar lugar frecuente','<form id="placeForm" class="stack" style="margin-top:16px"><div class="field"><label>¿Cómo llamamos este lugar?</label><input class="input" name="name" placeholder="Universidad, café, casa de…" required maxlength="80"></div><div class="field"><label>Tipo</label><select name="kind"><option value="home">Casa</option><option value="work">Trabajo</option><option value="memory" selected>Recuerdo</option><option value="adventure">Aventura</option></select></div><div class="field"><label>Nota</label><textarea name="note" placeholder="Detectado porque has estado aquí varios días">Lugar sugerido por visitas frecuentes</textarea></div><input type="hidden" name="latitude" value="'+attr(s.latitude)+'"><input type="hidden" name="longitude" value="'+attr(s.longitude)+'"><p class="muted">La app sugiere la zona; tú eliges si realmente es un lugar importante y cómo guardarlo.</p><button class="btn" type="submit">Guardar en nuestro mapa</button></form>','place');
+}
+
 function historyPlacesView(){
  const places=mapData?.places||[];
  if(!places.length)return '<section class="section"><div class="section-head"><div><h2>Mapa de nuestra historia</h2><p>Guarden lugares y relaciónenlos con recuerdos para construirlo.</p></div></div><div class="empty">Aún no hay lugares guardados.</div></section>';
@@ -436,7 +764,7 @@ function historyPlacesView(){
 function mapHistoryView(){
  if(!mapData)return '<div class="section">'+loading('Cargando recorridos')+'</div>';
  const trips=mapData.trips||[],events=mapData.events||[],encounters=mapData.encounters||[];
- return historyPlacesView()+'<section class="section"><div class="section-head"><div><h2>Actividad reciente</h2><p>Recorridos, llegadas y encuentros.</p></div></div><div class="stack">'+
+ return historyPlacesView()+'<section class="section" id="encounter-history"><div class="section-head"><div><h2>Actividad reciente</h2><p>Recorridos, llegadas y encuentros.</p></div></div><div class="stack">'+
  (trips.slice(0,4).map(t=>'<div class="card"><span class="badge">'+(names()[Number(t.person)]||'Nosotros')+'</span><h3 style="margin-top:8px">'+fmtDistance(t.distance_m)+' · '+fmtDuration(t.duration_s)+'</h3><p>'+esc(fmtDateTime(t.started_at))+(t.max_speed?' · máx. '+(Number(t.max_speed)*3.6).toFixed(0)+' km/h':'')+'</p></div>').join('')||
  events.slice(0,4).map(e=>'<div class="card"><h3>'+(e.event==='arrived'?'Llegada':'Salida')+'</h3><p>'+esc(fmtDateTime(e.happened_at))+'</p></div>').join('')||
  encounters.slice(0,3).map(e=>'<div class="card"><h3 class="icon-title">'+ico('heart')+'Nos encontramos</h3><p>'+esc(fmtDateTime(e.started_at))+'</p></div>').join('')||
@@ -462,10 +790,84 @@ function deviceProfilesCard(){
  return '<div class="card"><div class="row between"><div><h3>Perfiles y teléfonos</h3><p>Este teléfono está entrando como <b>'+esc(mine)+'</b>. Cada código nuevo queda ligado al perfil que elijas.</p></div>'+ico('smartphone')+'</div><div class="stack" style="margin-top:10px">'+(rows||'<p class="muted">No hay otros teléfonos activos.</p>')+'</div>'+ownerControls+'</div>';
 }
 
+function gpsHistoryPrivacyCard(){
+ return '<div class="card gps-history-card"><div class="row between"><div><p class="eyebrow">DATOS DE MOVILIDAD</p><h3>Historial GPS de '+esc(myName())+'</h3><p>Exporta o borra únicamente los datos de movilidad de este perfil. Lugares guardados, recuerdos, encuentros y datos de '+esc(partnerName())+' no se eliminan.</p></div>'+ico('route')+'</div><div class="gps-history-scope"><span>'+ico('user-round')+' Solo '+esc(myName())+'</span><span>'+ico('shield-check')+' Control individual</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small secondary" data-action="gps-history-export">'+ico('download')+' Exportar GPS</button><button class="btn small danger" data-action="gps-history-delete-open">'+ico('trash-2')+' Borrar historial GPS</button></div></div>';
+}
+function gpsExportProgress(dataset,total){
+ const labels={history:'Puntos GPS',trips:'Recorridos',tripPoints:'Puntos de rutas',placeEvents:'Llegadas y salidas'};
+ const label=labels[dataset]||'Historial GPS',status=modal.querySelector('#gpsExportStatus'),count=modal.querySelector('#gpsExportCount');
+ if(status)status.textContent='Exportando '+label.toLowerCase()+'…';
+ if(count)count.textContent=total+' registros preparados';
+}
+async function exportGpsHistory(){
+ const helper=window.GalaxyGpsHistory;if(!helper)return;
+ showModal('Exportar historial GPS','<div class="gps-export-progress">'+loading('Preparando historial GPS')+'<h3 id="gpsExportStatus">Preparando exportación…</h3><p id="gpsExportCount">0 registros preparados</p><p class="muted">El archivo contendrá solo los datos de movilidad de '+esc(myName())+'.</p></div>');
+ const bundle=helper.emptyBundle(String(cloud.person),myName());
+ try{
+  for(const dataset of helper.DATASETS){
+   let after=0,snapshot=0,done=false,pages=0;
+   while(!done){
+    if(++pages>1000)throw new Error('El historial es demasiado grande para exportarlo en una sola operación.');
+    const page=await api('gps-history-export',{dataset,after,snapshot,limit:1000});
+    if(!snapshot)snapshot=Number(page.snapshot||0);
+    helper.appendPage(bundle,dataset,page.rows||[]);
+    gpsExportProgress(dataset,helper.totalRows(bundle));
+    done=!!page.done;
+    if(!done){
+      const next=Number(page.next||0);if(!Number.isFinite(next)||next<=after)throw new Error('La exportación GPS perdió el cursor.');
+      after=next;
+    }
+   }
+  }
+  bundle.exportedAt=new Date().toISOString();
+  const fileName=helper.exportFileName(cloud.today,myName());
+  await GalaxyNative.call('exportJson',fileName,JSON.stringify(bundle));
+  closeModal();toast('Historial GPS exportado: '+helper.totalRows(bundle)+' registros.');
+ }catch(error){if(modal.open)closeModal();throw error;}
+}
+function openGpsHistoryDelete(){
+ const own=(cloud?.locations||[]).find(l=>String(l.person)===String(cloud.person))||{};
+ if(own.trip_active){showModal('Primero termina el recorrido','<div class="gps-delete-warning">'+ico('route')+'<div><h3>Hay un recorrido activo</h3><p>Termínalo antes de borrar el historial GPS para no dejar una ruta incompleta.</p><button class="btn small secondary" data-action="gps-history-map">Ir al mapa</button></div></div>');return;}
+ showModal('Borrar historial GPS de '+myName(),'<form id="gpsHistoryDeleteForm" class="stack gps-delete-form" style="margin-top:16px"><div class="gps-delete-warning danger">'+ico('triangle-alert')+'<div><h3>Esta acción no se puede deshacer</h3><p>Se borrarán solo los puntos GPS, recorridos, puntos temporales de rutas y llegadas/salidas de '+esc(myName())+'.</p></div></div><div class="gps-preserved"><b>Se conserva:</b><span>Lugares guardados</span><span>Recuerdos y archivos</span><span>Encuentros compartidos</span><span>Datos de '+esc(partnerName())+'</span></div><div class="field"><label>Escribe BORRAR para confirmar</label><input class="input" name="confirmation" autocomplete="off" autocapitalize="characters" placeholder="BORRAR" required></div><p class="muted">'+(native.tracking?'La ubicación se pausará unos segundos, se limpiará la cola pendiente y volverá a activarse al terminar.':'La ubicación está pausada y seguirá así después del borrado.')+'</p><button class="btn danger" type="submit">'+ico('trash-2')+' Borrar únicamente mi historial GPS</button></form>','gps-delete');
+}
+async function deleteGpsHistory(){
+ const helper=window.GalaxyGpsHistory,wasTracking=!!native.tracking;
+ let stopped=false,serverDeleted=false,result=null;
+ if(wasTracking){await GalaxyNative.call('stopLocation');stopped=true;native=nativeState();await new Promise(resolve=>setTimeout(resolve,700));}
+ try{
+  result=await api('gps-history-delete');serverDeleted=true;
+  await GalaxyNative.call('clearPendingGps');
+ }catch(error){
+  if(stopped&&!serverDeleted){try{await GalaxyNative.call('startLocation');native=nativeState();}catch{}}
+  if(serverDeleted)throw new Error('El historial del servidor se borró, pero Android no pudo limpiar la cola GPS pendiente. La ubicación quedó pausada para evitar que reaparezcan puntos antiguos.');
+  throw error;
+ }
+ let restarted=false;
+ if(wasTracking){
+  try{await GalaxyNative.call('startLocation');native=nativeState();restarted=true;}
+  catch{}
+ }
+ frequentPlacesData=null;frequentPlacesLoadedAt=0;mapData=null;
+ await refreshState({quiet:true});
+ closeModal();render();
+ const total=Number(result?.deleted?.total||0);
+ toast('Borrados '+total+' registros GPS de '+myName()+'.'+(wasTracking&&!restarted?' Ubicación quedó pausada.':''));
+}
+
+function themeIcon(id){
+ return {auto:'sparkles',daylight:'sparkles',cosmic:'moon',halloween:'moon',christmas:'star',valentine:'heart',friendship:'hand-heart',easter:'flower-2'}[id]||'sparkles';
+}
+function themeSettingsCard(){
+ const engine=window.GalaxyTheme;if(!engine)return'';
+ const choice=engine.getChoice(),state=engine.resolve(choice),automatic=choice==='auto';
+ return '<div class="card theme-settings-card"><div class="row between"><div><p class="eyebrow">APARIENCIA</p><h3>Temas de Nuestra Galaxia</h3><p>'+(automatic?'Automático está activo. Ahora se ve como <b>'+esc(engine.LABELS[state.active])+'</b>.':'Elegiste <b>'+esc(engine.LABELS[state.active])+'</b> manualmente.')+'</p></div>'+ico(themeIcon(state.active))+'</div><div class="theme-grid">'+engine.options().map(option=>'<button class="theme-option '+(choice===option.id?'active':'')+'" data-action="theme-set" data-value="'+attr(option.id)+'"><span class="theme-preview" data-preview="'+attr(option.id)+'">'+ico(themeIcon(option.id))+'</span><span><b>'+esc(option.label)+'</b><small>'+(option.id==='auto'?'Cambia con la fecha':option.id===state.active?'Vista actual':'Elegir tema')+'</small></span>'+(choice===option.id?ico('circle-check-big'):'')+'</button>').join('')+'</div><p class="theme-local-note">'+ico('smartphone')+' La apariencia se guarda en este teléfono. No cambia el tema del teléfono de '+esc(partnerName())+'.</p></div>';
+}
+
 function moreView(){
  const settings=cloud.settings||{data:{},version:1},data=settings.data||{},presence=ownPresence();
  return '<section><div class="section-head"><div><p class="eyebrow">NUESTRA APP</p><h2>Más</h2><p>Privacidad, respaldo, nuestra historia inteligente y ajustes.</p></div></div>'+
- '<div class="card"><div class="row between"><div><h3>Privacidad de “Ahora”</h3><p>Tu ubicación sigue teniendo su propio interruptor. Aquí decides si compartes batería y la canción que estás escuchando.</p></div>'+ico('shield-check')+'</div><div class="privacy-grid"><button class="privacy-toggle '+(presence.shareBattery?'active':'')+'" data-action="presence-battery">'+ico('battery-charging')+'<span><b>Batería</b><small>'+(presence.shareBattery?'Compartida':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(presence.shareListening?'active':'')+'" data-action="presence-listening">'+ico('music')+'<span><b>Escuchando</b><small>'+(presence.shareListening?'Compartido':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(native.tracking?'active':'')+'" data-action="map">'+ico('map-pin')+'<span><b>Ubicación</b><small>'+(native.tracking?'Compartiendo':'Pausada')+'</small></span></button></div></div>'+
+ '<div class="card"><div class="row between"><div><h3>Privacidad de “Ahora”</h3><p>Tu ubicación sigue teniendo su propio interruptor. Aquí decides si compartes batería y la canción que estás escuchando.</p></div>'+ico('shield-check')+'</div><div class="privacy-grid"><button class="privacy-toggle '+(presence.shareBattery?'active':'')+'" data-action="presence-battery">'+ico('battery-charging')+'<span><b>Batería</b><small>'+(presence.shareBattery?'Compartida':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(presence.shareListening?'active':'')+'" data-action="presence-listening">'+ico('music')+'<span><b>Escuchando</b><small>'+(presence.shareListening?'Compartido':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(native.tracking?'active':'')+'" data-action="map">'+ico('map-pin')+'<span><b>Ubicación</b><small>'+(native.tracking?'Compartiendo':'Pausada')+'</small></span></button></div></div>'+gpsHistoryPrivacyCard()+
+ themeSettingsCard()+
  '<div class="card"><div class="row between"><div><h3>Nuestra IA</h3><p>Pregunta por recuerdos, planes, lugares, viajes y momentos guardados. Responde usando únicamente su propia historia.</p></div>'+ico('sparkles')+'</div><button class="btn small" style="margin-top:14px" data-action="our-ai">Preguntar a nuestra historia</button></div>'+
  '<div class="card"><div class="row between"><div><h3>Copia de nuestra galaxia</h3><p>Exporta los datos a un archivo JSON o restaura una copia. Fotos, música y audios permanecen en su almacenamiento privado y se conservan por referencia.</p></div>'+ico('archive')+'</div><div class="row wrap" style="margin-top:14px"><button class="btn small secondary" data-action="backup-export">'+ico('download')+' Exportar</button><button class="btn small ghost" data-action="backup-import">'+ico('upload')+' Restaurar</button></div></div>'+
  '<div class="card"><div class="row between"><div><h3>Widget “Nuestra Galaxia”</h3><p>Foto, próxima fecha y un abrazo desde el escritorio.</p></div><span class="badge '+(native.canPinWidget?'good':'')+'">'+(native.canPinWidget?'Disponible':'Manual')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small" data-action="widget-add">Añadir widget</button><button class="btn small secondary" data-action="widget-photo">Elegir foto</button><button class="btn small ghost" data-action="widget-photo-clear">Quitar foto</button></div></div>'+
@@ -503,6 +905,7 @@ function drawMap({fit=true}={}){
    const linked=(cloud?.items||[]).filter(i=>Number(i.data?.placeId)===Number(p.id));
    map.addMarker({lat:p.latitude,lon:p.longitude,icon:markerIcon,className:'place',popup:p.name+(linked.length?' · '+linked.length+' '+(linked.length===1?'historia':'historias'):'')+(p.note?' · '+p.note:'')});
  });
+ visibleFrequentSuggestions().slice(0,3).forEach(s=>map.addMarker({lat:s.latitude,lon:s.longitude,icon:'map-pin',className:'suggestion',popup:'Lugar frecuente · '+Number(s.days||0)+' días · '+Number(s.visits||0)+' visitas'}));
  const grouped={};
  (mapData.tripPoints||[]).slice().reverse().forEach(p=>(grouped[p.person]??=[]).push([Number(p.latitude),Number(p.longitude)]));
  Object.entries(grouped).forEach(([person,points])=>{if(points.length>1)map.addPolyline(points,{className:person===cloud.person?'mine':'partner',dashed:person!==cloud.person});});
@@ -568,8 +971,9 @@ function openPlace(){
  showModal('Guardar este lugar','<form id="placeForm" class="stack" style="margin-top:16px"><div class="field"><label>Nombre</label><input class="input" name="name" placeholder="Casa, oficina, nuestro parque…" required></div><div class="field"><label>Tipo</label><select name="kind"><option value="home">Casa</option><option value="work">Trabajo</option><option value="memory">Recuerdo</option><option value="adventure">Aventura</option></select></div><div class="field"><label>Nota</label><textarea name="note" placeholder="Algo que quieras recordar de este lugar"></textarea></div><input type="hidden" name="latitude" value="'+Number(own.latitude)+'"><input type="hidden" name="longitude" value="'+Number(own.longitude)+'"><button class="btn" type="submit">Guardar lugar actual</button></form>','place');
 }
 function openDestination(){
- const partner=cloud.person==='0'?'1':'0',places=mapData?.places||[];
- showModal('Acompáñame','<form id="destinationForm" class="stack" style="margin-top:16px"><div class="field"><label>Voy hacia</label><select name="destination"><option value="person:'+partner+'">'+esc(partnerName())+'</option>'+places.map(p=>'<option value="place:'+p.id+'">'+esc(p.name)+'</option>').join('')+'<option value="none">Ningún destino</option></select></div><button class="btn" type="submit">Guardar destino</button></form>','destination');
+ const partner=cloud.person==='0'?'1':'0',places=mapData?.places||[],active=(mapData?.destinations||[]).find(d=>String(d.person)===String(cloud.person)&&d.active!==false);
+ const current=active?(active.kind==='person'?'person:'+active.target_person:'place:'+active.place_id):'none';
+ showModal('Acompáñame','<form id="destinationForm" class="stack" style="margin-top:16px"><div class="field"><label>Voy hacia</label><select name="destination"><option value="person:'+partner+'" '+(current==='person:'+partner?'selected':'')+'>'+esc(partnerName())+'</option>'+places.map(p=>'<option value="place:'+p.id+'" '+(current==='place:'+p.id?'selected':'')+'>'+esc(p.name)+'</option>').join('')+'<option value="none" '+(current==='none'?'selected':'')+'>Ningún destino</option></select></div><p class="muted">El ETA se actualizará con tu ubicación y forma de moverte.</p><button class="btn" type="submit">Guardar destino</button></form>','destination');
 }
 
 function storyDocuments(){
@@ -648,6 +1052,22 @@ document.addEventListener('click',async e=>{
   if(a==='welcome-skip'){finishAdriWelcome();return;}
   if(a==='welcome-replay'){welcomePreview=true;welcomeStep=0;welcomeGift=true;welcomeEntering=false;tourStep=-1;render();window.scrollTo(0,0);return;}
   if(a==='modal-close'){closeModal();return;}
+  if(a==='universal-search-open'){openUniversalSearch();return;}
+  if(a==='universal-search-result'){await openUniversalSearchResult(btn);return;}
+  if(a==='monthly-summary-open'){await openMonthlySummary(btn.dataset.month||String(cloud.today||'').slice(0,7));return;}
+  if(a==='monthly-summary-month'){if(!btn.disabled)await openMonthlySummary(btn.dataset.month);return;}
+  if(a==='today-history-open'){await openTodayHistory();return;}
+  if(a==='today-history-refresh'){await openTodayHistory(true);return;}
+  if(a==='today-history-item'){await openTodayHistoryItem(btn);return;}
+  if(a==='encounter-stats-open'){await openEncounterStats();return;}
+  if(a==='encounter-stats-refresh'){await openEncounterStats(true);return;}
+  if(a==='encounter-map'){closeModal();go('map');await refreshMap({detail:true});setTimeout(()=>document.querySelector('#encounter-history')?.scrollIntoView({behavior:'smooth',block:'center'}),120);return;}
+  if(a==='couple-distance-map'){go('map');await refreshMap({quiet:true,detail:false});setTimeout(()=>{focusCoupleOnMap();document.querySelector('#coupleDistanceCard')?.scrollIntoView({behavior:'smooth',block:'center'});},120);return;}
+  if(a==='couple-distance-focus'){focusCoupleOnMap();return;}
+  if(a==='eta-focus'){focusEtaOnMap();return;}
+  if(a==='frequent-place-save'){openFrequentPlaceSuggestion(frequentSuggestionFromButton(btn));return;}
+  if(a==='frequent-place-focus'){if(map){map.setView([Number(btn.dataset.lat),Number(btn.dataset.lon)],16);document.querySelector('#map')?.scrollIntoView({behavior:'smooth',block:'center'});}return;}
+  if(a==='frequent-place-dismiss'){const s=frequentSuggestionFromButton(btn);window.GalaxyFrequentPlaces?.dismiss(s,14);render();toast('Ocultaremos esta sugerencia durante dos semanas.');return;}
   if(a==='map'){go('map');return;}
   if(a==='moments'){go('moments');return;}
   if(a==='add-memory'){if(!mapData)await refreshMap({quiet:true,detail:false});openItemForm('memory');return;}
@@ -677,6 +1097,12 @@ document.addEventListener('click',async e=>{
   if(a==='surprise-note-new'){if(!mapData)await refreshMap({quiet:true,detail:false});openSurpriseNote();return;}
   if(a==='surprise-again'){openSurprise();return;}
   if(a==='surprise-save'&&lastSurprise){await busy(async()=>{await api('item-save',{kind:'plan',data:{title:lastSurprise.title,body:lastSurprise.body,category:'Cita sorpresa',done:false}});closeModal();await refreshState();},'Cita guardada en Planes.');return;}
+  if(a==='album-add'){openAlbumAdd();return;}
+  if(a==='photos-picker'){await importPhotosPicker();return;}
+  if(a==='photo-file'){closeModal();await GalaxyNative.call('pickMedia','photo');await refreshPhotoAlbum();toast('Foto añadida desde el teléfono.');return;}
+  if(a==='drive-folder-connect'){await connectDriveFolder();return;}
+  if(a==='drive-sync'){await syncDriveAlbum();return;}
+  if(a==='drive-folder-disconnect'){if(confirm('¿Desconectar esta carpeta de Google Drive? Las fotos ya importadas seguirán en el álbum.')){await GalaxyNative.call('disconnectDriveFolder');native=nativeState();render();toast('Carpeta de Drive desconectada.');}return;}
   if(a==='music-add'){openMusicAdd();return;}
   if(a==='music-upload'){closeModal();await GalaxyNative.call('pickMedia','music');media.music=null;mediaLoadedAt.music=0;await loadMedia('music',true);renderGlobalPlayer();toast('MP3 añadido a Nuestra música.');return;}
   if(a==='music-url'){openMusicUrl();return;}
@@ -691,6 +1117,10 @@ document.addEventListener('click',async e=>{
   if(a==='our-ai'){if(!mapData)await refreshMap({quiet:true,detail:true});openOurAI();return;}
   if(a==='ai-question'){const q=btn.dataset.question||'';const input=modal.querySelector('#ourAiForm [name="question"]');if(input)input.value=q;showAiAnswer(q);return;}
   if(a==='backup-export'){const backup=await api('backup-export');await GalaxyNative.call('exportJson','nuestra-galaxia-backup-'+(cloud.today||'copia')+'.json',JSON.stringify(backup));toast('Copia guardada en el teléfono.');return;}
+  if(a==='gps-history-export'){await exportGpsHistory();return;}
+  if(a==='gps-history-delete-open'){openGpsHistoryDelete();return;}
+  if(a==='gps-history-map'){closeModal();go('map');return;}
+  if(a==='theme-set'){const state=window.GalaxyTheme?.applyTheme(btn.dataset.value);render();toast(state?.selected==='auto'?'Tema automático · ahora '+window.GalaxyTheme.LABELS[state.active]+'.':'Tema '+window.GalaxyTheme.LABELS[state?.active]+' activado.');return;}
   if(a==='backup-import'){if(!confirm('Restaurar una copia añadirá lo que falte sin borrar lo que ya existe. ¿Continuar?'))return;const file=await GalaxyNative.call('importJson'),backup=JSON.parse(file.json||'{}'),result=await api('backup-import',{backup});await refreshState({quiet:true});await refreshMap({quiet:true,detail:true});render();const r=result.restored||{};toast('Copia restaurada: '+Number(r.items||0)+' contenidos, '+Number(r.places||0)+' lugares y '+Number(r.bond||0)+' momentos.');return;}
   if(a==='map-refresh'){await refreshMap({detail:true});return;}
   if(a==='status-menu'){$('#statusMenu')?.classList.toggle('open');return;}
@@ -731,6 +1161,10 @@ document.addEventListener('click',async e=>{
  }catch(err){toast(err.message||'No pudimos completar la acción.');}
 });
 
+document.addEventListener('input',e=>{
+ if(e.target.id==='universalSearchInput')renderUniversalSearchResults(e.target.value);
+});
+
 document.addEventListener('change',e=>{
  if(e.target.matches('[data-role="surprise-unlock"]')){const dateBox=modal.querySelector('[data-role="surprise-date"]'),placeBox=modal.querySelector('[data-role="surprise-place"]');if(dateBox)dateBox.hidden=e.target.value!=='date';if(placeBox)placeBox.hidden=e.target.value!=='place';}
  if(e.target.matches('[data-role="game-question"]')){
@@ -743,6 +1177,7 @@ document.addEventListener('submit',async e=>{
  e.preventDefault();
  try{
   if(e.target.id==='ourAiForm'){const q=String(new FormData(e.target).get('question')||'');showAiAnswer(q);return;}
+  if(e.target.id==='gpsHistoryDeleteForm'){const value=new FormData(e.target).get('confirmation');if(!window.GalaxyGpsHistory?.validDeleteConfirmation(value))throw new Error('Escribe BORRAR exactamente para confirmar.');const submit=e.target.querySelector('button[type="submit"]');if(submit)submit.disabled=true;await deleteGpsHistory();return;}
   if(e.target.id==='pairForm'){
    const code=new FormData(e.target).get('code');await GalaxyNative.call('pair',String(code));native=nativeState();await refreshState();toast('Teléfono vinculado como '+myName()+'.');return;
   }
@@ -761,8 +1196,8 @@ document.addEventListener('submit',async e=>{
    await api('bond-save',{type:'voice',data:{...pendingVoiceDraft,audioPath:upload.path,mime:upload.mime}});
    pendingVoiceDraft=null;voiceReady=false;closeModal();await refreshState();toast('Mensaje de voz guardado.');return;
   }
-  if(e.target.id==='placeForm'){const fd=new FormData(e.target);await api('place-save',{name:fd.get('name'),kind:fd.get('kind'),note:fd.get('note'),latitude:Number(fd.get('latitude')),longitude:Number(fd.get('longitude'))});closeModal();await refreshMap();toast('Lugar guardado.');return;}
-  if(e.target.id==='destinationForm'){const value=String(new FormData(e.target).get('destination'));if(value==='none')await api('destination-save',{kind:'none'});else{const [kind,id]=value.split(':');await api('destination-save',kind==='person'?{kind,target_person:id,label:partnerName()}:{kind,place_id:Number(id)});}closeModal();await refreshMap();toast('Destino actualizado.');return;}
+  if(e.target.id==='placeForm'){const fd=new FormData(e.target);await api('place-save',{name:fd.get('name'),kind:fd.get('kind'),note:fd.get('note'),latitude:Number(fd.get('latitude')),longitude:Number(fd.get('longitude'))});closeModal();frequentPlacesLoadedAt=0;await refreshMap();await loadFrequentPlaces(true).catch(()=>{});toast('Lugar guardado.');return;}
+  if(e.target.id==='destinationForm'){const value=String(new FormData(e.target).get('destination'));if(value==='none')await api('destination-save',{kind:'none'});else{const [kind,id]=value.split(':');await api('destination-save',kind==='person'?{kind,target_person:id,label:partnerName()}:{kind,place_id:Number(id)});}closeModal();await refreshMap({detail:false});if(view==='map')setTimeout(()=>document.querySelector('#etaCard')?.scrollIntoView({behavior:'smooth',block:'center'}),80);toast(value==='none'?'Destino desactivado.':'Destino actualizado · ETA listo.');return;}
   if(e.target.id==='settingsForm'){const fd=new FormData(e.target);await api('settings-save',{version:cloud.settings.version,data:{names:[fd.get('name0'),fd.get('name1')],startDate:fd.get('startDate'),albumUrl:fd.get('albumUrl')}});await refreshState();toast('Ajustes guardados.');return;}
  }catch(err){toast(err.message||'No pudimos guardar.');}
 });

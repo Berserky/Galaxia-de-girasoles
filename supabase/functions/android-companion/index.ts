@@ -130,9 +130,18 @@ async function smartPlaces(d:any,p:any){
 }
 
 async function encounter(){
-  const locs=await ok(db.from("galaxy_locations").select("person,latitude,longitude,sharing").eq("sharing",true));
-  if(!locs||locs.length!==2||locs.some((x:any)=>x.latitude==null||x.longitude==null))return;
-  const meters=dist(locs[0],locs[1]),runtime=await ok(db.from("galaxy_encounter_runtime").select("*").eq("singleton",true).single()),open=(await ok(db.from("galaxy_encounters").select("id").is("ended_at",null).limit(1)))?.[0];
+  const [locs,runtime,openRows]=await Promise.all([
+    ok(db.from("galaxy_locations").select("person,latitude,longitude,sharing,updated_at").eq("sharing",true)),
+    ok(db.from("galaxy_encounter_runtime").select("*").eq("singleton",true).single()),
+    ok(db.from("galaxy_encounters").select("id,started_at").is("ended_at",null).limit(1))
+  ]);
+  const open=openRows?.[0];
+  if(!locs||locs.length!==2||locs.some((x:any)=>x.latitude==null||x.longitude==null)){
+    if(runtime.near_since)await ok(db.from("galaxy_encounter_runtime").update({near_since:null}).eq("singleton",true));
+    if(open)await ok(db.from("galaxy_encounters").update({ended_at:new Date().toISOString()}).eq("id",open.id));
+    return;
+  }
+  const meters=dist(locs[0],locs[1]);
   if(meters<=80){
     if(!runtime.near_since){await ok(db.from("galaxy_encounter_runtime").update({near_since:new Date().toISOString()}).eq("singleton",true));return;}
     if(!open&&Date.now()-Date.parse(runtime.near_since)>=60000)await ok(db.from("galaxy_encounters").insert({started_at:runtime.near_since,distance_m:Math.round(meters),created_by:locs[0].person}));
@@ -526,6 +535,329 @@ async function gesture(req:Request,body:any){
 
 function meters(lat1:number,lon1:number,lat2:number,lon2:number){if(![lat1,lon1,lat2,lon2].every(Number.isFinite))return Infinity;const R=6371000,p=Math.PI/180,dLat=(lat2-lat1)*p,dLon=(lon2-lon1)*p,a=Math.sin(dLat/2)**2+Math.cos(lat1*p)*Math.cos(lat2*p)*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(a));}
 
+function monthBounds(month:string){
+  const [year,number]=month.split("-").map(Number);
+  const start=new Date(`${month}-01T00:00:00-05:00`);
+  const nextYear=number===12?year+1:year,nextMonth=number===12?1:number+1;
+  const nextKey=nextYear+"-"+String(nextMonth).padStart(2,"0");
+  const end=new Date(`${nextKey}-01T00:00:00-05:00`);
+  return {start:start.toISOString(),end:end.toISOString(),startDay:month+"-01",endDay:nextKey+"-01"};
+}
+function bogotaDay(value:unknown){
+  const date=new Date(String(value||""));
+  if(!Number.isFinite(date.getTime()))return"";
+  return new Intl.DateTimeFormat("en-CA",{timeZone:"America/Bogota",year:"numeric",month:"2-digit",day:"2-digit"}).format(date);
+}
+async function monthlySummary(req:Request,body:any){
+  await device(req);
+  const currentMonth=today().slice(0,7),month=String(body.month||currentMonth);
+  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)||month>currentMonth)return json({error:"Mes no válido."},400);
+  const bounds=monthBounds(month),now=Date.now();
+  const [items,trips,encounters,daily,bond]=await Promise.all([
+    ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:false}).limit(2000)),
+    ok(db.from("galaxy_trip_history").select("person,started_at,ended_at,distance_m,duration_s").gte("started_at",bounds.start).lt("started_at",bounds.end).order("started_at",{ascending:false}).limit(1000)),
+    ok(db.from("galaxy_encounters").select("id,started_at,ended_at,distance_m").gte("started_at",bounds.start).lt("started_at",bounds.end).order("started_at",{ascending:false}).limit(1000)),
+    ok(db.from("galaxy_daily").select("day,person,mood,answer").gte("day",bounds.startDay).lt("day",bounds.endDay).order("day",{ascending:true}).limit(1000)),
+    ok(db.from("galaxy_bond").select("id,type,author,created").gte("created",bounds.start).lt("created",bounds.end).order("created",{ascending:false}).limit(1000))
+  ]);
+  const monthItems=(items||[]).filter((row:any)=>{
+    const explicit=String(row?.data?.date||row?.data?.unlockDate||"");
+    const effective=explicit&&/^\d{4}-\d{2}-\d{2}$/.test(explicit)?explicit:bogotaDay(row?.created);
+    return effective.startsWith(month);
+  });
+  const counts={
+    saved:monthItems.length,
+    memories:monthItems.filter((x:any)=>x.kind==="memory").length,
+    plansDone:monthItems.filter((x:any)=>x.kind==="plan"&&x.data?.done===true).length,
+    events:monthItems.filter((x:any)=>x.kind==="event").length,
+    songs:monthItems.filter((x:any)=>x.kind==="song").length,
+    notes:monthItems.filter((x:any)=>x.kind==="note").length,
+    journeys:monthItems.filter((x:any)=>x.kind==="journey").length,
+    wishesDone:monthItems.filter((x:any)=>x.kind==="wish"&&x.data?.done===true).length
+  };
+  const tripRows=trips||[],distanceM=tripRows.reduce((sum:number,row:any)=>sum+Math.max(0,Number(row.distance_m||0)),0);
+  const byPerson:Record<string,number>={};
+  for(const row of tripRows){const p=String(row.person);byPerson[p]=(byPerson[p]||0)+Math.max(0,Number(row.distance_m||0));}
+  let togetherSeconds=0;
+  for(const row of encounters||[]){
+    const start=Math.max(Date.parse(row.started_at),Date.parse(bounds.start));
+    const end=Math.min(row.ended_at?Date.parse(row.ended_at):now,Date.parse(bounds.end),now);
+    if(Number.isFinite(start)&&Number.isFinite(end)&&end>start)togetherSeconds+=(end-start)/1000;
+  }
+  const dailyByDay=new Map<string,any[]>();
+  for(const row of daily||[]){const list=dailyByDay.get(row.day)||[];list.push(row);dailyByDay.set(row.day,list);}
+  let moodDays=0,answerDays=0;
+  for(const rows of dailyByDay.values()){
+    const people=new Set(rows.filter((x:any)=>x.mood).map((x:any)=>String(x.person)));if(people.has("0")&&people.has("1"))moodDays++;
+    const answered=new Set(rows.filter((x:any)=>x.answer).map((x:any)=>String(x.person)));if(answered.has("0")&&answered.has("1"))answerDays++;
+  }
+  const highlights=monthItems.filter((x:any)=>["memory","plan","event","journey"].includes(x.kind)&&!(x.kind==="plan"&&!x.data?.done)).sort((a:any,b:any)=>String(b.data?.date||b.created).localeCompare(String(a.data?.date||a.created))).slice(0,6).map((x:any)=>({id:x.id,kind:x.kind,title:text(x.data?.title||"",160),date:String(x.data?.date||bogotaDay(x.created))}));
+  return json({
+    month,counts,
+    trips:{count:tripRows.length,distance_m:Math.round(distanceM),by_person_m:Object.fromEntries(Object.entries(byPerson).map(([k,v])=>[k,Math.round(v)]))},
+    encounters:{count:(encounters||[]).length,together_seconds:Math.round(togetherSeconds)},
+    connection:{mood_days:moodDays,answer_days:answerDays},
+    bond:{gestures:(bond||[]).filter((x:any)=>x.type==="gesture").length,voices:(bond||[]).filter((x:any)=>x.type==="voice").length},
+    highlights
+  });
+}
+
+function sameHistoryDay(value:string,day:string){
+  return validDate(value)&&value<day&&value.slice(5)===day.slice(5);
+}
+async function todayHistory(req:Request,body:any){
+  const d=await device(req),person=String(d.person),day=String(body.day||today()),current=today();
+  if(!validDate(day)||day>current)return json({error:"Fecha no válida."},400);
+  const [items,trips,encounters,bond,daily,placeEvents,places,locations]=await Promise.all([
+    ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:false}).limit(5000)),
+    ok(db.from("galaxy_trip_history").select("id,person,started_at,ended_at,distance_m,duration_s,dominant_motion").order("started_at",{ascending:false}).limit(5000)),
+    ok(db.from("galaxy_encounters").select("id,started_at,ended_at,distance_m").order("started_at",{ascending:false}).limit(5000)),
+    ok(db.from("galaxy_bond").select("id,type,author,data,created").order("created",{ascending:false}).limit(5000)),
+    ok(db.from("galaxy_daily").select("day,person,mood,answer").order("day",{ascending:false}).limit(5000)),
+    ok(db.from("galaxy_place_events").select("id,person,place_id,event,happened_at").order("happened_at",{ascending:false}).limit(5000)),
+    ok(db.from("galaxy_places").select("id,name").limit(1000)),
+    ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude"))
+  ]);
+  const buckets=new Map<string,any>();
+  const bucket=(year:string)=>{
+    if(!buckets.has(year))buckets.set(year,{
+      year,items:[],places:new Set<string>(),
+      stats:{trips:0,distance_m:0,encounters:0,together_seconds:0,gestures:0,voices:0,shared_notes:0,rituals:0,arrivals:0,mood_together:false,answer_together:false}
+    });
+    return buckets.get(year);
+  };
+  const placeNames=new Map((places||[]).map((p:any)=>[String(p.id),text(p.name,80)]));
+  const own=(locations||[]).find((x:any)=>String(x.person)===person&&x.sharing);
+  for(const row of items||[]){
+    const data=row.data||{},explicit=validDate(data.date)?String(data.date):(validDate(data.unlockDate)?String(data.unlockDate):"");
+    const eventDay=explicit||bogotaDay(row.created);
+    if(!sameHistoryDay(eventDay,day))continue;
+    if(row.kind==="note"&&data.surprise&&String(row.author)!==person){
+      let unlocked=data.unlockType==="date"&&(!data.unlockDate||String(data.unlockDate)<=day);
+      if(data.unlockType==="place"&&own)unlocked=meters(Number(own.latitude),Number(own.longitude),Number(data.latitude),Number(data.longitude))<=Number(data.radius||150);
+      if(!unlocked)continue;
+    }
+    const b=bucket(eventDay.slice(0,4)),kind=String(row.kind||"memory");
+    b.items.push({
+      id:String(row.id),kind,author:String(row.author),date:eventDay,origin:explicit?"dated":"saved",
+      title:text(data.title||({memory:"Recuerdo",plan:"Plan",event:"Fecha",journey:"Viaje",song:"Canción",note:"Nota",capsule:"Cápsula",wish:"Deseo"} as any)[kind]||"Historia",160),
+      body:text(data.body||"",1200),category:text(data.category||"",80),placeName:text(data.placeName||"",100),done:data.done===true
+    });
+  }
+  for(const row of trips||[]){
+    const eventDay=bogotaDay(row.started_at);if(!sameHistoryDay(eventDay,day))continue;
+    const b=bucket(eventDay.slice(0,4));b.stats.trips++;b.stats.distance_m+=Math.max(0,Number(row.distance_m||0));
+  }
+  for(const row of encounters||[]){
+    const eventDay=bogotaDay(row.started_at);if(!sameHistoryDay(eventDay,day))continue;
+    const b=bucket(eventDay.slice(0,4));b.stats.encounters++;
+    const start=Date.parse(row.started_at),end=row.ended_at?Date.parse(row.ended_at):start;
+    if(Number.isFinite(start)&&Number.isFinite(end)&&end>start)b.stats.together_seconds+=(end-start)/1000;
+  }
+  for(const row of bond||[]){
+    const eventDay=bogotaDay(row.created);if(!sameHistoryDay(eventDay,day))continue;
+    const b=bucket(eventDay.slice(0,4));
+    if(row.type==="gesture")b.stats.gestures++;
+    if(row.type==="voice")b.stats.voices++;
+    if(row.type==="sharednote")b.stats.shared_notes++;
+    if(row.type==="ritual")b.stats.rituals++;
+  }
+  const dailyDays=new Map<string,any[]>();
+  for(const row of daily||[]){if(!sameHistoryDay(String(row.day||""),day))continue;const rows=dailyDays.get(row.day)||[];rows.push(row);dailyDays.set(row.day,rows);}
+  for(const [historyDay,rows] of dailyDays){
+    const b=bucket(historyDay.slice(0,4));
+    const moods=new Set(rows.filter((x:any)=>x.mood).map((x:any)=>String(x.person)));
+    const answers=new Set(rows.filter((x:any)=>x.answer).map((x:any)=>String(x.person)));
+    b.stats.mood_together=moods.has("0")&&moods.has("1");
+    b.stats.answer_together=answers.has("0")&&answers.has("1");
+  }
+  for(const row of placeEvents||[]){
+    if(row.event!=="arrived")continue;
+    const eventDay=bogotaDay(row.happened_at);if(!sameHistoryDay(eventDay,day))continue;
+    const b=bucket(eventDay.slice(0,4));b.stats.arrivals++;
+    const name=placeNames.get(String(row.place_id));if(name)b.places.add(name);
+  }
+  const groups=[...buckets.values()].map((b:any)=>({
+    year:b.year,
+    items:b.items.sort((a:any,b:any)=>String(b.date).localeCompare(String(a.date))).slice(0,50),
+    places:[...b.places].slice(0,6),
+    stats:{...b.stats,distance_m:Math.round(b.stats.distance_m),together_seconds:Math.round(b.stats.together_seconds)}
+  })).sort((a:any,b:any)=>String(b.year).localeCompare(String(a.year)));
+  return json({
+    day,
+    groups,
+    totals:{
+      years:groups.length,
+      items:groups.reduce((n:number,g:any)=>n+g.items.length,0),
+      trips:groups.reduce((n:number,g:any)=>n+g.stats.trips,0),
+      encounters:groups.reduce((n:number,g:any)=>n+g.stats.encounters,0)
+    }
+  });
+}
+
+async function encounterStats(req:Request){
+  await device(req);
+  const generated=new Date(),generatedMs=generated.getTime(),currentMonth=today().slice(0,7),bounds=monthBounds(currentMonth);
+  const [rows,locations]=await Promise.all([
+    ok(db.from("galaxy_encounters").select("id,started_at,ended_at,distance_m,created_by").order("started_at",{ascending:false}).limit(10000)),
+    ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude,updated_at").order("person"))
+  ]);
+  const locs=locations||[],mutualReady=locs.length===2&&locs.every((x:any)=>x.sharing&&x.latitude!=null&&x.longitude!=null);
+  const updates=locs.map((x:any)=>Date.parse(x.updated_at||"")).filter((n:number)=>Number.isFinite(n));
+  const lastMutual=updates.length===2?Math.min(...updates):NaN;
+  const fresh=mutualReady&&Number.isFinite(lastMutual)&&generatedMs-lastMutual<=10*60*1000;
+  const monthStart=Date.parse(bounds.start),monthEnd=Date.parse(bounds.end);
+  let totalSeconds=0,monthSeconds=0,monthCount=0,longest:any=null,longestSeconds=0,validCount=0;
+  const recent:any[]=[];
+  for(const row of rows||[]){
+    const start=Date.parse(row.started_at||"");if(!Number.isFinite(start))continue;
+    let end=row.ended_at?Date.parse(row.ended_at):NaN;
+    const isOpen=!row.ended_at;
+    if(!Number.isFinite(end)){
+      if(isOpen&&fresh)end=generatedMs;
+      else if(isOpen&&Number.isFinite(lastMutual))end=Math.max(start,Math.min(generatedMs,lastMutual));
+      else end=start;
+    }
+    if(end<start)end=start;
+    const seconds=Math.max(0,Math.round((end-start)/1000));
+    totalSeconds+=seconds;validCount++;
+    if(seconds>longestSeconds){longestSeconds=seconds;longest={id:row.id,started_at:row.started_at,ended_at:row.ended_at,duration_seconds:seconds};}
+    if(bogotaDay(row.started_at).startsWith(currentMonth))monthCount++;
+    const overlapStart=Math.max(start,monthStart),overlapEnd=Math.min(end,monthEnd);
+    if(overlapEnd>overlapStart)monthSeconds+=Math.round((overlapEnd-overlapStart)/1000);
+    if(recent.length<8)recent.push({id:row.id,started_at:row.started_at,ended_at:row.ended_at,distance_m:row.distance_m,duration_seconds:seconds,active:isOpen&&fresh});
+  }
+  const open=(rows||[]).find((x:any)=>!x.ended_at),active=open&&fresh?{
+    id:open.id,started_at:open.started_at,distance_m:open.distance_m,
+    current_distance_m:mutualReady?Math.round(dist(locs[0],locs[1])):null,
+    elapsed_seconds:Math.max(0,Math.round((generatedMs-Date.parse(open.started_at))/1000))
+  }:null;
+  return json({
+    generated_at:generated.toISOString(),
+    total_count:validCount,
+    completed_count:(rows||[]).filter((x:any)=>!!x.ended_at).length,
+    total_seconds:Math.round(totalSeconds),
+    average_seconds:validCount?Math.round(totalSeconds/validCount):0,
+    longest,
+    current_month:{month:currentMonth,count:monthCount,seconds:Math.round(monthSeconds)},
+    active,
+    recent
+  });
+}
+
+function frequentPlaceCandidates(rows:any[],places:any[],now=Date.now()){
+  const samples=(rows||[]).map((r:any)=>({...r,_t:Date.parse(r.captured_at||"")})).filter((r:any)=>
+    Number.isFinite(r._t)&&Number.isFinite(Number(r.latitude))&&Number.isFinite(Number(r.longitude))&&
+    (r.accuracy==null||Number(r.accuracy)<=120)&&
+    (r.motion==="still"||Math.max(0,Number(r.speed||0))<=0.8)
+  ).sort((a:any,b:any)=>a._t-b._t);
+  const stays:any[]=[];
+  let current:any=null;
+  const close=()=>{
+    if(!current)return;
+    const duration=Math.max(0,current.last-current.start);
+    if(current.count>=4&&duration>=8*60*1000)stays.push({
+      latitude:current.lat/current.count,longitude:current.lon/current.count,
+      started_at:new Date(current.start).toISOString(),ended_at:new Date(current.last).toISOString(),
+      duration_ms:duration,day:bogotaDay(new Date(current.start).toISOString())
+    });
+    current=null;
+  };
+  for(const row of samples){
+    if(!current){current={start:row._t,last:row._t,lat:Number(row.latitude),lon:Number(row.longitude),count:1};continue;}
+    const center={latitude:current.lat/current.count,longitude:current.lon/current.count};
+    const gap=row._t-current.last,metersAway=dist(center,row);
+    if(gap>20*60*1000||metersAway>120){close();current={start:row._t,last:row._t,lat:Number(row.latitude),lon:Number(row.longitude),count:1};continue;}
+    current.last=row._t;current.lat+=Number(row.latitude);current.lon+=Number(row.longitude);current.count++;
+  }
+  close();
+  const clusters:any[]=[];
+  for(const stay of stays){
+    let best:any=null,bestMeters=Infinity;
+    for(const cluster of clusters){
+      const metersAway=dist(stay,cluster);
+      if(metersAway<=160&&metersAway<bestMeters){best=cluster;bestMeters=metersAway;}
+    }
+    if(!best){
+      best={latitude:stay.latitude,longitude:stay.longitude,weight:stay.duration_ms,visits:0,days:new Set<string>(),dwell_ms:0,first_visit:stay.started_at,last_visit:stay.ended_at};
+      clusters.push(best);
+    }
+    const weight=Math.max(1,stay.duration_ms),sum=best.weight+weight;
+    best.latitude=(best.latitude*best.weight+stay.latitude*weight)/sum;
+    best.longitude=(best.longitude*best.weight+stay.longitude*weight)/sum;
+    best.weight=sum;best.visits++;best.days.add(stay.day);best.dwell_ms+=stay.duration_ms;
+    if(stay.started_at<best.first_visit)best.first_visit=stay.started_at;
+    if(stay.ended_at>best.last_visit)best.last_visit=stay.ended_at;
+  }
+  const ownPlaces=places||[];
+  return clusters.map((cluster:any)=>{
+    const days=cluster.days.size,dwellMinutes=Math.round(cluster.dwell_ms/60000),lastMs=Date.parse(cluster.last_visit);
+    const nearSaved=ownPlaces.some((p:any)=>dist(cluster,p)<=180);
+    const recentDays=Number.isFinite(lastMs)?Math.max(0,(now-lastMs)/86400000):999;
+    const score=days*12+cluster.visits*3+Math.min(20,dwellMinutes/30)+Math.max(0,12-recentDays);
+    return {
+      latitude:Number(cluster.latitude.toFixed(6)),longitude:Number(cluster.longitude.toFixed(6)),
+      days,visits:cluster.visits,dwell_minutes:dwellMinutes,
+      first_visit:cluster.first_visit,last_visit:cluster.last_visit,
+      score:Number(score.toFixed(2)),near_saved:nearSaved
+    };
+  }).filter((x:any)=>!x.near_saved&&x.days>=3&&x.visits>=3&&x.dwell_minutes>=45&&Date.parse(x.last_visit)>=now-21*86400000)
+    .sort((a:any,b:any)=>b.score-a.score||Date.parse(b.last_visit)-Date.parse(a.last_visit)).slice(0,5)
+    .map(({near_saved,...x}:any)=>x);
+}
+async function frequentPlaces(req:Request){
+  const d=await device(req),person=String(d.person),since=new Date(Date.now()-45*86400000).toISOString();
+  const [rows,places]=await Promise.all([
+    ok(db.from("galaxy_location_history").select("latitude,longitude,accuracy,speed,motion,captured_at").eq("person",person).gte("captured_at",since).order("captured_at",{ascending:false}).limit(12000)),
+    ok(db.from("galaxy_places").select("id,latitude,longitude").eq("owner",person).limit(500))
+  ]);
+  const suggestions=frequentPlaceCandidates((rows||[]).slice().reverse(),places||[]);
+  return json({suggestions,window_days:45,min_days:3,min_dwell_minutes:45});
+}
+
+const gpsExportSets:Record<string,{table:string,columns:string}>={
+  history:{table:"galaxy_location_history",columns:"id,person,latitude,longitude,accuracy,speed,heading,motion,captured_at,source_device_id,client_sample_id"},
+  trips:{table:"galaxy_trip_history",columns:"id,person,started_at,ended_at,distance_m,duration_s,max_speed,dominant_motion,created_at"},
+  tripPoints:{table:"galaxy_trip_points",columns:"id,person,latitude,longitude,created_at"},
+  placeEvents:{table:"galaxy_place_events",columns:"id,person,place_id,event,happened_at"}
+};
+async function gpsHistoryExport(req:Request,body:any){
+  const d=await device(req),person=String(d.person),dataset=String(body.dataset||""),cfg=gpsExportSets[dataset];
+  if(!cfg)return json({error:"Conjunto GPS no válido."},400);
+  const after=Math.max(0,Number(body.after||0)),requested=Math.max(1,Math.min(1000,Number(body.limit||1000)));
+  if(!Number.isFinite(after))return json({error:"Cursor GPS no válido."},400);
+  let snapshot=Math.max(0,Number(body.snapshot||0));
+  if(!snapshot){
+    const latest=(await ok(db.from(cfg.table).select("id").eq("person",person).order("id",{ascending:false}).limit(1)))?.[0];
+    snapshot=Math.max(0,Number(latest?.id||0));
+  }
+  if(!snapshot)return json({dataset,rows:[],next:null,done:true,snapshot:0});
+  let query=db.from(cfg.table).select(cfg.columns).eq("person",person).gt("id",after).lte("id",snapshot).order("id",{ascending:true}).limit(requested);
+  const rows=await ok(query),last=rows?.length?Number(rows[rows.length-1].id):after;
+  return json({dataset,rows:rows||[],next:rows?.length?last:null,done:!rows?.length||last>=snapshot||rows.length<requested,snapshot});
+}
+async function exactCount(table:string,person:string){
+  const {count,error}=await db.from(table).select("id",{count:"exact",head:true}).eq("person",person);
+  if(error)throw error;return Number(count||0);
+}
+async function gpsHistoryDelete(req:Request){
+  const d=await device(req),person=String(d.person),loc=(await ok(db.from("galaxy_locations").select("trip_active,trip_started_at").eq("person",person).limit(1)))?.[0]||{};
+  if(loc.trip_active)return json({error:"Termina el recorrido activo antes de borrar tu historial GPS."},409);
+  const [history,trips,tripPoints,placeEvents]=await Promise.all([
+    exactCount("galaxy_location_history",person),
+    exactCount("galaxy_trip_history",person),
+    exactCount("galaxy_trip_points",person),
+    exactCount("galaxy_place_events",person)
+  ]);
+  await Promise.all([
+    ok(db.from("galaxy_location_history").delete().eq("person",person)),
+    ok(db.from("galaxy_trip_history").delete().eq("person",person)),
+    ok(db.from("galaxy_trip_points").delete().eq("person",person)),
+    ok(db.from("galaxy_place_events").delete().eq("person",person))
+  ]);
+  return json({ok:true,person,deleted:{history,trips,tripPoints,placeEvents,total:history+trips+tripPoints+placeEvents},deleted_at:new Date().toISOString()});
+}
+
 async function mapState(req:Request,body:any){
   await device(req);
   const [locations,places,tripPoints,destinations]=await Promise.all([
@@ -733,6 +1065,12 @@ Deno.serve(async req=>{
     if(action==="bond-delete")return await bondDelete(req,body);
     if(action==="bond-widget")return await bondWidget(req,body);
     if(action==="map-state")return await mapState(req,body);
+    if(action==="monthly-summary")return await monthlySummary(req,body);
+    if(action==="today-history")return await todayHistory(req,body);
+    if(action==="encounter-stats")return await encounterStats(req);
+    if(action==="frequent-places")return await frequentPlaces(req);
+    if(action==="gps-history-export")return await gpsHistoryExport(req,body);
+    if(action==="gps-history-delete")return await gpsHistoryDelete(req);
     if(action==="place-save")return await placeSave(req,body);
     if(action==="place-delete")return await placeDelete(req,body);
     if(action==="status-set")return await setStatus(req,body);

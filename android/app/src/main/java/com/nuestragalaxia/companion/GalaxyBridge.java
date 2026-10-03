@@ -31,6 +31,10 @@ public final class GalaxyBridge {
     @JavascriptInterface public void pickMedia(String requestId,String kind){
         activity.pickMedia(requestId,kind);
     }
+    @JavascriptInterface public void pickPhotos(String requestId){ activity.pickPhotos(requestId); }
+    @JavascriptInterface public void pickDriveFolder(String requestId){ activity.pickDriveFolder(requestId); }
+    @JavascriptInterface public void syncDriveFolder(String requestId){ activity.syncDriveFolder(requestId); }
+    @JavascriptInterface public void disconnectDriveFolder(String requestId){ activity.disconnectDriveFolder(requestId); }
 
     @JavascriptInterface public void startVoiceRecording(String requestId){ activity.startVoiceRecording(requestId); }
     @JavascriptInterface public void stopVoiceRecording(String requestId){ activity.stopVoiceRecording(requestId); }
@@ -40,6 +44,7 @@ public final class GalaxyBridge {
 
     @JavascriptInterface public void exportJson(String requestId,String fileName,String json){ activity.exportJson(requestId,fileName,json); }
     @JavascriptInterface public void importJson(String requestId){ activity.importJson(requestId); }
+    @JavascriptInterface public void clearPendingGps(String requestId){ activity.clearPendingGps(requestId); }
 
     @JavascriptInterface public void startLocation(String requestId){
         activity.startLocation(requestId);
