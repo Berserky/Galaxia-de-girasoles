@@ -41,10 +41,10 @@ public final class MainActivity extends ComponentActivity {
     private static final int REQ_CAMERA=205;
     private static final Set<String> MOBILE_ACTIONS=Set.of(
         "mobile-state","item-save","item-delete","settings-save","daily-save",
-        "bond-save","bond-update","bond-guess","bond-delete","bond-widget",
+        "bond-save","bond-update","bond-guess","bond-delete","bond-widget","bond-send-gesture","bond-gesture-list","bond-gesture-save","bond-gesture-delete",
         "map-state","place-save","place-delete","status-set","transport-set","destination-save","trip",
         "media-list","media-delete","presence-set","backup-export","backup-import",
-        "pair-code-create","profile-repair","device-revoke","goals-engine","date-engine","insights-summary","monthly-summary","today-history","encounter-stats","frequent-places","gps-history-export","gps-history-delete"
+        "pair-code-create","profile-repair","device-revoke","push-token-register","push-token-unregister","push-preferences","goals-engine","date-engine","insights-summary","monthly-summary","today-history","encounter-stats","frequent-places","gps-history-export","gps-history-delete"
     );
 
     private DeviceStore store;
@@ -88,6 +88,7 @@ public final class MainActivity extends ComponentActivity {
         setContentView(R.layout.activity_main);
         store=new DeviceStore(this);
         cloudMedia=new CloudMediaStore(this);
+        PushManager.initialize(this);
         web=findViewById(R.id.webView);
         setupWeb();
 
@@ -159,6 +160,8 @@ public final class MainActivity extends ComponentActivity {
             state.put("name",paired?store.name():"");
             state.put("tracking",paired&&store.tracking());
             state.put("momentNotifications",new BondStore(this).enabled());
+            state.put("bondHaptics",new BondStore(this).hapticEnabled());
+            state.put("pushConfigured",PushManager.configured());
             state.put("notificationsGranted",Build.VERSION.SDK_INT<33||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED);
             state.put("notificationsEnabled",BondWorker.notificationsAllowed(this));
             state.put("locationGranted",checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED);
@@ -192,7 +195,7 @@ public final class MainActivity extends ComponentActivity {
                 }
                 resolve(requestId,result);
             }catch(ApiClient.ApiException e){
-                if(e.status==401){store.clear();nativeChanged();}
+                if(e.status==401){PushManager.cancel(this);store.clear();new BondStore(this).clear();nativeChanged();}
                 reject(requestId,e.getMessage());
             }catch(Exception e){
                 reject(requestId,e.getMessage()==null?"No pudimos completar la acción.":e.getMessage());
@@ -207,6 +210,7 @@ public final class MainActivity extends ComponentActivity {
             try{
                 ApiClient.PairResult result=ApiClient.pair(clean,Build.MANUFACTURER+" "+Build.MODEL);
                 store.save(result.token,result.person,result.name);
+                PushManager.initialize(this);
                 refreshMomentsInternal();
                 resolve(requestId,nativeState());
                 nativeChanged();
@@ -219,8 +223,11 @@ public final class MainActivity extends ComponentActivity {
             try{
                 String previous=store.token();
                 stopService(new Intent(this,TrackingService.class));
-                store.clear();
+                if(previous!=null)try{ApiClient.pushUnregister(previous);}catch(Exception ignored){}
                 if(previous!=null)try{ApiClient.stop(previous);}catch(Exception ignored){}
+                PushManager.cancel(this);
+                store.clear();
+                new BondStore(this).clear();
                 resolve(requestId,nativeState());
                 nativeChanged();
             }catch(Exception e){reject(requestId,"No pudimos desvincular este teléfono.");}
@@ -656,11 +663,22 @@ public final class MainActivity extends ComponentActivity {
     private void applyMomentNotifications(String requestId,boolean enabled){
         new BondStore(this).enabled(enabled);
         if(enabled)BondWorker.prepareNotifications(this);
+        PushManager.schedule(this);
         io.execute(()->{
             try{BondWorker.schedule(getApplicationContext());if(enabled)BondWorker.refresh(getApplicationContext());}catch(Exception ignored){}
         });
         resolve(requestId,nativeState());
         nativeChanged();
+    }
+
+    void setBondHaptics(String requestId,boolean enabled){
+        runOnUiThread(()->{
+            if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+            new BondStore(this).hapticEnabled(enabled);
+            PushManager.schedule(this);
+            resolve(requestId,nativeState());
+            nativeChanged();
+        });
     }
 
     void testMomentNotification(String requestId){
