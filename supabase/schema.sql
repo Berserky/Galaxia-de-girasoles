@@ -1152,3 +1152,193 @@ grant select,insert,update,delete on public.galaxy_context_state,public.galaxy_c
 grant usage,select on sequence public.galaxy_context_eta_history_id_seq to service_role;
 
 commit;
+
+
+-- Mega Update 3.0 · Galaxy Intelligence Engine
+-- Search projections only. Raw GPS coordinates and provider secrets never enter this index.
+begin;
+
+create extension if not exists vector with schema extensions;
+
+create or replace function public.galaxy_search_normalize(value text)
+returns text
+language sql immutable parallel safe
+set search_path=''
+as $$
+ select trim(regexp_replace(
+   lower(translate(coalesce(value,''),
+    'áéíóúüñÁÉÍÓÚÜÑ',
+    'aeiouunAEIOUUN')),
+   '[^a-z0-9]+',' ','g'))
+$$;
+
+create table if not exists public.galaxy_intelligence_documents (
+ id uuid primary key default gen_random_uuid(),
+ source_type text not null check(length(source_type) between 1 and 40),
+ source_id text not null check(length(source_id) between 1 and 300),
+ source_version text not null default '' check(length(source_version)<=160),
+ title text not null default '' check(length(title)<=500),
+ content text not null default '' check(length(content)<=20000),
+ occurred_on date,
+ metadata jsonb not null default '{}'::jsonb check(jsonb_typeof(metadata)='object' and octet_length(metadata::text)<=8192),
+ owner_person text check(owner_person is null or owner_person in ('0','1')),
+ visible_after date,
+ searchable boolean not null default true,
+ content_hash text not null check(length(content_hash) between 1 and 128),
+ embedding extensions.vector(384),
+ embedding_model text not null default 'gte-small' check(length(embedding_model)<=80),
+ embedding_status text not null default 'pending' check(embedding_status in ('pending','ready','error','disabled')),
+ embedding_error text check(embedding_error is null or length(embedding_error)<=300),
+ search_vector tsvector generated always as (
+   to_tsvector('simple',public.galaxy_search_normalize(title||' '||content))
+ ) stored,
+ created_at timestamptz not null default now(),
+ updated_at timestamptz not null default now(),
+ unique(source_type,source_id)
+);
+create index if not exists galaxy_intelligence_search_idx on public.galaxy_intelligence_documents using gin(search_vector);
+create index if not exists galaxy_intelligence_embedding_hnsw_idx on public.galaxy_intelligence_documents using hnsw (embedding vector_cosine_ops);
+create index if not exists galaxy_intelligence_source_idx on public.galaxy_intelligence_documents(source_type,source_id);
+create index if not exists galaxy_intelligence_date_idx on public.galaxy_intelligence_documents(occurred_on desc);
+
+create table if not exists public.galaxy_voice_transcripts (
+ bond_id uuid primary key references public.galaxy_bond(id) on delete cascade,
+ transcript text not null check(length(transcript)<=30000),
+ segments jsonb not null default '[]'::jsonb check(jsonb_typeof(segments)='array' and octet_length(segments::text)<=50000),
+ provider text not null check(length(provider)<=40),
+ model text not null check(length(model)<=120),
+ status text not null default 'ready' check(status in ('ready','error')),
+ last_error text check(last_error is null or length(last_error)<=300),
+ created_at timestamptz not null default now(),
+ updated_at timestamptz not null default now()
+);
+
+create table if not exists public.galaxy_photo_context (
+ path text primary key check(length(path) between 3 and 300),
+ author text not null check(author in ('0','1')),
+ caption text check(caption is null or length(caption)<=3000),
+ context text check(context is null or length(context)<=5000),
+ taken_on date,
+ created_at timestamptz not null default now(),
+ updated_at timestamptz not null default now()
+);
+
+create table if not exists public.galaxy_intelligence_usage (
+ day date not null,
+ person text not null check(person in ('0','1')),
+ operation text not null check(operation in ('ask','narrate','transcribe')),
+ count integer not null default 0 check(count>=0),
+ updated_at timestamptz not null default now(),
+ primary key(day,person,operation)
+);
+
+alter table public.galaxy_intelligence_documents enable row level security;
+alter table public.galaxy_voice_transcripts enable row level security;
+alter table public.galaxy_photo_context enable row level security;
+alter table public.galaxy_intelligence_usage enable row level security;
+
+revoke all on public.galaxy_intelligence_documents,public.galaxy_voice_transcripts,public.galaxy_photo_context,public.galaxy_intelligence_usage from public,anon,authenticated;
+grant select,insert,update,delete on public.galaxy_intelligence_documents,public.galaxy_voice_transcripts,public.galaxy_photo_context,public.galaxy_intelligence_usage to service_role;
+
+create or replace function public.galaxy_intelligence_hybrid_search(
+ query_text text,
+ query_embedding extensions.vector(384),
+ query_person text,
+ match_count integer default 20
+)
+returns table(
+ id uuid,
+ source_type text,
+ source_id text,
+ title text,
+ content text,
+ occurred_on date,
+ metadata jsonb,
+ exact_rank bigint,
+ fulltext_rank bigint,
+ semantic_rank bigint,
+ exact_score double precision,
+ fulltext_score real,
+ semantic_score double precision,
+ final_score double precision
+)
+language sql stable security definer
+set search_path=''
+as $$
+ with permitted as (
+  select d.*,
+   public.galaxy_search_normalize(query_text) q,
+   plainto_tsquery('simple',public.galaxy_search_normalize(query_text)) tsq
+  from public.galaxy_intelligence_documents d
+  where d.searchable
+    and (d.owner_person is null or d.owner_person=query_person)
+    and (d.visible_after is null or d.visible_after <= (now() at time zone 'America/Bogota')::date or d.owner_person=query_person)
+ ),
+ exact as (
+  select p.id,
+   case
+    when public.galaxy_search_normalize(p.title)=p.q then 1.0
+    when public.galaxy_search_normalize(p.title) like p.q||'%' then 0.95
+    when public.galaxy_search_normalize(p.title) like '%'||p.q||'%' then 0.9
+    when public.galaxy_search_normalize(p.content) like '%'||p.q||'%' then 0.8
+    else 0.0 end exact_score,
+   row_number() over(order by
+    case
+     when public.galaxy_search_normalize(p.title)=p.q then 1.0
+     when public.galaxy_search_normalize(p.title) like p.q||'%' then 0.95
+     when public.galaxy_search_normalize(p.title) like '%'||p.q||'%' then 0.9
+     else 0.8 end desc,
+    p.occurred_on desc nulls last,p.id) exact_rank
+  from permitted p
+  where length(p.q)>0 and (
+   public.galaxy_search_normalize(p.title) like '%'||p.q||'%'
+   or public.galaxy_search_normalize(p.content) like '%'||p.q||'%')
+  limit 100
+ ),
+ fulltext as (
+  select p.id,ts_rank_cd(p.search_vector,p.tsq) fulltext_score,
+   row_number() over(order by ts_rank_cd(p.search_vector,p.tsq) desc,p.occurred_on desc nulls last,p.id) fulltext_rank
+  from permitted p
+  where length(p.q)>0 and p.search_vector @@ p.tsq
+  order by fulltext_score desc
+  limit 100
+ ),
+ semantic as (
+  select p.id,(1-(p.embedding <=> query_embedding))::double precision semantic_score,
+   row_number() over(order by p.embedding <=> query_embedding,p.occurred_on desc nulls last,p.id) semantic_rank
+  from permitted p
+  where query_embedding is not null and p.embedding is not null and p.embedding_status='ready'
+  order by p.embedding <=> query_embedding
+  limit 100
+ ),
+ ids as (
+  select exact.id from exact
+  union select fulltext.id from fulltext
+  union select semantic.id from semantic
+ ),
+ scored as (
+  select p.id,p.source_type,p.source_id,p.title,p.content,p.occurred_on,p.metadata,
+   e.exact_rank,f.fulltext_rank,s.semantic_rank,
+   coalesce(e.exact_score,0)::double precision exact_score,
+   coalesce(f.fulltext_score,0)::real fulltext_score,
+   coalesce(s.semantic_score,0)::double precision semantic_score,
+   (
+    case when e.exact_rank is not null then 100 + e.exact_score*10 + 1.0/(50+e.exact_rank) else 0 end
+    + case when f.fulltext_rank is not null then f.fulltext_score*2.5 + 1.0/(50+f.fulltext_rank) else 0 end
+    + case when s.semantic_rank is not null then greatest(0,s.semantic_score) + 1.0/(50+s.semantic_rank) else 0 end
+   )::double precision final_score
+  from ids
+  join permitted p using(id)
+  left join exact e using(id)
+  left join fulltext f using(id)
+  left join semantic s using(id)
+ )
+ select * from scored
+ order by final_score desc,occurred_on desc nulls last,id
+ limit greatest(1,least(coalesce(match_count,20),100))
+$$;
+
+revoke all on function public.galaxy_intelligence_hybrid_search(text,extensions.vector,text,integer) from public,anon,authenticated;
+grant execute on function public.galaxy_intelligence_hybrid_search(text,extensions.vector,text,integer) to service_role;
+
+commit;
