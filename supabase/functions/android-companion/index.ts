@@ -130,9 +130,18 @@ async function smartPlaces(d:any,p:any){
 }
 
 async function encounter(){
-  const locs=await ok(db.from("galaxy_locations").select("person,latitude,longitude,sharing").eq("sharing",true));
-  if(!locs||locs.length!==2||locs.some((x:any)=>x.latitude==null||x.longitude==null))return;
-  const meters=dist(locs[0],locs[1]),runtime=await ok(db.from("galaxy_encounter_runtime").select("*").eq("singleton",true).single()),open=(await ok(db.from("galaxy_encounters").select("id").is("ended_at",null).limit(1)))?.[0];
+  const [locs,runtime,openRows]=await Promise.all([
+    ok(db.from("galaxy_locations").select("person,latitude,longitude,sharing,updated_at").eq("sharing",true)),
+    ok(db.from("galaxy_encounter_runtime").select("*").eq("singleton",true).single()),
+    ok(db.from("galaxy_encounters").select("id,started_at").is("ended_at",null).limit(1))
+  ]);
+  const open=openRows?.[0];
+  if(!locs||locs.length!==2||locs.some((x:any)=>x.latitude==null||x.longitude==null)){
+    if(runtime.near_since)await ok(db.from("galaxy_encounter_runtime").update({near_since:null}).eq("singleton",true));
+    if(open)await ok(db.from("galaxy_encounters").update({ended_at:new Date().toISOString()}).eq("id",open.id));
+    return;
+  }
+  const meters=dist(locs[0],locs[1]);
   if(meters<=80){
     if(!runtime.near_since){await ok(db.from("galaxy_encounter_runtime").update({near_since:new Date().toISOString()}).eq("singleton",true));return;}
     if(!open&&Date.now()-Date.parse(runtime.near_since)>=60000)await ok(db.from("galaxy_encounters").insert({started_at:runtime.near_since,distance_m:Math.round(meters),created_by:locs[0].person}));
@@ -686,6 +695,56 @@ async function todayHistory(req:Request,body:any){
   });
 }
 
+async function encounterStats(req:Request){
+  await device(req);
+  const generated=new Date(),generatedMs=generated.getTime(),currentMonth=today().slice(0,7),bounds=monthBounds(currentMonth);
+  const [rows,locations]=await Promise.all([
+    ok(db.from("galaxy_encounters").select("id,started_at,ended_at,distance_m,created_by").order("started_at",{ascending:false}).limit(10000)),
+    ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude,updated_at").order("person"))
+  ]);
+  const locs=locations||[],mutualReady=locs.length===2&&locs.every((x:any)=>x.sharing&&x.latitude!=null&&x.longitude!=null);
+  const updates=locs.map((x:any)=>Date.parse(x.updated_at||"")).filter((n:number)=>Number.isFinite(n));
+  const lastMutual=updates.length===2?Math.min(...updates):NaN;
+  const fresh=mutualReady&&Number.isFinite(lastMutual)&&generatedMs-lastMutual<=10*60*1000;
+  const monthStart=Date.parse(bounds.start),monthEnd=Date.parse(bounds.end);
+  let totalSeconds=0,monthSeconds=0,monthCount=0,longest:any=null,longestSeconds=0,validCount=0;
+  const recent:any[]=[];
+  for(const row of rows||[]){
+    const start=Date.parse(row.started_at||"");if(!Number.isFinite(start))continue;
+    let end=row.ended_at?Date.parse(row.ended_at):NaN;
+    const isOpen=!row.ended_at;
+    if(!Number.isFinite(end)){
+      if(isOpen&&fresh)end=generatedMs;
+      else if(isOpen&&Number.isFinite(lastMutual))end=Math.max(start,Math.min(generatedMs,lastMutual));
+      else end=start;
+    }
+    if(end<start)end=start;
+    const seconds=Math.max(0,Math.round((end-start)/1000));
+    totalSeconds+=seconds;validCount++;
+    if(seconds>longestSeconds){longestSeconds=seconds;longest={id:row.id,started_at:row.started_at,ended_at:row.ended_at,duration_seconds:seconds};}
+    if(bogotaDay(row.started_at).startsWith(currentMonth))monthCount++;
+    const overlapStart=Math.max(start,monthStart),overlapEnd=Math.min(end,monthEnd);
+    if(overlapEnd>overlapStart)monthSeconds+=Math.round((overlapEnd-overlapStart)/1000);
+    if(recent.length<8)recent.push({id:row.id,started_at:row.started_at,ended_at:row.ended_at,distance_m:row.distance_m,duration_seconds:seconds,active:isOpen&&fresh});
+  }
+  const open=(rows||[]).find((x:any)=>!x.ended_at),active=open&&fresh?{
+    id:open.id,started_at:open.started_at,distance_m:open.distance_m,
+    current_distance_m:mutualReady?Math.round(dist(locs[0],locs[1])):null,
+    elapsed_seconds:Math.max(0,Math.round((generatedMs-Date.parse(open.started_at))/1000))
+  }:null;
+  return json({
+    generated_at:generated.toISOString(),
+    total_count:validCount,
+    completed_count:(rows||[]).filter((x:any)=>!!x.ended_at).length,
+    total_seconds:Math.round(totalSeconds),
+    average_seconds:validCount?Math.round(totalSeconds/validCount):0,
+    longest,
+    current_month:{month:currentMonth,count:monthCount,seconds:Math.round(monthSeconds)},
+    active,
+    recent
+  });
+}
+
 async function mapState(req:Request,body:any){
   await device(req);
   const [locations,places,tripPoints,destinations]=await Promise.all([
@@ -895,6 +954,7 @@ Deno.serve(async req=>{
     if(action==="map-state")return await mapState(req,body);
     if(action==="monthly-summary")return await monthlySummary(req,body);
     if(action==="today-history")return await todayHistory(req,body);
+    if(action==="encounter-stats")return await encounterStats(req);
     if(action==="place-save")return await placeSave(req,body);
     if(action==="place-delete")return await placeDelete(req,body);
     if(action==="status-set")return await setStatus(req,body);
