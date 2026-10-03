@@ -151,6 +151,11 @@ export function normalizePlanCategory(data:any={}){
 function allQuestions(){
  return [...LEGACY_QUESTIONS,...Object.values(QUESTION_DECKS).flat()];
 }
+export function questionById(id:unknown){
+ const key=cleanText(id);
+ return allQuestions().find(question=>question.id===key)||null;
+}
+
 function contextualDecks(context:any){
  if(monthlyAnniversary(context))return ["memories","future","intimate"];
  const activity=recentActivityDeck(context);
