@@ -114,7 +114,7 @@ create index if not exists galaxy_goal_links_item_idx on public.galaxy_goal_link
 create index if not exists galaxy_goal_contributions_goal_date_idx on public.galaxy_goal_contributions(goal_id,contribution_date desc,created_at desc);
 
 create or replace function public.galaxy_goal_version() returns trigger
-language plpgsql set search_path='' as $
+language plpgsql set search_path='' as $$
 begin
  if tg_op='UPDATE' then
   new.id:=old.id;
@@ -128,7 +128,7 @@ begin
  if new.status='completed' and new.completed_at is null then new.completed_at:=now(); end if;
  if new.status<>'completed' then new.completed_at:=null; end if;
  return new;
-end $;
+end $$;
 
 drop trigger if exists goals_version on public.galaxy_goals;
 create trigger goals_version before insert or update on public.galaxy_goals
