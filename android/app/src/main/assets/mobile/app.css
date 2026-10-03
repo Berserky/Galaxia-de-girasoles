@@ -96,7 +96,10 @@ textarea{min-height:110px;resize:vertical}
 .item-actions{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
 .status-dot{width:9px;height:9px;border-radius:50%;background:var(--muted);display:inline-block;margin-right:6px}
 .status-dot.live{background:var(--good);box-shadow:0 0 0 5px color-mix(in srgb,var(--good) 16%,transparent)}
+.status-dot.stale{background:var(--accent);opacity:.62;box-shadow:0 0 0 5px color-mix(in srgb,var(--accent) 10%,transparent)}
 .person-card{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center}
+.person-card.stale{border-style:dashed}
+.person-card.stale .speed{color:var(--muted)}
 .person-card .bubble{width:48px;height:48px;border-radius:18px;background:var(--surface2);display:grid;place-items:center;font-size:21px}
 .speed{font-size:20px;font-weight:800;text-align:right}
 .speed small{display:block;font-size:10px;color:var(--muted);font-weight:600}
@@ -171,6 +174,7 @@ textarea{min-height:110px;resize:vertical}
 .gmap-marker button{width:40px;height:40px;border-radius:15px;border:3px solid var(--surface);background:var(--accent);color:white;font-weight:900;box-shadow:0 6px 20px rgba(0,0,0,.22);display:grid;place-items:center;padding:0}
 .gmap-marker button .ui-icon,.gmap-marker button svg{width:18px;height:18px}
 .gmap-marker.partner button{background:var(--accent2)}
+.gmap-marker.stale button{opacity:.58;filter:saturate(.45);box-shadow:0 0 0 4px color-mix(in srgb,var(--muted) 18%,transparent)}
 .gmap-marker.place button{width:34px;height:34px;border-radius:12px;background:var(--surface);color:var(--accent);border:2px solid var(--accent)}
 .gmap-popup{display:none;position:absolute;left:50%;bottom:48px;transform:translateX(-50%);white-space:nowrap;max-width:230px;overflow:hidden;text-overflow:ellipsis;background:var(--popup-bg);color:var(--popup-text);padding:8px 10px;border-radius:11px;font-size:11px;box-shadow:var(--shadow)}
 .gmap-marker.open .gmap-popup{display:block}

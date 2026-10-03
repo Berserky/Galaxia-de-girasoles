@@ -137,11 +137,18 @@ assert.ok(distance.includes('function metersBetween(')&&distance.includes('funct
 assert.ok(app.includes('function coupleDistanceCard(')&&app.includes('function focusCoupleOnMap('),'Falta distancia entre Sebas y Adri en Android');
 assert.ok(app.includes('data-action="couple-distance-map"')&&app.includes('data-action="couple-distance-focus"'),'Faltan acciones de distancia de pareja');
 assert.ok(app.includes('distancia en línea recta'),'La UI debe aclarar que la distancia no es una ruta vial');
+assert.ok(app.includes('function locationFreshState(')&&app.includes('Sin actualizar · hace'),'Las tarjetas de personas deben distinguir ubicaciones viejas de posiciones en vivo');
+assert.ok(css.includes('.status-dot.stale')&&css.includes('.gmap-marker.stale'),'El mapa debe diferenciar visualmente una última ubicación antigua');
+assert.ok(app.includes('function refreshMapNow(')&&app.includes("GalaxyNative.call('refreshLocation')"),'Actualizar mapa debe pedir una lectura GPS real al teléfono, no solo releer Supabase');
+assert.ok(bridge.includes('refreshLocation')&&main.includes('void refreshLocation(')&&main.includes('CurrentLocationRequest'),'Falta actualización GPS nativa de alta precisión');
+assert.ok(main.includes('ensureTrackingService()')&&main.includes('startForegroundService(new Intent(this,TrackingService.class).setAction(TrackingService.ACTION_START))'),'La app debe reactivar el servicio de ubicación al volver si el usuario dejó compartir ubicación activo');
 assert.ok(css.includes('.couple-distance')&&css.includes('.couple-distance-value'),'Faltan estilos de distancia de pareja');
 assert.ok(eta.includes('function movementMode(')&&eta.includes('function resolveDestination(')&&eta.includes('function eta(')&&eta.includes('function etaLabel('),'Falta motor independiente de ETA');
 assert.ok(app.includes('function etaCard()')&&app.includes('function focusEtaOnMap()')&&app.includes('function etaState()'),'Falta experiencia ETA en Android');
 assert.ok(app.includes('data-action="eta-focus"')&&app.includes('ETA HACIA'),'Falta navegación y tarjeta ETA');
 assert.ok(app.includes('No reemplaza navegación vial'),'La interfaz ETA debe aclarar que no es navegación vial');
+assert.ok(app.includes('ETA significa tiempo estimado de llegada')&&app.includes('ETA = tiempo estimado de llegada'),'La UI debe explicar ETA tanto antes como durante el cálculo');
+assert.ok(app.includes('Tú no puedes actualizar su GPS desde este teléfono'),'ETA debe explicar que una ubicación stale de la pareja solo puede renovarse desde su propio dispositivo');
 assert.ok(app.includes("current==='person:'")&&app.includes("current==='place:'"),'Acompáñame debe recordar el destino activo');
 assert.ok(css.includes('.eta-card')&&css.includes('.eta-value')&&css.includes('.eta-actions'),'Faltan estilos del ETA');
 assert.ok(frequentPlaces.includes('function suggestionKey(')&&frequentPlaces.includes('function visibleSuggestions(')&&frequentPlaces.includes('function dismiss('),'Falta módulo de sugerencias frecuentes');

@@ -55,6 +55,10 @@ public final class GalaxyBridge {
         activity.stopLocation(requestId);
     }
 
+    @JavascriptInterface public void refreshLocation(String requestId){
+        activity.refreshLocation(requestId);
+    }
+
     @JavascriptInterface public void setMomentNotifications(String requestId,boolean enabled){
         activity.setMomentNotifications(requestId,enabled);
     }

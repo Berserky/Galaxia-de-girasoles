@@ -24,7 +24,12 @@ import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.webkit.WebViewAssetLoader;
 import androidx.core.content.FileProvider;
+import com.google.android.gms.location.CurrentLocationRequest;
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.location.Priority;
 import org.json.JSONObject;
+import java.time.Instant;
 import java.util.*;
 import java.io.*;
 import java.util.concurrent.*;
@@ -653,6 +658,42 @@ public final class MainActivity extends ComponentActivity {
         });
     }
 
+    void refreshLocation(String requestId){
+        if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+        if(!store.tracking()){reject(requestId,"Activa Compartir ubicación antes de actualizar el GPS.");return;}
+        runOnUiThread(()->{
+            boolean granted=checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED
+                ||checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED;
+            if(!granted){reject(requestId,"Activa el permiso de ubicación para obtener una posición reciente.");return;}
+            try{
+                FusedLocationProviderClient fused=LocationServices.getFusedLocationProviderClient(this);
+                CurrentLocationRequest current=new CurrentLocationRequest.Builder()
+                    .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
+                    .setMaxUpdateAgeMillis(0)
+                    .setDurationMillis(12000)
+                    .build();
+                com.google.android.gms.tasks.CancellationToken tokenSource=new com.google.android.gms.tasks.CancellationTokenSource().getToken();
+                fused.getCurrentLocation(current,tokenSource)
+                    .addOnSuccessListener(this,loc->{
+                        if(loc==null){reject(requestId,"Android no obtuvo una ubicación reciente. Revisa GPS y permisos.");return;}
+                        MotionClassifier.Result motion=new MotionClassifier().classify(loc);
+                        double accuracy=loc.hasAccuracy()?loc.getAccuracy():-1,heading=loc.hasBearing()?loc.getBearing():-1;
+                        long when=loc.getTime()>0?loc.getTime():System.currentTimeMillis();
+                        String captured=Instant.ofEpochMilli(when).toString(),sampleId=UUID.randomUUID().toString();
+                        io.execute(()->{
+                            try{
+                                String deviceToken=store.token();
+                                if(deviceToken==null)throw new ApiClient.ApiException(401,"El vínculo del dispositivo ya no es válido.");
+                                ApiClient.location(deviceToken,loc.getLatitude(),loc.getLongitude(),accuracy,motion.speedMs,heading,motion.motion,false,false,captured,sampleId);
+                                resolve(requestId,new JSONObject().put("updated",true).put("capturedAt",captured));
+                            }catch(Exception e){reject(requestId,e.getMessage()==null?"No pudimos actualizar tu ubicación.":e.getMessage());}
+                        });
+                    })
+                    .addOnFailureListener(this,e->reject(requestId,"Android no pudo solicitar una ubicación reciente."));
+            }catch(Exception e){reject(requestId,"Android no pudo solicitar una ubicación reciente.");}
+        });
+    }
+
     void setMomentNotifications(String requestId,boolean enabled){
         runOnUiThread(()->{
             if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
@@ -831,8 +872,19 @@ public final class MainActivity extends ComponentActivity {
 
     void closeApp(){runOnUiThread(this::finish);}
 
+    private void ensureTrackingService(){
+        if(store==null||!store.pairedFast()||!store.tracking())return;
+        boolean locationGranted=checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED
+            ||checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED;
+        boolean notificationsGranted=Build.VERSION.SDK_INT<33||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED;
+        if(!locationGranted||!notificationsGranted)return;
+        try{startForegroundService(new Intent(this,TrackingService.class).setAction(TrackingService.ACTION_START));}
+        catch(Exception ignored){}
+    }
+
     @Override protected void onResume(){
         super.onResume();
+        ensureTrackingService();
         if(updater!=null)updater.resumePendingInstall();
         if(pageReady){nativeChanged();refreshMomentsInternal();}
     }
