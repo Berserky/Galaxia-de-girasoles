@@ -624,3 +624,85 @@ revoke all on public.galaxy_goals,public.galaxy_goal_participants,public.galaxy_
 grant select,insert,update,delete on public.galaxy_goals,public.galaxy_goal_participants,public.galaxy_goal_steps,public.galaxy_goal_links,public.galaxy_goal_contributions to service_role;
 
 commit;
+
+
+-- Mega Update 3.0 · Galaxy Bond Engine 2.0
+-- Additive only: galaxy_bond_participation remains the durable source of all earned days.
+begin;
+
+create table if not exists public.galaxy_bond_gestures (
+ id uuid primary key default gen_random_uuid(),
+ name text not null check(length(name) between 1 and 40),
+ icon text not null check(length(icon) between 1 and 40),
+ text text not null check(length(text) between 1 and 180),
+ behavior text not null check(behavior in ('message','haptic','message_haptic')),
+ created_by text not null check(created_by in ('0','1')),
+ enabled boolean not null default true,
+ version integer not null default 1 check(version>0),
+ created_at timestamptz not null default now(),
+ updated_at timestamptz not null default now()
+);
+create index if not exists galaxy_bond_gestures_enabled_idx on public.galaxy_bond_gestures(enabled,created_at);
+
+create or replace function public.galaxy_bond_gesture_version() returns trigger
+language plpgsql set search_path='' as $$
+begin
+ new.id:=old.id;
+ new.created_by:=old.created_by;
+ new.created_at:=old.created_at;
+ new.version:=old.version+1;
+ new.updated_at:=now();
+ return new;
+end $$;
+drop trigger if exists bond_gesture_version on public.galaxy_bond_gestures;
+create trigger bond_gesture_version before update on public.galaxy_bond_gestures
+for each row execute function public.galaxy_bond_gesture_version();
+
+create table if not exists public.galaxy_push_tokens (
+ device_id uuid primary key references public.galaxy_devices(id) on delete cascade,
+ token text not null unique check(length(token) between 20 and 4096),
+ platform text not null default 'android' check(platform='android'),
+ created_at timestamptz not null default now(),
+ updated_at timestamptz not null default now()
+);
+
+create table if not exists public.galaxy_push_subscriptions (
+ device_id uuid not null references public.galaxy_devices(id) on delete cascade,
+ event_type text not null check(event_type in ('gesture','arrived_safe','nearby','capsule','note','reminder')),
+ enabled boolean not null default false,
+ updated_at timestamptz not null default now(),
+ primary key(device_id,event_type)
+);
+
+create table if not exists public.galaxy_push_events (
+ id uuid primary key default gen_random_uuid(),
+ source_device_id uuid references public.galaxy_devices(id) on delete set null,
+ source_person text not null check(source_person in ('0','1')),
+ target_person text not null check(target_person in ('0','1')),
+ event_type text not null check(event_type in ('gesture','arrived_safe','nearby','capsule','note','reminder')),
+ payload jsonb not null default '{}'::jsonb check(jsonb_typeof(payload)='object' and octet_length(payload::text)<=4096),
+ created_at timestamptz not null default now(),
+ expires_at timestamptz not null default (now()+interval '1 day')
+);
+create index if not exists galaxy_push_events_target_idx on public.galaxy_push_events(target_person,created_at desc);
+
+create table if not exists public.galaxy_push_deliveries (
+ event_id uuid not null references public.galaxy_push_events(id) on delete cascade,
+ device_id uuid not null references public.galaxy_devices(id) on delete cascade,
+ status text not null check(status in ('sent','skipped','failed','unregistered')),
+ error_code text,
+ attempted_at timestamptz not null default now(),
+ primary key(event_id,device_id)
+);
+create index if not exists galaxy_push_deliveries_device_idx on public.galaxy_push_deliveries(device_id,attempted_at desc);
+
+alter table public.galaxy_bond_gestures enable row level security;
+alter table public.galaxy_push_tokens enable row level security;
+alter table public.galaxy_push_subscriptions enable row level security;
+alter table public.galaxy_push_events enable row level security;
+alter table public.galaxy_push_deliveries enable row level security;
+
+revoke all on public.galaxy_bond_gestures,public.galaxy_push_tokens,public.galaxy_push_subscriptions,public.galaxy_push_events,public.galaxy_push_deliveries from public,anon,authenticated;
+grant select,insert,update,delete on public.galaxy_bond_gestures,public.galaxy_push_tokens,public.galaxy_push_subscriptions,public.galaxy_push_events,public.galaxy_push_deliveries to service_role;
+
+commit;
