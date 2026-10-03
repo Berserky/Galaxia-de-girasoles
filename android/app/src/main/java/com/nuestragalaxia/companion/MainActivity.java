@@ -13,6 +13,7 @@ import android.media.MediaRecorder;
 import android.os.*;
 import android.provider.DocumentsContract;
 import android.provider.Settings;
+import android.view.View;
 import android.webkit.*;
 import android.widget.Toast;
 import androidx.activity.ComponentActivity;
