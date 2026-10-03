@@ -132,3 +132,52 @@ test('annual insights are aggregated server-side in one request',()=>{
  assert.equal((block.match(/monthlySummary\(/g)||[]).length,0,'year summary must not call monthly summary twelve times');
  assert.ok(source.includes('period.kind==="year"')&&source.includes('series'),'pure core must emit annual monthly series');
 });
+
+
+test('empty periods return a stable zeroed contract',()=>{
+ const period=periodBounds('month','2026-08','2026-10-03');
+ const result=aggregateInsightRows({period,items:[],trips:[],encounters:[],daily:[],bond:[],participation:[],placeEvents:[],places:[],photos:[],nowMs:Date.parse('2026-10-03T12:00:00-05:00')});
+ assert.equal(result.counts.saved,0);
+ assert.equal(result.counts.memories,0);
+ assert.equal(result.trips.count,0);
+ assert.equal(result.trips.distance_m,0);
+ assert.equal(result.encounters.count,0);
+ assert.equal(result.encounters.together_seconds,0);
+ assert.equal(result.connection.mood_days,0);
+ assert.equal(result.connection.answer_days,0);
+ assert.equal(result.highlights.length,0);
+ assert.equal(result.photos.length,0);
+ assert.equal(result.places.visits.length,0);
+});
+
+test('incomplete mood data never becomes a false couple coincidence',()=>{
+ const period=periodBounds('week','2026-09-28','2026-10-03');
+ const result=aggregateInsightRows({
+  period,items:[],trips:[],encounters:[],bond:[],participation:[],placeEvents:[],places:[],photos:[],
+  daily:[
+   {day:'2026-10-01',person:'0',mood:'feliz',answer:'Solo una respuesta'},
+   {day:'2026-10-02',person:'0',mood:'tranquilo',answer:null},
+   {day:'2026-10-02',person:'1',mood:null,answer:'Respuesta sin mood'}
+  ],
+  nowMs:Date.parse('2026-10-03T12:00:00-05:00')
+ });
+ assert.equal(result.connection.mood_days,0);
+ assert.equal(result.connection.exact_mood_days,0);
+ assert.equal(result.connection.compatible_mood_days,0);
+ assert.equal(result.connection.answer_days,0);
+});
+
+test('exact moods count as exact, not as merely compatible',()=>{
+ const period=periodBounds('week','2026-09-28','2026-10-03');
+ const result=aggregateInsightRows({
+  period,items:[],trips:[],encounters:[],bond:[],participation:[],placeEvents:[],places:[],photos:[],
+  daily:[
+   {day:'2026-10-01',person:'0',mood:'feliz',answer:null},
+   {day:'2026-10-01',person:'1',mood:'feliz',answer:null}
+  ],
+  nowMs:Date.parse('2026-10-03T12:00:00-05:00')
+ });
+ assert.equal(result.connection.mood_days,1);
+ assert.equal(result.connection.exact_mood_days,1);
+ assert.equal(result.connection.compatible_mood_days,0);
+});
