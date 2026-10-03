@@ -444,6 +444,12 @@ function mapHistoryView(){
  '</div></section>';
 }
 
+async function openPairCode(target){
+ const profile=names()[Number(target)]||('Perfil '+target);
+ const r=await api('pair-code-create',{target_person:String(target),device_name:'Android de '+profile});
+ showModal('Código para '+profile,'<div class="stack" style="margin-top:16px"><p>Este código vinculará el próximo teléfono como <b>'+esc(profile)+'</b>. Dura 10 minutos y sirve una sola vez.</p><input class="input" readonly value="'+attr(r.code)+'" aria-label="Código de vinculación"><button class="btn" data-action="pair-code-copy" data-code="'+attr(r.code)+'">'+ico('key')+' Copiar código</button><p class="muted">Antes de compartirlo, verifica que arriba diga el nombre correcto.</p></div>');
+}
+
 function deviceProfilesCard(){
  const me=String(cloud?.person??native.person??''),currentId=String(cloud?.device?.id||''),list=cloud?.devices||[],labels=names(),partner=labels[1]||'Adri',mine=labels[Number(me)]||myName();
  const rows=list.map(d=>{
@@ -699,12 +705,8 @@ document.addEventListener('click',async e=>{
   if(a==='now-settings'){go('more');setTimeout(()=>document.querySelector('.privacy-grid')?.scrollIntoView({behavior:'smooth',block:'center'}),80);return;}
   if(a==='presence-battery'){await busy(()=>togglePresence('battery'),'Privacidad de batería actualizada.');return;}
   if(a==='presence-listening'){await busy(()=>togglePresence('listening'),'Privacidad de música actualizada.');return;}
-  if(a==='pair-code-partner'||a==='pair-code-self'){
-    const target=a==='pair-code-partner'?'1':String(cloud.person),profile=names()[Number(target)]||('Perfil '+target);
-    const r=await api('pair-code-create',{target_person:target,device_name:'Android de '+profile});
-    showModal('Código para '+profile,'<div class="stack" style="margin-top:16px"><p>Este código vinculará el próximo teléfono como <b>'+esc(profile)+'</b>. Dura 10 minutos y sirve una sola vez.</p><input class="input" readonly value="'+attr(r.code)+'" aria-label="Código de vinculación"><button class="btn" data-action="pair-code-copy" data-code="'+attr(r.code)+'">'+ico('key')+' Copiar código</button><p class="muted">Antes de compartirlo, verifica que arriba diga el nombre correcto.</p></div>');
-    return;
-  }
+  if(a==='pair-code-partner'){await openPairCode('1');return;}
+  if(a==='pair-code-self'){await openPairCode(String(cloud.person));return;}
   if(a==='pair-code-copy'){await GalaxyNative.call('copyText','Código de Nuestra Galaxia',String(btn.dataset.code||''));toast('Código copiado.');return;}
   if(a==='profile-repair'){
     const partner=names()[1]||'Adri',mine=names()[0]||'Sebas';
