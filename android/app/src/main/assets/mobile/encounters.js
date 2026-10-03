@@ -2,6 +2,7 @@
  function durationLabel(seconds){
   const total=Math.max(0,Math.round(Number(seconds)||0));
   const days=Math.floor(total/86400),hours=Math.floor((total%86400)/3600),minutes=Math.floor((total%3600)/60);
+  if(total===0)return '0 min';
   if(days)return days+' d '+hours+' h';
   if(hours)return hours+' h '+minutes+' min';
   return Math.max(1,minutes)+' min';
