@@ -5,6 +5,7 @@ import {existsSync,readFileSync} from 'node:fs';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const schema=read('supabase/schema.sql');
 const edge=read('supabase/functions/android-companion/index.ts');
+const contextEngine=read('supabase/functions/android-companion/context-engine.ts');
 const app=read('android/app/src/main/assets/mobile/app.js');
 const css=read('android/app/src/main/assets/mobile/app.css');
 const main=read('android/app/src/main/java/com/nuestragalaxia/companion/MainActivity.java');
@@ -55,8 +56,8 @@ test('Acompañame 2.0 and return-home sessions track destination, progress, ETA 
 });
 
 test('shared trips and date/memory suggestions require coherent context and human confirmation',()=>{
- assert.ok(edge.includes('SHARED_TRIP_DETECTED'));
- assert.ok(edge.includes('LONG_ENCOUNTER'));
+ assert.ok(contextEngine.includes('SHARED_TRIP_DETECTED'));
+ assert.ok(contextEngine.includes('LONG_ENCOUNTER'));
  assert.ok(edge.includes('galaxy_shared_trips'));
  assert.ok(edge.includes('galaxy_context_suggestions'));
  assert.ok(edge.includes('requiresConfirmation'));
