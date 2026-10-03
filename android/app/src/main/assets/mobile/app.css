@@ -397,3 +397,41 @@ textarea{min-height:110px;resize:vertical}
 .search-hit{animation:searchHit 1.7s ease}
 @keyframes searchHit{0%,100%{box-shadow:0 7px 24px rgba(54,43,83,.035)}20%,70%{border-color:var(--accent);box-shadow:0 0 0 4px rgba(114,84,199,.12),0 12px 30px rgba(54,43,83,.08)}}
 @media(prefers-reduced-motion:reduce){.search-hit{animation:none;border-color:var(--accent)}}
+
+/* Super Update · Monthly couple summary */
+.monthly-teaser{width:100%;display:grid;grid-template-columns:48px minmax(0,1fr) 18px;align-items:center;gap:13px;text-align:left;color:var(--text)}
+.monthly-teaser-icon{width:48px;height:48px;border-radius:16px;display:grid;place-items:center;background:linear-gradient(145deg,rgba(114,84,199,.14),rgba(185,84,104,.09));color:var(--accent)}
+.monthly-teaser-icon .ui-icon{width:23px;height:23px}
+.monthly-teaser h3,.monthly-teaser p{margin:2px 0}
+.monthly-teaser>span:nth-child(2){min-width:0}
+.monthly-teaser>.ui-icon{width:16px;height:16px;color:var(--muted)}
+.monthly-summary{padding-top:4px}
+.monthly-nav{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;gap:10px;align-items:center;text-align:center}
+.monthly-nav h2{margin:2px 0 0}
+.monthly-nav .btn{min-width:42px;padding:8px}
+.monthly-nav .btn:disabled{opacity:.28}
+.monthly-hero{margin-top:18px;padding:17px;border-radius:20px;background:linear-gradient(135deg,rgba(114,84,199,.12),rgba(185,84,104,.08));display:flex;gap:12px;align-items:center}
+.monthly-hero>span{width:43px;height:43px;border-radius:14px;background:var(--surface);display:grid;place-items:center;color:var(--accent);flex:0 0 auto}
+.monthly-hero b{display:block;font-size:15px}
+.monthly-hero p{margin:3px 0 0}
+.monthly-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:12px}
+.monthly-metric{min-height:122px;border:1px solid var(--border);border-radius:18px;background:var(--surface);padding:14px;display:flex;flex-direction:column;align-items:flex-start}
+.monthly-metric>span{width:34px;height:34px;border-radius:12px;background:var(--surface2);display:grid;place-items:center;color:var(--accent);margin-bottom:10px}
+.monthly-metric>span .ui-icon{width:17px;height:17px}
+.monthly-metric b{font-size:22px;line-height:1}
+.monthly-metric small{font-size:11px;color:var(--muted);margin-top:5px}
+.monthly-metric em{font-style:normal;font-size:9px;color:var(--muted);margin-top:3px}
+.monthly-extra{margin-top:12px}
+.monthly-extra-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.monthly-extra-row span{display:inline-flex;align-items:center;gap:5px;padding:7px 9px;border-radius:999px;background:var(--surface2);font-size:10px;color:var(--muted)}
+.monthly-extra-row .ui-icon{width:13px;height:13px}
+.monthly-highlights{margin-top:20px}
+.monthly-highlight{width:100%;display:grid;grid-template-columns:36px minmax(0,1fr) 16px;gap:10px;align-items:center;border:0;border-top:1px solid var(--border);background:transparent;padding:11px 2px;text-align:left;color:var(--text)}
+.monthly-highlight>span:first-child{width:36px;height:36px;border-radius:12px;background:var(--surface2);display:grid;place-items:center;color:var(--accent)}
+.monthly-highlight>span:nth-child(2){display:grid;gap:3px;min-width:0}
+.monthly-highlight b,.monthly-highlight small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.monthly-highlight small{font-size:10px;color:var(--muted)}
+.monthly-highlight .ui-icon{width:15px;height:15px}
+.monthly-loading{text-align:center;padding:22px 0}
+.monthly-loading .skeleton{margin-bottom:12px}
+@media(max-width:360px){.monthly-metrics{grid-template-columns:1fr}.monthly-metric{min-height:100px}}
