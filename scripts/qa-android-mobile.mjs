@@ -129,7 +129,7 @@ assert.ok(app.includes('function encounterStatsTeaser()')&&app.includes('functio
 assert.ok(app.includes('data-action="encounter-stats-open"')&&app.includes("api('encounter-stats'"),'Falta acceso al contador de encuentros');
 assert.ok(mainActions.has('encounter-stats')&&edgeActions.has('encounter-stats'),'Falta contador de encuentros end-to-end');
 assert.ok(edge.includes('async function encounterStats(')&&edge.includes('average_seconds')&&edge.includes('current_month')&&edge.includes('longest'),'El backend debe calcular estadísticas completas de encuentros');
-assert.ok(edge.includes('if(!locs||locs.length!==2')&&edge.includes('update({ended_at:new Date().toISOString()})'),'El detector debe cerrar encuentros cuando deja de existir presencia mutua');
+assert.ok(contextEngine.includes('signalLossGraceS')&&contextEngine.includes('ENCOUNTER_ENDED'),'Context Engine debe cerrar encuentros tras pérdida sostenida de presencia mutua');
 assert.ok(css.includes('.encounter-metrics')&&css.includes('.encounter-live')&&css.includes('.encounter-recent'),'Faltan estilos del contador de encuentros');
 assert.ok(distance.includes('function metersBetween(')&&distance.includes('function coupleDistance(')&&distance.includes('function distanceMood('),'Falta motor independiente de distancia de pareja');
 assert.ok(app.includes('function coupleDistanceCard(')&&app.includes('function focusCoupleOnMap('),'Falta distancia entre Sebas y Adri en Android');
