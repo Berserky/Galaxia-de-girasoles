@@ -28,11 +28,16 @@ const pendingPoints=read('android/app/src/main/java/com/nuestragalaxia/companion
 const cloudMediaStore=read('android/app/src/main/java/com/nuestragalaxia/companion/CloudMediaStore.java');
 const bondWorker=read('android/app/src/main/java/com/nuestragalaxia/companion/BondWorker.java');
 const bondStore=read('android/app/src/main/java/com/nuestragalaxia/companion/BondStore.java');
+const pushService=read('android/app/src/main/java/com/nuestragalaxia/companion/GalaxyFirebaseService.java');
+const pushManager=read('android/app/src/main/java/com/nuestragalaxia/companion/PushManager.java');
+const widgetPrefs=read('android/app/src/main/java/com/nuestragalaxia/companion/WidgetPrefs.java');
 const trackingService=read('android/app/src/main/java/com/nuestragalaxia/companion/TrackingService.java');
 const updater=read('android/app/src/main/java/com/nuestragalaxia/companion/UpdateManager.java');
 const edge=read('supabase/functions/android-companion/index.ts');
 const dateEngine=read('supabase/functions/android-companion/date-engine.ts');
 const goalsEngine=read('supabase/functions/android-companion/goals-engine.ts');
+const bondEngine=read('supabase/functions/android-companion/bond-engine.ts');
+const pushEngine=read('supabase/functions/android-companion/push-engine.ts');
 const schema=read('supabase/schema.sql');
 const build=read('android/app/build.gradle.kts');
 const workflow=read('.github/workflows/android-companion.yml');
@@ -262,5 +267,24 @@ assert.ok(app.includes('Sin conexión bancaria')&&goalsEngine.includes('No se pe
 assert.ok(dateEngine.includes('context.goalSuggestions')&&!dateEngine.includes('galaxy_goals'),'Date Engine solo puede recibir sugerencias genéricas de Goals');
 assert.ok(edge.includes('buildGoalInsightSummary')&&app.includes('goalsCompleted')&&app.includes('savingsAchieved'),'Insights debe mostrar actividad de objetivos sin duplicar su modelo');
 assert.ok(css.includes('/* Mega Update 3.0 · Galaxy Goals Engine */')&&css.includes('.goal-card'),'Faltan estilos de Galaxy Goals');
+
+
+// Galaxy Bond Engine 2.0
+assert.ok(bondEngine.includes('computeBondProgress')&&bondEngine.includes('gardenState')&&bondEngine.includes('recordStreak'),'Galaxy Bond Engine 2.0 necesita días acumulados, racha y récord');
+assert.ok(schema.includes('galaxy_bond_gestures')&&schema.includes('galaxy_push_tokens')&&schema.includes('galaxy_push_subscriptions'),'Galaxy Bond Engine 2.0 requiere catálogo y routing push relacional');
+assert.ok(edge.includes('bond-send-gesture')&&edge.includes('dispatchPushEvent')&&edge.includes('FCM_SERVICE_ACCOUNT_JSON'),'Galaxy Bond Engine 2.0 debe usar eventos push reutilizables');
+assert.ok(pushEngine.includes('arrived_safe')&&pushEngine.includes('nearby')&&pushEngine.includes('capsule')&&pushEngine.includes('note')&&pushEngine.includes('reminder'),'La capa push debe quedar preparada para futuros eventos');
+assert.ok(build.includes('com.google.firebase:firebase-messaging:25.1.3'),'Falta Firebase Messaging');
+assert.ok(manifest.includes('com.google.firebase.MESSAGING_EVENT')&&manifest.includes('android.permission.VIBRATE'),'Falta registrar FCM/hápticos');
+assert.ok(pushService.includes('onNewToken')&&pushService.includes('onMessageReceived')&&pushService.includes('hapticEnabled()'),'FCM debe manejar rotación y respetar opt-in háptico');
+assert.equal(pushService.includes('TrackingService.ACTION_START'),false,'Push no puede iniciar ubicación');
+assert.ok(main.includes('setBondHaptics')&&bridge.includes('setBondHaptics')&&bondStore.includes('hapticEnabled()'),'Hápticos necesitan control explícito por usuario');
+assert.ok(pushManager.includes('bond.enabled()||bond.hapticEnabled()'),'El gesto push solo se suscribe cuando notificación o háptico están habilitados');
+assert.ok(widgetPrefs.includes('photo')&&widgetPrefs.includes('distance')&&widgetPrefs.includes('eta')&&widgetPrefs.includes('garden'),'WidgetPrefs debe controlar módulos de Widget 2.0');
+assert.ok(widget.includes('getAppWidgetOptions')&&widget.includes('compact')&&widget.includes('WidgetPrefs'),'Widget 2.0 debe adaptarse a tamaño y preferencias');
+assert.ok(app.includes('Nuestro jardín')&&app.includes('currentStreak')&&app.includes('recordStreak')&&app.includes('bond-gesture-new')&&app.includes('bond-haptics'),'La UI debe exponer jardín, rachas, gestos y hápticos');
+assert.ok(css.includes('/* Mega Update 3.0 · Galaxy Bond Engine 2.0 */')&&css.includes('.bond-garden-scene'),'Faltan estilos del jardín 2.0');
+assert.ok(insights.includes('current_streak')&&insights.includes('record_streak')&&insights.includes('gestures'),'Insights debe consumir métricas Bond 2.0');
+assert.equal(build.includes('FCM_SERVICE_ACCOUNT_JSON')||main.includes('FCM_SERVICE_ACCOUNT_JSON')||app.includes('FCM_SERVICE_ACCOUNT_JSON'),false,'La credencial privada FCM jamás puede entrar al cliente');
 
 console.log('QA móvil Nuestra Galaxia: OK');
