@@ -811,4 +811,4 @@ html:not([data-theme="daylight"]) .gmap-attrib{backdrop-filter:blur(6px)}
 .goal-contribution b,.goal-contribution small{display:block}.goal-contribution small{color:var(--muted);font-size:9px;margin-top:2px}
 @media(max-width:360px){.goal-form-grid{grid-template-columns:1fr}.goal-step{grid-template-columns:32px minmax(0,1fr) 58px}}
 @media(min-width:700px){.goals-summary{grid-template-columns:repeat(4,minmax(0,1fr))}.goals-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(prefers-reduced-motion:reduce){.goal-progress i,.goal-card,.goal-step{transition:none!important;animation:none!important}}
+@media(prefers-reduced-motion:reduce){.goal-progress i,.goal-card,.goal-step,.plan-roulette,.plan-roulette.result,.wrapped-card{transition:none!important;animation:none!important}.wrapped-deck{scroll-behavior:auto}}
