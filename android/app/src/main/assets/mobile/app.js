@@ -1264,11 +1264,11 @@ function drawMap({fit=true}={}){
  const locs=(mapData.locations||[]).filter(x=>x.sharing&&Number.isFinite(Number(x.latitude))&&Number.isFinite(Number(x.longitude)));
  const bounds=[];
  locs.forEach(l=>{
-   const mine=l.person===cloud.person,name=names()[Number(l.person)]||'Nosotros';
+   const mine=l.person===cloud.person,name=names()[Number(l.person)]||'Nosotros',fresh=locationFreshState(l);
    map.addMarker({
      lat:l.latitude,lon:l.longitude,label:esc(name.slice(0,1)),
-     className:mine?'mine':'partner',
-     popup:name+' · '+transportLabel(l)+' · '+(Number(l.speed||0)*3.6).toFixed(0)+' km/h'
+     className:(mine?'mine':'partner')+(fresh?'':' stale'),
+     popup:fresh?(name+' · '+transportLabel(l)+' · '+(Number(l.speed||0)*3.6).toFixed(0)+' km/h'):(name+' · última ubicación hace '+ageDurationLabel(locationAgeMs(l)))
    });
    bounds.push([Number(l.latitude),Number(l.longitude)]);
  });
