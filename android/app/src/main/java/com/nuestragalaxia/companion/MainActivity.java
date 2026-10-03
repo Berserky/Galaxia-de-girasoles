@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetManager;
 import android.content.*;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.graphics.Color;
 import android.net.Uri;
 import android.media.MediaPlayer;
 import android.media.MediaRecorder;
@@ -638,6 +639,31 @@ public final class MainActivity extends ComponentActivity {
             }else{
                 reject(requestId,"Mantén pulsado el escritorio y elige Widgets → Nuestra Galaxia.");
             }
+        });
+    }
+
+    void setSystemTheme(String requestId,String theme){
+        runOnUiThread(()->{
+            try{
+                String key=theme==null?"daylight":theme;
+                String hex=switch(key){
+                    case "cosmic" -> "#10101D";
+                    case "halloween" -> "#100913";
+                    case "christmas" -> "#071510";
+                    case "valentine" -> "#180810";
+                    case "friendship" -> "#120B22";
+                    case "easter" -> "#11162C";
+                    default -> "#F7F6FA";
+                };
+                boolean light="daylight".equals(key);
+                getWindow().setStatusBarColor(Color.parseColor(hex));
+                getWindow().setNavigationBarColor(Color.parseColor(hex));
+                int flags=getWindow().getDecorView().getSystemUiVisibility();
+                if(light)flags|=View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                else flags&=~(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+                getWindow().getDecorView().setSystemUiVisibility(flags);
+                resolve(requestId,new JSONObject().put("theme",key));
+            }catch(Exception e){reject(requestId,"No pudimos sincronizar el tema con Android.");}
         });
     }
 
