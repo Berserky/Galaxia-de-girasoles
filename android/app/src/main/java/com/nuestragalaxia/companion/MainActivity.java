@@ -17,7 +17,8 @@ import androidx.activity.OnBackPressedCallback;
 import androidx.webkit.WebViewAssetLoader;
 import org.json.JSONObject;
 import java.util.Set;
-import java.io.File;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.*;
 
 public final class MainActivity extends ComponentActivity {
@@ -26,11 +27,14 @@ public final class MainActivity extends ComponentActivity {
     private static final int REQ_BOND_NOTIFICATIONS=102;
     private static final int REQ_MEDIA=200;
     private static final int REQ_MICROPHONE=201;
+    private static final int REQ_BACKUP_EXPORT=202;
+    private static final int REQ_BACKUP_IMPORT=203;
+    private static final int MAX_BACKUP_BYTES=5*1024*1024;
     private static final Set<String> MOBILE_ACTIONS=Set.of(
         "mobile-state","item-save","item-delete","settings-save","daily-save",
         "bond-save","bond-update","bond-guess","bond-delete","bond-widget",
         "map-state","place-save","place-delete","status-set","transport-set","destination-save","trip",
-        "media-list","media-delete"
+        "media-list","media-delete","presence-set","backup-export","backup-restore"
     );
 
     private DeviceStore store;
@@ -43,6 +47,8 @@ public final class MainActivity extends ComponentActivity {
     private String pendingBondRequest;
     private String pendingMediaRequest;
     private String pendingMediaKind;
+    private String pendingBackupRequest;
+    private String pendingBackupContent;
     private String pendingVoiceStartRequest;
     private MediaRecorder voiceRecorder;
     private MediaPlayer voicePlayer;
@@ -137,6 +143,11 @@ public final class MainActivity extends ComponentActivity {
             state.put("locationGranted",checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED);
             state.put("backgroundLocationGranted",Build.VERSION.SDK_INT<29||checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION)==PackageManager.PERMISSION_GRANTED);
             state.put("canPinWidget",Build.VERSION.SDK_INT>=26&&getSystemService(AppWidgetManager.class).isRequestPinAppWidgetSupported());
+            BatteryManager battery=getSystemService(BatteryManager.class);
+            if(battery!=null){
+                int level=battery.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
+                if(level>=0&&level<=100)state.put("batteryLevel",level);
+            }
         }catch(Exception ignored){}
         return state;
     }
@@ -202,8 +213,70 @@ public final class MainActivity extends ComponentActivity {
         });
     }
 
+    void saveBackup(String requestId,String content){
+        if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+        if(content==null||content.isEmpty()||content.getBytes(StandardCharsets.UTF_8).length>MAX_BACKUP_BYTES){reject(requestId,"La copia es demasiado grande.");return;}
+        runOnUiThread(()->{
+            if(pendingBackupRequest!=null){reject(requestId,"Ya hay una operación de copia abierta.");return;}
+            pendingBackupRequest=requestId;pendingBackupContent=content;
+            Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType("application/json");
+            intent.putExtra(Intent.EXTRA_TITLE,"NuestraGalaxia-backup-"+System.currentTimeMillis()+".json");
+            try{startActivityForResult(intent,REQ_BACKUP_EXPORT);}
+            catch(Exception e){pendingBackupRequest=null;pendingBackupContent=null;reject(requestId,"No hay un administrador de archivos compatible.");}
+        });
+    }
+
+    void pickBackup(String requestId){
+        if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+        runOnUiThread(()->{
+            if(pendingBackupRequest!=null){reject(requestId,"Ya hay una operación de copia abierta.");return;}
+            pendingBackupRequest=requestId;
+            Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType("application/json");
+            try{startActivityForResult(intent,REQ_BACKUP_IMPORT);}
+            catch(Exception e){pendingBackupRequest=null;reject(requestId,"No hay un administrador de archivos compatible.");}
+        });
+    }
+
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
+
+        if(requestCode==REQ_BACKUP_EXPORT||requestCode==REQ_BACKUP_IMPORT){
+            String request=pendingBackupRequest,content=pendingBackupContent;
+            pendingBackupRequest=null;pendingBackupContent=null;
+            if(request==null)return;
+            if(resultCode!=RESULT_OK||data==null||data.getData()==null){reject(request,"Operación cancelada.");return;}
+            Uri uri=data.getData();
+            io.execute(()->{
+                try{
+                    if(requestCode==REQ_BACKUP_EXPORT){
+                        byte[] bytes=(content==null?"":content).getBytes(StandardCharsets.UTF_8);
+                        if(bytes.length<1||bytes.length>MAX_BACKUP_BYTES)throw new IOException("La copia es demasiado grande.");
+                        try(OutputStream out=getContentResolver().openOutputStream(uri,"wt")){
+                            if(out==null)throw new IOException("No se pudo abrir el archivo.");
+                            out.write(bytes);
+                        }
+                        resolve(request,new JSONObject().put("saved",true));
+                    }else{
+                        ByteArrayOutputStream out=new ByteArrayOutputStream();
+                        try(InputStream in=getContentResolver().openInputStream(uri)){
+                            if(in==null)throw new IOException("No se pudo abrir la copia.");
+                            byte[] buffer=new byte[8192];int read,total=0;
+                            while((read=in.read(buffer))!=-1){
+                                total+=read;if(total>MAX_BACKUP_BYTES)throw new IOException("La copia supera el tamaño permitido.");
+                                out.write(buffer,0,read);
+                            }
+                        }
+                        resolve(request,new JSONObject().put("content",out.toString(StandardCharsets.UTF_8.name())));
+                    }
+                }catch(Exception e){reject(request,e.getMessage()==null?"No pudimos procesar la copia de seguridad.":e.getMessage());}
+            });
+            return;
+        }
+
         if(requestCode!=REQ_MEDIA)return;
         String request=pendingMediaRequest,kind=pendingMediaKind;
         pendingMediaRequest=null;pendingMediaKind=null;
@@ -231,7 +304,7 @@ public final class MainActivity extends ComponentActivity {
     }
 
     private void beginVoiceRecording(String requestId){
-        cleanupVoice(false);
+        cleanupVoice(true);
         try{
             voiceFile=new File(getCacheDir(),"voice-"+System.currentTimeMillis()+".m4a");
             voiceRecorder=android.os.Build.VERSION.SDK_INT>=31?new MediaRecorder(this):new MediaRecorder();
@@ -263,7 +336,15 @@ public final class MainActivity extends ComponentActivity {
             if(voiceFile==null||!voiceFile.exists()){reject(requestId,"Primero graba un audio.");return;}
             try{
                 if(voicePlayer!=null){voicePlayer.release();voicePlayer=null;}
-                voicePlayer=new MediaPlayer();voicePlayer.setDataSource(voiceFile.getAbsolutePath());voicePlayer.prepare();voicePlayer.start();
+                MediaPlayer player=new MediaPlayer();
+                voicePlayer=player;
+                player.setDataSource(voiceFile.getAbsolutePath());
+                player.setOnCompletionListener(done->{
+                    try{done.release();}catch(Exception ignored){}
+                    if(voicePlayer==done)voicePlayer=null;
+                    try{event("voice",new JSONObject().put("previewEnded",true));}catch(Exception ignored){}
+                });
+                player.prepare();player.start();
                 resolve(requestId,new JSONObject().put("playing",true));
             }catch(Exception e){reject(requestId,"No pudimos reproducir la grabación.");}
         });
@@ -453,6 +534,11 @@ public final class MainActivity extends ComponentActivity {
     private void toast(String text){runOnUiThread(()->Toast.makeText(this,text,Toast.LENGTH_LONG).show());}
 
     void closeApp(){runOnUiThread(this::finish);}
+
+    @Override protected void onPause(){
+        if(voiceRecorder!=null)stopVoiceRecording(null);
+        super.onPause();
+    }
 
     @Override protected void onResume(){
         super.onResume();
