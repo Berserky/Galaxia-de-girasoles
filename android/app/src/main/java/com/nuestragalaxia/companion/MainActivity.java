@@ -381,8 +381,7 @@ public final class MainActivity extends ComponentActivity {
             if(resultCode!=RESULT_OK||data==null||data.getData()==null){reject(request,"Selección cancelada.");return;}
             Uri uri=data.getData();
             try{
-                int flags=data.getFlags()&Intent.FLAG_GRANT_READ_URI_PERMISSION;
-                getContentResolver().takePersistableUriPermission(uri,flags);
+                getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 String name=documentName(uri);cloudMedia.saveDrive(uri,name);nativeChanged();
                 resolve(request,new JSONObject().put("connected",true).put("name",name));
             }catch(Exception e){reject(request,"La carpeta seleccionada no permite acceso persistente. Elige la carpeta desde Google Drive o Archivos.");}
