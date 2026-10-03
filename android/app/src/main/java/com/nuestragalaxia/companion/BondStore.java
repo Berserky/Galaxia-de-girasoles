@@ -16,6 +16,7 @@ public final class BondStore {
  public String feedback(){return prefs.getString("feedback","");}
  public void feedback(String text){prefs.edit().putString("feedback",text).commit();}
  public boolean consumeDate(String key){if(key.equals(prefs.getString("dateSeen","")))return false;return prefs.edit().putString("dateSeen",key).commit();}
+ public boolean hasSeen(String id){return id!=null&&prefs.getStringSet("seen",Collections.emptySet()).contains(id);}
  public void markSeen(String id){if(id==null||id.trim().isEmpty())return;Set<String> seen=new HashSet<>(prefs.getStringSet("seen",Collections.emptySet()));seen.add(id);prefs.edit().putStringSet("seen",seen).commit();}
  public List<String> consume(JSONArray gestures){
   List<String> ids=new ArrayList<>();for(int i=0;i<gestures.length();i++){JSONObject g=gestures.optJSONObject(i);if(g!=null)ids.add(g.optString("id"));}
