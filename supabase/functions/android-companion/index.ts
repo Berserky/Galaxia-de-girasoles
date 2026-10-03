@@ -1000,6 +1000,8 @@ async function intelligenceIndexAction(req:Request,body:any){
  return json({ok:true,processed:sources.length,ready,errors,nextOffset:(items||[]).length===limit?offset+limit:null});
 }
 
+async function intelligenceBestEffort(label:string,work:()=>Promise<any>){try{return await work();}catch(error){console.warn("intelligence-index",label,error instanceof Error?error.message:"error");return null;}}
+
 function cleanItem(kind:string,data:any){
   if(!allowedKinds.has(kind))throw new Error("Tipo de contenido no válido");
   if(!data||typeof data!=="object"||Array.isArray(data)||JSON.stringify(data).length>12000)throw new Error("Contenido no válido");
@@ -1020,10 +1022,12 @@ async function itemSave(req:Request,body:any){
     if(!row)return json({error:"El contenido ya no existe"},404);
     if(Number(body.version)!==Number(row.version))return json({error:"Este contenido cambió. Actualiza antes de guardar otra vez."},409);
     const updated=await ok(db.from("galaxy_items").update({data}).eq("id",row.id).eq("version",row.version).select("*").single());
+    await intelligenceBestEffort("item-update",()=>syncIntelligenceItem(updated));
     return json({item:updated});
   }
   const created=await ok(db.from("galaxy_items").insert({kind,data,author:String(d.person)}).select("*").single());
   await recordParticipation(String(d.person));
+  await intelligenceBestEffort("item-create",()=>syncIntelligenceItem(created));
   return json({item:created},201);
 }
 
@@ -1033,6 +1037,7 @@ async function itemDelete(req:Request,body:any){
   if(!row)return json({error:"El contenido ya no existe"},404);
   if(Number(body.version)!==Number(row.version))return json({error:"Este contenido cambió. Actualiza antes de borrarlo."},409);
   await ok(db.from("galaxy_items").delete().eq("id",row.id).eq("version",row.version));
+  await intelligenceBestEffort("item-delete",()=>deleteIntelligenceSource("item",String(row.id)));
   return json({ok:true});
 }
 
@@ -1059,6 +1064,7 @@ async function dailySave(req:Request,body:any){
     await ok(db.from("galaxy_daily").upsert({day,person:String(d.person),answer:value},{onConflict:"day,person"}));
   }else return json({error:"Campo no válido."},400);
   await recordParticipation(String(d.person));
+  if(field==="answer")await intelligenceBestEffort("daily-answer",()=>syncIntelligenceDaily(day));
   return json({ok:true});
 }
 
@@ -1119,8 +1125,9 @@ async function convertItemToGoal(req:Request,body:any){
  const keepOriginal=body.keepOriginal!==false,draft=conversionDraft(item,{keepOriginal,participants:Array.isArray(body.participants)?body.participants:["0","1"]});
  const normalized={...draft,...(body.goal&&typeof body.goal==="object"?body.goal:{}),participants:draft.participants,kind:String(body.goal?.kind||draft.kind)};
  const goal=await createGoalRecord(String(d.person),normalized,{itemId:item.id,relation:item.kind==="plan"?"source-plan":"source-wish"});
- if(!keepOriginal)await ok(db.from("galaxy_items").delete().eq("id",item.id));
+ if(!keepOriginal){await ok(db.from("galaxy_items").delete().eq("id",item.id));await intelligenceBestEffort("converted-item-delete",()=>deleteIntelligenceSource("item",String(item.id)));}
  await recordParticipation(String(d.person));
+ await intelligenceBestEffort("goal-convert",()=>syncIntelligenceGoal(goal));
  return json({goal:await goalResponse(String(goal.id)),sourcePreserved:keepOriginal},201);
 }
 async function goalsEngine(req:Request,body:any){
@@ -1132,6 +1139,7 @@ async function goalsEngine(req:Request,body:any){
  if(operation==="create"){
   const goal=await createGoalRecord(person,body.goal||body);
   await recordParticipation(person);
+  await intelligenceBestEffort("goal-create",()=>syncIntelligenceGoal(goal));
   return json({goal:await goalResponse(String(goal.id))},201);
  }
  if(operation==="convert-item")return await convertItemToGoal(req,body);
@@ -1149,11 +1157,13 @@ async function goalsEngine(req:Request,body:any){
   await ok(db.from("galaxy_goal_participants").delete().eq("goal_id",id));
   await ok(db.from("galaxy_goal_participants").insert(normalized.participants.map((p:string)=>({goal_id:id,person:p}))));
   await recordParticipation(person);
+  await intelligenceBestEffort("goal-update",()=>syncIntelligenceGoal(updated));
   return json({goal:await goalResponse(id)});
  }
  if(operation==="delete"){
   const removed=await ok(db.from("galaxy_goals").delete().eq("id",id).eq("version",expectedVersion).select("id").maybeSingle());
   if(!removed)return json({error:"Este objetivo cambió en otro dispositivo. Actualiza antes de eliminar."},409);
+  await intelligenceBestEffort("goal-delete",()=>deleteIntelligenceSource("goal",id));
   return json({ok:true});
  }
  if(operation==="step-add"){
@@ -1162,7 +1172,7 @@ async function goalsEngine(req:Request,body:any){
   const rows=await ok(db.from("galaxy_goal_steps").select("position").eq("goal_id",id).order("position",{ascending:false}).limit(1));
   const position=(rows?.length?Number(rows[0].position)+1:0);
   await ok(db.from("galaxy_goal_steps").insert({goal_id:id,title,position}));
-  await recordParticipation(person);return json({goal:await goalResponse(id)});
+  await recordParticipation(person);await intelligenceBestEffort("goal-step-add",()=>syncIntelligenceGoal(id));return json({goal:await goalResponse(id)});
  }
  if(operation==="step-toggle"){
   const stepId=String(body.stepId||""),step=(await ok(db.from("galaxy_goal_steps").select("*").eq("id",stepId).eq("goal_id",id).limit(1)))?.[0];
@@ -1170,13 +1180,14 @@ async function goalsEngine(req:Request,body:any){
   const claimed=await touchGoalVersion(id,expectedVersion);if(!claimed)return json({error:"Este objetivo cambió en otro dispositivo."},409);
   const complete=body.completed!==false;
   await ok(db.from("galaxy_goal_steps").update({completed_at:complete?new Date().toISOString():null,completed_by:complete?person:null}).eq("id",stepId).eq("goal_id",id));
-  await recordParticipation(person);return json({goal:await goalResponse(id)});
+  await recordParticipation(person);await intelligenceBestEffort("goal-step-toggle",()=>syncIntelligenceGoal(id));return json({goal:await goalResponse(id)});
  }
  if(operation==="step-reorder"){
   const rows=await ok(db.from("galaxy_goal_steps").select("*").eq("goal_id",id).order("position"));
   let ordered:string[];try{ordered=reorderStepIds(rows||[],body.stepIds||[]);}catch(e){return json({error:e instanceof Error?e.message:"Orden no válido."},400);}
   const claimed=await touchGoalVersion(id,expectedVersion);if(!claimed)return json({error:"Este objetivo cambió en otro dispositivo."},409);
   for(let position=0;position<ordered.length;position++)await ok(db.from("galaxy_goal_steps").update({position}).eq("id",ordered[position]).eq("goal_id",id));
+  await intelligenceBestEffort("goal-step-reorder",()=>syncIntelligenceGoal(id));
   return json({goal:await goalResponse(id)});
  }
  if(operation==="contribution-add"){
@@ -1575,6 +1586,7 @@ async function bondSave(req:Request,body:any){
   if(type==="voice")await validateVoice(person,payload);
   const row=await ok(db.from("galaxy_bond").insert({type,author:person,data:payload}).select("*").single());
   await recordParticipation(person);
+  await intelligenceBestEffort("bond-create",()=>syncIntelligenceBond(row));
   return json({entry:row},201);
 }
 
@@ -1587,6 +1599,7 @@ async function bondUpdate(req:Request,body:any){
   if(row.type==="ritual"&&payload.week!==row.data?.week)return json({error:"La semana no se puede cambiar."},400);
   const updated=await ok(db.from("galaxy_bond").update({data:payload,version:row.version+1}).eq("id",row.id).eq("version",row.version).select("*").single());
   await recordParticipation(person);
+  await intelligenceBestEffort("bond-update",()=>syncIntelligenceBond(updated));
   return json({entry:updated});
 }
 
@@ -1609,6 +1622,8 @@ async function bondDelete(req:Request,body:any){
   if(row.type!=="sharednote"&&row.author!==person)return json({error:"Solo su autor puede eliminar este momento."},403);
   if(Number(body.version)!==Number(row.version))return json({error:"Cambió en otro dispositivo. Actualiza antes de borrar."},409);
   await ok(db.from("galaxy_bond").delete().eq("id",row.id).eq("version",row.version));
+  if(["sharednote","ritual"].includes(String(row.type)))await intelligenceBestEffort("bond-delete",()=>deleteIntelligenceSource(String(row.type),String(row.id)));
+  if(row.type==="voice")await intelligenceBestEffort("voice-delete-index",()=>deleteIntelligenceSource("voice-transcript",String(row.id)));
   return json({ok:true});
 }
 
@@ -2043,9 +2058,11 @@ async function placeSave(req:Request,body:any){
     const row=(await ok(db.from("galaxy_places").select("*").eq("id",Number(body.id)).limit(1)))?.[0];
     if(!row||row.owner!==person)return json({error:"No puedes editar este lugar."},403);
     const place=await ok(db.from("galaxy_places").update({name,kind,latitude,longitude,note:note||null}).eq("id",row.id).select("*").single());
+    await intelligenceBestEffort("place-update",()=>syncIntelligencePlace(place));
     return json({place});
   }
   const place=await ok(db.from("galaxy_places").insert({owner:person,name,kind,latitude,longitude,note:note||null}).select("*").single());
+  await intelligenceBestEffort("place-create",()=>syncIntelligencePlace(place));
   return json({place},201);
 }
 
@@ -2053,6 +2070,7 @@ async function placeDelete(req:Request,body:any){
   const d=await device(req),person=String(d.person),row=(await ok(db.from("galaxy_places").select("id,owner").eq("id",Number(body.id)).limit(1)))?.[0];
   if(!row||row.owner!==person)return json({error:"No puedes borrar este lugar."},403);
   await ok(db.from("galaxy_places").delete().eq("id",row.id));
+  await intelligenceBestEffort("place-delete",()=>deleteIntelligenceSource("place",String(row.id)));
   return json({ok:true});
 }
 
@@ -2112,6 +2130,7 @@ async function tripAction(req:Request,body:any){
     const trip=await ok(db.from("galaxy_trip_history").insert({person,started_at:loc.trip_started_at,ended_at:ended.toISOString(),distance_m:Math.round(meters),duration_s:duration,max_speed:maxSpeed||null,dominant_motion:dominant(rows||[])}).select("*").single());
     await ok(db.from("galaxy_locations").update({trip_active:false,trip_started_at:null,updated_at:ended.toISOString()}).eq("person",person));
     await ok(db.from("galaxy_trip_points").delete().eq("person",person));
+    await intelligenceBestEffort("trip-complete",()=>syncIntelligenceTrip(trip));
     return json({ok:true,trip_active:false,trip});
   }
   return json({error:"Operación de recorrido no válida."},400);
@@ -2146,7 +2165,7 @@ async function mediaDelete(req:Request,body:any){
   if(!bucket||!path)return json({error:"Archivo no válido."},400);
   if(kind==="voice"&&!path.startsWith(String(d.person)+"/"))return json({error:"Solo puedes borrar tus audios."},403);
   await ok(db.storage.from(bucket).remove([path]));
-  if(kind==="photo")await ok(db.from("galaxy_bond_config").update({photo_path:""}).eq("photo_path",path));
+  if(kind==="photo"){await ok(db.from("galaxy_bond_config").update({photo_path:""}).eq("photo_path",path));await ok(db.from("galaxy_photo_context").delete().eq("path",path));await intelligenceBestEffort("photo-delete",()=>deleteIntelligenceSource("photo",path));}
   return json({ok:true});
 }
 
