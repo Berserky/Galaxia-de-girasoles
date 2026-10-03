@@ -252,6 +252,23 @@ async function refreshMap({quiet=false,detail=false}={}){
    else if(view==='map'){drawMap({fit:false});updateCoupleDistanceDom();updateEtaDom();}
  }catch(e){if(!quiet)toast(e.message);}
 }
+
+async function refreshMapNow(){
+ let gpsError='';
+ if(native.tracking&&native.locationGranted){
+  toast('Solicitando una ubicación GPS reciente…');
+  try{await GalaxyNative.call('refreshLocation');}
+  catch(e){gpsError=String(e?.message||e||'No pudimos actualizar tu GPS.');}
+ }
+ await refreshMap({quiet:true,detail:true});
+ if(view==='map')render();
+ const distance=coupleDistanceState();
+ if(distance.available)toast('Ubicaciones actualizadas.');
+ else if(distance.reason==='stale')toast(staleLocationCopy(distance));
+ else if(gpsError)toast(gpsError);
+ else if(!native.tracking)toast('Tu ubicación está pausada. Actívala para calcular distancia y ETA.');
+ else toast('Mapa actualizado. Falta una ubicación reciente del otro teléfono.');
+}
 const mediaFresh=kind=>!!media[kind]&&Date.now()-(mediaLoadedAt[kind]||0)<20*60*1000;
 async function loadMedia(kind,force=false){
  const fresh=mediaFresh(kind);
@@ -599,13 +616,26 @@ function coupleDistanceLocations(){
  const rows=mapData?.locations?.length?mapData.locations:(cloud?.locations||[]);
  return rows;
 }
+function locationAgeMs(location){const t=Date.parse(location?.updated_at||'');return Number.isFinite(t)?Math.max(0,Date.now()-t):Infinity;}
+function locationFreshState(location,freshMs=10*60*1000){
+ return !!location?.sharing&&Number.isFinite(Number(location?.latitude))&&Number.isFinite(Number(location?.longitude))&&locationAgeMs(location)<=freshMs;
+}
+function ageDurationLabel(age){
+ const ms=Math.max(0,Number(age)||0),min=Math.floor(ms/60000);
+ if(min<1)return'menos de 1 min';
+ if(min<60)return min+' min';
+ const h=Math.floor(min/60),rest=min%60;
+ return h+' h'+(rest?' '+rest+' min':'');
+}
 function distanceAgeLabel(value){
  const age=Math.max(0,Date.now()-Date.parse(value||''));
  if(!Number.isFinite(age))return'';
- if(age<60000)return'Actualizado hace menos de 1 min';
- const min=Math.floor(age/60000);
- if(min<60)return'Actualizado hace '+min+' min';
- const h=Math.floor(min/60);return'Actualizado hace '+h+' h';
+ return'Actualizado hace '+ageDurationLabel(age);
+}
+function staleLocationCopy(state){
+ const ages=Array.isArray(state?.ages)?state.ages:[],labels=names(),stale=[];
+ for(let i=0;i<2;i++)if(Number(ages[i])>10*60*1000)stale.push((labels[i]||('Persona '+(i+1)))+' · hace '+ageDurationLabel(ages[i]));
+ return stale.length?'Falta una ubicación reciente: '+stale.join(' / ')+'. Cada teléfono debe enviar su propio GPS.':'Falta una ubicación reciente de uno de los teléfonos.';
 }
 function coupleDistanceState(){
  return window.GalaxyDistance?.coupleDistance(coupleDistanceLocations())||{available:false,reason:'missing'};
@@ -613,8 +643,8 @@ function coupleDistanceState(){
 function coupleDistanceCard({mapMode=false}={}){
  const state=coupleDistanceState(),title='Distancia entre '+myName()+' y '+partnerName();
  if(!state.available){
-   const stale=state.reason==='stale',copy=stale?'Una de las ubicaciones lleva demasiado tiempo sin actualizarse.':'Ambos deben compartir ubicación para calcular la distancia.';
-   return '<section class="section"><div class="card couple-distance unavailable" id="coupleDistanceCard"><span class="couple-distance-icon">'+ico(stale?'refresh-cw':'map-pin')+'</span><div><p class="eyebrow">'+esc(title.toUpperCase())+'</p><h3>'+(stale?'Esperando una ubicación reciente':'Distancia no disponible')+'</h3><p>'+esc(copy)+'</p></div>'+(mapMode?'<button class="btn small ghost" data-action="map-refresh">'+ico('refresh-cw')+' Actualizar</button>':'<button class="btn small ghost" data-action="couple-distance-map">'+ico('map-pin')+' Abrir mapa</button>')+'</div></section>';
+   const stale=state.reason==='stale',copy=stale?staleLocationCopy(state):'Ambos deben compartir una ubicación reciente para calcular la distancia.';
+   return '<section class="section"><div class="card couple-distance unavailable" id="coupleDistanceCard"><span class="couple-distance-icon">'+ico(stale?'refresh-cw':'map-pin')+'</span><div><p class="eyebrow">'+esc(title.toUpperCase())+'</p><h3>'+(stale?'Esperando una ubicación reciente':'Distancia no disponible')+'</h3><p>'+esc(copy)+'</p></div>'+(mapMode?'<button class="btn small ghost" data-action="map-refresh">'+ico('refresh-cw')+' Actualizar GPS</button>':'<button class="btn small ghost" data-action="couple-distance-map">'+ico('map-pin')+' Abrir mapa</button>')+'</div></section>';
  }
  const mood=state.mood||{},distance=window.GalaxyDistance.formatDistance(state.meters),together=mood.key==='together';
  return '<section class="section"><div class="card couple-distance '+(together?'together':'')+'" id="coupleDistanceCard"><span class="couple-distance-icon">'+ico(together?'heart-handshake':'navigation')+'</span><div class="couple-distance-main"><p class="eyebrow">'+esc(title.toUpperCase())+'</p><div class="couple-distance-value"><strong>'+esc(distance)+'</strong><span>'+esc(mood.title||'')+'</span></div><p>'+esc(mood.copy||'')+'</p><small>'+esc(distanceAgeLabel(state.updated_at))+' · distancia en línea recta</small></div>'+(mapMode?'<button class="btn small secondary" data-action="couple-distance-focus">'+ico('navigation')+' Ver ambos</button>':'<button class="btn small ghost" data-action="couple-distance-map">'+ico('map-pin')+' Ver mapa</button>')+'</div></section>';
@@ -635,26 +665,26 @@ function etaData(){
  return {locations:mapData?.locations||cloud?.locations||[],places:mapData?.places||[],destinations:mapData?.destinations||[]};
 }
 function etaState(){return window.GalaxyEta?.eta(etaData(),String(cloud?.person??''))||{available:false,reason:'engine'};}
-function etaUnavailableCopy(reason){
- if(reason==='none')return {title:'Elige a dónde vas',copy:'Usa Acompáñame para seleccionar a '+partnerName()+' o uno de sus lugares guardados.'};
- if(reason==='own-paused')return {title:'Activa tu ubicación',copy:'Necesitamos tu posición para calcular cuánto falta.'};
- if(reason==='own-stale')return {title:'Esperando tu ubicación',copy:'Tu posición necesita una actualización reciente para calcular el ETA.'};
- if(reason==='target-paused')return {title:partnerName()+' pausó su ubicación',copy:'No calcularemos un ETA hacia una posición que ya no se comparte.'};
- if(reason==='target-stale')return {title:'Esperando a '+partnerName(),copy:'Su última posición es demasiado antigua para estimar una llegada fiable.'};
+function etaUnavailableCopy(reason,e={}){
+ if(reason==='none')return {title:'Elige un destino',copy:'ETA significa tiempo estimado de llegada. Toca Acompáñame y elige a '+partnerName()+' o un lugar guardado.'};
+ if(reason==='own-paused')return {title:'Activa tu ubicación',copy:'El ETA calcula cuánto tardarías tú en llegar al destino, así que necesita tu GPS activo.'};
+ if(reason==='own-stale')return {title:'Esperando tu ubicación',copy:'Tu teléfono no ha enviado una posición reciente. Actualizar GPS pedirá una nueva lectura a Android.'};
+ if(reason==='target-paused')return {title:partnerName()+' pausó su ubicación',copy:'Si el destino es '+partnerName()+', su teléfono también debe compartir ubicación.'};
+ if(reason==='target-stale')return {title:'Esperando a '+partnerName(),copy:'Su teléfono no ha enviado una posición reciente'+(e.target?.updated_at?' desde hace '+ageDurationLabel(locationAgeMs(e.target)):'')+'. Tú no puedes actualizar su GPS desde este teléfono.'};
  if(reason==='place-missing')return {title:'Ese lugar ya no está disponible',copy:'Elige otro destino desde Acompáñame.'};
- return {title:'ETA no disponible',copy:'Actualiza el mapa o elige nuevamente el destino.'};
+ return {title:'ETA no disponible',copy:'El ETA estima tu tiempo de llegada usando distancia, movimiento y velocidad. Actualiza el GPS o cambia el destino.'};
 }
 function etaCard(){
  const e=etaState();
  if(!e.available){
-  const message=etaUnavailableCopy(e.reason),hasDestination=e.reason!=='none';
-  return '<section class="section"><div class="card eta-card unavailable" id="etaCard"><span class="eta-icon">'+ico('timer')+'</span><div><p class="eyebrow">ETA APROXIMADO</p><h3>'+esc(message.title)+'</h3><p>'+esc(message.copy)+'</p></div><button class="btn small '+(hasDestination?'ghost':'secondary')+'" data-action="'+(hasDestination?'map-refresh':'destination')+'">'+ico(hasDestination?'refresh-cw':'navigation')+' '+(hasDestination?'Actualizar':'Acompáñame')+'</button></div></section>';
+  const message=etaUnavailableCopy(e.reason,e),hasDestination=e.reason!=='none',ownProblem=e.reason==='own-stale'||e.reason==='own-paused';
+  return '<section class="section"><div class="card eta-card unavailable" id="etaCard"><span class="eta-icon">'+ico('timer')+'</span><div><p class="eyebrow">TIEMPO ESTIMADO DE LLEGADA · ETA</p><h3>'+esc(message.title)+'</h3><p>'+esc(message.copy)+'</p></div><button class="btn small '+(hasDestination?'ghost':'secondary')+'" data-action="'+(hasDestination?'map-refresh':'destination')+'">'+ico(hasDestination?'refresh-cw':'navigation')+' '+(hasDestination?(ownProblem?'Actualizar mi GPS':'Revisar de nuevo'):'Acompáñame')+'</button></div></section>';
  }
  const modeIcon=e.mode==='walking'?'person-standing':e.mode==='motorcycle'?'bike':e.mode==='transit'?'bus-front':'navigation';
  const distance=window.GalaxyDistance?.formatDistance(e.meters)||fmtDistance(e.meters),eta=window.GalaxyEta.etaLabel(e.seconds);
  const source=e.speed_source==='live'?'con tu velocidad actual':'con ritmo estimado';
  const targetNote=e.target_moving?' · el destino también está en movimiento':'';
- return '<section class="section"><div class="card eta-card '+(e.arrived?'arrived':'')+'" id="etaCard"><span class="eta-icon">'+ico(e.arrived?'map-pin-check':modeIcon)+'</span><div class="eta-main"><p class="eyebrow">ETA HACIA '+esc(String(e.label||'DESTINO').toUpperCase())+'</p><div class="eta-value"><strong>'+esc(eta)+'</strong><span>'+esc(distance)+'</span></div><p>'+esc(e.arrived?'Ya estás en el destino.':'Estimado '+e.mode_label+', '+source+'.')+'</p><small>Ruta aproximada desde distancia geográfica'+esc(targetNote)+'. No reemplaza navegación vial.</small></div><div class="eta-actions"><button class="btn small secondary" data-action="eta-focus">'+ico('crosshair')+' Ver ruta</button><button class="btn small ghost" data-action="destination">'+ico('shuffle')+' Cambiar</button></div></div></section>';
+ return '<section class="section"><div class="card eta-card '+(e.arrived?'arrived':'')+'" id="etaCard"><span class="eta-icon">'+ico(e.arrived?'map-pin-check':modeIcon)+'</span><div class="eta-main"><p class="eyebrow">ETA HACIA '+esc(String(e.label||'DESTINO').toUpperCase())+'</p><div class="eta-value"><strong>'+esc(eta)+'</strong><span>'+esc(distance)+'</span></div><p>'+esc(e.arrived?'Ya estás en el destino.':'Llegarías aproximadamente '+e.mode_label+', '+source+'.')+'</p><small>ETA = tiempo estimado de llegada. Se calcula con distancia geográfica, tu modo de movimiento y velocidad'+esc(targetNote)+'. No reemplaza navegación vial.</small></div><div class="eta-actions"><button class="btn small secondary" data-action="eta-focus">'+ico('crosshair')+' Ver ambos</button><button class="btn small ghost" data-action="destination">'+ico('shuffle')+' Cambiar destino</button></div></div></section>';
 }
 function updateEtaDom(){
  const current=document.querySelector('#etaCard');if(!current)return;
@@ -787,8 +817,9 @@ function dailyQuestionCard(own,partner){
 }
 
 function personCard(l){
- const name=names()[Number(l.person)]||'Nosotros',live=!!l.sharing,motion=transportLabel(l),kmh=Math.max(0,Number(l.speed||0)*3.6);
- return '<div class="card person-card"><div class="bubble">'+esc(name.slice(0,1))+'</div><div><b><span class="status-dot '+(live?'live':'')+'"></span>'+esc(name)+'</b><p>'+(live?esc(motion)+(l.status?' · '+esc(l.status):''):'Ubicación pausada')+'</p></div><div class="speed">'+(live?kmh.toFixed(kmh<10?1:0):'—')+'<small>km/h</small></div></div>';
+ const name=names()[Number(l.person)]||'Nosotros',sharing=!!l.sharing,fresh=locationFreshState(l),motion=transportLabel(l),kmh=Math.max(0,Number(l.speed||0)*3.6);
+ const state=!sharing?'Ubicación pausada':fresh?(esc(motion)+(l.status?' · '+esc(l.status):'')):'Sin actualizar · hace '+ageDurationLabel(locationAgeMs(l));
+ return '<div class="card person-card '+(sharing&&!fresh?'stale':'')+'"><div class="bubble">'+esc(name.slice(0,1))+'</div><div><b><span class="status-dot '+(fresh?'live':sharing?'stale':'')+'"></span>'+esc(name)+'</b><p>'+state+'</p></div><div class="speed">'+(fresh?kmh.toFixed(kmh<10?1:0):'—')+'<small>km/h</small></div></div>';
 }
 function transportLabel(l){
  if(!l.sharing)return'Ubicación pausada';
@@ -1663,11 +1694,11 @@ document.addEventListener('click',async e=>{
   if(a==='context-suggestion-dismiss'){await api('context-suggestion',{operation:'dismiss',id:btn.dataset.id});await refreshMap({detail:true});toast('Sugerencia descartada.');return;}
   if(a==='context-suggestion-accept'){const suggestion=(mapData?.context?.suggestions||[]).find(s=>String(s.id)===String(btn.dataset.id));const result=await api('context-suggestion',{operation:'accept',id:btn.dataset.id});if(suggestion?.kind==='date'){const recap=await api('context-recap',{kind:'date',sourceEventId:suggestion.source_event_id});showModal('Recap de cita',contextRecapMarkup('Recap de cita',recap.recap));setTimeout(()=>renderContextRecapMap(recap.recap),30);}else{await refreshState({quiet:true});toast(result.item?'Recuerdo guardado.':'Sugerencia aceptada.');}await refreshMap({quiet:true,detail:true});return;}
   if(a==='context-trip-recap'){const recap=await api('context-recap',{kind:'trip',tripId:Number(btn.dataset.id)});showModal('Recap de recorrido',contextRecapMarkup('Recap de recorrido',recap.recap));setTimeout(()=>renderContextRecapMap(recap.recap),30);return;}
-  if(a==='map-refresh'){await refreshMap({detail:true});return;}
+  if(a==='map-refresh'){await refreshMapNow();return;}
   if(a==='status-menu'){$('#statusMenu')?.classList.toggle('open');return;}
   if(a==='status-set'){await api('status-set',{status:btn.dataset.status});$('#statusMenu')?.classList.remove('open');await refreshMap();toast('Estado actualizado.');return;}
   if(a==='status-custom'){const value=prompt('¿Qué estado quieres mostrar?','');if(value){await api('status-set',{status:value});await refreshMap();}return;}
-  if(a==='location-start'){await GalaxyNative.call('startLocation');native=nativeState();render();toast('Ubicación activa.');return;}
+  if(a==='location-start'){await GalaxyNative.call('startLocation');native=nativeState();try{await GalaxyNative.call('refreshLocation');}catch{}await refreshMap({quiet:true,detail:false});render();toast('Ubicación activa y GPS actualizado.');return;}
   if(a==='location-stop'){await GalaxyNative.call('stopLocation');native=nativeState();render();toast('Ubicación detenida.');return;}
   if(a==='trip-toggle'){const own=(cloud.locations||[]).find(l=>l.person===cloud.person)||{};await api('trip',{operation:own.trip_active?'stop':'start'});await refreshState();await refreshMap({detail:true});toast(own.trip_active?'Recorrido guardado.':'Recorrido iniciado.');return;}
   if(a==='place-new'){if(!mapData)await refreshMap({quiet:true,detail:true});openPlace();return;}
