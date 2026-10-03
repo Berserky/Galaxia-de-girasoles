@@ -56,7 +56,7 @@ test('custom gestures are CRUD-managed separately from historical galaxy_bond en
 test('gesture sending uses reusable push events rather than a haptic-only endpoint',()=>{
  assert.ok(edge.includes('async function dispatchPushEvent('));
  assert.ok(edge.includes('dispatchPushEvent(d,target,"gesture"')||edge.includes("dispatchPushEvent(d,target,'gesture'"));
- for(const future of ['arrived_safe','nearby','capsule','note','reminder'])assert.ok(edge.includes(future),future);
+ for(const future of ['arrived_safe','nearby','capsule','note','reminder'])assert.ok(pushEngine.includes(future),future);
  assert.equal(edge.includes('haptic-only'),false);
 });
 
