@@ -7,6 +7,7 @@ import vm from 'node:vm';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const source=readFileSync(resolve(root,'android/app/src/main/assets/mobile/insights.js'),'utf8');
+const html=readFileSync(resolve(root,'android/app/src/main/assets/mobile/index.html'),'utf8');
 const context={module:{exports:{}},exports:{},globalThis:{},Intl,Date,Math};
 vm.runInNewContext(source,context);
 const {periodFor,shiftPeriod,anniversaryDay,relationshipClock,compareMetrics,compatibleMood}=context.module.exports;
@@ -69,4 +70,12 @@ test('mood compatibility is deterministic and distinguishes exact matches',()=>{
   assert.equal(compatibleMood('sensible','abrazo'),'compatible');
   assert.equal(compatibleMood('feliz','cansado'),null);
   assert.equal(compatibleMood(null,'feliz'),null);
+});
+
+
+test('Android loads the insights domain before the main application',()=>{
+  const insights=html.indexOf('src="./insights.js"');
+  const app=html.indexOf('src="./app.js"');
+  assert.ok(insights>=0,'insights.js must be loaded by the WebView');
+  assert.ok(app>insights,'insights.js must load before app.js');
 });
