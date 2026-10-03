@@ -369,3 +369,31 @@ textarea{min-height:110px;resize:vertical}
  .now-grid{grid-template-columns:1fr}
  .privacy-grid{grid-template-columns:1fr}
 }
+
+/* Super Update · Universal search */
+.header-actions{display:flex;align-items:center;gap:9px}
+.header-search{width:42px;height:42px;border:1px solid var(--border);border-radius:15px;background:var(--surface);color:var(--text);display:grid;place-items:center;box-shadow:0 5px 18px rgba(54,43,83,.035)}
+.header-search .ui-icon{width:19px;height:19px}
+.universal-search{padding-top:12px}
+.universal-search-box{display:flex;align-items:center;gap:9px;border:1px solid var(--border);border-radius:18px;background:#fbfafd;padding:0 13px}
+.universal-search-box:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(114,84,199,.09)}
+.universal-search-box>.ui-icon{width:19px;height:19px;color:var(--muted);flex:0 0 auto}
+.universal-search-box .input{border:0;background:transparent;box-shadow:none;padding-left:0}
+.universal-search-list{display:grid;gap:8px;margin-top:14px}
+.universal-search-result{width:100%;display:grid;grid-template-columns:42px minmax(0,1fr) 18px;align-items:center;gap:11px;border:1px solid var(--border);border-radius:17px;background:var(--surface);padding:11px;text-align:left;color:var(--text)}
+.universal-search-result:active{background:var(--surface2)}
+.search-result-icon{width:42px;height:42px;border-radius:14px;background:var(--surface2);display:grid;place-items:center;color:var(--accent)}
+.search-result-icon .ui-icon{width:19px;height:19px}
+.search-result-copy{display:grid;gap:3px;min-width:0}
+.search-result-copy b,.search-result-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.search-result-copy b{font-size:13px}
+.search-result-copy small{font-size:10px;color:var(--muted)}
+.universal-search-result>.ui-icon{width:16px;height:16px;color:var(--muted)}
+.universal-search-count{margin:10px 2px 0!important;font-size:10px!important;color:var(--muted)}
+.universal-search-empty{text-align:center;padding:34px 14px 22px;color:var(--muted)}
+.universal-search-empty>.ui-icon{width:31px;height:31px;color:var(--accent);margin-bottom:9px}
+.universal-search-empty h3{margin:4px 0 6px;color:var(--text)}
+.universal-search-empty p{max-width:360px;margin:auto}
+.search-hit{animation:searchHit 1.7s ease}
+@keyframes searchHit{0%,100%{box-shadow:0 7px 24px rgba(54,43,83,.035)}20%,70%{border-color:var(--accent);box-shadow:0 0 0 4px rgba(114,84,199,.12),0 12px 30px rgba(54,43,83,.08)}}
+@media(prefers-reduced-motion:reduce){.search-hit{animation:none;border-color:var(--accent)}}
