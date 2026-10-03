@@ -226,6 +226,17 @@ export function buildCandidates(context:any={},constraintsInput:any={}){
  for(const plan of context.pendingPlans||[]){
   const c=candidateFromPlan(plan);if(!c.done)out.push(c);
  }
+ for(const suggestion of context.goalSuggestions||[]){
+  if(!suggestion||!suggestion.id||!suggestion.title)continue;
+  out.push({
+   id:String(suggestion.id),title:cleanText(suggestion.title),body:cleanText(suggestion.body),
+   minutes:Math.max(15,numberOr(suggestion.minutes,120)),budget:Math.max(0,numberOr(suggestion.budget,0)),
+   where:normalizeWhere(suggestion.where)==="casa"?"casa":"salir",source:cleanText(suggestion.source)||"context",
+   planCategory:normalizePlanCategory({planCategory:suggestion.planCategory}),tags:Array.isArray(suggestion.tags)?suggestion.tags.map(String):["context"],
+   distanceM:Number.isFinite(Number(suggestion.distanceM))?Math.max(0,Number(suggestion.distanceM)):null,
+   placeId:suggestion.placeId??null,done:false
+  });
+ }
  const seenPlaces=new Set<string>();
  for(const place of [...(context.frequentPlaces||[]),...(context.places||[])]){
   const key=String((place.id??place.name)||"");if(!key||seenPlaces.has(key))continue;seenPlaces.add(key);
