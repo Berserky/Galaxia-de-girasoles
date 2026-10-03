@@ -838,4 +838,4 @@ html:not([data-theme="daylight"]) .gmap-attrib{backdrop-filter:blur(6px)}
 .bond-gesture-row b,.bond-gesture-row small{display:block}.bond-gesture-row small{color:var(--muted);font-size:9px;margin-top:2px}
 @keyframes gardenSway{from{rotate:-2deg}to{rotate:2deg}}
 @media(min-width:700px){.bond-gesture-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.bond-garden{display:grid;grid-template-columns:minmax(260px,.9fr) 1.1fr}.bond-garden-scene{min-height:100%;border-bottom:0;border-right:1px solid var(--border)}}
-@media(prefers-reduced-motion:reduce){.bond-garden-scene,.garden-flower,.garden-glow{animation:none!important;transition:none!important}.garden-flower{rotate:0deg}}
+@media(prefers-reduced-motion:reduce){.bond-garden-scene,.garden-flower,.garden-glow,.plan-roulette,.plan-roulette.result,.wrapped-card,.goal-progress i,.goal-card,.goal-step{animation:none!important;transition:none!important}.garden-flower{rotate:0deg}.wrapped-deck{scroll-behavior:auto}}
