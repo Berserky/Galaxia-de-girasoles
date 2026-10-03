@@ -202,7 +202,7 @@ async function refreshMap({quiet=false,detail=false}={}){
    const next=await api('map-state',{detail});
    mapData=detail||!mapData?next:{...mapData,...next};
    if(view==='map'&&!quiet)render();
-   else if(view==='map')drawMap({fit:false});
+   else if(view==='map'){drawMap({fit:false});updateCoupleDistanceDom();}
  }catch(e){if(!quiet)toast(e.message);}
 }
 const mediaFresh=kind=>!!media[kind]&&Date.now()-(mediaLoadedAt[kind]||0)<20*60*1000;
@@ -298,7 +298,7 @@ function renderTourOverlay(){
 function homeView(){
  const own=ownDaily(),partner=partnerDaily(),next=cloud.nextEvent,garden=cloud.bond?.garden||{days:0,stage:0};
  const locs=cloud.locations||[];
- return anniversaryBanner()+'<section class="hero"><p class="eyebrow">NUESTRO UNIVERSO</p><h1>'+esc(myName())+' & '+esc(partnerName())+'</h1><p>Un lugar para acompañarnos, guardar lo vivido y seguir construyendo lo que viene.</p><div class="hero-stats"><div class="hero-stat"><b>'+coupleDays()+'</b><small>días juntos</small></div><div class="hero-stat"><b>'+items('memory').length+'</b><small>recuerdos</small></div><div class="hero-stat"><b>'+garden.days+'</b><small>días del girasol</small></div></div></section>'+monthlySummaryTeaser()+todayHistoryTeaser()+encounterStatsTeaser()+nowCard()+
+ return anniversaryBanner()+'<section class="hero"><p class="eyebrow">NUESTRO UNIVERSO</p><h1>'+esc(myName())+' & '+esc(partnerName())+'</h1><p>Un lugar para acompañarnos, guardar lo vivido y seguir construyendo lo que viene.</p><div class="hero-stats"><div class="hero-stat"><b>'+coupleDays()+'</b><small>días juntos</small></div><div class="hero-stat"><b>'+items('memory').length+'</b><small>recuerdos</small></div><div class="hero-stat"><b>'+garden.days+'</b><small>días del girasol</small></div></div></section>'+monthlySummaryTeaser()+todayHistoryTeaser()+coupleDistanceCard()+encounterStatsTeaser()+nowCard()+
  '<section class="section"><div class="section-head"><div><h2>¿Cómo estás hoy?</h2><p>Tu estado se comparte solo con tu persona.</p></div></div><div class="mood-grid">'+Object.entries(moods).map(([id,m])=>'<button class="mood '+(own.mood===id?'active':'')+'" data-action="mood" data-value="'+id+'"><span>'+ico(m[0])+'</span>'+m[1]+'</button>').join('')+'</div>'+(partner.mood?'<div class="card" style="margin-top:10px"><span class="badge">'+esc(partnerName())+'</span> <b>'+esc(moods[partner.mood]?.[1]||partner.mood)+'</b></div>':'')+'</section>'+
  '<section class="section"><div class="card"><p class="eyebrow">PREGUNTA DEL DÍA</p><h3>'+esc(dailyQuestion())+'</h3>'+dailyAnswerMarkup(own,partner)+'</div></section>'+
  '<section class="section"><div class="grid">'+
@@ -412,6 +412,42 @@ async function openTodayHistoryItem(btn){
  const item=todayHistoryItems.get(id);if(!item)return;
  const meta=kindMeta[item.kind]||['sparkles','Historia'];
  showModal(item.title||meta[1],'<div class="card today-history-detail"><span class="badge">'+esc(meta[1])+'</span><p class="muted" style="margin-top:8px">'+esc(fmtDate(item.date))+(item.placeName?' · '+esc(item.placeName):'')+'</p>'+(item.body?'<p style="margin-top:14px">'+esc(item.body)+'</p>':'')+(item.category?'<p class="muted" style="margin-top:10px">'+esc(item.category)+'</p>':'')+'</div>');
+}
+
+function coupleDistanceLocations(){
+ const rows=mapData?.locations?.length?mapData.locations:(cloud?.locations||[]);
+ return rows;
+}
+function distanceAgeLabel(value){
+ const age=Math.max(0,Date.now()-Date.parse(value||''));
+ if(!Number.isFinite(age))return'';
+ if(age<60000)return'Actualizado hace menos de 1 min';
+ const min=Math.floor(age/60000);
+ if(min<60)return'Actualizado hace '+min+' min';
+ const h=Math.floor(min/60);return'Actualizado hace '+h+' h';
+}
+function coupleDistanceState(){
+ return window.GalaxyDistance?.coupleDistance(coupleDistanceLocations())||{available:false,reason:'missing'};
+}
+function coupleDistanceCard({mapMode=false}={}){
+ const state=coupleDistanceState(),title='Distancia entre '+myName()+' y '+partnerName();
+ if(!state.available){
+   const stale=state.reason==='stale',copy=stale?'Una de las ubicaciones lleva demasiado tiempo sin actualizarse.':'Ambos deben compartir ubicación para calcular la distancia.';
+   return '<section class="section"><div class="card couple-distance unavailable" id="coupleDistanceCard"><span class="couple-distance-icon">'+ico(stale?'refresh-cw':'map-pin')+'</span><div><p class="eyebrow">'+esc(title.toUpperCase())+'</p><h3>'+(stale?'Esperando una ubicación reciente':'Distancia no disponible')+'</h3><p>'+esc(copy)+'</p></div>'+(mapMode?'<button class="btn small ghost" data-action="map-refresh">'+ico('refresh-cw')+' Actualizar</button>':'<button class="btn small ghost" data-action="couple-distance-map">'+ico('map-pin')+' Abrir mapa</button>')+'</div></section>';
+ }
+ const mood=state.mood||{},distance=window.GalaxyDistance.formatDistance(state.meters),together=mood.key==='together';
+ return '<section class="section"><div class="card couple-distance '+(together?'together':'')+'" id="coupleDistanceCard"><span class="couple-distance-icon">'+ico(together?'heart-handshake':'navigation')+'</span><div class="couple-distance-main"><p class="eyebrow">'+esc(title.toUpperCase())+'</p><div class="couple-distance-value"><strong>'+esc(distance)+'</strong><span>'+esc(mood.title||'')+'</span></div><p>'+esc(mood.copy||'')+'</p><small>'+esc(distanceAgeLabel(state.updated_at))+' · distancia en línea recta</small></div>'+(mapMode?'<button class="btn small secondary" data-action="couple-distance-focus">'+ico('navigation')+' Ver ambos</button>':'<button class="btn small ghost" data-action="couple-distance-map">'+ico('map-pin')+' Ver mapa</button>')+'</div></section>';
+}
+function updateCoupleDistanceDom(){
+ const current=document.querySelector('#coupleDistanceCard');if(!current)return;
+ const wrapper=document.createElement('div');wrapper.innerHTML=coupleDistanceCard({mapMode:view==='map'});
+ const next=wrapper.querySelector('#coupleDistanceCard');if(next)current.replaceWith(next);
+ refreshIcons();
+}
+function focusCoupleOnMap(){
+ const rows=coupleDistanceLocations().filter(l=>l.sharing&&Number.isFinite(Number(l.latitude))&&Number.isFinite(Number(l.longitude)));
+ if(!map||rows.length<2)return;
+ map.fitBounds(rows.map(l=>[Number(l.latitude),Number(l.longitude)]),{maxZoom:16});
 }
 
 function encounterStatsTeaser(){
@@ -607,7 +643,7 @@ function mapView(){
  const own=(cloud.locations||[]).find(l=>l.person===cloud.person)||{},partner=(cloud.locations||[]).find(l=>l.person!==cloud.person)||{};
  return '<section><div class="section-head"><div><p class="eyebrow">NUESTRO MAPA</p><h2>Acompañarnos</h2><p>Ubicación voluntaria, recorridos y lugares importantes.</p></div><button class="btn small secondary" data-action="map-refresh">Actualizar</button></div>'+
  '<div class="map-wrap"><div id="map"></div><button class="map-fab" data-action="status-menu" aria-label="Estado rápido">'+ico('sparkles')+'</button><div id="statusMenu" class="map-status-menu">'+['Ya voy','Voy bien','Llegué','En camino','Necesito una pausa'].map(s=>'<button data-action="status-set" data-status="'+attr(s)+'">'+esc(s)+'</button>').join('')+'<button data-action="status-custom">Otro…</button></div></div>'+
- '<div class="grid" style="margin-top:12px">'+personCard(own)+personCard(partner)+'</div>'+
+ '<div class="grid" style="margin-top:12px">'+personCard(own)+personCard(partner)+'</div>'+coupleDistanceCard({mapMode:true})+
  '<div class="section"><div class="card"><div class="row between"><div><h3>Compartir ubicación</h3><p>'+(native.tracking?'Android la mantiene activa en segundo plano.':'Está detenida en este teléfono.')+'</p></div><span class="badge '+(native.tracking?'good':'')+'">'+(native.tracking?'Activa':'Pausada')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small" data-action="'+(native.tracking?'location-stop':'location-start')+'">'+(native.tracking?'Detener':'Comenzar')+'</button><button class="btn small secondary" data-action="app-settings">Permisos</button></div></div></div>'+
  '<div class="section"><div class="card"><h3>Cómo me muevo normalmente</h3><p>Ayuda a interpretar cuando Android detecta que vas en vehículo.</p><div class="chips" style="margin-top:12px">'+
  ['','motorcycle','transit'].map(value=>'<button class="chip '+((own.transport_preference||'')===value?'active':'')+'" data-action="transport-set" data-value="'+value+'">'+ico(value==='motorcycle'?'bike':value==='transit'?'bus-front':'navigation')+(value==='motorcycle'?'Moto':value==='transit'?'Transporte público':'Automático')+'</button>').join('')+
@@ -845,6 +881,8 @@ document.addEventListener('click',async e=>{
   if(a==='encounter-stats-open'){await openEncounterStats();return;}
   if(a==='encounter-stats-refresh'){await openEncounterStats(true);return;}
   if(a==='encounter-map'){closeModal();go('map');await refreshMap({detail:true});setTimeout(()=>document.querySelector('#encounter-history')?.scrollIntoView({behavior:'smooth',block:'center'}),120);return;}
+  if(a==='couple-distance-map'){go('map');await refreshMap({quiet:true,detail:false});setTimeout(()=>{focusCoupleOnMap();document.querySelector('#coupleDistanceCard')?.scrollIntoView({behavior:'smooth',block:'center'});},120);return;}
+  if(a==='couple-distance-focus'){focusCoupleOnMap();return;}
   if(a==='map'){go('map');return;}
   if(a==='moments'){go('moments');return;}
   if(a==='add-memory'){if(!mapData)await refreshMap({quiet:true,detail:false});openItemForm('memory');return;}
