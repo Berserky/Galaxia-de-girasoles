@@ -44,6 +44,7 @@ const surpriseIdeas=[
 
 let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null;
 let toastTimer,refreshing=false,updateState={text:'La app está al día.',progress:0,busy:false},pendingVoiceDraft=null,voiceReady=false,voiceRecording=false,voiceResumeMusic=false,lastSurprise=null;
+let presenceLastSignature='',voiceTimer=null,voiceSeconds=0;
 let welcomeStep=0,welcomePreview=false,welcomeGift=true,welcomeEntering=false,tourStep=-1;
 const welcomeMusic=new Audio('../musica.mp3');welcomeMusic.loop=true;welcomeMusic.volume=.32;
 const globalPlayer=document.getElementById('globalPlayer'),providerPlayer=document.getElementById('providerPlayer');
@@ -61,7 +62,7 @@ function renderGlobalPlayer(){
  globalPlayer.innerHTML='<button class="player-main" data-action="player-toggle" aria-label="'+(musicPlaying?'Pausar':'Reproducir')+'">'+ico(playerIcon())+'</button><button class="player-info" data-action="player-expand"><span class="player-eq '+(musicPlaying?'playing':'')+'"><i></i><i></i><i></i></span><span><b>'+esc(t.title)+'</b><small>'+esc(t.platform==='youtube'?'YouTube / YouTube Music':t.platform==='spotify'?'Spotify':t.platform==='mp3'?'MP3':'Audio')+'</small></span></button><button class="player-skip" data-action="player-next" aria-label="Siguiente">'+ico('skip-forward')+'</button>';
  refreshIcons();
 }
-function setMusicPlaying(v){musicPlaying=!!v;renderGlobalPlayer();}
+function setMusicPlaying(v){musicPlaying=!!v;renderGlobalPlayer();if(cloud)setTimeout(()=>syncPresence(),0);}
 function playMusicAt(index){
  rebuildMusicQueue();if(!musicQueue.length)return;musicIndex=(index+musicQueue.length)%musicQueue.length;const t=musicQueue[musicIndex];
  musicAudio.pause();if(ytPlayer?.pauseVideo)try{ytPlayer.pauseVideo();}catch{}if(spotifyController?.pause)try{spotifyController.pause();}catch{}
@@ -100,7 +101,8 @@ window.GalaxyNative={
    let data={};try{data=JSON.parse(json||'{}');}catch{}
    if(name==='native'){native=data;render();}
    if(name==='update'){updateState=data;renderUpdateOnly();}
-   if(name==='voice'&&data.ready&&modal.open){voiceRecording=false;voiceReady=true;const status=modal.querySelector('[data-role="voice-status"]');if(status)status.textContent='Grabación lista. Escúchala antes de guardar.';modal.querySelector('[data-action="voice-record-stop"]')?.setAttribute('hidden','');modal.querySelector('[data-action="voice-preview"]')?.removeAttribute('hidden');modal.querySelector('[data-action="voice-discard"]')?.removeAttribute('hidden');modal.querySelector('[data-action="voice-record-start"]')?.removeAttribute('hidden');}
+   if(name==='voice'&&data.ready&&modal.open){stopVoiceTimer();voiceRecording=false;voiceReady=true;const status=modal.querySelector('[data-role="voice-status"]');if(status)status.textContent='Grabación lista. Escúchala antes de guardar.';modal.querySelector('[data-action="voice-record-stop"]')?.setAttribute('hidden','');modal.querySelector('[data-action="voice-preview"]')?.removeAttribute('hidden');modal.querySelector('[data-action="voice-discard"]')?.removeAttribute('hidden');modal.querySelector('[data-action="voice-record-start"]')?.removeAttribute('hidden');if(voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}}
+   if(name==='voice-preview-ended'&&voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}
  },
  back(){
    if(modal.open){closeModal();return;}
@@ -128,6 +130,42 @@ const partnerName=()=>names()[Number(cloud?.person||0)===0?1:0]||'Mi persona';
 const todayRows=()=>cloud?.daily?.filter(r=>r.day===cloud.today)||[];
 const ownDaily=()=>todayRows().find(r=>r.person===cloud?.person)||{};
 const partnerDaily=()=>todayRows().find(r=>r.person!==cloud?.person)||{};
+const ownPresence=()=>cloud?.settings?.data?.presence?.[String(cloud?.person)]||{};
+const partnerPresence=()=>cloud?.settings?.data?.presence?.[String(cloud?.person)==='0'?'1':'0']||{};
+const currentTrackTitle=()=>{rebuildMusicQueue();return musicPlaying&&musicQueue[musicIndex]?String(musicQueue[musicIndex].title||''):'';};
+async function syncPresence(force=false){
+ if(!native.paired||!cloud)return;
+ const p=ownPresence(),payload={shareBattery:p.shareBattery===true,shareListening:p.shareListening===true,battery:Number(native.battery),listening:currentTrackTitle()};
+ const signature=JSON.stringify(payload);
+ if(!force&&signature===presenceLastSignature)return;
+ presenceLastSignature=signature;
+ try{await api('presence-set',payload);try{await GalaxyNative.call('refreshMoments');}catch{}}
+ catch(e){presenceLastSignature='';if(force)throw e;}
+}
+async function togglePresence(kind){
+ const p=ownPresence(),payload={shareBattery:p.shareBattery===true,shareListening:p.shareListening===true,battery:Number(native.battery),listening:currentTrackTitle()};
+ if(kind==='battery')payload.shareBattery=!payload.shareBattery;
+ if(kind==='listening')payload.shareListening=!payload.shareListening;
+ await api('presence-set',payload);presenceLastSignature='';await refreshState({quiet:true});render();try{await GalaxyNative.call('refreshMoments');}catch{}
+}
+function nowPersonCard(person,isOwn){
+ const loc=(cloud.locations||[]).find(l=>String(l.person)===String(person))||{},daily=todayRows().find(r=>String(r.person)===String(person))||{};
+ const p=cloud?.settings?.data?.presence?.[String(person)]||{},name=names()[Number(person)]||(isOwn?'Yo':'Mi persona');
+ const mood=daily.mood?(moods[daily.mood]?.[1]||daily.mood):'Sin estado';
+ const movement=loc.sharing?transportLabel(loc):'Ubicación pausada';
+ const battery=isOwn?Number(native.battery):(p.shareBattery===true?Number(p.battery):NaN);
+ const listening=isOwn?currentTrackTitle():(p.shareListening===true?String(p.listening||''):'');
+ const kmh=loc.sharing?Math.max(0,Number(loc.speed||0)*3.6):null;
+ return '<div class="now-person card"><div class="row between"><div><span class="badge">'+esc(isOwn?'Tú':'Ahora')+'</span><h3>'+esc(name)+'</h3></div><span class="now-mood">'+esc(mood)+'</span></div>'+
+ '<div class="now-facts"><span>'+ico('navigation')+esc(movement)+(kmh!==null?' · '+kmh.toFixed(kmh<10?1:0)+' km/h':'')+'</span>'+
+ (loc.status?'<span>'+ico('message-circle')+esc(loc.status)+'</span>':'')+
+ (listening?'<span>'+ico('music')+esc(listening)+'</span>':'')+
+ (Number.isFinite(battery)?'<span>'+ico('battery-charging')+Math.round(battery)+'%</span>':'')+'</div></div>';
+}
+function nowCard(){
+ const me=String(cloud.person),other=me==='0'?'1':'0';
+ return '<section class="section now-section"><div class="section-head"><div><p class="eyebrow">AHORA</p><h2>Cómo estamos</h2><p>Solo se comparte lo que cada uno decide activar.</p></div><button class="btn small ghost" data-action="now-settings">'+ico('sliders-horizontal')+' Privacidad</button></div><div class="now-grid">'+nowPersonCard(me,true)+nowPersonCard(other,false)+'</div></section>';
+}
 const dailyQuestion=()=>{const d=cloud?.today||new Date().toISOString().slice(0,10);let n=0;for(const c of d)n+=c.charCodeAt(0);return dailyQuestions[n%dailyQuestions.length];};
 const currentMonday=()=>{const d=new Date((cloud?.today||new Date().toISOString().slice(0,10))+'T12:00:00');const day=d.getDay()||7;d.setDate(d.getDate()-day+1);return d.toISOString().slice(0,10);};
 const coupleDays=()=>{const s=cloud?.settings?.data?.startDate;if(!s)return 0;return Math.max(0,Math.floor((Date.parse((cloud?.today||s)+'T12:00:00Z')-Date.parse(s+'T12:00:00Z'))/86400000));};
@@ -256,7 +294,7 @@ function renderTourOverlay(){
 function homeView(){
  const own=ownDaily(),partner=partnerDaily(),next=cloud.nextEvent,garden=cloud.bond?.garden||{days:0,stage:0};
  const locs=cloud.locations||[];
- return anniversaryBanner()+'<section class="hero"><p class="eyebrow">NUESTRO UNIVERSO</p><h1>'+esc(myName())+' & '+esc(partnerName())+'</h1><p>Un lugar para acompañarnos, guardar lo vivido y seguir construyendo lo que viene.</p><div class="hero-stats"><div class="hero-stat"><b>'+coupleDays()+'</b><small>días juntos</small></div><div class="hero-stat"><b>'+items('memory').length+'</b><small>recuerdos</small></div><div class="hero-stat"><b>'+garden.days+'</b><small>días del girasol</small></div></div></section>'+
+ return anniversaryBanner()+'<section class="hero"><p class="eyebrow">NUESTRO UNIVERSO</p><h1>'+esc(myName())+' & '+esc(partnerName())+'</h1><p>Un lugar para acompañarnos, guardar lo vivido y seguir construyendo lo que viene.</p><div class="hero-stats"><div class="hero-stat"><b>'+coupleDays()+'</b><small>días juntos</small></div><div class="hero-stat"><b>'+items('memory').length+'</b><small>recuerdos</small></div><div class="hero-stat"><b>'+garden.days+'</b><small>días del girasol</small></div></div></section>'+nowCard()+
  '<section class="section"><div class="section-head"><div><h2>¿Cómo estás hoy?</h2><p>Tu estado se comparte solo con tu persona.</p></div></div><div class="mood-grid">'+Object.entries(moods).map(([id,m])=>'<button class="mood '+(own.mood===id?'active':'')+'" data-action="mood" data-value="'+id+'"><span>'+ico(m[0])+'</span>'+m[1]+'</button>').join('')+'</div>'+(partner.mood?'<div class="card" style="margin-top:10px"><span class="badge">'+esc(partnerName())+'</span> <b>'+esc(moods[partner.mood]?.[1]||partner.mood)+'</b></div>':'')+'</section>'+
  '<section class="section"><div class="card"><p class="eyebrow">PREGUNTA DEL DÍA</p><h3>'+esc(dailyQuestion())+'</h3>'+dailyAnswerMarkup(own,partner)+'</div></section>'+
  '<section class="section"><div class="grid">'+
@@ -397,8 +435,11 @@ function mapHistoryView(){
 }
 
 function moreView(){
- const settings=cloud.settings||{data:{},version:1},data=settings.data||{};
- return '<section><div class="section-head"><div><p class="eyebrow">NUESTRA APP</p><h2>Más</h2><p>Widget, ajustes, permisos y actualización.</p></div></div>'+
+ const settings=cloud.settings||{data:{},version:1},data=settings.data||{},presence=ownPresence();
+ return '<section><div class="section-head"><div><p class="eyebrow">NUESTRA APP</p><h2>Más</h2><p>Privacidad, respaldo, nuestra historia inteligente y ajustes.</p></div></div>'+
+ '<div class="card"><div class="row between"><div><h3>Privacidad de “Ahora”</h3><p>Tu ubicación sigue teniendo su propio interruptor. Aquí decides si compartes batería y la canción que estás escuchando.</p></div>'+ico('shield-check')+'</div><div class="privacy-grid"><button class="privacy-toggle '+(presence.shareBattery?'active':'')+'" data-action="presence-battery">'+ico('battery-charging')+'<span><b>Batería</b><small>'+(presence.shareBattery?'Compartida':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(presence.shareListening?'active':'')+'" data-action="presence-listening">'+ico('music')+'<span><b>Escuchando</b><small>'+(presence.shareListening?'Compartido':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(native.tracking?'active':'')+'" data-action="map">'+ico('map-pin')+'<span><b>Ubicación</b><small>'+(native.tracking?'Compartiendo':'Pausada')+'</small></span></button></div></div>'+
+ '<div class="card"><div class="row between"><div><h3>Nuestra IA</h3><p>Pregunta por recuerdos, planes, lugares, viajes y momentos guardados. Responde usando únicamente su propia historia.</p></div>'+ico('sparkles')+'</div><button class="btn small" style="margin-top:14px" data-action="our-ai">Preguntar a nuestra historia</button></div>'+
+ '<div class="card"><div class="row between"><div><h3>Copia de nuestra galaxia</h3><p>Exporta los datos a un archivo JSON o restaura una copia. Fotos, música y audios permanecen en su almacenamiento privado y se conservan por referencia.</p></div>'+ico('archive')+'</div><div class="row wrap" style="margin-top:14px"><button class="btn small secondary" data-action="backup-export">'+ico('download')+' Exportar</button><button class="btn small ghost" data-action="backup-import">'+ico('upload')+' Restaurar</button></div></div>'+
  '<div class="card"><div class="row between"><div><h3>Widget “Nuestra Galaxia”</h3><p>Foto, próxima fecha y un abrazo desde el escritorio.</p></div><span class="badge '+(native.canPinWidget?'good':'')+'">'+(native.canPinWidget?'Disponible':'Manual')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small" data-action="widget-add">Añadir widget</button><button class="btn small secondary" data-action="widget-photo">Elegir foto</button><button class="btn small ghost" data-action="widget-photo-clear">Quitar foto</button></div></div>'+
  '<div class="card"><div class="row between"><div><h3>Notificaciones de momentos</h3><p>Gestos y fechas especiales, sin depender del GPS.</p></div><span class="badge '+(native.momentNotifications?'good':'')+'">'+(native.momentNotifications?'Activas':'Pausadas')+'</span></div><button class="btn small secondary" style="margin-top:14px" data-action="moment-notifications">'+(native.momentNotifications?'Desactivar':'Activar')+'</button></div>'+
  '<div class="card"><h3>Nuestros datos</h3><form id="settingsForm" class="stack" style="margin-top:12px"><div class="grid"><div class="field"><label>Nombre 1</label><input class="input" name="name0" value="'+attr(data.names?.[0]||'')+'" required></div><div class="field"><label>Nombre 2</label><input class="input" name="name1" value="'+attr(data.names?.[1]||'')+'" required></div></div><div class="field"><label>Inicio de nuestra historia</label><input class="input" type="date" name="startDate" value="'+attr(data.startDate||'')+'"></div><div class="field"><label>Álbum de Google Fotos (opcional)</label><input class="input" name="albumUrl" value="'+attr(data.albumUrl||'')+'" placeholder="https://photos.app.goo.gl/…"></div><button class="btn" type="submit">Guardar ajustes</button></form></div>'+
@@ -446,7 +487,7 @@ function showModal(title,body,formId=''){
  modal.showModal();
  refreshIcons();
 }
-async function resetVoiceDraft(){if(voiceRecording||voiceReady){try{await GalaxyNative.call('discardVoiceRecording');}catch{}}voiceRecording=false;voiceReady=false;if(voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}}
+async function resetVoiceDraft(){stopVoiceTimer();if(voiceRecording||voiceReady){try{await GalaxyNative.call('discardVoiceRecording');}catch{}}voiceRecording=false;voiceReady=false;if(voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}}
 function closeModal(){if(modal.dataset.form==='voice'&&pendingVoiceDraft!==null)resetVoiceDraft();if(modal.open)modal.close();delete modal.dataset.editId;delete modal.dataset.version;delete modal.dataset.kind;delete modal.dataset.form;}
 function openItemForm(kind,item){
  const d=item?.data||{},meta=kindMeta[kind]||['sparkles','Contenido'];
@@ -472,6 +513,11 @@ function openSharedNote(entry){
  const d=entry?.data||{};modal.dataset.editId=entry?.id||'';modal.dataset.version=entry?.version||'';
  showModal(entry?'Editar nota':'Nueva nota compartida','<form id="sharedNoteForm" class="stack" style="margin-top:16px"><div class="field"><label>Título</label><input class="input" name="title" value="'+attr(d.title||'')+'" required></div><div class="field"><label>Nota</label><textarea name="body">'+esc(d.body||'')+'</textarea></div><button class="btn" type="submit">Guardar nota</button></form>','sharednote');
 }
+function startVoiceTimer(){
+ stopVoiceTimer();voiceSeconds=0;
+ voiceTimer=setInterval(()=>{voiceSeconds++;const status=modal.querySelector('[data-role="voice-status"]');if(status&&voiceRecording)status.textContent='Grabando… '+voiceSeconds+' s / 60 s';if(voiceSeconds>=60)stopVoiceTimer();},1000);
+}
+function stopVoiceTimer(){if(voiceTimer){clearInterval(voiceTimer);voiceTimer=null;}}
 function openVoice(referenceId=''){
  pendingVoiceDraft={};voiceReady=false;voiceRecording=false;
  const refs=(cloud.items||[]).filter(i=>['memory','song','capsule'].includes(i.kind)&&!(i.kind==='capsule'&&String(i.data?.date||'')>cloud.today));
@@ -555,10 +601,10 @@ document.addEventListener('click',async e=>{
   if(a==='voice-for-item'){openVoice(btn.dataset.id);return;}
   if(a==='anniversary-open'){memoryTab='memory';go('memories');setTimeout(()=>document.querySelector('.constellation')?.scrollIntoView({behavior:'smooth',block:'center'}),80);return;}
   if(a==='constellation-item'){const i=cloud.items.find(x=>x.id===btn.dataset.id);if(i)showModal(i.data?.title||'Recuerdo','<div class="card" style="margin-top:16px"><span class="badge">'+esc(kindMeta[i.kind]?.[1]||'Historia')+'</span><p style="margin-top:10px">'+esc(i.data?.body||fmtDate(i.data?.date)||'Parte de nuestra historia.')+'</p>'+(linkedVoices(i.id).length?linkedVoices(i.id).map(voiceCard).join(''):'')+'</div>');return;}
-  if(a==='voice-record-start'){voiceResumeMusic=musicPlaying;if(musicPlaying)toggleMusic();await GalaxyNative.call('startVoiceRecording');voiceRecording=true;voiceReady=false;modal.querySelector('[data-role="voice-status"]').textContent='Grabando… máximo 1 minuto.';btn.hidden=true;modal.querySelector('[data-action="voice-record-stop"]').hidden=false;return;}
-  if(a==='voice-record-stop'){const info=await GalaxyNative.call('stopVoiceRecording');voiceRecording=false;voiceReady=true;modal.querySelector('[data-role="voice-status"]').textContent='Grabación lista · '+Math.max(1,Math.round((info.durationMs||0)/1000))+' s. Escúchala antes de guardar.';btn.hidden=true;modal.querySelector('[data-action="voice-record-start"]').hidden=false;modal.querySelector('[data-action="voice-preview"]').hidden=false;modal.querySelector('[data-action="voice-discard"]').hidden=false;if(voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}return;}
-  if(a==='voice-preview'){if(musicPlaying)toggleMusic();await GalaxyNative.call('playVoiceRecording');return;}
-  if(a==='voice-discard'){await GalaxyNative.call('discardVoiceRecording');voiceReady=false;voiceRecording=false;modal.querySelector('[data-role="voice-status"]').textContent='Audio descartado. Puedes grabarlo otra vez.';modal.querySelector('[data-action="voice-preview"]').hidden=true;btn.hidden=true;modal.querySelector('[data-action="voice-record-start"]').hidden=false;return;}
+  if(a==='voice-record-start'){voiceResumeMusic=musicPlaying;if(musicPlaying)toggleMusic();await GalaxyNative.call('startVoiceRecording');voiceRecording=true;voiceReady=false;startVoiceTimer();modal.querySelector('[data-role="voice-status"]').textContent='Grabando… 0 s / 60 s';btn.hidden=true;modal.querySelector('[data-action="voice-record-stop"]').hidden=false;return;}
+  if(a==='voice-record-stop'){const info=await GalaxyNative.call('stopVoiceRecording');stopVoiceTimer();voiceRecording=false;voiceReady=true;modal.querySelector('[data-role="voice-status"]').textContent='Grabación lista · '+Math.max(1,Math.round((info.durationMs||0)/1000))+' s. Escúchala antes de guardar.';btn.hidden=true;modal.querySelector('[data-action="voice-record-start"]').hidden=false;modal.querySelector('[data-action="voice-preview"]').hidden=false;modal.querySelector('[data-action="voice-discard"]').hidden=false;if(voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}return;}
+  if(a==='voice-preview'){voiceResumeMusic=musicPlaying;if(musicPlaying)toggleMusic();await GalaxyNative.call('playVoiceRecording');return;}
+  if(a==='voice-discard'){stopVoiceTimer();await GalaxyNative.call('discardVoiceRecording');voiceReady=false;voiceRecording=false;modal.querySelector('[data-role="voice-status"]').textContent='Audio descartado. Puedes grabarlo otra vez.';modal.querySelector('[data-action="voice-preview"]').hidden=true;btn.hidden=true;modal.querySelector('[data-action="voice-record-start"]').hidden=false;return;}
   if(a==='voice-file'){const form=modal.querySelector('#voiceForm'),fd=new FormData(form);pendingVoiceDraft={title:String(fd.get('title')||''),body:String(fd.get('body')||''),referenceId:String(fd.get('referenceId')||'')};if(!pendingVoiceDraft.title.trim()){toast('Ponle un título al mensaje.');return;}const upload=await GalaxyNative.call('pickMedia','voice');await api('bond-save',{type:'voice',data:{...pendingVoiceDraft,audioPath:upload.path,mime:upload.mime}});pendingVoiceDraft=null;closeModal();await refreshState();toast('Mensaje de voz guardado.');return;}
   if(a==='bond-delete'){await busy(()=>bondDelete(btn.dataset.id));return;}
   if(a==='game-guess'){await busy(async()=>{await api('bond-guess',{id:btn.dataset.id,guess:btn.dataset.guess});await refreshState();},'Respuesta enviada.');return;}
@@ -585,6 +631,9 @@ document.addEventListener('click',async e=>{
   if(a==='place-new'){if(!mapData)await refreshMap({quiet:true,detail:true});openPlace();return;}
   if(a==='destination'){if(!mapData)await refreshMap({quiet:true,detail:true});openDestination();return;}
   if(a==='transport-set'){await api('transport-set',{preference:btn.dataset.value});await refreshState({quiet:true});await refreshMap({quiet:true});render();toast('Preferencia de transporte actualizada.');return;}
+  if(a==='now-settings'){go('more');setTimeout(()=>document.querySelector('.privacy-grid')?.scrollIntoView({behavior:'smooth',block:'center'}),80);return;}
+  if(a==='presence-battery'){await busy(()=>togglePresence('battery'),'Privacidad de batería actualizada.');return;}
+  if(a==='presence-listening'){await busy(()=>togglePresence('listening'),'Privacidad de música actualizada.');return;}
   if(a==='app-settings'){await GalaxyNative.call('openAppSettings');return;}
   if(a==='widget-add'){await GalaxyNative.call('addWidget');toast('Android abrió la solicitud del widget.');return;}
   if(a==='widget-photo'){await chooseWidgetPhoto();return;}
@@ -651,4 +700,5 @@ document.addEventListener('visibilitychange',()=>{
 });
 
 render();
-if(native.paired)refreshState();
+if(native.paired)refreshState().then(()=>syncPresence()).catch(()=>{});
+setInterval(()=>{if(native.paired&&cloud&&document.visibilityState==='visible')syncPresence().catch(()=>{});},300000);
