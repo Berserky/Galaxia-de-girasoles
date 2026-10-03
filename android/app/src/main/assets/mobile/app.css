@@ -506,3 +506,24 @@ textarea{min-height:110px;resize:vertical}
 .encounter-recent b{font-size:12px}
 .encounter-recent small{font-size:10px;color:var(--muted)}
 @media(max-width:360px){.encounter-metrics{grid-template-columns:1fr}.encounter-metrics>div{min-height:96px}}
+
+/* Super Update · Couple distance */
+.couple-distance{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:13px;align-items:center}
+.couple-distance.together{border-color:rgba(80,164,116,.3);background:linear-gradient(135deg,var(--surface),rgba(80,164,116,.08))}
+.couple-distance.unavailable{opacity:.92}
+.couple-distance-icon{width:48px;height:48px;border-radius:16px;display:grid;place-items:center;background:var(--surface2);color:var(--accent)}
+.couple-distance.together .couple-distance-icon{background:#eaf6ef;color:var(--good)}
+.couple-distance-icon .ui-icon{width:23px;height:23px}
+.couple-distance-main{min-width:0}
+.couple-distance h3,.couple-distance p{margin:2px 0}
+.couple-distance-value{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.couple-distance-value strong{font-size:26px;line-height:1}
+.couple-distance-value span{font-size:11px;font-weight:700;color:var(--accent)}
+.couple-distance.together .couple-distance-value span{color:var(--good)}
+.couple-distance small{display:block;margin-top:5px;font-size:9px;color:var(--muted)}
+.couple-distance>.btn{align-self:center}
+@media(max-width:420px){
+ .couple-distance{grid-template-columns:44px minmax(0,1fr)}
+ .couple-distance-icon{width:44px;height:44px}
+ .couple-distance>.btn{grid-column:2;justify-self:start}
+}
