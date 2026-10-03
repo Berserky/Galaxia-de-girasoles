@@ -234,7 +234,7 @@ public final class MainActivity extends ComponentActivity {
         cleanupVoice(false);
         try{
             voiceFile=new File(getCacheDir(),"voice-"+System.currentTimeMillis()+".m4a");
-            voiceRecorder=new MediaRecorder(this);
+            voiceRecorder=android.os.Build.VERSION.SDK_INT>=31?new MediaRecorder(this):new MediaRecorder();
             voiceRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
             voiceRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
             voiceRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
