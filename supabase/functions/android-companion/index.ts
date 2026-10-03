@@ -150,7 +150,8 @@ async function persistContextEvent(d:any,event:any){
   event_type:String(event.type),dedupe_key:key,person,partner_person:target,source_device_id:d?.id||null,
   occurred_at:event.occurredAt||new Date().toISOString(),payload
  },{onConflict:"dedupe_key",ignoreDuplicates:true}).select("*"));
- return inserted?.[0]||await contextEventByDedupe(key);
+ if(inserted?.[0])return {row:inserted[0],isNew:true};
+ return {row:await contextEventByDedupe(key),isNew:false};
 }
 async function contextMaybePush(d:any,eventRow:any,event:any,settings:any[]){
  const payload=event?.payload||{};
@@ -164,29 +165,39 @@ async function contextMaybePush(d:any,eventRow:any,event:any,settings:any[]){
   const person=String(payload.person||""),pref=(settings||[]).find((x:any)=>String(x.person)===person);
   if(!pref?.arrived_safe_enabled||!["0","1"].includes(person))return;
   const target=person==="0"?"1":"0";
-  await dispatchPushEvent(d,target,"arrived_safe",{title:"Llegó bien",body:(payload.label?"Llegó a "+String(payload.label)+".":"Llegó a su destino.")});
+  await dispatchPushEvent(d,target,"arrived_safe",{title:"Llegó bien",body:(payload.label?"Llegó a "+String(payload.label)+".":"Llegó a su destino.")},{requireSubscription:false});
  }
 }
 async function contextCreateSuggestions(eventRow:any,event:any,settings:any[]){
  if(event.type!=="ENCOUNTER_ENDED")return;
  const payload=event.payload||{},started=Date.parse(String(payload.startedAt||"")),ended=Date.parse(String(payload.endedAt||event.occurredAt||""));
  const durationS=Number.isFinite(started)&&Number.isFinite(ended)?Math.max(0,Math.round((ended-started)/1000)):0;
- const allowMemory=(settings||[]).some((x:any)=>x.memory_suggestions!==false);
- const allowDate=(settings||[]).some((x:any)=>x.date_suggestions!==false);
+ if(!Number.isFinite(started)||!Number.isFinite(ended)||durationS<5*60)return;
+ const startedIso=new Date(started).toISOString(),endedIso=new Date(ended).toISOString();
  let place:any=null;
- if(Number.isFinite(ended)){
-  const recent=(await ok(db.from("galaxy_place_events").select("place_id,happened_at").gte("happened_at",new Date(ended-4*3600000).toISOString()).lte("happened_at",new Date(ended+15*60000).toISOString()).order("happened_at",{ascending:false}).limit(10)))||[];
-  if(recent.length)place=(await ok(db.from("galaxy_places").select("id,name,kind").eq("id",recent[0].place_id).limit(1)))?.[0]||null;
- }
- if(allowMemory&&durationS>=5*60){
-  const suggestion=buildEncounterSuggestion({encounter:{id:eventRow.id,started_at:payload.startedAt,ended_at:payload.endedAt||event.occurredAt},place,photos:[],songs:[]});
-  await ok(db.from("galaxy_context_suggestions").upsert({kind:"memory",source_event_id:eventRow.id,person:null,status:"pending",payload:suggestion},{onConflict:"source_event_id,kind",ignoreDuplicates:true}));
- }
- if(allowDate&&durationS>=2*3600){
-  await ok(db.from("galaxy_context_suggestions").upsert({
-   kind:"date",source_event_id:eventRow.id,person:null,status:"pending",
-   payload:{question:"¿Esto fue una cita?",requiresConfirmation:true,durationS,place:place?{id:place.id,name:place.name,kind:place.kind}:null}
-  },{onConflict:"source_event_id,kind",ignoreDuplicates:true}));
+ const recent=(await ok(db.from("galaxy_place_events").select("place_id,happened_at").gte("happened_at",new Date(ended-4*3600000).toISOString()).lte("happened_at",new Date(ended+15*60000).toISOString()).order("happened_at",{ascending:false}).limit(10)))||[];
+ if(recent.length)place=(await ok(db.from("galaxy_places").select("id,name,kind").eq("id",recent[0].place_id).limit(1)))?.[0]||null;
+ const enabled=(settings||[]).filter((x:any)=>["0","1"].includes(String(x.person)));
+ const needsMemory=enabled.some((x:any)=>x.memory_suggestions!==false);
+ const assets=needsMemory?await contextWindowAssets(startedIso,endedIso,"0"):null;
+ const trip=(await ok(db.from("galaxy_trip_history").select("id,person,started_at,ended_at,distance_m,duration_s,dominant_motion").lte("started_at",endedIso).gte("ended_at",startedIso).order("started_at",{ascending:false}).limit(1)))?.[0]||null;
+ for(const pref of enabled){
+  const person=String(pref.person);
+  if(pref.memory_suggestions!==false){
+   const suggestion=buildEncounterSuggestion({
+    encounter:{id:eventRow.id,started_at:startedIso,ended_at:endedIso},place,trip,
+    photos:assets?.photos||[],songs:assets?.songs||[]
+   });
+   await ok(db.from("galaxy_context_suggestions").upsert({
+    kind:"memory",source_event_id:eventRow.id,person,status:"pending",payload:suggestion
+   },{onConflict:"source_event_id,kind,person",ignoreDuplicates:true}));
+  }
+  if(pref.date_suggestions!==false&&durationS>=2*3600){
+   await ok(db.from("galaxy_context_suggestions").upsert({
+    kind:"date",source_event_id:eventRow.id,person,status:"pending",
+    payload:{question:"¿Esto fue una cita?",requiresConfirmation:true,durationS,place:place?{id:place.id,name:place.name,kind:place.kind}:null,trip:trip?{id:trip.id,distanceM:trip.distance_m,durationS:trip.duration_s}:null}
+   },{onConflict:"source_event_id,kind,person",ignoreDuplicates:true}));
+  }
  }
 }
 async function contextLegacySideEffects(d:any,eventRow:any,event:any){
@@ -276,11 +287,11 @@ async function contextTick(d:any){
  const nearProfiles=Object.fromEntries((settings||[]).filter((x:any)=>x.near_enabled).map((x:any)=>[String(x.person),{enabled:true,distanceM:Number(x.near_distance_m)||300,cooldownS:(Number(x.near_cooldown_minutes)||60)*60}]));
  const destinations=await resolveContextDestinations(sessions||[],locations||[],places||[]);
  const previous=stateRow?.data&&Object.keys(stateRow.data).length?stateRow.data:emptyContextState();
- const result=contextStep(previous,{at:now.toISOString(),people,places:places||[],destinations},{nearProfiles,sharedTripEnabled:(settings||[]).some((x:any)=>x.shared_trip_detection===true)});
+ const result=contextStep(previous,{at:now.toISOString(),people,places:places||[],destinations},{nearProfiles,sharedTripEnabled:(settings||[]).length===2&&(settings||[]).every((x:any)=>x.shared_trip_detection===true)});
  await ok(db.from("galaxy_context_state").upsert({singleton:true,data:result.state,updated_at:now.toISOString()},{onConflict:"singleton"}));
  for(const event of result.events||[]){
-  const row=await persistContextEvent(d,event);
-  if(!row)continue;
+  const persisted=await persistContextEvent(d,event),row=persisted?.row;
+  if(!row||persisted.isNew!==true)continue;
   await contextLegacySideEffects(d,row,event);
   await contextMaybePush(d,row,event,settings||[]);
   await contextCreateSuggestions(row,event,settings||[]);
@@ -361,17 +372,17 @@ async function contextEventsFeed(req:Request,body:any){
  return json({events:rows||[]});
 }
 async function contextSuggestionAction(req:Request,body:any){
- const d=await device(req),operation=String(body.operation||"list");
+ const d=await device(req),person=String(d.person),operation=String(body.operation||"list");
  if(operation==="list"){
-  const rows=await ok(db.from("galaxy_context_suggestions").select("*").eq("status","pending").order("created_at",{ascending:false}).limit(30));
+  const rows=await ok(db.from("galaxy_context_suggestions").select("*").eq("person",person).eq("status","pending").order("created_at",{ascending:false}).limit(30));
   return json({suggestions:rows||[]});
  }
  const id=String(body.id||"");if(!id)return json({error:"Sugerencia no válida."},400);
- const row=(await ok(db.from("galaxy_context_suggestions").select("*").eq("id",id).limit(1)))?.[0];
+ const row=(await ok(db.from("galaxy_context_suggestions").select("*").eq("id",id).eq("person",person).limit(1)))?.[0];
  if(!row)return json({error:"La sugerencia ya no existe."},404);
  if(operation==="dismiss"||operation==="accept"){
   const status=operation==="accept"?"accepted":"dismissed",resolved=new Date().toISOString();
-  await ok(db.from("galaxy_context_suggestions").update({status,resolved_at:resolved,person:String(d.person)}).eq("id",id).eq("status","pending"));
+  await ok(db.from("galaxy_context_suggestions").update({status,resolved_at:resolved}).eq("id",id).eq("person",person).eq("status","pending"));
   if(operation==="accept"&&row.kind==="memory"){
    const p=row.payload||{};
    const item=await ok(db.from("galaxy_items").insert({kind:"memory",author:String(d.person),data:{title:text(p.title||"Después de vernos",120),body:"Recuerdo sugerido por Galaxy Context Engine.",contextSourceEventId:row.source_event_id,placeId:p.place?.id||null,date:today()}}).select("*").single());
@@ -387,7 +398,7 @@ async function contextStateAction(req:Request){
  const [settings,sessionRows,suggestions,events]=await Promise.all([
   contextOwnSettings(person),
   ok(db.from("galaxy_context_sessions").select("*").eq("person",person).eq("status","active").order("started_at",{ascending:false}).limit(1)),
-  ok(db.from("galaxy_context_suggestions").select("*").eq("status","pending").order("created_at",{ascending:false}).limit(10)),
+  ok(db.from("galaxy_context_suggestions").select("*").eq("person",person).eq("status","pending").order("created_at",{ascending:false}).limit(10)),
   ok(db.from("galaxy_context_events").select("id,event_type,person,partner_person,occurred_at,payload").order("occurred_at",{ascending:false}).limit(20))
  ]);
  const session=sessionRows?.[0]||null;
@@ -454,7 +465,7 @@ async function location(req:Request,body:any){
   await ok(db.from("galaxy_locations").upsert({person:d.person,sharing:true,latitude:p.lat,longitude:p.lon,accuracy:p.accuracy,speed:p.speed,heading:p.heading,motion:p.motion,status:existing.status||null,trip_active:!!existing.trip_active,trip_started_at:existing.trip_started_at||null,transport_preference:existing.transport_preference||null,updated_at:now},{onConflict:"person"}));
   if(body.history===true)await history(req,body);
   if(existing.trip_active&&body.trip_point===true)await ok(db.from("galaxy_trip_points").insert({person:d.person,latitude:p.lat,longitude:p.lon}));
-  await contextTick(d);
+  if(body.trip_point===true)await contextTick(d);
   return json({ok:true,person:d.person});
 }
 
@@ -523,7 +534,7 @@ async function pushPreferences(req:Request,body:any){
  const d=await device(req),subscriptions=await savePushPreferences(String(d.id),body.events||{});
  return json({ok:true,subscriptions,pushConfigured:!!fcmCredentials()});
 }
-async function dispatchPushEvent(sourceDevice:any,targetPerson:string,eventType:string,payload:any){
+async function dispatchPushEvent(sourceDevice:any,targetPerson:string,eventType:string,payload:any,options:any={}){
  if(!PUSH_EVENT_TYPES.includes(eventType))throw new Error("Tipo de evento push no válido.");
  const sanitized=sanitizePushPayload(eventType,payload);
  const event=await ok(db.from("galaxy_push_events").insert({
@@ -537,10 +548,10 @@ async function dispatchPushEvent(sourceDevice:any,targetPerson:string,eventType:
  ]);
  const allowed=new Set((subscriptions||[]).map((row:any)=>String(row.device_id)));
  const tokenByDevice=new Map((tokens||[]).map((row:any)=>[String(row.device_id),String(row.token)]));
- const credentials=fcmCredentials(),deliveries:any[]=[];
+ const credentials=fcmCredentials(),deliveries:any[]=[],requireSubscription=options?.requireSubscription!==false;
  for(const target of devices||[]){
   const deviceId=String(target.id),token=tokenByDevice.get(deviceId);
-  if(!token||!allowed.has(deviceId)){
+  if(!token||(requireSubscription&&!allowed.has(deviceId))){
    deliveries.push({event_id:event.id,device_id:deviceId,status:"skipped",error_code:!token?"no-token":"disabled"});
    continue;
   }
@@ -1728,7 +1739,7 @@ async function mapState(req:Request,body:any){
     ok(db.from("galaxy_trip_history").select("*").order("started_at",{ascending:false}).limit(40)),
     ok(db.from("galaxy_place_events").select("*").order("happened_at",{ascending:false}).limit(40)),
     ok(db.from("galaxy_encounters").select("*").order("started_at",{ascending:false}).limit(40)),
-    ok(db.from("galaxy_context_suggestions").select("*").eq("status","pending").order("created_at",{ascending:false}).limit(10)),
+    ok(db.from("galaxy_context_suggestions").select("*").eq("person",person).eq("status","pending").order("created_at",{ascending:false}).limit(10)),
     session?ok(db.from("galaxy_context_eta_history").select("captured_at,distance_m,eta_s,progress_pct").eq("session_id",session.id).order("captured_at",{ascending:false}).limit(30)):Promise.resolve([]),
     ok(db.from("galaxy_context_events").select("id,event_type,person,partner_person,occurred_at,payload").order("occurred_at",{ascending:false}).limit(30))
   ]);
