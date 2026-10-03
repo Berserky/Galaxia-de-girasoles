@@ -527,3 +527,96 @@ create table if not exists public.galaxy_daily_questions (
 );
 create index if not exists galaxy_daily_questions_created_idx on public.galaxy_daily_questions(created_at desc);
 alter table public.galaxy_daily_questions enable row level security;
+
+
+-- Mega Update 3.0 · Galaxy Goals Engine
+-- Goals are relational. Plans and wishes remain in galaxy_items.
+begin;
+
+create table if not exists public.galaxy_goals (
+ id uuid primary key default gen_random_uuid(),
+ kind text not null default 'goal' check(kind in ('goal','savings')),
+ title text not null check(length(title) between 1 and 160),
+ description text not null default '' check(length(description)<=4000),
+ category text not null default 'other' check(category in ('travel','home','learning','experience','project','wellbeing','other')),
+ target_date date,
+ status text not null default 'active' check(status in ('active','paused','completed','archived')),
+ target_amount bigint check(target_amount is null or target_amount between 1 and 1000000000000),
+ created_by text not null check(created_by in ('0','1')),
+ version integer not null default 1 check(version>0),
+ completed_at timestamptz,
+ created_at timestamptz not null default now(),
+ updated_at timestamptz not null default now(),
+ check((kind='savings' and target_amount is not null) or (kind='goal' and target_amount is null))
+);
+
+create table if not exists public.galaxy_goal_participants (
+ goal_id uuid not null references public.galaxy_goals(id) on delete cascade,
+ person text not null check(person in ('0','1')),
+ created_at timestamptz not null default now(),
+ primary key(goal_id,person)
+);
+
+create table if not exists public.galaxy_goal_steps (
+ id uuid primary key default gen_random_uuid(),
+ goal_id uuid not null references public.galaxy_goals(id) on delete cascade,
+ title text not null check(length(title) between 1 and 300),
+ position integer not null default 0 check(position>=0),
+ completed_at timestamptz,
+ completed_by text check(completed_by is null or completed_by in ('0','1')),
+ created_at timestamptz not null default now()
+);
+
+create table if not exists public.galaxy_goal_links (
+ id uuid primary key default gen_random_uuid(),
+ goal_id uuid not null references public.galaxy_goals(id) on delete cascade,
+ item_id uuid not null references public.galaxy_items(id) on delete cascade,
+ relation text not null check(relation in ('note','memory','plan','source-plan','source-wish')),
+ created_at timestamptz not null default now(),
+ unique(goal_id,item_id,relation)
+);
+
+create table if not exists public.galaxy_goal_contributions (
+ id uuid primary key default gen_random_uuid(),
+ goal_id uuid not null references public.galaxy_goals(id) on delete cascade,
+ amount bigint not null check(amount between 1 and 1000000000000),
+ contribution_date date not null,
+ note text check(note is null or length(note)<=300),
+ contributor text not null check(contributor in ('0','1')),
+ created_at timestamptz not null default now()
+);
+
+create index if not exists galaxy_goals_status_idx on public.galaxy_goals(status,updated_at desc);
+create index if not exists galaxy_goals_target_date_idx on public.galaxy_goals(target_date) where target_date is not null;
+create index if not exists galaxy_goal_steps_goal_position_idx on public.galaxy_goal_steps(goal_id,position);
+create index if not exists galaxy_goal_links_goal_idx on public.galaxy_goal_links(goal_id);
+create index if not exists galaxy_goal_links_item_idx on public.galaxy_goal_links(item_id);
+create index if not exists galaxy_goal_contributions_goal_date_idx on public.galaxy_goal_contributions(goal_id,contribution_date desc,created_at desc);
+
+create or replace function public.galaxy_goal_version() returns trigger
+language plpgsql set search_path='' as $$
+begin
+ new.id:=old.id;
+ new.created_by:=old.created_by;
+ new.created_at:=old.created_at;
+ new.version:=old.version+1;
+ new.updated_at:=now();
+ if new.status='completed' and old.status<>'completed' then new.completed_at:=now(); end if;
+ if new.status<>'completed' and old.status='completed' then new.completed_at:=null; end if;
+ return new;
+end $$;
+
+drop trigger if exists goals_version on public.galaxy_goals;
+create trigger goals_version before update on public.galaxy_goals
+for each row execute function public.galaxy_goal_version();
+
+alter table public.galaxy_goals enable row level security;
+alter table public.galaxy_goal_participants enable row level security;
+alter table public.galaxy_goal_steps enable row level security;
+alter table public.galaxy_goal_links enable row level security;
+alter table public.galaxy_goal_contributions enable row level security;
+
+revoke all on public.galaxy_goals,public.galaxy_goal_participants,public.galaxy_goal_steps,public.galaxy_goal_links,public.galaxy_goal_contributions from public,anon,authenticated;
+grant select,insert,update,delete on public.galaxy_goals,public.galaxy_goal_participants,public.galaxy_goal_steps,public.galaxy_goal_links,public.galaxy_goal_contributions to service_role;
+
+commit;
