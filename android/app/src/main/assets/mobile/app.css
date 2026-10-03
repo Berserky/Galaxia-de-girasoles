@@ -776,4 +776,4 @@ html:not([data-theme="daylight"]) .gmap-attrib{backdrop-filter:blur(6px)}
 .date-mode-photos{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.date-mode-photos img,.date-mode-photos span{width:100%;aspect-ratio:1;border-radius:12px;object-fit:cover;background:var(--surface2);display:grid;place-items:center;color:var(--muted)}
 .date-mode-save{width:100%;min-height:48px}.plan-pick{text-align:left;width:100%}.plan-pick b,.plan-pick small{display:block}.plan-pick small{color:var(--muted);margin-top:3px}
 @media(max-width:360px){.date-plan-grid,.date-mode-grid{grid-template-columns:1fr}.date-mode-tool{min-height:92px}}
-@media(prefers-reduced-motion:reduce){.plan-roulette,.plan-roulette.result{animation:none!important}.question-deck,.date-mode-tool{transition:none!important}}
+@media(prefers-reduced-motion:reduce){.plan-roulette,.plan-roulette.result,.wrapped-card{animation:none!important}.wrapped-deck{scroll-behavior:auto}.question-deck,.date-mode-tool{transition:none!important}}
