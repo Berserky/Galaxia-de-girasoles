@@ -272,7 +272,7 @@ alter table public.galaxy_device_pair_codes enable row level security;
 revoke all on public.galaxy_device_pair_codes from anon,authenticated;
 
 create or replace function public.galaxy_device_pair_start(device_name text default 'Android')
-returns text language plpgsql security definer set search_path='' as $
+returns text language plpgsql security definer set search_path='' as $$
 declare p text := public.galaxy_person(); token text;
 begin
  if p is null then raise exception 'No autorizado'; end if;
@@ -282,13 +282,13 @@ begin
  insert into public.galaxy_device_pair_codes(code_hash,person,device_name,expires_at)
  values(encode(extensions.digest(token,'sha256'),'hex'),p,trim(device_name),now()+interval '10 minutes');
  return token;
-end $;
+end $$;
 revoke all on function public.galaxy_device_pair_start(text) from public,anon;
 grant execute on function public.galaxy_device_pair_start(text) to authenticated;
 
 create or replace function public.galaxy_device_pair_start_for(target_person text, device_name text default 'Android')
 returns text language plpgsql security definer set search_path=''
-as $
+as $$
 declare
  caller_person text := public.galaxy_person();
  token text;
@@ -302,7 +302,7 @@ begin
  insert into public.galaxy_device_pair_codes(code_hash,person,device_name,expires_at)
  values(encode(extensions.digest(token,'sha256'),'hex'),target_person,trim(device_name),now()+interval '10 minutes');
  return token;
-end $;
+end $$;
 revoke all on function public.galaxy_device_pair_start_for(text,text) from public,anon;
 grant execute on function public.galaxy_device_pair_start_for(text,text) to authenticated;
 
@@ -595,7 +595,7 @@ create index if not exists galaxy_goal_links_item_idx on public.galaxy_goal_link
 create index if not exists galaxy_goal_contributions_goal_date_idx on public.galaxy_goal_contributions(goal_id,contribution_date desc,created_at desc);
 
 create or replace function public.galaxy_goal_version() returns trigger
-language plpgsql set search_path='' as $
+language plpgsql set search_path='' as $$
 begin
  if tg_op='UPDATE' then
   new.id:=old.id;
@@ -609,7 +609,7 @@ begin
  if new.status='completed' and new.completed_at is null then new.completed_at:=now(); end if;
  if new.status<>'completed' then new.completed_at:=null; end if;
  return new;
-end $;
+end $$;
 
 drop trigger if exists goals_version on public.galaxy_goals;
 create trigger goals_version before insert or update on public.galaxy_goals
