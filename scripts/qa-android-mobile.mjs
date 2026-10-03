@@ -68,11 +68,18 @@ for(const action of apiCalls){
  assert.ok(edgeActions.has(action),'Acción UI no implementada en Edge Function: '+action);
 }
 assert.ok(mainActions.has('transport-set')&&edgeActions.has('transport-set'),'Falta transporte habitual end-to-end');
+for(const action of ['presence-set','backup-export','backup-import'])assert.ok(mainActions.has(action)&&edgeActions.has(action),'Falta '+action+' end-to-end');
+assert.ok(app.includes('function nowCard()')&&app.includes('Privacidad de “Ahora”'),'Falta panel Ahora con privacidad');
+assert.ok(app.includes('function historyPlacesView()')&&app.includes('placeId'),'Falta mapa histórico enlazado a recuerdos');
+assert.ok(app.includes('function openOurAI()')&&app.includes('function aiResult(question)'),'Falta Nuestra IA sobre la historia');
+assert.ok(edge.includes('async function backupExport')&&edge.includes('async function backupImport'),'Falta backup seguro en backend');
 
 const nativeCalls=new Set([...app.matchAll(/GalaxyNative\.call\(['"]([^'"]+)['"]/g)].map(m=>m[1]));
 const bridgeMethods=new Set([...bridge.matchAll(/public void (\w+)\(/g)].map(m=>m[1]));
 for(const method of nativeCalls)assert.ok(bridgeMethods.has(method),'Método nativo sin bridge: '+method);
 assert.ok(bridgeMethods.has('closeApp')&&app.includes('GalaxyAndroid.closeApp()'),'El botón Atrás debe poder cerrar la app desde Inicio');
+assert.ok(bridgeMethods.has('exportJson')&&bridgeMethods.has('importJson'),'Faltan puentes nativos de backup');
+assert.ok(main.includes('REQ_BACKUP_EXPORT')&&main.includes('REQ_BACKUP_IMPORT'),'Falta Storage Access Framework para backups');
 
 const version=build.match(/versionCode\s*=\s*(\d+);\s*versionName\s*=\s*"([^"]+)"/);
 assert.ok(version,'No se pudo leer la versión Android');
@@ -87,6 +94,8 @@ assert.ok(updater.includes('BuildConfig.APPLICATION_ID.equals(info.packageName)'
 assert.ok(updater.includes('version<=BuildConfig.VERSION_CODE'),'El updater debe rechazar APK no superior');
 assert.ok(updater.includes('resumePendingInstall'),'El updater debe retomar la instalación tras conceder permisos');
 assert.ok(updater.includes('MAX_APK_BYTES'),'El updater debe limitar el tamaño de descarga');
+assert.ok(widget.includes('widgetNow')&&widget.includes('nowText'),'El widget debe mostrar el estado Ahora');
+assert.ok(edge.includes('pPresence.shareBattery')&&edge.includes('pPresence.shareListening'),'El widget no debe exponer batería o música sin opt-in');
 
 assert.ok(edge.includes('body.detail!==true'),'El mapa debe tener refresco ligero');
 assert.ok(app.includes("refreshMap({quiet:true,detail:false})"),'El polling del mapa debe usar refresco ligero');
@@ -102,4 +111,4 @@ assert.ok(css.includes('@media(prefers-reduced-motion:reduce)'),'La bienvenida d
 assert.equal(motionTest.includes('placeholderKeepsUnitTestTaskActive'),false,'La prueba de movimiento no puede ser placeholder');
 assert.ok(motionTest.includes('medianIgnoresSingleGpsSpeedSpike'),'Falta prueba de ruido GPS');
 
-console.log('QA móvil 1.9.0: OK');
+console.log('QA móvil Nuestra Galaxia: OK');
