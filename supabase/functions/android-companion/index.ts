@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.117.2";
 import { aggregateInsightRows, evaluateAchievements, isInsightVisibleItem, periodBounds, previousPeriod } from "./insights.ts";
 import { QUESTION_DECKS, buildDateRecap, buildSequentialPlan, buildSurpriseExperience, normalizePlanCategory, questionById, roulettePendingPlans, selectQuestion } from "./date-engine.ts";
+import { buildGoalDateSuggestions, buildGoalInsightSummary, computeGoalProgress, conversionDraft, normalizeContribution, normalizeGoalInput, reorderStepIds } from "./goals-engine.ts";
 
 const url=Deno.env.get("SUPABASE_URL")!;
 let service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"";
@@ -348,6 +349,155 @@ async function dailySave(req:Request,body:any){
   return json({ok:true});
 }
 
+
+
+async function loadGoalData(){
+ const [goals,goalParticipants,goalSteps,goalLinks,goalContributions,items]=await Promise.all([
+  ok(db.from("galaxy_goals").select("*").order("updated_at",{ascending:false}).limit(1000)),
+  ok(db.from("galaxy_goal_participants").select("*").limit(2000)),
+  ok(db.from("galaxy_goal_steps").select("*").order("position",{ascending:true}).limit(5000)),
+  ok(db.from("galaxy_goal_links").select("*").order("created_at",{ascending:true}).limit(5000)),
+  ok(db.from("galaxy_goal_contributions").select("*").order("contribution_date",{ascending:false}).limit(10000)),
+  ok(db.from("galaxy_items").select("id,kind,data,version,author,created").order("created",{ascending:false}).limit(5000))
+ ]);
+ return {goals:goals||[],goalParticipants:goalParticipants||[],goalSteps:goalSteps||[],goalLinks:goalLinks||[],goalContributions:goalContributions||[],items:items||[]};
+}
+function goalView(goal:any,data:any){
+ const id=String(goal.id),steps=(data.goalSteps||[]).filter((row:any)=>String(row.goal_id)===id).sort((a:any,b:any)=>Number(a.position)-Number(b.position));
+ const contributions=(data.goalContributions||[]).filter((row:any)=>String(row.goal_id)===id).sort((a:any,b:any)=>String(b.contribution_date).localeCompare(String(a.contribution_date))||String(b.created_at).localeCompare(String(a.created_at)));
+ const participants=(data.goalParticipants||[]).filter((row:any)=>String(row.goal_id)===id).map((row:any)=>String(row.person)).sort();
+ const itemMap=new Map((data.items||[]).map((item:any)=>[String(item.id),item]));
+ const links=(data.goalLinks||[]).filter((row:any)=>String(row.goal_id)===id).map((row:any)=>{
+  const item:any=itemMap.get(String(row.item_id));
+  return {...row,item:item?{id:item.id,kind:item.kind,title:text(item.data?.title||item.kind,160),body:text(item.data?.body||"",500)}:null};
+ });
+ return {...goal,participants,steps,contributions,links,...computeGoalProgress(goal,steps,contributions)};
+}
+function allGoalViews(data:any){return (data.goals||[]).map((goal:any)=>goalView(goal,data));}
+async function currentGoal(id:string){
+ const row=(await ok(db.from("galaxy_goals").select("*").eq("id",id).limit(1)))?.[0];
+ return row||null;
+}
+async function touchGoalVersion(id:string,expectedVersion:number){
+ if(!Number.isInteger(expectedVersion)||expectedVersion<1)return null;
+ return await ok(db.from("galaxy_goals").update({updated_at:new Date().toISOString()}).eq("id",id).eq("version",expectedVersion).select("*").maybeSingle());
+}
+async function createGoalRecord(person:string,input:any,source:any=null){
+ const normalized=normalizeGoalInput(input),created=await ok(db.from("galaxy_goals").insert({
+  kind:normalized.kind,title:normalized.title,description:normalized.description,category:normalized.category,
+  target_date:normalized.target_date,status:normalized.status,target_amount:normalized.target_amount,created_by:person
+ }).select("*").single());
+ try{
+  await ok(db.from("galaxy_goal_participants").insert(normalized.participants.map((p:string)=>({goal_id:created.id,person:p}))));
+  if(source?.itemId&&source?.relation)await ok(db.from("galaxy_goal_links").insert({goal_id:created.id,item_id:String(source.itemId),relation:String(source.relation)}));
+ }catch(error){
+  await ok(db.from("galaxy_goals").delete().eq("id",created.id));
+  throw error;
+ }
+ return created;
+}
+async function goalResponse(id:string){
+ const data=await loadGoalData(),goal=(data.goals||[]).find((row:any)=>String(row.id)===String(id));
+ return goal?goalView(goal,data):null;
+}
+async function convertItemToGoal(req:Request,body:any){
+ const d=await device(req),id=String(body.itemId||""),item=(await ok(db.from("galaxy_items").select("*").eq("id",id).limit(1)))?.[0];
+ if(!item||!["plan","wish"].includes(String(item.kind)))return json({error:"Solo un plan o deseo puede convertirse en objetivo."},400);
+ const keepOriginal=body.keepOriginal!==false,draft=conversionDraft(item,{keepOriginal,participants:Array.isArray(body.participants)?body.participants:["0","1"]});
+ const normalized={...draft,...(body.goal&&typeof body.goal==="object"?body.goal:{}),participants:draft.participants,kind:String(body.goal?.kind||draft.kind)};
+ const goal=await createGoalRecord(String(d.person),normalized,{itemId:item.id,relation:item.kind==="plan"?"source-plan":"source-wish"});
+ if(!keepOriginal)await ok(db.from("galaxy_items").delete().eq("id",item.id));
+ await recordParticipation(String(d.person));
+ return json({goal:await goalResponse(String(goal.id)),sourcePreserved:keepOriginal},201);
+}
+async function goalsEngine(req:Request,body:any){
+ const d=await device(req),person=String(d.person),operation=String(body.operation||"list");
+ if(operation==="list"){
+  const data=await loadGoalData();
+  return json({goals:allGoalViews(data)});
+ }
+ if(operation==="create"){
+  const goal=await createGoalRecord(person,body.goal||body);
+  await recordParticipation(person);
+  return json({goal:await goalResponse(String(goal.id))},201);
+ }
+ if(operation==="convert-item")return await convertItemToGoal(req,body);
+ const id=String(body.goalId||body.id||"");
+ const existing=await currentGoal(id);
+ if(!existing)return json({error:"El objetivo ya no existe."},404);
+ const expectedVersion=Number(body.expectedVersion);
+ if(operation==="update"){
+  let normalized;try{normalized=normalizeGoalInput({...existing,...(body.goal||{}),participants:Array.isArray(body.goal?.participants)?body.goal.participants:body.participants});}catch(e){return json({error:e instanceof Error?e.message:"Objetivo no válido."},400);}
+  const updated=await ok(db.from("galaxy_goals").update({
+   kind:normalized.kind,title:normalized.title,description:normalized.description,category:normalized.category,
+   target_date:normalized.target_date,status:normalized.status,target_amount:normalized.target_amount
+  }).eq("id",id).eq("version",expectedVersion).select("*").maybeSingle());
+  if(!updated)return json({error:"Este objetivo cambió en otro dispositivo. Actualiza antes de guardar."},409);
+  await ok(db.from("galaxy_goal_participants").delete().eq("goal_id",id));
+  await ok(db.from("galaxy_goal_participants").insert(normalized.participants.map((p:string)=>({goal_id:id,person:p}))));
+  await recordParticipation(person);
+  return json({goal:await goalResponse(id)});
+ }
+ if(operation==="delete"){
+  const removed=await ok(db.from("galaxy_goals").delete().eq("id",id).eq("version",expectedVersion).select("id").maybeSingle());
+  if(!removed)return json({error:"Este objetivo cambió en otro dispositivo. Actualiza antes de eliminar."},409);
+  return json({ok:true});
+ }
+ if(operation==="step-add"){
+  const title=text(body.title,300);if(!title)return json({error:"Escribe el paso."},400);
+  const claimed=await touchGoalVersion(id,expectedVersion);if(!claimed)return json({error:"Este objetivo cambió en otro dispositivo."},409);
+  const rows=await ok(db.from("galaxy_goal_steps").select("position").eq("goal_id",id).order("position",{ascending:false}).limit(1));
+  const position=(rows?.length?Number(rows[0].position)+1:0);
+  await ok(db.from("galaxy_goal_steps").insert({goal_id:id,title,position}));
+  await recordParticipation(person);return json({goal:await goalResponse(id)});
+ }
+ if(operation==="step-toggle"){
+  const stepId=String(body.stepId||""),step=(await ok(db.from("galaxy_goal_steps").select("*").eq("id",stepId).eq("goal_id",id).limit(1)))?.[0];
+  if(!step)return json({error:"El paso ya no existe."},404);
+  const claimed=await touchGoalVersion(id,expectedVersion);if(!claimed)return json({error:"Este objetivo cambió en otro dispositivo."},409);
+  const complete=body.completed!==false;
+  await ok(db.from("galaxy_goal_steps").update({completed_at:complete?new Date().toISOString():null,completed_by:complete?person:null}).eq("id",stepId).eq("goal_id",id));
+  await recordParticipation(person);return json({goal:await goalResponse(id)});
+ }
+ if(operation==="step-reorder"){
+  const rows=await ok(db.from("galaxy_goal_steps").select("*").eq("goal_id",id).order("position"));
+  let ordered:string[];try{ordered=reorderStepIds(rows||[],body.stepIds||[]);}catch(e){return json({error:e instanceof Error?e.message:"Orden no válido."},400);}
+  const claimed=await touchGoalVersion(id,expectedVersion);if(!claimed)return json({error:"Este objetivo cambió en otro dispositivo."},409);
+  for(let position=0;position<ordered.length;position++)await ok(db.from("galaxy_goal_steps").update({position}).eq("id",ordered[position]).eq("goal_id",id));
+  return json({goal:await goalResponse(id)});
+ }
+ if(operation==="contribution-add"){
+  if(existing.kind!=="savings")return json({error:"Los aportes manuales solo aplican a metas de ahorro."},400);
+  let contribution;try{contribution=normalizeContribution(body.contribution||body,person);}catch(e){return json({error:e instanceof Error?e.message:"Aporte no válido."},400);}
+  const claimed=await touchGoalVersion(id,expectedVersion);if(!claimed)return json({error:"Este objetivo cambió en otro dispositivo."},409);
+  await ok(db.from("galaxy_goal_contributions").insert({goal_id:id,...contribution}));
+  await recordParticipation(person);return json({goal:await goalResponse(id)});
+ }
+ if(operation==="contribution-delete"){
+  if(existing.kind!=="savings")return json({error:"Este objetivo no es una meta de ahorro."},400);
+  const contributionId=String(body.contributionId||""),row=(await ok(db.from("galaxy_goal_contributions").select("id").eq("id",contributionId).eq("goal_id",id).limit(1)))?.[0];
+  if(!row)return json({error:"El aporte ya no existe."},404);
+  const claimed=await touchGoalVersion(id,expectedVersion);if(!claimed)return json({error:"Este objetivo cambió en otro dispositivo."},409);
+  await ok(db.from("galaxy_goal_contributions").delete().eq("id",contributionId).eq("goal_id",id));
+  return json({goal:await goalResponse(id)});
+ }
+ if(operation==="link-add"){
+  const itemId=String(body.itemId||""),relation=String(body.relation||""),item=(await ok(db.from("galaxy_items").select("id,kind").eq("id",itemId).limit(1)))?.[0];
+  const expectedKind=relation==="note"?"note":relation==="memory"?"memory":relation==="plan"?"plan":"";
+  if(!item||!expectedKind||item.kind!==expectedKind)return json({error:"El contenido relacionado no coincide con el tipo elegido."},400);
+  const claimed=await touchGoalVersion(id,expectedVersion);if(!claimed)return json({error:"Este objetivo cambió en otro dispositivo."},409);
+  await ok(db.from("galaxy_goal_links").upsert({goal_id:id,item_id:itemId,relation},{onConflict:"goal_id,item_id,relation",ignoreDuplicates:true}));
+  return json({goal:await goalResponse(id)});
+ }
+ if(operation==="link-delete"){
+  const linkId=String(body.linkId||""),row=(await ok(db.from("galaxy_goal_links").select("id").eq("id",linkId).eq("goal_id",id).limit(1)))?.[0];
+  if(!row)return json({error:"La relación ya no existe."},404);
+  const claimed=await touchGoalVersion(id,expectedVersion);if(!claimed)return json({error:"Este objetivo cambió en otro dispositivo."},409);
+  await ok(db.from("galaxy_goal_links").delete().eq("id",linkId).eq("goal_id",id));
+  return json({goal:await goalResponse(id)});
+ }
+ return json({error:"Operación de Goals Engine no válida."},400);
+}
 
 function datePlanView(row:any){
  const data=row?.data||{};
@@ -1257,6 +1407,7 @@ Deno.serve(async req=>{
     if(action==="bond-delete")return await bondDelete(req,body);
     if(action==="bond-widget")return await bondWidget(req,body);
     if(action==="map-state")return await mapState(req,body);
+    if(action==="goals-engine")return await goalsEngine(req,body);
     if(action==="date-engine")return await dateEngine(req,body);
     if(action==="insights-summary")return await insightsSummary(req,body);
     if(action==="monthly-summary")return await monthlySummary(req,body);
