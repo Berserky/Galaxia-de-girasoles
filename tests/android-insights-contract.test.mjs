@@ -126,7 +126,8 @@ test('insights summary is wired end-to-end and monthly stays a compatibility ada
 });
 
 test('annual insights are aggregated server-side in one request',()=>{
- const block=edge.slice(edge.indexOf('async function insightsSummary('),edge.indexOf('function sameHistoryDay('));
+ const start=edge.indexOf('async function insightsSummary(');
+ const block=edge.slice(start,edge.indexOf('async function monthlySummary(',start));
  assert.ok(block.includes('kind'), 'insights-summary must accept period kind');
  assert.equal((block.match(/monthlySummary\(/g)||[]).length,0,'year summary must not call monthly summary twelve times');
  assert.ok(source.includes('period.kind==="year"')&&source.includes('series'),'pure core must emit annual monthly series');
