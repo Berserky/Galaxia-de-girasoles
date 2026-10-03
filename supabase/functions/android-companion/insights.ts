@@ -169,7 +169,10 @@ export function aggregateInsightRows(input:any){
     notes:visibleItems.filter((x:any)=>x.kind==="note").length,
     journeys:visibleItems.filter((x:any)=>x.kind==="journey").length,
     wishesDone:visibleItems.filter((x:any)=>x.kind==="wish"&&x.data?.done===true).length
-  };
+  } as any;
+  const goalInsights=input.goalInsights||{};
+  counts.goalsCompleted=Math.max(0,Number(goalInsights.completed)||0);
+  counts.savingsAchieved=Math.max(0,Number(goalInsights.savingsAchieved)||0);
   const trips=(input.trips||[]).filter((row:any)=>clipIntervalSeconds(row.started_at,row.ended_at,period.start,period.end,nowMs)>0||inside(bogotaDay(row.started_at),period));
   const byPerson:Record<string,number>={};let distanceM=0,durationS=0;
   for(const row of trips){
@@ -226,12 +229,19 @@ export function aggregateInsightRows(input:any){
   if(period.kind==="year"){
     for(let month=1;month<=12;month++){
       const key=period.startDay.slice(0,4)+"-"+pad(month);
-      series[key]={memories:0,plansDone:0,events:0,songs:0,distance_m:0,together_seconds:0,mood_days:0};
+      series[key]={memories:0,plansDone:0,events:0,songs:0,distance_m:0,together_seconds:0,mood_days:0,goalsCompleted:0,savingsAchieved:0,goal_contribution_amount:0};
     }
     for(const item of visibleItems){const bucket=series[effectiveDay(item).slice(0,7)];if(!bucket)continue;if(item.kind==="memory")bucket.memories++;if(item.kind==="plan"&&item.data?.done)bucket.plansDone++;if(item.kind==="event")bucket.events++;if(item.kind==="song")bucket.songs++;}
     for(const trip of trips){const bucket=series[bogotaDay(trip.started_at).slice(0,7)];if(bucket)bucket.distance_m+=Math.max(0,Number(trip.distance_m)||0);}
     for(const row of input.encounters||[]){const bucket=series[bogotaDay(row.started_at).slice(0,7)];if(bucket)bucket.together_seconds+=clipIntervalSeconds(row.started_at,row.ended_at,period.start,period.end,nowMs);}
     for(const [day,rows] of days){const people=new Set(rows.filter((x:any)=>x.mood).map((x:any)=>String(x.person)));if(people.has("0")&&people.has("1")&&series[day.slice(0,7)])series[day.slice(0,7)].mood_days++;}
+    const goalSeries=goalInsights.series||{};
+    for(const [key,value] of Object.entries(goalSeries) as any){
+      if(!series[key])continue;
+      series[key].goalsCompleted=Math.max(0,Number(value?.goals_completed)||0);
+      series[key].savingsAchieved=Math.max(0,Number(value?.savings_achieved)||0);
+      series[key].goal_contribution_amount=Math.max(0,Number(value?.goal_contribution_amount)||0);
+    }
   }
   return {
     period,counts,
@@ -241,6 +251,7 @@ export function aggregateInsightRows(input:any){
     connection:{mood_days:moodDays,answer_days:answerDays,exact_mood_days:exactMoodDays,compatible_mood_days:compatibleMoodDays,joint_days:jointCount},
     moods:{distribution:moodDistribution,calendar},
     questions:{answered_together_days:answerDays},
+    goals:{completed:counts.goalsCompleted,savingsAchieved:counts.savingsAchieved,goal_contribution_amount:Math.max(0,Number(goalInsights.contributionAmount)||0),active_progress_pct:Math.max(0,Math.min(100,Number(goalInsights.activeProgressPct)||0))},
     bond:{gestures:bond.filter((x:any)=>x.type==="gesture").length,voices:bond.filter((x:any)=>x.type==="voice").length,rituals:bond.filter((x:any)=>x.type==="ritual").length,shared_notes:bond.filter((x:any)=>x.type==="sharednote").length},
     highlights,photos,series
   };
