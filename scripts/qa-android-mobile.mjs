@@ -73,8 +73,8 @@ assert.ok(edge.includes('galaxy_presence'),'Falta presencia privada en backend')
 assert.ok(app.includes('function nowCard()'),'Falta tarjeta Ahora en Inicio');
 assert.ok(app.includes('function relationshipAnswer('),'Falta Nuestra IA local');
 assert.ok(app.includes('Mapa de nuestra historia'),'Falta mapa histórico enlazado');
-assert.ok(app.includes("data-action="backup-export"")&&app.includes("data-action="backup-import""),'Faltan controles de backup');
-assert.ok(app.includes("data-action="presence-battery-toggle"")&&app.includes("data-action="presence-song-toggle""),'Faltan controles de privacidad Ahora');
+assert.ok(app.includes('data-action="backup-export"')&&app.includes('data-action="backup-import"'),'Faltan controles de backup');
+assert.ok(app.includes('data-action="presence-battery-toggle"')&&app.includes('data-action="presence-song-toggle"'),'Faltan controles de privacidad Ahora');
 assert.ok(edge.includes('["memory","song","capsule","journey","note"]'),'Las notas de voz deben poder enlazarse a viajes y sorpresas');
 
 const nativeCalls=new Set([...app.matchAll(/GalaxyNative\.call\(['"]([^'"]+)['"]/g)].map(m=>m[1]));
