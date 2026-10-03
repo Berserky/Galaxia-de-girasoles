@@ -135,15 +135,15 @@ const partnerPresence=()=>cloud?.settings?.data?.presence?.[String(cloud?.person
 const currentTrackTitle=()=>{rebuildMusicQueue();return musicPlaying&&musicQueue[musicIndex]?String(musicQueue[musicIndex].title||''):'';};
 async function syncPresence(force=false){
  if(!native.paired||!cloud)return;
- const p=ownPresence(),payload={shareBattery:p.shareBattery===true,shareListening:p.shareListening===true,battery:Number(native.battery),listening:currentTrackTitle()};
+ const p=ownPresence(),payload={shareBattery:p.shareBattery===true,shareListening:p.shareListening===true,battery:native.battery==null?null:Number(native.battery),listening:currentTrackTitle()};
  const signature=JSON.stringify(payload);
  if(!force&&signature===presenceLastSignature)return;
  presenceLastSignature=signature;
- try{await api('presence-set',payload);try{await GalaxyNative.call('refreshMoments');}catch{}}
+ try{await api('presence-set',payload);await refreshState({quiet:true});try{await GalaxyNative.call('refreshMoments');}catch{}}
  catch(e){presenceLastSignature='';if(force)throw e;}
 }
 async function togglePresence(kind){
- const p=ownPresence(),payload={shareBattery:p.shareBattery===true,shareListening:p.shareListening===true,battery:Number(native.battery),listening:currentTrackTitle()};
+ const p=ownPresence(),payload={shareBattery:p.shareBattery===true,shareListening:p.shareListening===true,battery:native.battery==null?null:Number(native.battery),listening:currentTrackTitle()};
  if(kind==='battery')payload.shareBattery=!payload.shareBattery;
  if(kind==='listening')payload.shareListening=!payload.shareListening;
  await api('presence-set',payload);presenceLastSignature='';await refreshState({quiet:true});render();try{await GalaxyNative.call('refreshMoments');}catch{}
@@ -153,7 +153,7 @@ function nowPersonCard(person,isOwn){
  const p=cloud?.settings?.data?.presence?.[String(person)]||{},name=names()[Number(person)]||(isOwn?'Yo':'Mi persona');
  const mood=daily.mood?(moods[daily.mood]?.[1]||daily.mood):'Sin estado';
  const movement=loc.sharing?transportLabel(loc):'Ubicación pausada';
- const battery=isOwn?Number(native.battery):(p.shareBattery===true?Number(p.battery):NaN);
+ const battery=isOwn?(native.battery==null?NaN:Number(native.battery)):(p.shareBattery===true&&p.battery!=null?Number(p.battery):NaN);
  const listening=isOwn?currentTrackTitle():(p.shareListening===true?String(p.listening||''):'');
  const kmh=loc.sharing?Math.max(0,Number(loc.speed||0)*3.6):null;
  return '<div class="now-person card"><div class="row between"><div><span class="badge">'+esc(isOwn?'Tú':'Ahora')+'</span><h3>'+esc(name)+'</h3></div><span class="now-mood">'+esc(mood)+'</span></div>'+
@@ -499,7 +499,7 @@ function openItemForm(kind,item){
  const d=item?.data||{},meta=kindMeta[kind]||['sparkles','Contenido'],editing=!!item?.id,places=mapData?.places||[];
  modal.dataset.editId=item?.id||'';modal.dataset.version=item?.version||'';modal.dataset.kind=kind;
  const needsDate=['memory','event','capsule','journey'].includes(kind),canPlace=['memory','journey','event'].includes(kind);
- const placeField=canPlace&&places.length?'<div class="field"><label>Lugar de nuestra historia (opcional)</label><select name="placeId"><option value="">Sin lugar</option>'+places.map(p=>'<option value="'+p.id+'" '+(Number(d.placeId)===Number(p.id)?'selected':'')+'>'+esc(p.name)+'</option>').join('')+'</select></div>':'';
+ const placeField=canPlace?(places.length?'<div class="field"><label>Lugar de nuestra historia (opcional)</label><select name="placeId"><option value="">Sin lugar</option>'+places.map(p=>'<option value="'+p.id+'" '+(Number(d.placeId)===Number(p.id)?'selected':'')+'>'+esc(p.name)+'</option>').join('')+'</select></div>':(d.placeId?'<input type="hidden" name="placeId" value="'+attr(d.placeId)+'">':'')):'';
  const body='<form id="itemForm" class="stack" style="margin-top:16px"><div class="field"><label>Título</label><input class="input" name="title" value="'+attr(d.title||'')+'" required maxlength="160"></div><div class="field"><label>Texto</label><textarea name="body" placeholder="Escribe aquí…">'+esc(d.body||'')+'</textarea></div>'+
  (needsDate?'<div class="field"><label>Fecha</label><input class="input" type="date" name="date" value="'+attr(d.date||'')+'"></div>':'')+
  '<div class="field"><label>Categoría</label><input class="input" name="category" value="'+attr(d.category||'')+'" placeholder="'+attr(meta[1])+'"></div>'+placeField+
