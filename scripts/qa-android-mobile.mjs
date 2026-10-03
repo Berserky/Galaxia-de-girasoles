@@ -10,6 +10,7 @@ const read=path=>readFileSync(resolve(root,path),'utf8');
 const app=read('android/app/src/main/assets/mobile/app.js');
 const map=read('android/app/src/main/assets/mobile/map.js');
 const search=read('android/app/src/main/assets/mobile/search.js');
+const insights=read('android/app/src/main/assets/mobile/insights.js');
 const monthly=read('android/app/src/main/assets/mobile/monthly.js');
 const todayHistory=read('android/app/src/main/assets/mobile/today-history.js');
 const encounters=read('android/app/src/main/assets/mobile/encounters.js');
@@ -43,7 +44,7 @@ assert.equal(emoji.test(widget),false,'El widget no debe usar emojis/dingbats co
 assert.ok(existsSync(resolve(root,'android/app/src/main/assets/mobile/lucide.js')),'Falta Lucide local');
 assert.ok(existsSync(resolve(root,'android/app/src/main/assets/mobile/LICENSE-lucide')),'Falta licencia de Lucide');
 const scriptSources=[...index.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m=>m[1]);
-assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./eta.js','./frequent-places.js','./gps-history.js','./theme.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
+assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./insights.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./eta.js','./frequent-places.js','./gps-history.js','./theme.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
 assert.ok(index.includes("connect-src 'none'"),'La UI local no debe hacer fetch directo ni recibir credenciales');
 assert.equal(/leaflet/i.test(css+index),false,'No deben quedar estilos o assets muertos de Leaflet');
 
@@ -98,6 +99,8 @@ assert.ok(css.includes('.universal-search-result')&&css.includes('.search-hit'),
 assert.ok(monthly.includes('function shiftMonth(')&&monthly.includes('function summaryHasActivity('),'Falta módulo mensual independiente');
 assert.ok(app.includes('function monthlySummaryTeaser()')&&app.includes('function openMonthlySummary('),'Falta experiencia mensual Android');
 assert.ok(app.includes('data-action="monthly-summary-open"')&&app.includes("api('monthly-summary'"),'Falta acceso al resumen mensual');
+assert.ok(mainActions.has('insights-summary')&&edgeActions.has('insights-summary'),'Falta Galaxy Insights end-to-end');
+assert.ok(insights.includes('function periodFor(')&&insights.includes('function relationshipClock('),'Falta motor temporal reutilizable de Insights');
 assert.ok(mainActions.has('monthly-summary')&&edgeActions.has('monthly-summary'),'Falta resumen mensual end-to-end');
 assert.ok(edge.includes('async function monthlySummary(')&&edge.includes('together_seconds')&&edge.includes('mood_days'),'El backend mensual debe incluir recorridos, encuentros y conexión');
 assert.ok(css.includes('.monthly-metrics')&&css.includes('.monthly-highlight'),'Faltan estilos del resumen mensual');
