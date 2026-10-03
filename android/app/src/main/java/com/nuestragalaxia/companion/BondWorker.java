@@ -156,12 +156,15 @@ public final class BondWorker extends Worker {
     }
 
     public static boolean notificationsAllowed(Context c){
-        return (Build.VERSION.SDK_INT<33||c.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED)
-            &&c.getSystemService(NotificationManager.class).areNotificationsEnabled();
+        NotificationManager nm=c.getSystemService(NotificationManager.class);
+        boolean permission=Build.VERSION.SDK_INT<33||c.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED;
+        NotificationChannel channel=nm.getNotificationChannel(CHANNEL);
+        return permission&&nm.areNotificationsEnabled()&&(channel==null||channel.getImportance()!=NotificationManager.IMPORTANCE_NONE);
     }
 
     public static void prepareNotifications(Context c){
         NotificationManager nm=c.getSystemService(NotificationManager.class);
+        if(nm.getNotificationChannel("galaxy-moments")!=null)nm.deleteNotificationChannel("galaxy-moments");
         NotificationChannel ch=new NotificationChannel(CHANNEL,"Momentos para dos",NotificationManager.IMPORTANCE_DEFAULT);
         ch.setDescription("Gestos y fechas especiales de tu persona en Nuestra Galaxia.");
         ch.enableVibration(true);
