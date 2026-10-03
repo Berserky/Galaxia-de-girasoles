@@ -564,3 +564,22 @@ textarea{min-height:110px;resize:vertical}
 .frequent-place-head small{font-size:9px;color:var(--muted)}
 .frequent-place-privacy{display:flex;align-items:flex-start;gap:7px;margin:11px 2px 0!important;font-size:9px!important;line-height:1.45;color:var(--muted)}
 .frequent-place-privacy .ui-icon{width:14px;height:14px;flex:0 0 auto;color:var(--accent)}
+
+/* Super Update · Individual GPS history */
+.gps-history-card{border-color:rgba(114,84,199,.14)}
+.gps-history-card .row>svg{color:var(--accent);flex:0 0 auto}
+.gps-history-scope{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+.gps-history-scope span{display:inline-flex;align-items:center;gap:5px;padding:7px 9px;border-radius:999px;background:var(--surface2);font-size:10px;color:var(--muted)}
+.gps-history-scope .ui-icon{width:13px;height:13px;color:var(--accent)}
+.gps-export-progress{text-align:center;padding:18px 4px}
+.gps-export-progress .skeleton{margin-bottom:16px}
+.gps-export-progress h3,.gps-export-progress p{margin:5px 0}
+.gps-delete-warning{display:flex;align-items:flex-start;gap:11px;padding:14px;border-radius:17px;background:var(--surface2)}
+.gps-delete-warning.danger{background:rgba(185,84,104,.08);border:1px solid rgba(185,84,104,.16)}
+.gps-delete-warning>.ui-icon{width:21px;height:21px;flex:0 0 auto;color:var(--accent);margin-top:2px}
+.gps-delete-warning.danger>.ui-icon{color:var(--danger)}
+.gps-delete-warning h3,.gps-delete-warning p{margin:2px 0}
+.gps-preserved{display:flex;flex-wrap:wrap;gap:7px}
+.gps-preserved b{width:100%;font-size:11px}
+.gps-preserved span{padding:7px 9px;border-radius:999px;background:#eaf6ef;color:var(--good);font-size:10px;font-weight:600}
+.gps-delete-form .btn.danger{width:100%}
