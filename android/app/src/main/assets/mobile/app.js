@@ -131,6 +131,20 @@ const partnerDaily=()=>todayRows().find(r=>r.person!==cloud?.person)||{};
 const dailyQuestion=()=>{const d=cloud?.today||new Date().toISOString().slice(0,10);let n=0;for(const c of d)n+=c.charCodeAt(0);return dailyQuestions[n%dailyQuestions.length];};
 const currentMonday=()=>{const d=new Date((cloud?.today||new Date().toISOString().slice(0,10))+'T12:00:00');const day=d.getDay()||7;d.setDate(d.getDate()-day+1);return d.toISOString().slice(0,10);};
 const coupleDays=()=>{const s=cloud?.settings?.data?.startDate;if(!s)return 0;return Math.max(0,Math.floor((Date.parse((cloud?.today||s)+'T12:00:00Z')-Date.parse(s+'T12:00:00Z'))/86400000));};
+const dateDistance=d=>Math.round((Date.parse(d+'T12:00:00Z')-Date.parse((cloud?.today||d)+'T12:00:00Z'))/86400000);
+function livingMoment(){
+ const memories=items('memory').filter(x=>x.data?.date),today=cloud?.today||'',sameDay=memories.find(x=>x.data.date.slice(5)===today.slice(5)&&x.data.date!==today);
+ const next=cloud?.nextEvent,partner=partnerDaily();
+ if(sameDay)return {icon:'history',label:'UN DÍA COMO HOY',title:sameDay.data.title,body:'Este recuerdo volvió a aparecer en su historia.',action:'memory',id:sameDay.id};
+ if(next&&dateDistance(next.date)>=0&&dateDistance(next.date)<=14)return {icon:'calendar-heart',label:'SE ACERCA ALGO ESPECIAL',title:next.title,body:'Faltan '+dateDistance(next.date)+' días.',action:'memory'};
+ if(partner.mood)return {icon:'heart-pulse',label:'AHORA',title:partnerName()+' está '+(moods[partner.mood]?.[1]||partner.mood).toLowerCase(),body:'Un pequeño gesto puede hacer el día más cercano.',action:'moments'};
+ const last=memories.slice().sort((a,b)=>String(b.data.date).localeCompare(String(a.data.date)))[0];
+ return last?{icon:'sparkles',label:'DE SU HISTORIA',title:last.data.title,body:'Un recuerdo para volver a mirar hoy.',action:'memory',id:last.id}:{icon:'sparkles',label:'MOMENTOS VIVOS',title:'Su historia empieza aquí',body:'Guarden algo de hoy para encontrarlo más adelante.',action:'add-memory'};
+}
+function livingMomentCard(){const m=livingMoment();return '<section class="section"><button class="card living-moment" data-action="'+m.action+'" '+(m.id?'data-id="'+m.id+'"':'')+'><span class="item-icon">'+ico(m.icon)+'</span><div><p class="eyebrow">'+esc(m.label)+'</p><h3>'+esc(m.title)+'</h3><p>'+esc(m.body)+'</p></div></button></section>';}
+function surpriseNotes(){return items('note').filter(x=>x.data?.surprise);}
+function surpriseUnlocked(i){const d=i.data||{};if(d.unlockType==='date')return !d.unlockDate||d.unlockDate<=cloud.today;if(d.unlockType==='place'){const own=(cloud.locations||[]).find(l=>l.person===cloud.person&&l.sharing);if(!own)return false;const km=(a,b,c,e)=>{const R=6371,p=Math.PI/180,da=(c-a)*p,dl=(e-b)*p,q=Math.sin(da/2)**2+Math.cos(a*p)*Math.cos(c*p)*Math.sin(dl/2)**2;return 2*R*Math.asin(Math.sqrt(q));};return km(Number(own.latitude),Number(own.longitude),Number(d.latitude),Number(d.longitude))*1000<=Number(d.radius||150);}return true;}
+function surpriseNotesView(){const list=surpriseNotes();return '<section class="section"><div class="section-head"><div><h2>Notas sorpresa</h2><p>Mensajes que aparecen en el momento o lugar elegido.</p></div><button class="btn small" data-action="surprise-note-new">+ Sorpresa</button></div><div class="stack">'+(list.length?list.map(i=>{const open=surpriseUnlocked(i),d=i.data||{};return '<div class="card"><span class="badge">'+(open?'Desbloqueada':'Guardada')+'</span><h3 style="margin-top:9px">'+esc(open?d.title:'Hay algo esperando para ti')+'</h3><p>'+esc(open?(d.body||''):(d.unlockType==='date'?'Se abrirá '+fmtDate(d.unlockDate):'Se abrirá al llegar al lugar elegido.'))+'</p>'+(open&&linkedVoices(i.id).length?linkedVoices(i.id).map(voiceCard).join(''):'')+(i.author===cloud.person?'<div class="item-actions"><button class="btn small secondary" data-action="voice-for-item" data-id="'+i.id+'">'+ico('mic')+' Añadir voz</button><button class="btn small ghost" data-action="item-delete" data-id="'+i.id+'">Eliminar</button></div>':'')+'</div>';}).join(''):'<div class="empty">Dejen una nota para una fecha o un lugar especial.</div>')+'</div></section>';}
 
 async function refreshState({quiet=false}={}){
  if(!native.paired||refreshing)return;
@@ -248,7 +262,7 @@ function homeView(){
  actionCard('heart','Enviar un gesto','Abrazo, beso o “te extraño”','moments')+
  actionCard('images','Guardar recuerdo','Algo que no queremos olvidar','add-memory')+
  actionCard('circle-check-big','Nuevo plan','Algo para hacer juntos','add-plan')+
- '</div></section>'+
+ '</div></section>'+livingMomentCard()+
  (next?'<section class="section"><div class="card"><p class="eyebrow">PRÓXIMA FECHA</p><h3>'+esc(next.title)+'</h3><p>'+esc(fmtDate(next.date))+'</p></div></section>':'')+
  '<section class="section"><div class="section-head"><div><h2>Cerca, aunque estemos lejos</h2><p>Estado actual del mapa compartido.</p></div></div><div class="stack">'+locs.map(personCard).join('')+'</div></section>';
 }
@@ -323,6 +337,7 @@ function momentsView(){
  '<button class="gesture" data-action="gesture" data-gesture="kiss"><span>'+ico('heart')+'</span>Beso</button>'+
  '<button class="gesture" data-action="gesture" data-gesture="miss"><span>'+ico('message-circle')+'</span>Te extraño</button></div></div>'+
  '<div class="section"><div class="grid">'+actionCard('dice-5','Cita sorpresa','Una idea según el momento','surprise')+actionCard('gamepad-2','Juego de nosotros','Adivinar lo que elegiría el otro','new-game')+actionCard('notebook-pen','Ritual semanal','Agradecer, pedir y planear','new-ritual')+actionCard('mic','Mensaje de voz','Dejar una voz para el otro','new-voice')+'</div></div>'+
+ surpriseNotesView()+
  momentSection('Juego de nosotros',games,gameCard,'No hay preguntas pendientes todavía.')+
  momentSection('Ritual semanal',rituals,ritualCard,'El primer ritual puede empezar esta semana.')+
  '<section class="section"><div class="section-head"><div><h2>Notas compartidas</h2><p>Los dos pueden editarlas.</p></div><button class="btn small" data-action="new-sharednote">+ Nota</button></div><div class="stack">'+(notes.length?notes.map(sharedNoteCard).join(''):'<div class="empty">Una lista, una idea, una promesa o cualquier cosa de los dos.</div>')+'</div></section>'+
@@ -455,6 +470,10 @@ function openVoice(referenceId=''){
  const refs=(cloud.items||[]).filter(i=>['memory','song','capsule'].includes(i.kind)&&!(i.kind==='capsule'&&String(i.data?.date||'')>cloud.today));
  showModal('Mensaje de voz','<form id="voiceForm" class="stack" style="margin-top:16px"><div class="field"><label>Título</label><input class="input" name="title" placeholder="Te pienso…" required></div><div class="field"><label>Dedicatoria</label><textarea name="body" placeholder="Unas palabras antes del audio…"></textarea></div><div class="field"><label>Relacionar con un recuerdo (opcional)</label><select name="referenceId"><option value="">Sin referencia</option>'+refs.map(i=>'<option value="'+i.id+'" '+(String(i.id)===String(referenceId)?'selected':'')+'>'+esc(i.data?.title||'Recuerdo')+'</option>').join('')+'</select></div><div class="card compact" data-role="voice-recorder"><b>Grábalo aquí</b><small class="muted" data-role="voice-status">Toca el micrófono cuando estés listo.</small><div class="row wrap" style="margin-top:10px"><button class="btn" type="button" data-action="voice-record-start">'+ico('mic')+' Grabar</button><button class="btn secondary" type="button" data-action="voice-record-stop" hidden>'+ico('square')+' Detener</button><button class="btn secondary" type="button" data-action="voice-preview" hidden>'+ico('play')+' Escuchar</button><button class="btn secondary" type="button" data-action="voice-discard" hidden>'+ico('rotate-ccw')+' Repetir</button></div></div><button class="btn secondary" type="button" data-action="voice-file">'+ico('folder-open')+' Elegir audio del teléfono</button><button class="btn" type="submit">Guardar mensaje de voz</button></form>','voice');
 }
+function openSurpriseNote(){
+ const own=(cloud.locations||[]).find(l=>l.person===cloud.person&&l.sharing);
+ showModal('Nueva nota sorpresa','<form id="surpriseNoteForm" class="stack" style="margin-top:16px"><div class="field"><label>Título</label><input class="input" name="title" required maxlength="160"></div><div class="field"><label>Mensaje</label><textarea name="body" required></textarea></div><div class="field"><label>Desbloquear</label><select name="unlockType" data-role="surprise-unlock"><option value="date">En una fecha</option>'+(own?'<option value="place">Al llegar a este lugar</option>':'')+'</select></div><div class="field" data-role="surprise-date"><label>Fecha</label><input class="input" type="date" name="unlockDate" value="'+attr(cloud.today)+'"></div><input type="hidden" name="latitude" value="'+attr(own?.latitude||'')+'"><input type="hidden" name="longitude" value="'+attr(own?.longitude||'')+'"><button class="btn" type="submit">Guardar sorpresa</button></form>','surprise-note');
+}
 function openSurprise(){
  const idea=surpriseIdeas[Math.floor(Math.random()*surpriseIdeas.length)];lastSurprise=idea;
  showModal('Cita sorpresa','<div class="card" style="margin-top:16px"><span class="badge">'+idea.minutes+' min · '+(idea.budget?('$ '+idea.budget.toLocaleString('es-CO')):'$ 0')+' · '+esc(idea.where)+'</span><h3 style="margin-top:10px">'+esc(idea.title)+'</h3><p>'+esc(idea.body)+'</p></div><div class="form-actions"><button class="btn secondary" data-action="surprise-again">Otra idea</button><button class="btn" data-action="surprise-save">Guardar como plan</button></div>');
@@ -535,6 +554,7 @@ document.addEventListener('click',async e=>{
   if(a==='bond-delete'){await busy(()=>bondDelete(btn.dataset.id));return;}
   if(a==='game-guess'){await busy(async()=>{await api('bond-guess',{id:btn.dataset.id,guess:btn.dataset.guess});await refreshState();},'Respuesta enviada.');return;}
   if(a==='surprise'){openSurprise();return;}
+  if(a==='surprise-note-new'){openSurpriseNote();return;}
   if(a==='surprise-again'){openSurprise();return;}
   if(a==='surprise-save'&&lastSurprise){await busy(async()=>{await api('item-save',{kind:'plan',data:{title:lastSurprise.title,body:lastSurprise.body,category:'Cita sorpresa',done:false}});closeModal();await refreshState();},'Cita guardada en Planes.');return;}
   if(a==='music-add'){openMusicAdd();return;}
@@ -568,6 +588,7 @@ document.addEventListener('click',async e=>{
 });
 
 document.addEventListener('change',e=>{
+ if(e.target.matches('[data-role="surprise-unlock"]')){const box=modal.querySelector('[data-role="surprise-date"]');if(box)box.hidden=e.target.value!=='date';}
  if(e.target.matches('[data-role="game-question"]')){
    const q=gameQuestions[e.target.value],answer=modal.querySelector('[data-role="game-answer"]');
    answer.innerHTML=q.options.map(o=>'<option>'+esc(o)+'</option>').join('');
@@ -586,6 +607,7 @@ document.addEventListener('submit',async e=>{
   if(e.target.id==='gameForm'){const fd=new FormData(e.target);await api('bond-save',{type:'game',data:{questionId:fd.get('questionId'),answer:fd.get('answer')}});closeModal();await refreshState();toast('Pregunta guardada.');return;}
   if(e.target.id==='ritualForm'){const fd=new FormData(e.target),data={week:fd.get('week'),gratitude:fd.get('gratitude'),need:fd.get('need'),plan:fd.get('plan')},id=modal.dataset.editId,version=Number(modal.dataset.version||0);if(id)await api('bond-update',{id,version,data});else await api('bond-save',{type:'ritual',data});closeModal();await refreshState();toast('Ritual guardado.');return;}
   if(e.target.id==='sharedNoteForm'){const fd=new FormData(e.target),data={title:fd.get('title'),body:fd.get('body')},id=modal.dataset.editId,version=Number(modal.dataset.version||0);if(id)await api('bond-update',{id,version,data});else await api('bond-save',{type:'sharednote',data});closeModal();await refreshState();toast('Nota compartida guardada.');return;}
+  if(e.target.id==='surpriseNoteForm'){const fd=new FormData(e.target),unlockType=String(fd.get('unlockType')||'date'),data={title:String(fd.get('title')||''),body:String(fd.get('body')||''),category:'Sorpresa',surprise:true,unlockType,unlockDate:unlockType==='date'?String(fd.get('unlockDate')||''):'',latitude:unlockType==='place'?Number(fd.get('latitude')):null,longitude:unlockType==='place'?Number(fd.get('longitude')):null,radius:150};await api('item-save',{kind:'note',data});closeModal();await refreshState();toast('Sorpresa guardada.');return;}
   if(e.target.id==='voiceForm'){
    const fd=new FormData(e.target);pendingVoiceDraft={title:String(fd.get('title')||''),body:String(fd.get('body')||''),referenceId:String(fd.get('referenceId')||'')};
    if(voiceRecording)throw new Error('Detén la grabación antes de guardarla.');
