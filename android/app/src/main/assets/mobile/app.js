@@ -42,7 +42,7 @@ const surpriseIdeas=[
  {title:'Álbum del mes',body:'Elegir juntos las mejores fotos del mes y escribir una frase para cada una.',minutes:60,budget:0,where:'casa'}
 ];
 
-let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null;
+let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map();
 let toastTimer,refreshing=false,updateState={text:'La app está al día.',progress:0,busy:false},pendingVoiceDraft=null,voiceReady=false,voiceRecording=false,voiceResumeMusic=false,lastSurprise=null;
 let presenceLastSignature='',voiceTimer=null,voiceSeconds=0;
 let welcomeStep=0,welcomePreview=false,welcomeGift=true,welcomeEntering=false,tourStep=-1;
@@ -299,7 +299,7 @@ function renderTourOverlay(){
 function homeView(){
  const own=ownDaily(),partner=partnerDaily(),next=cloud.nextEvent,garden=cloud.bond?.garden||{days:0,stage:0};
  const locs=cloud.locations||[];
- return anniversaryBanner()+'<section class="hero"><p class="eyebrow">NUESTRO UNIVERSO</p><h1>'+esc(myName())+' & '+esc(partnerName())+'</h1><p>Un lugar para acompañarnos, guardar lo vivido y seguir construyendo lo que viene.</p><div class="hero-stats"><div class="hero-stat"><b>'+coupleDays()+'</b><small>días juntos</small></div><div class="hero-stat"><b>'+items('memory').length+'</b><small>recuerdos</small></div><div class="hero-stat"><b>'+garden.days+'</b><small>días del girasol</small></div></div></section>'+nowCard()+
+ return anniversaryBanner()+'<section class="hero"><p class="eyebrow">NUESTRO UNIVERSO</p><h1>'+esc(myName())+' & '+esc(partnerName())+'</h1><p>Un lugar para acompañarnos, guardar lo vivido y seguir construyendo lo que viene.</p><div class="hero-stats"><div class="hero-stat"><b>'+coupleDays()+'</b><small>días juntos</small></div><div class="hero-stat"><b>'+items('memory').length+'</b><small>recuerdos</small></div><div class="hero-stat"><b>'+garden.days+'</b><small>días del girasol</small></div></div></section>'+monthlySummaryTeaser()+nowCard()+
  '<section class="section"><div class="section-head"><div><h2>¿Cómo estás hoy?</h2><p>Tu estado se comparte solo con tu persona.</p></div></div><div class="mood-grid">'+Object.entries(moods).map(([id,m])=>'<button class="mood '+(own.mood===id?'active':'')+'" data-action="mood" data-value="'+id+'"><span>'+ico(m[0])+'</span>'+m[1]+'</button>').join('')+'</div>'+(partner.mood?'<div class="card" style="margin-top:10px"><span class="badge">'+esc(partnerName())+'</span> <b>'+esc(moods[partner.mood]?.[1]||partner.mood)+'</b></div>':'')+'</section>'+
  '<section class="section"><div class="card"><p class="eyebrow">PREGUNTA DEL DÍA</p><h3>'+esc(dailyQuestion())+'</h3>'+dailyAnswerMarkup(own,partner)+'</div></section>'+
  '<section class="section"><div class="grid">'+
@@ -312,6 +312,54 @@ function homeView(){
  '<section class="section"><div class="section-head"><div><h2>Cerca, aunque estemos lejos</h2><p>Estado actual del mapa compartido.</p></div></div><div class="stack">'+locs.map(personCard).join('')+'</div></section>';
 }
 function actionCard(iconName,title,copy,action){return '<button class="action-card" data-action="'+action+'"><span class="icon">'+ico(iconName)+'</span><b>'+esc(title)+'</b><small>'+esc(copy)+'</small></button>';}
+function monthlySummaryTeaser(){
+ const month=String(cloud?.today||'').slice(0,7),label=window.GalaxyMonthly?.monthLabel(month)||'Nuestro mes';
+ return '<section class="section"><button class="card monthly-teaser" data-action="monthly-summary-open" data-month="'+attr(month)+'"><span class="monthly-teaser-icon">'+ico('calendar-heart')+'</span><span><p class="eyebrow">NUESTRO MES</p><h3>'+esc(label)+'</h3><p>Recuerdos, planes, kilómetros, encuentros y pequeños gestos en un solo lugar.</p></span>'+ico('chevron-right')+'</button></section>';
+}
+function monthlyMetric(iconName,value,label,detail=''){
+ return '<div class="monthly-metric"><span>'+ico(iconName)+'</span><b>'+esc(value)+'</b><small>'+esc(label)+'</small>'+(detail?'<em>'+esc(detail)+'</em>':'')+'</div>';
+}
+function monthlySummaryMarkup(summary){
+ const month=summary.month,current=String(cloud?.today||'').slice(0,7),counts=summary.counts||{},trips=summary.trips||{},encounters=summary.encounters||{},connection=summary.connection||{},bond=summary.bond||{};
+ const label=window.GalaxyMonthly?.monthLabel(month)||month,has=window.GalaxyMonthly?.summaryHasActivity(summary);
+ const km=(Number(trips.distance_m||0)/1000).toFixed(Number(trips.distance_m||0)>=10000?0:1);
+ const together=fmtDuration(Number(encounters.together_seconds||0));
+ const previous=window.GalaxyMonthly?.shiftMonth(month,-1)||'',next=window.GalaxyMonthly?.shiftMonth(month,1)||'',canNext=window.GalaxyMonthly?.canGoNext(month,current);
+ const highlights=(summary.highlights||[]).map(i=>'<button class="monthly-highlight" data-action="universal-search-result" data-type="item" data-id="'+attr(i.id)+'" data-kind="'+attr(i.kind)+'"><span>'+ico(kindMeta[i.kind]?.[0]||'sparkles')+'</span><span><b>'+esc(i.title||'Parte de nuestra historia')+'</b><small>'+esc(fmtDate(i.date))+'</small></span>'+ico('chevron-right')+'</button>').join('');
+ return '<div class="monthly-summary"><div class="monthly-nav"><button class="btn small ghost" data-action="monthly-summary-month" data-month="'+attr(previous)+'" aria-label="Mes anterior">'+ico('chevron-left')+'</button><div><p class="eyebrow">NUESTRO MES</p><h2>'+esc(label)+'</h2></div><button class="btn small ghost" data-action="monthly-summary-month" data-month="'+attr(next)+'" aria-label="Mes siguiente" '+(canNext?'':'disabled')+'>'+ico('chevron-right')+'</button></div>'+
+ (has?'<div class="monthly-hero"><span>'+ico('sparkles')+'</span><div><b>'+Number(counts.saved||0)+' cosas guardadas</b><p>Un vistazo a lo que construyeron juntos este mes.</p></div></div>'+
+ '<div class="monthly-metrics">'+
+ monthlyMetric('images',counts.memories||0,'recuerdos')+
+ monthlyMetric('circle-check-big',counts.plansDone||0,'planes vividos')+
+ monthlyMetric('calendar-heart',counts.events||0,'fechas especiales')+
+ monthlyMetric('route',km+' km','recorridos',Number(trips.count||0)+' rutas')+
+ monthlyMetric('heart-handshake',encounters.count||0,'encuentros',together+' juntos')+
+ monthlyMetric('smile',connection.mood_days||0,'días conectados',Number(connection.answer_days||0)+' preguntas de ambos')+
+ monthlyMetric('hand-heart',bond.gestures||0,'gestos enviados')+
+ monthlyMetric('mic',bond.voices||0,'mensajes de voz')+
+ '</div>'+
+ ((Number(counts.songs||0)+Number(counts.notes||0)+Number(counts.journeys||0)+Number(counts.wishesDone||0))?'<div class="monthly-extra card"><h3>También pasó</h3><div class="monthly-extra-row">'+
+ (counts.songs?'<span>'+ico('music')+counts.songs+' canciones</span>':'')+
+ (counts.notes?'<span>'+ico('file-text')+counts.notes+' notas</span>':'')+
+ (counts.journeys?'<span>'+ico('route')+counts.journeys+' viajes</span>':'')+
+ (counts.wishesDone?'<span>'+ico('star')+counts.wishesDone+' deseos vividos</span>':'')+
+ '</div></div>':'')+
+ (highlights?'<div class="monthly-highlights"><div class="section-head"><div><h3>Momentos del mes</h3><p>Algunas cosas para volver a mirar.</p></div></div>'+highlights+'</div>':'')
+ :'<div class="universal-search-empty">'+ico('moon-star')+'<h3>Este mes todavía está empezando</h3><p>Cuando guarden recuerdos, recorridos, planes o gestos, su historia mensual aparecerá aquí.</p></div>')+
+ '</div>';
+}
+async function openMonthlySummary(month=String(cloud?.today||'').slice(0,7)){
+ if(!window.GalaxyMonthly?.validMonth(month))return;
+ const cached=monthlyCache.get(month);
+ showModal('Nuestro mes',cached?monthlySummaryMarkup(cached):'<div class="monthly-loading">'+loading('Preparando nuestro mes')+'<p>Reuniendo recuerdos, recorridos y momentos…</p></div>');
+ if(cached)return;
+ try{
+  const summary=await api('monthly-summary',{month});
+  monthlyCache.set(month,summary);
+  if(modal.open)showModal('Nuestro mes',monthlySummaryMarkup(summary));
+ }catch(error){if(modal.open)showModal('Nuestro mes','<div class="universal-search-empty">'+ico('circle-alert')+'<h3>No pudimos preparar este mes</h3><p>'+esc(error.message||'Intenta nuevamente.')+'</p></div>');}
+}
+
 function universalSearchData(){return {items:cloud?.items||[],places:cloud?.places||mapData?.places||[]};}
 function universalSearchRows(query){
  if(!window.GalaxySearch?.searchUniverse)return[];
@@ -692,6 +740,8 @@ document.addEventListener('click',async e=>{
   if(a==='modal-close'){closeModal();return;}
   if(a==='universal-search-open'){openUniversalSearch();return;}
   if(a==='universal-search-result'){await openUniversalSearchResult(btn);return;}
+  if(a==='monthly-summary-open'){await openMonthlySummary(btn.dataset.month||String(cloud.today||'').slice(0,7));return;}
+  if(a==='monthly-summary-month'){if(!btn.disabled)await openMonthlySummary(btn.dataset.month);return;}
   if(a==='map'){go('map');return;}
   if(a==='moments'){go('moments');return;}
   if(a==='add-memory'){if(!mapData)await refreshMap({quiet:true,detail:false});openItemForm('memory');return;}
