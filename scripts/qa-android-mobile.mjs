@@ -68,11 +68,23 @@ for(const action of apiCalls){
  assert.ok(edgeActions.has(action),'Acción UI no implementada en Edge Function: '+action);
 }
 assert.ok(mainActions.has('transport-set')&&edgeActions.has('transport-set'),'Falta transporte habitual end-to-end');
+for(const action of ['presence-set','backup-export','backup-restore'])assert.ok(mainActions.has(action)&&edgeActions.has(action),'Falta función 2.1 end-to-end: '+action);
+assert.ok(edge.includes('galaxy_presence'),'Falta presencia privada en backend');
+assert.ok(app.includes('function nowCard()'),'Falta tarjeta Ahora en Inicio');
+assert.ok(app.includes('function relationshipAnswer('),'Falta Nuestra IA local');
+assert.ok(app.includes('Mapa de nuestra historia'),'Falta mapa histórico enlazado');
+assert.ok(app.includes("data-action="backup-export"")&&app.includes("data-action="backup-import""),'Faltan controles de backup');
+assert.ok(app.includes("data-action="presence-battery-toggle"")&&app.includes("data-action="presence-song-toggle""),'Faltan controles de privacidad Ahora');
+assert.ok(edge.includes('["memory","song","capsule","journey","note"]'),'Las notas de voz deben poder enlazarse a viajes y sorpresas');
 
 const nativeCalls=new Set([...app.matchAll(/GalaxyNative\.call\(['"]([^'"]+)['"]/g)].map(m=>m[1]));
 const bridgeMethods=new Set([...bridge.matchAll(/public void (\w+)\(/g)].map(m=>m[1]));
 for(const method of nativeCalls)assert.ok(bridgeMethods.has(method),'Método nativo sin bridge: '+method);
 assert.ok(bridgeMethods.has('closeApp')&&app.includes('GalaxyAndroid.closeApp()'),'El botón Atrás debe poder cerrar la app desde Inicio');
+for(const method of ['saveBackup','pickBackup'])assert.ok(bridgeMethods.has(method),'Falta puente nativo para '+method);
+assert.ok(main.includes('BATTERY_PROPERTY_CAPACITY'),'Ahora debe leer batería real sin permisos sensibles');
+assert.ok(main.includes('previewEnded'),'El preview de voz debe avisar cuando termina');
+assert.ok(main.includes('onPause()')&&main.includes('stopVoiceRecording(null)'),'La grabación debe detenerse al pasar a segundo plano');
 
 const version=build.match(/versionCode\s*=\s*(\d+);\s*versionName\s*=\s*"([^"]+)"/);
 assert.ok(version,'No se pudo leer la versión Android');
@@ -87,6 +99,8 @@ assert.ok(updater.includes('BuildConfig.APPLICATION_ID.equals(info.packageName)'
 assert.ok(updater.includes('version<=BuildConfig.VERSION_CODE'),'El updater debe rechazar APK no superior');
 assert.ok(updater.includes('resumePendingInstall'),'El updater debe retomar la instalación tras conceder permisos');
 assert.ok(updater.includes('MAX_APK_BYTES'),'El updater debe limitar el tamaño de descarga');
+assert.ok(widget.includes('widgetNow'),'El widget debe mostrar el contexto Ahora');
+assert.ok(widget.includes('nowText'),'El widget debe convertir presencia compartida en texto');
 
 assert.ok(edge.includes('body.detail!==true'),'El mapa debe tener refresco ligero');
 assert.ok(app.includes("refreshMap({quiet:true,detail:false})"),'El polling del mapa debe usar refresco ligero');
@@ -102,4 +116,4 @@ assert.ok(css.includes('@media(prefers-reduced-motion:reduce)'),'La bienvenida d
 assert.equal(motionTest.includes('placeholderKeepsUnitTestTaskActive'),false,'La prueba de movimiento no puede ser placeholder');
 assert.ok(motionTest.includes('medianIgnoresSingleGpsSpeedSpike'),'Falta prueba de ruido GPS');
 
-console.log('QA móvil 1.9.0: OK');
+console.log('QA móvil 2.1: OK');
