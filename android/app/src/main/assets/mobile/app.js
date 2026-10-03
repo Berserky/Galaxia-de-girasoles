@@ -101,7 +101,15 @@ window.GalaxyNative={
    if(name==='native'){native=data;render();}
    if(name==='update'){updateState=data;renderUpdateOnly();}
    if(name==='voice'&&data.previewEnded&&voiceResumeMusic){voiceResumeMusic=false;if(!musicPlaying)toggleMusic();}
-   if(name==='voice'&&data.ready){stopVoiceTimer();}
+   if(name==='voice'&&data.ready){
+     stopVoiceTimer();voiceRecording=false;voiceReady=true;
+     if(modal.open&&modal.dataset.form==='voice'){
+       const status=modal.querySelector('[data-role="voice-status"]'),start=modal.querySelector('[data-action="voice-record-start"]'),stop=modal.querySelector('[data-action="voice-record-stop"]'),preview=modal.querySelector('[data-action="voice-preview"]'),discard=modal.querySelector('[data-action="voice-discard"]');
+       if(status)status.textContent='Grabación lista · '+Math.max(1,Math.round((data.durationMs||60000)/1000))+' s. Escúchala antes de guardar.';
+       if(start)start.hidden=false;if(stop)stop.hidden=true;if(preview)preview.hidden=false;if(discard)discard.hidden=false;
+     }
+     if(voiceResumeMusic){if(!musicPlaying)toggleMusic();voiceResumeMusic=false;}
+   }
    if(name==='voice'&&data.ready&&modal.open){voiceRecording=false;voiceReady=true;const status=modal.querySelector('[data-role="voice-status"]');if(status)status.textContent='Grabación lista. Escúchala antes de guardar.';modal.querySelector('[data-action="voice-record-stop"]')?.setAttribute('hidden','');modal.querySelector('[data-action="voice-preview"]')?.removeAttribute('hidden');modal.querySelector('[data-action="voice-discard"]')?.removeAttribute('hidden');modal.querySelector('[data-action="voice-record-start"]')?.removeAttribute('hidden');}
  },
  back(){
