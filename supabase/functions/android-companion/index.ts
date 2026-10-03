@@ -485,14 +485,14 @@ async function location(req:Request,body:any){
   if(body.sharing===false){
     await ok(db.from("galaxy_locations").update({sharing:false,latitude:null,longitude:null,accuracy:null,speed:null,heading:null,motion:null,status:null,updated_at:now}).eq("person",d.person));
     await ok(db.from("galaxy_device_place_presence").delete().eq("device_id",d.id));
-    await encounter();
+    await contextTick(d);
     return json({ok:true});
   }
   const p=point(body),existing=(await ok(db.from("galaxy_locations").select("*").eq("person",d.person).limit(1)))?.[0]||{};
   await ok(db.from("galaxy_locations").upsert({person:d.person,sharing:true,latitude:p.lat,longitude:p.lon,accuracy:p.accuracy,speed:p.speed,heading:p.heading,motion:p.motion,status:existing.status||null,trip_active:!!existing.trip_active,trip_started_at:existing.trip_started_at||null,transport_preference:existing.transport_preference||null,updated_at:now},{onConflict:"person"}));
   if(body.history===true)await history(req,body);
   if(existing.trip_active&&body.trip_point===true)await ok(db.from("galaxy_trip_points").insert({person:d.person,latitude:p.lat,longitude:p.lon}));
-  await smartPlaces(d,p);await encounter();
+  await contextTick(d);
   return json({ok:true,person:d.person});
 }
 
@@ -1999,6 +1999,12 @@ Deno.serve(async req=>{
     if(action==="bond-delete")return await bondDelete(req,body);
     if(action==="bond-widget")return await bondWidget(req,body);
     if(action==="map-state")return await mapState(req,body);
+    if(action==="context-state")return await contextStateAction(req);
+    if(action==="context-settings")return await contextSettingsAction(req,body);
+    if(action==="context-session")return await contextSessionAction(req,body);
+    if(action==="context-events")return await contextEventsFeed(req,body);
+    if(action==="context-suggestion")return await contextSuggestionAction(req,body);
+    if(action==="context-recap")return await contextRecapAction(req,body);
     if(action==="goals-engine")return await goalsEngine(req,body);
     if(action==="date-engine")return await dateEngine(req,body);
     if(action==="insights-summary")return await insightsSummary(req,body);
