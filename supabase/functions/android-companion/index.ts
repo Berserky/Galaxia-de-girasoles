@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.117.2";
 import { aggregateInsightRows, evaluateAchievements, isInsightVisibleItem, periodBounds, previousPeriod } from "./insights.ts";
+import { QUESTION_DECKS, buildDateRecap, buildSequentialPlan, buildSurpriseExperience, normalizePlanCategory, questionById, roulettePendingPlans, selectQuestion } from "./date-engine.ts";
 
 const url=Deno.env.get("SUPABASE_URL")!;
 let service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"";
@@ -345,6 +346,152 @@ async function dailySave(req:Request,body:any){
   }else return json({error:"Campo no válido."},400);
   await recordParticipation(String(d.person));
   return json({ok:true});
+}
+
+
+function datePlanView(row:any){
+ const data=row?.data||{};
+ return {
+  id:String(row?.id||""),title:text(data.title||"Plan",160),body:text(data.body||"",1200),
+  category:text(data.category||"",80),planCategory:normalizePlanCategory(data),done:data.done===true,
+  budget:Number.isFinite(Number(data.budget))?Math.max(0,Number(data.budget)):0,
+  minutes:Number.isFinite(Number(data.minutes))?Math.max(15,Number(data.minutes)):120,
+  where:data.where==="casa"?"casa":"salir",placeId:data.placeId??null
+ };
+}
+function dateQuestionContextKind(context:any){
+ const start=String(context?.startDate||""),day=String(context?.today||"");
+ if(start&&day&&start.slice(8,10)===day.slice(8,10))return "anniversary";
+ if((context?.journeys||[]).length)return "travel";
+ if((context?.memories||[]).length)return "memory";
+ return "daily";
+}
+async function buildDateContext(req:Request,knownDevice:any=null){
+ const d=knownDevice||await device(req),person=String(d.person),day=today(),since=new Date(Date.now()-90*86400000).toISOString();
+ const [settings,items,locations,places,trips,encounters,questionRows,placeEvents]=await Promise.all([
+  ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
+  ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:false}).limit(1000)),
+  ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude,transport_preference,updated_at").order("person")),
+  ok(db.from("galaxy_places").select("id,name,kind,latitude,longitude,note,owner,created_at").order("created_at",{ascending:false}).limit(200)),
+  ok(db.from("galaxy_trip_history").select("id,person,started_at,ended_at,distance_m,duration_s,dominant_motion").order("started_at",{ascending:false}).limit(250)),
+  ok(db.from("galaxy_encounters").select("id,started_at,ended_at").order("started_at",{ascending:false}).limit(250)),
+  ok(db.from("galaxy_daily_questions").select("day,question_id,deck,context_kind,favorite,memory_id").order("day",{ascending:false}).limit(40)),
+  ok(db.from("galaxy_place_events").select("place_id,event,happened_at").eq("event","arrived").gte("happened_at",since).order("happened_at",{ascending:false}).limit(1000))
+ ]);
+ const allItems=items||[],plans=allItems.filter((row:any)=>row.kind==="plan").map(datePlanView);
+ const own=(locations||[]).find((row:any)=>String(row.person)===person&&row.sharing&&row.latitude!=null&&row.longitude!=null);
+ const visitCounts=new Map<string,number>();
+ for(const event of placeEvents||[]){const id=String(event.place_id);visitCounts.set(id,(visitCounts.get(id)||0)+1);}
+ const placeViews=(places||[]).map((place:any)=>{
+  const distanceM=own?Math.round(dist(own,place)):null;
+  return {id:place.id,name:text(place.name,100),kind:text(place.kind,40),note:text(place.note,300),distanceM,visits:visitCounts.get(String(place.id))||0};
+ });
+ const startDate=validDate(settings?.data?.startDate)?String(settings.data.startDate):"";
+ const hour=Number(new Intl.DateTimeFormat("en-US",{timeZone:"America/Bogota",hour:"2-digit",hourCycle:"h23"}).format(new Date()));
+ return {
+  today:day,startDate,nowHour:Number.isFinite(hour)?hour:12,person,
+  recentQuestionIds:(questionRows||[]).map((row:any)=>String(row.question_id)).filter(Boolean).slice(0,14),
+  memories:allItems.filter((row:any)=>row.kind==="memory").slice(0,80).map((row:any)=>({id:row.id,date:row.data?.date||bogotaDay(row.created),title:text(row.data?.title,160)})),
+  journeys:allItems.filter((row:any)=>row.kind==="journey").slice(0,50).map((row:any)=>({id:row.id,date:row.data?.date||bogotaDay(row.created),title:text(row.data?.title,160)})),
+  pendingPlans:plans.filter((plan:any)=>!plan.done),completedPlans:plans.filter((plan:any)=>plan.done),
+  places:placeViews,frequentPlaces:placeViews.filter((place:any)=>Number(place.visits)>=2),
+  trips:trips||[],encounters:encounters||[],
+  location:own?{available:true,latitude:Number(own.latitude),longitude:Number(own.longitude)}:{available:false},
+  transport:text(own?.transport_preference||"auto",24)||"auto",
+  questionRows:questionRows||[]
+ };
+}
+async function ensureDailyQuestion(req:Request,context:any=null,knownDevice:any=null){
+ const ctx=context||await buildDateContext(req,knownDevice),day=String(ctx.today);
+ let row=await ok(db.from("galaxy_daily_questions").select("*").eq("day",day).maybeSingle());
+ if(!row){
+  const selected=selectQuestion(ctx,{seed:"daily|"+day});
+  await ok(db.from("galaxy_daily_questions").upsert({
+   day,question_id:selected.id,deck:selected.deck,context_kind:dateQuestionContextKind(ctx),favorite:false
+  },{onConflict:"day",ignoreDuplicates:true}));
+  row=await ok(db.from("galaxy_daily_questions").select("*").eq("day",day).single());
+ }
+ let question=questionById(row.question_id);
+ if(!question){
+  question=selectQuestion(ctx,{seed:"repair|"+day});
+  row=await ok(db.from("galaxy_daily_questions").update({question_id:question.id,deck:question.deck}).eq("day",day).select("*").single());
+ }
+ return {row,question,context:ctx};
+}
+async function favoriteQuestionMemory(req:Request,body:any){
+ const d=await device(req),day=validDate(body.day)?String(body.day):today();
+ const assignment=await ok(db.from("galaxy_daily_questions").select("*").eq("day",day).maybeSingle());
+ if(!assignment)return json({error:"Esta pregunta todavía no tiene una asignación guardada."},404);
+ if(assignment.memory_id){
+  const item=await ok(db.from("galaxy_items").select("*").eq("id",assignment.memory_id).maybeSingle());
+  if(item)return json({item,existing:true});
+ }
+ const rows=await ok(db.from("galaxy_daily").select("day,person,answer").eq("day",day).order("person"));
+ const answers=(rows||[]).filter((row:any)=>text(row.answer,3000)).map((row:any)=>({person:String(row.person),answer:text(row.answer,3000)}));
+ if(answers.length!==2)return json({error:"El recuerdo puede crearse cuando ambos hayan respondido."},409);
+ const question=questionById(assignment.question_id);
+ if(!question)return json({error:"La pregunta ya no está disponible."},409);
+ const settings=await ok(db.from("galaxy_settings").select("data").eq("id",1).single());
+ const names=Array.isArray(settings?.data?.names)?settings.data.names:["Persona 1","Persona 2"];
+ const data=cleanItem("memory",{
+  title:"Pregunta favorita · "+day,
+  body:question.text+"\n\n"+answers.map((entry:any)=>text(names[Number(entry.person)]||("Persona "+entry.person),40)+": "+entry.answer).join("\n"),
+  category:"Pregunta favorita",date:day,
+  source:{type:"daily-question",day,questionId:question.id,deck:question.deck},
+  answers
+ });
+ const item=await ok(db.from("galaxy_items").insert({kind:"memory",data,author:String(d.person)}).select("*").single());
+ await ok(db.from("galaxy_daily_questions").update({favorite:true,memory_id:item.id}).eq("day",day));
+ await recordParticipation(String(d.person));
+ return json({item,existing:false});
+}
+async function saveDateRecap(req:Request,body:any){
+ const d=await device(req),recap=buildDateRecap(body.session||body,{today:today()}),sessionId=text(recap?.dateMode?.sessionId,100);
+ if(!sessionId)return json({error:"La sesión de Modo Cita no es válida."},400);
+ const recent=await ok(db.from("galaxy_items").select("*").eq("kind","memory").order("created",{ascending:false}).limit(500));
+ const existing=(recent||[]).find((item:any)=>String(item?.data?.dateMode?.sessionId||"")===sessionId);
+ if(existing)return json({item:existing,existing:true});
+ const data=cleanItem("memory",recap);
+ const item=await ok(db.from("galaxy_items").insert({kind:"memory",data,author:String(d.person)}).select("*").single());
+ await recordParticipation(String(d.person));
+ return json({item,existing:false});
+}
+async function dateEngine(req:Request,body:any){
+ const operation=String(body.operation||"context"),d=await device(req);
+ if(operation==="favorite-memory")return await favoriteQuestionMemory(req,body);
+ if(operation==="date-recap-save")return await saveDateRecap(req,body);
+ const context=await buildDateContext(req,d);
+ if(operation==="context"){
+  const assigned=await ensureDailyQuestion(req,context,d);
+  return json({
+   today:context.today,
+   question:{...assigned.question,favorite:!!assigned.row.favorite,memoryId:assigned.row.memory_id||null,contextKind:assigned.row.context_kind},
+   decks:Object.keys(QUESTION_DECKS).map(id=>({id,count:QUESTION_DECKS[id].length})),
+   pendingPlans:context.pendingPlans,
+   categories:["this-week","when-possible","someday","travel","home"],
+   locationAvailable:!!context.location?.available,transport:context.transport,
+   places:context.places.map((place:any)=>({id:place.id,name:place.name,kind:place.kind,distanceM:place.distanceM,visits:place.visits}))
+  });
+ }
+ if(operation==="question"){
+  const question=selectQuestion(context,{deck:String(body.deck||""),seed:String(body.seed||context.today+"|"+body.deck)});
+  return json({question});
+ }
+ if(operation==="favorite"){
+  const assigned=await ensureDailyQuestion(req,context,d),favorite=body.favorite!==false;
+  const row=await ok(db.from("galaxy_daily_questions").update({favorite}).eq("day",assigned.row.day).select("*").single());
+  return json({question:{...assigned.question,favorite:!!row.favorite,memoryId:row.memory_id||null,contextKind:row.context_kind}});
+ }
+ if(operation==="surprise"){
+  return json({experience:buildSurpriseExperience(context,{...(body.constraints||{}),seed:body.seed||context.today+"|surprise"})});
+ }
+ if(operation==="roulette"){
+  return json({plan:roulettePendingPlans(context.pendingPlans,{category:String(body.category||""),seed:String(body.seed||context.today+"|roulette")})});
+ }
+ if(operation==="planner"){
+  return json({experience:buildSequentialPlan(context,{...(body.constraints||{}),seed:body.seed||context.today+"|planner"})});
+ }
+ return json({error:"Operación de Date Engine no válida."},400);
 }
 
 async function presenceSet(req:Request,body:any){
@@ -1113,6 +1260,7 @@ Deno.serve(async req=>{
     if(action==="bond-delete")return await bondDelete(req,body);
     if(action==="bond-widget")return await bondWidget(req,body);
     if(action==="map-state")return await mapState(req,body);
+    if(action==="date-engine")return await dateEngine(req,body);
     if(action==="insights-summary")return await insightsSummary(req,body);
     if(action==="monthly-summary")return await monthlySummary(req,body);
     if(action==="today-history")return await todayHistory(req,body);
