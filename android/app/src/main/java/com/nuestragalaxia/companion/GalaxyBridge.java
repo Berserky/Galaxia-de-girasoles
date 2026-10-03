@@ -66,6 +66,10 @@ public final class GalaxyBridge {
         activity.addWidget(requestId);
     }
 
+    @JavascriptInterface public void setSystemTheme(String requestId,String theme){
+        activity.setSystemTheme(requestId,theme);
+    }
+
     @JavascriptInterface public void openAppSettings(String requestId){
         activity.openAppSettings(requestId);
     }
