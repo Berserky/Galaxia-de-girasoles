@@ -152,6 +152,7 @@ public final class MainActivity extends ComponentActivity {
             state.put("tracking",paired&&store.tracking());
             state.put("momentNotifications",new BondStore(this).enabled());
             state.put("notificationsGranted",Build.VERSION.SDK_INT<33||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED);
+            state.put("notificationsEnabled",getSystemService(NotificationManager.class).areNotificationsEnabled());
             state.put("locationGranted",checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED);
             state.put("backgroundLocationGranted",Build.VERSION.SDK_INT<29||checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION)==PackageManager.PERMISSION_GRANTED);
             state.put("canPinWidget",Build.VERSION.SDK_INT>=26&&getSystemService(AppWidgetManager.class).isRequestPinAppWidgetSupported());
@@ -608,11 +609,22 @@ public final class MainActivity extends ComponentActivity {
 
     private void applyMomentNotifications(String requestId,boolean enabled){
         new BondStore(this).enabled(enabled);
+        if(enabled)BondWorker.prepareNotifications(this);
         io.execute(()->{
             try{BondWorker.schedule(getApplicationContext());if(enabled)BondWorker.refresh(getApplicationContext());}catch(Exception ignored){}
         });
         resolve(requestId,nativeState());
         nativeChanged();
+    }
+
+    void testMomentNotification(String requestId){
+        runOnUiThread(()->{
+            if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+            if(!new BondStore(this).enabled()){reject(requestId,"Activa primero las notificaciones de momentos.");return;}
+            if(!BondWorker.notificationsAllowed(this)){reject(requestId,"Android está bloqueando las notificaciones. Ábrelas desde Ajustes del sistema.");return;}
+            try{BondWorker.testNotification(this);resolve(requestId,new JSONObject().put("sent",true));}
+            catch(Exception e){reject(requestId,"Android no pudo mostrar la notificación de prueba.");}
+        });
     }
 
     void addWidget(String requestId){
