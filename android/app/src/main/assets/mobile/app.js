@@ -164,12 +164,16 @@ function startVoiceTimer(){
 }
 function livingMoment(){
  const memories=items('memory').filter(x=>x.data?.date),today=cloud?.today||'',sameDay=memories.find(x=>x.data.date.slice(5)===today.slice(5)&&x.data.date!==today);
- const next=cloud?.nextEvent,partner=partnerDaily();
- if(sameDay)return {icon:'history',label:'UN DÍA COMO HOY',title:sameDay.data.title,body:'Este recuerdo volvió a aparecer en su historia.',action:'memory',id:sameDay.id};
- if(next&&dateDistance(next.date)>=0&&dateDistance(next.date)<=14)return {icon:'calendar-heart',label:'SE ACERCA ALGO ESPECIAL',title:next.title,body:'Faltan '+dateDistance(next.date)+' días.',action:'memory'};
- if(partner.mood)return {icon:'heart-pulse',label:'AHORA',title:partnerName()+' está '+(moods[partner.mood]?.[1]||partner.mood).toLowerCase(),body:'Un pequeño gesto puede hacer el día más cercano.',action:'moments'};
- const last=memories.slice().sort((a,b)=>String(b.data.date).localeCompare(String(a.data.date)))[0];
- return last?{icon:'sparkles',label:'DE SU HISTORIA',title:last.data.title,body:'Un recuerdo para volver a mirar hoy.',action:'memory',id:last.id}:{icon:'sparkles',label:'MOMENTOS VIVOS',title:'Su historia empieza aquí',body:'Guarden algo de hoy para encontrarlo más adelante.',action:'add-memory'};
+ const next=cloud?.nextEvent,partner=partnerDaily(),hour=new Date().getHours(),daypart=hour<12?'esta mañana':hour<18?'esta tarde':'esta noche';
+ const unlockedSurprise=surpriseNotes().find(i=>i.author!==cloud.person&&!i.data?.locked&&surpriseUnlocked(i));
+ const songs=items('song'),song=songs[0];
+ if(sameDay)return {icon:'history',label:'UN DÍA COMO HOY',title:sameDay.data.title,body:'Hace parte de sus '+coupleDays()+' días juntos. Vale la pena volver a mirarlo '+daypart+'.',action:'memory',id:sameDay.id};
+ if(next&&dateDistance(next.date)>=0&&dateDistance(next.date)<=14)return {icon:'calendar-heart',label:'SE ACERCA ALGO ESPECIAL',title:next.title,body:dateDistance(next.date)===0?'Es hoy. Su galaxia ya lo sabe.':'Faltan '+dateDistance(next.date)+' días.',action:'memory'};
+ if(unlockedSurprise)return {icon:'mail-heart',label:'HAY ALGO PARA TI',title:unlockedSurprise.data?.title||'Una sorpresa se desbloqueó',body:unlockedSurprise.data?.body||'Abre Momentos para encontrarla.',action:'moments'};
+ if(partner.mood)return {icon:'heart-pulse',label:'AHORA',title:partnerName()+' está '+(moods[partner.mood]?.[1]||partner.mood).toLowerCase(),body:'Un pequeño gesto puede hacer '+daypart+' más cercana.',action:'moments'};
+ if(song)return {icon:'music',label:'BANDA SONORA',title:song.data?.title||'Una canción de ustedes',body:'Una canción guardada en su historia para acompañar '+daypart+'.',action:'memory'};
+ const pick=memories.length?memories[new Date((today||'2000-01-01')+'T12:00:00').getDate()%memories.length]:null;
+ return pick?{icon:'sparkles',label:'DE SU HISTORIA',title:pick.data.title,body:'Un recuerdo elegido de su historia para volver a mirar hoy.',action:'memory',id:pick.id}:{icon:'sparkles',label:'MOMENTOS VIVOS',title:'Su historia empieza aquí',body:'Guarden algo de hoy para encontrarlo más adelante.',action:'add-memory'};
 }
 function anniversaryInfo(){const start=cloud?.settings?.data?.startDate,today=cloud?.today;if(!start||!today)return null;const a=new Date(start+'T12:00:00'),b=new Date(today+'T12:00:00');if(a.getUTCDate()!==b.getUTCDate())return null;let months=(b.getUTCFullYear()-a.getUTCFullYear())*12+b.getUTCMonth()-a.getUTCMonth();if(months<=0)return null;return {months,years:Math.floor(months/12)};}
 function anniversaryBanner(){const a=anniversaryInfo();if(!a)return'';const title=a.months%12===0?'Hoy cumplen '+a.years+' '+(a.years===1?'año':'años'):'Hoy cumplen '+a.months+' meses';return '<section class="anniversary-mode"><div class="anniversary-stars"></div><p class="eyebrow">UN DÍA DE USTEDES</p><h2>'+esc(title)+'</h2><p>La galaxia guarda lo que han construido hasta hoy.</p><button class="btn small" data-action="anniversary-open">'+ico('sparkles')+' Abrir nuestro día</button></section>';}
