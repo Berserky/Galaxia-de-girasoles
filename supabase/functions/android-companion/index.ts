@@ -276,7 +276,7 @@ async function presenceSet(req:Request,body:any){
   const d=await device(req),person=String(d.person),row=await ok(db.from("galaxy_settings").select("*").eq("id",1).single());
   const old=row.data||{},presence={...(old.presence||{})},prev=presence[person]||{};
   const shareBattery=body.shareBattery===true,shareListening=body.shareListening===true;
-  const battery=Number(body.battery),listening=text(body.listening,180);
+  const rawBattery=body.battery,battery=rawBattery===null||rawBattery===undefined||rawBattery===""?NaN:Number(rawBattery),listening=text(body.listening,180);
   presence[person]={
     ...prev,
     shareBattery,
@@ -691,7 +691,7 @@ async function moments(req:Request){
     motion:pLoc.sharing?pLoc.motion||null:null,
     speed:pLoc.sharing?Number(pLoc.speed||0):null,
     status:pLoc.sharing?text(pLoc.status,80):"",
-    battery:pPresence.shareBattery===true?Number(pPresence.battery):null,
+    battery:pPresence.shareBattery===true&&pPresence.battery!==null&&pPresence.battery!==undefined&&Number.isFinite(Number(pPresence.battery))?Number(pPresence.battery):null,
     listening:pPresence.shareListening===true?text(pPresence.listening,180):"",
     updatedAt:pPresence.updatedAt||pLoc.updated_at||null
   };
