@@ -16,7 +16,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public final class BondWorker extends Worker {
-    private static final String PERIODIC="galaxy-moments-periodic",ONCE="galaxy-moments-refresh",CHANNEL="galaxy-moments";
+    private static final String PERIODIC="galaxy-moments-periodic",ONCE="galaxy-moments-refresh",CHANNEL="galaxy-moments-v2";
 
     public BondWorker(Context c,WorkerParameters p){super(c,p);}
 
@@ -155,9 +155,24 @@ public final class BondWorker extends Worker {
         }
     }
 
-    private static boolean notificationsAllowed(Context c){
+    public static boolean notificationsAllowed(Context c){
         return (Build.VERSION.SDK_INT<33||c.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED)
             &&c.getSystemService(NotificationManager.class).areNotificationsEnabled();
+    }
+
+    public static void prepareNotifications(Context c){
+        NotificationManager nm=c.getSystemService(NotificationManager.class);
+        NotificationChannel ch=new NotificationChannel(CHANNEL,"Momentos para dos",NotificationManager.IMPORTANCE_DEFAULT);
+        ch.setDescription("Gestos y fechas especiales de tu persona en Nuestra Galaxia.");
+        ch.enableVibration(true);
+        ch.setShowBadge(true);
+        ch.setLockscreenVisibility(Notification.VISIBILITY_PRIVATE);
+        nm.createNotificationChannel(ch);
+    }
+
+    public static void testNotification(Context c){
+        prepareNotifications(c);
+        notify(c,"test-"+System.currentTimeMillis(),"Nuestra Galaxia está lista","Las notificaciones de momentos ya pueden aparecer en este teléfono.");
     }
 
     private static String gestureText(String gesture){
@@ -168,7 +183,7 @@ public final class BondWorker extends Worker {
 
     private static void notify(Context c,String id,String title,String body){
         NotificationManager nm=c.getSystemService(NotificationManager.class);
-        nm.createNotificationChannel(new NotificationChannel(CHANNEL,"Momentos para dos",NotificationManager.IMPORTANCE_LOW));
+        prepareNotifications(c);
         Intent open=new Intent(c,MainActivity.class);
         PendingIntent pending=PendingIntent.getActivity(c,41,open,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         Notification n=new Notification.Builder(c,CHANNEL)
@@ -178,6 +193,7 @@ public final class BondWorker extends Worker {
             .setContentIntent(pending)
             .setAutoCancel(true)
             .setOnlyAlertOnce(true)
+            .setCategory(Notification.CATEGORY_MESSAGE)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
             .build();
         nm.notify(id,410,n);
