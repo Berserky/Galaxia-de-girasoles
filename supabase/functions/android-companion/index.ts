@@ -980,8 +980,8 @@ async function intelligenceIndexAction(req:Request,body:any){
  if(operation==="photo-context-delete"){
   const path=text(body.path,300);await ok(db.from("galaxy_photo_context").delete().eq("path",path));await deleteIntelligenceSource("photo",path);return json({ok:true});
  }
- if(operation!=="rebuild")return json({error:"Operación de índice no válida."},400);
- const limit=Math.max(1,Math.min(25,Number(body.limit)||15)),offset=Math.max(0,Number(body.offset)||0);
+ if(operation==="rebuild"){
+  const limit=Math.max(1,Math.min(25,Number(body.limit)||15)),offset=Math.max(0,Number(body.offset)||0);
  const sources:any[]=[];
  const [items,places,trips,goals,bond,photoContexts]=await Promise.all([
   ok(db.from("galaxy_items").select("*").order("created").range(offset,offset+limit-1)),
@@ -1003,7 +1003,9 @@ async function intelligenceIndexAction(req:Request,body:any){
   for(const day of [...new Set((days||[]).map((x:any)=>String(x.day)))])await syncIntelligenceDaily(day);
   const transcripts=await ok(db.from("galaxy_voice_transcripts").select("bond_id").limit(limit));for(const tr of transcripts||[])await syncIntelligenceVoiceTranscript(String(tr.bond_id));
  }
- return json({ok:true,processed:sources.length,ready,errors,nextOffset:(items||[]).length===limit?offset+limit:null});
+  return json({ok:true,processed:sources.length,ready,errors,nextOffset:(items||[]).length===limit?offset+limit:null});
+ }
+ return json({error:"Operación de índice no válida."},400);
 }
 
 async function intelligenceBestEffort(label:string,work:()=>Promise<any>){try{return await work();}catch(error){console.warn("intelligence-index",label,error instanceof Error?error.message:"error");return null;}}
