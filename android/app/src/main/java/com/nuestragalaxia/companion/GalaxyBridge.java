@@ -67,6 +67,10 @@ public final class GalaxyBridge {
         activity.setBondHaptics(requestId,enabled);
     }
 
+    @JavascriptInterface public void setContextPushPrefs(String requestId,boolean nearby,boolean arrivedSafe){
+        activity.setContextPushPrefs(requestId,nearby,arrivedSafe);
+    }
+
     @JavascriptInterface public void addWidget(String requestId){
         activity.addWidget(requestId);
     }
