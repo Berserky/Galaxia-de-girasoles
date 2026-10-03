@@ -725,7 +725,8 @@ Deno.serve(async req=>{
     if(action==="daily-save")return await dailySave(req,body);
     if(action==="presence-set")return await presenceSet(req,body);
     if(action==="backup-export")return await backupExport(req);
-    if(action==="backup-restore"||action==="backup-import")return await backupRestore(req,body);
+    if(action==="backup-restore")return await backupRestore(req,body);
+    if(action==="backup-import")return await backupRestore(req,body);
     if(action==="bond-save")return await bondSave(req,body);
     if(action==="bond-update")return await bondUpdate(req,body);
     if(action==="bond-guess")return await bondGuess(req,body);
