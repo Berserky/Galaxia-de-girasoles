@@ -435,3 +435,40 @@ textarea{min-height:110px;resize:vertical}
 .monthly-loading{text-align:center;padding:22px 0}
 .monthly-loading .skeleton{margin-bottom:12px}
 @media(max-width:360px){.monthly-metrics{grid-template-columns:1fr}.monthly-metric{min-height:100px}}
+
+/* Super Update · Un día como hoy */
+.today-history-teaser{width:100%;display:grid;grid-template-columns:48px minmax(0,1fr) 18px;align-items:center;gap:13px;text-align:left;color:var(--text)}
+.today-history-icon{width:48px;height:48px;border-radius:16px;display:grid;place-items:center;background:linear-gradient(145deg,rgba(185,84,104,.12),rgba(114,84,199,.1));color:var(--accent)}
+.today-history-icon .ui-icon{width:23px;height:23px}
+.today-history-teaser h3,.today-history-teaser p{margin:2px 0}
+.today-history-teaser>span:nth-child(2){min-width:0}
+.today-history-teaser>.ui-icon{width:16px;height:16px;color:var(--muted)}
+.today-history-view{padding-top:2px}
+.today-history-head{display:grid;grid-template-columns:46px minmax(0,1fr) 42px;gap:11px;align-items:center;padding-bottom:14px;border-bottom:1px solid var(--border)}
+.today-history-head>span{width:46px;height:46px;border-radius:16px;background:linear-gradient(145deg,rgba(114,84,199,.15),rgba(185,84,104,.09));display:grid;place-items:center;color:var(--accent)}
+.today-history-head>span .ui-icon{width:22px;height:22px}
+.today-history-head h2,.today-history-head p{margin:2px 0}
+.today-history-head .btn{min-width:40px;padding:8px}
+.today-history-year{padding:20px 0 2px}
+.today-history-year+.today-history-year{border-top:1px solid var(--border)}
+.today-history-year-head{display:flex;align-items:center;gap:12px}
+.today-history-year-head>div{display:grid;min-width:94px}
+.today-history-year-head strong{font-size:22px;line-height:1}
+.today-history-year-head span:not(.today-history-year-line){font-size:10px;color:var(--muted);margin-top:4px}
+.today-history-year-line{height:1px;background:linear-gradient(90deg,var(--accent),transparent);flex:1;opacity:.45}
+.today-history-chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px}
+.today-history-chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--border);background:var(--surface2);border-radius:999px;padding:7px 9px;font-size:10px;color:var(--muted)}
+.today-history-chip .ui-icon{width:13px;height:13px;color:var(--accent)}
+.today-history-places{display:flex;align-items:flex-start;gap:7px;margin-top:11px;padding:10px 12px;border-radius:14px;background:var(--surface2);font-size:10px;color:var(--muted)}
+.today-history-places .ui-icon{width:14px;height:14px;color:var(--accent);flex:0 0 auto}
+.today-history-items{display:grid;margin-top:12px}
+.today-history-item{width:100%;display:grid;grid-template-columns:40px minmax(0,1fr) 16px;gap:10px;align-items:center;border:0;border-top:1px solid var(--border);background:transparent;padding:11px 0;text-align:left;color:var(--text)}
+.today-history-item:first-child{border-top:0}
+.today-history-item-icon{width:40px;height:40px;border-radius:13px;background:var(--surface2);display:grid;place-items:center;color:var(--accent)}
+.today-history-item-icon .ui-icon{width:18px;height:18px}
+.today-history-item>span:nth-child(2){display:grid;gap:3px;min-width:0}
+.today-history-item b,.today-history-item small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.today-history-item b{font-size:13px}
+.today-history-item small{font-size:10px;color:var(--muted)}
+.today-history-item>.ui-icon{width:15px;height:15px;color:var(--muted)}
+.today-history-detail p{line-height:1.55}
