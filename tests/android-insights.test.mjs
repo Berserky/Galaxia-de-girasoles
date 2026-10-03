@@ -58,7 +58,9 @@ test('relationship clock rejects invalid or future starts',()=>{
 
 test('metric comparison returns numeric deltas without judging them',()=>{
   const delta=compareMetrics({memories:8,distance_m:10000,mood_days:4},{memories:5,distance_m:12000,mood_days:4});
-  assert.equal(delta.memories,3);\n  assert.equal(delta.distance_m,-2000);\n  assert.equal(delta.mood_days,0);
+  assert.equal(delta.memories,3);
+  assert.equal(delta.distance_m,-2000);
+  assert.equal(delta.mood_days,0);
 });
 
 test('mood compatibility is deterministic and distinguishes exact matches',()=>{
