@@ -12,6 +12,7 @@ import android.media.MediaPlayer;
 import android.media.MediaRecorder;
 import android.os.*;
 import android.provider.DocumentsContract;
+import android.provider.MediaStore;
 import android.provider.Settings;
 import android.view.View;
 import android.webkit.*;
@@ -22,6 +23,7 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.webkit.WebViewAssetLoader;
+import androidx.core.content.FileProvider;
 import org.json.JSONObject;
 import java.util.*;
 import java.io.*;
@@ -36,12 +38,13 @@ public final class MainActivity extends ComponentActivity {
     private static final int REQ_BACKUP_EXPORT=202;
     private static final int REQ_BACKUP_IMPORT=203;
     private static final int REQ_DRIVE_FOLDER=204;
+    private static final int REQ_CAMERA=205;
     private static final Set<String> MOBILE_ACTIONS=Set.of(
         "mobile-state","item-save","item-delete","settings-save","daily-save",
         "bond-save","bond-update","bond-guess","bond-delete","bond-widget",
         "map-state","place-save","place-delete","status-set","transport-set","destination-save","trip",
         "media-list","media-delete","presence-set","backup-export","backup-import",
-        "pair-code-create","profile-repair","device-revoke","insights-summary","monthly-summary","today-history","encounter-stats","frequent-places","gps-history-export","gps-history-delete"
+        "pair-code-create","profile-repair","device-revoke","date-engine","insights-summary","monthly-summary","today-history","encounter-stats","frequent-places","gps-history-export","gps-history-delete"
     );
 
     private DeviceStore store;
@@ -60,6 +63,9 @@ public final class MainActivity extends ComponentActivity {
     private String pendingBackupImportRequest;
     private String pendingDriveFolderRequest;
     private String pendingPhotoPickerRequest;
+    private String pendingCameraRequest;
+    private File pendingCameraFile;
+    private Uri pendingCameraUri;
     private ActivityResultLauncher<PickVisualMediaRequest> photoPickerLauncher;
     private CloudMediaStore cloudMedia;
     private MediaRecorder voiceRecorder;
@@ -247,6 +253,28 @@ public final class MainActivity extends ComponentActivity {
         });
     }
 
+    void capturePhoto(String requestId){
+        if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+        runOnUiThread(()->{
+            if(pendingCameraRequest!=null){reject(requestId,"Ya hay una cámara abierta.");return;}
+            try{
+                File dir=new File(getCacheDir(),"date-photos");
+                if(!dir.exists()&&!dir.mkdirs())throw new IOException("No se pudo preparar la cámara.");
+                File file=File.createTempFile("date-", ".jpg", dir);
+                Uri uri=FileProvider.getUriForFile(this,getPackageName()+".files",file);
+                Intent intent=new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                intent.putExtra(MediaStore.EXTRA_OUTPUT,uri);
+                intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                if(intent.resolveActivity(getPackageManager())==null){file.delete();throw new IOException("No hay una cámara compatible en este teléfono.");}
+                pendingCameraRequest=requestId;pendingCameraFile=file;pendingCameraUri=uri;
+                startActivityForResult(intent,REQ_CAMERA);
+            }catch(Exception e){
+                pendingCameraRequest=null;pendingCameraFile=null;pendingCameraUri=null;
+                reject(requestId,e.getMessage()==null?"No pudimos abrir la cámara.":e.getMessage());
+            }
+        });
+    }
+
     void pickPhotos(String requestId){
         if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
         runOnUiThread(()->{
@@ -378,6 +406,22 @@ public final class MainActivity extends ComponentActivity {
 
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==REQ_CAMERA){
+            String request=pendingCameraRequest;File file=pendingCameraFile;Uri uri=pendingCameraUri;
+            pendingCameraRequest=null;pendingCameraFile=null;pendingCameraUri=null;
+            if(request==null)return;
+            if(resultCode!=RESULT_OK||file==null||uri==null){if(file!=null)file.delete();reject(request,"Foto cancelada.");return;}
+            io.execute(()->{
+                try{
+                    String token=store.token();
+                    if(token==null)throw new ApiClient.ApiException(401,"El vínculo del dispositivo ya no es válido.");
+                    JSONObject uploaded=MobileApiClient.upload(this,token,uri,"photo");
+                    resolve(request,uploaded);
+                }catch(Exception e){reject(request,e.getMessage()==null?"No pudimos guardar la foto.":e.getMessage());}
+                finally{file.delete();}
+            });
+            return;
+        }
         if(requestCode==REQ_DRIVE_FOLDER){
             String request=pendingDriveFolderRequest;pendingDriveFolderRequest=null;
             if(request==null)return;
