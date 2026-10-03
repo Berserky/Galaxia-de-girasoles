@@ -40,6 +40,8 @@ const goalsEngine=read('supabase/functions/android-companion/goals-engine.ts');
 const bondEngine=read('supabase/functions/android-companion/bond-engine.ts');
 const pushEngine=read('supabase/functions/android-companion/push-engine.ts');
 const contextEngine=read('supabase/functions/android-companion/context-engine.ts');
+const intelligenceEngine=read('supabase/functions/android-companion/intelligence-engine.ts');
+const intelligenceProvider=read('supabase/functions/android-companion/intelligence-provider.ts');
 const contextStore=read('android/app/src/main/java/com/nuestragalaxia/companion/ContextStore.java');
 const schema=read('supabase/schema.sql');
 const build=read('android/app/build.gradle.kts');
@@ -306,5 +308,21 @@ assert.ok(app.includes('Galaxy Context Engine')&&app.includes('Estamos cerca')&&
 assert.ok(css.includes('/* Mega Update 3.0 · Galaxy Context Engine */'),'Faltan estilos Context Engine');
 assert.ok(edge.includes('buildDateContextRecap')&&edge.includes('buildTripContextRecap'),'Faltan recaps contextuales');
 assert.ok(edge.includes('galaxy_context_suggestions')&&app.includes('¿Esto fue una cita?'),'El detector de cita debe pedir confirmación humana');
+
+
+// Galaxy Intelligence Engine
+assert.ok(schema.includes('create extension if not exists vector')&&schema.includes('extensions.vector(384)')&&schema.includes('using hnsw'),'Galaxy Intelligence Engine requiere pgvector 384d + HNSW');
+assert.ok(schema.includes('galaxy_intelligence_hybrid_search')&&schema.includes('ts_rank_cd')&&schema.includes('<=>'),'La búsqueda híbrida debe combinar exacto, FTS y similitud vectorial');
+assert.ok(intelligenceEngine.includes('buildIntelligenceDocument')&&intelligenceEngine.includes('mergeHybridRanks')&&intelligenceEngine.includes('validateNarrative'),'Galaxy Intelligence Engine necesita proyección, ranking y grounding determinísticos');
+assert.ok(intelligenceProvider.includes('gte-small')&&intelligenceProvider.includes('OPENAI_API_KEY'),'Embeddings y proveedor deben quedar solo en backend');
+assert.equal(app.includes('OPENAI_API_KEY')||main.includes('OPENAI_API_KEY'),false,'Nunca exponer claves de IA al cliente');
+assert.ok(main.includes('"intelligence-search"')&&edge.includes('action==="intelligence-search"'),'Intelligence Search debe estar permitido end-to-end');
+assert.ok(edge.includes('intelligence-ask')&&edge.includes('intelligence-connections')&&edge.includes('intelligence-narrate')&&edge.includes('intelligence-book'),'Faltan servicios de Galaxy Intelligence');
+assert.ok(search.includes('function searchUniverse(')&&app.includes('GalaxySearch.searchUniverse'),'La búsqueda clásica debe sobrevivir como fallback');
+assert.ok(app.includes('Nuestra IA 2.0')&&app.includes('IA de conexiones')&&app.includes('IA narradora')&&app.includes('Libro de Nuestra Galaxia'),'Faltan superficies de Intelligence Engine');
+assert.ok(app.includes('Transcribir')&&app.includes('Eliminar transcripción'),'Voz 2.0 debe controlar la transcripción por separado');
+assert.ok(edge.includes('syncIntelligenceItem(updated)')&&edge.includes('syncIntelligenceItem(created)')&&edge.includes('deleteIntelligenceSource("item"'),'El índice debe actualizarse incrementalmente');
+assert.ok(schema.includes('galaxy_voice_transcripts')&&edge.includes('audioPreserved:true'),'Eliminar transcripción no puede borrar el audio');
+assert.ok(css.includes('/* Mega Update 3.0 · Galaxy Intelligence Engine */'),'Faltan estilos de Galaxy Intelligence Engine');
 
 console.log('QA móvil Nuestra Galaxia: OK');
