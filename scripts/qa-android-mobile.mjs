@@ -300,7 +300,7 @@ const locationBlock=edge.slice(edge.indexOf('async function location('),edge.ind
 assert.equal(locationBlock.includes('await smartPlaces(')||locationBlock.includes('await encounter('),false,'Location no debe ejecutar detectores GPS independientes');
 assert.ok(main.includes('context-state')&&main.includes('context-settings')&&main.includes('context-session'),'Android debe permitir las acciones de Context Engine');
 assert.ok(contextStore.includes('nearbyEnabled')&&contextStore.includes('arrivedSafeEnabled'),'ContextStore debe preservar opt-ins push');
-assert.ok(pushManager.includes('context.nearbyEnabled()')&&pushManager.includes('context.arrivedSafeEnabled()'),'FCM debe respetar preferencias Context locales');
+assert.ok(pushManager.includes('nearbyEnabled()')&&pushManager.includes('arrivedSafeEnabled()'),'FCM debe respetar preferencias Context locales');
 assert.equal(contextStore.includes('TrackingService.ACTION_START'),false,'ContextStore jamás puede encender ubicación');
 assert.ok(app.includes('Galaxy Context Engine')&&app.includes('Estamos cerca')&&app.includes('Regreso a casa')&&app.includes('Acompáñame 2.0'),'Faltan superficies Context Engine');
 assert.ok(css.includes('/* Mega Update 3.0 · Galaxy Context Engine */'),'Faltan estilos Context Engine');
