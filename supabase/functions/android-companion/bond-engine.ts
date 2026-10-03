@@ -48,9 +48,10 @@ export function gardenState(totalDays:unknown){
  let current=stages[0];
  for(const stage of stages)if(days>=stage.days)current=stage;
  const next=stages.find(stage=>stage.days>days)||null;
- const unlockables=stages.slice(1).map(stage=>({...stage,unlocked:days>=stage.days}));
+ const milestones=stages.slice(1).map(stage=>({...stage,unlocked:days>=stage.days}));
+ const unlockables=milestones.filter(stage=>stage.unlocked);
  const progressPct=next?Math.max(0,Math.min(100,Math.round((days-current.days)/Math.max(1,next.days-current.days)*100))):100;
- return {totalDays:days,days,stage:current.stage,label:current.label,icon:current.icon,next,progressPct,unlockables};
+ return {totalDays:days,days,stage:current.stage,label:current.label,icon:current.icon,next,progressPct,unlockables,milestones};
 }
 
 export function computeBondProgress(rows:any[]=[],now:unknown=new Date()){
