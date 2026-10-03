@@ -202,7 +202,7 @@ async function refreshMap({quiet=false,detail=false}={}){
    const next=await api('map-state',{detail});
    mapData=detail||!mapData?next:{...mapData,...next};
    if(view==='map'&&!quiet)render();
-   else if(view==='map'){drawMap({fit:false});updateCoupleDistanceDom();}
+   else if(view==='map'){drawMap({fit:false});updateCoupleDistanceDom();updateEtaDom();}
  }catch(e){if(!quiet)toast(e.message);}
 }
 const mediaFresh=kind=>!!media[kind]&&Date.now()-(mediaLoadedAt[kind]||0)<20*60*1000;
@@ -450,6 +450,43 @@ function focusCoupleOnMap(){
  map.fitBounds(rows.map(l=>[Number(l.latitude),Number(l.longitude)]),{maxZoom:16});
 }
 
+function etaData(){
+ return {locations:mapData?.locations||cloud?.locations||[],places:mapData?.places||[],destinations:mapData?.destinations||[]};
+}
+function etaState(){return window.GalaxyEta?.eta(etaData(),String(cloud?.person??''))||{available:false,reason:'engine'};}
+function etaUnavailableCopy(reason){
+ if(reason==='none')return {title:'Elige a dónde vas',copy:'Usa Acompáñame para seleccionar a '+partnerName()+' o uno de sus lugares guardados.'};
+ if(reason==='own-paused')return {title:'Activa tu ubicación',copy:'Necesitamos tu posición para calcular cuánto falta.'};
+ if(reason==='own-stale')return {title:'Esperando tu ubicación',copy:'Tu posición necesita una actualización reciente para calcular el ETA.'};
+ if(reason==='target-paused')return {title:partnerName()+' pausó su ubicación',copy:'No calcularemos un ETA hacia una posición que ya no se comparte.'};
+ if(reason==='target-stale')return {title:'Esperando a '+partnerName(),copy:'Su última posición es demasiado antigua para estimar una llegada fiable.'};
+ if(reason==='place-missing')return {title:'Ese lugar ya no está disponible',copy:'Elige otro destino desde Acompáñame.'};
+ return {title:'ETA no disponible',copy:'Actualiza el mapa o elige nuevamente el destino.'};
+}
+function etaCard(){
+ const e=etaState();
+ if(!e.available){
+  const message=etaUnavailableCopy(e.reason),hasDestination=e.reason!=='none';
+  return '<section class="section"><div class="card eta-card unavailable" id="etaCard"><span class="eta-icon">'+ico('timer')+'</span><div><p class="eyebrow">ETA APROXIMADO</p><h3>'+esc(message.title)+'</h3><p>'+esc(message.copy)+'</p></div><button class="btn small '+(hasDestination?'ghost':'secondary')+'" data-action="'+(hasDestination?'map-refresh':'destination')+'">'+ico(hasDestination?'refresh-cw':'navigation')+' '+(hasDestination?'Actualizar':'Acompáñame')+'</button></div></section>';
+ }
+ const modeIcon=e.mode==='walking'?'person-standing':e.mode==='motorcycle'?'bike':e.mode==='transit'?'bus-front':'navigation';
+ const distance=window.GalaxyDistance?.formatDistance(e.meters)||fmtDistance(e.meters),eta=window.GalaxyEta.etaLabel(e.seconds);
+ const source=e.speed_source==='live'?'con tu velocidad actual':'con ritmo estimado';
+ const targetNote=e.target_moving?' · el destino también está en movimiento':'';
+ return '<section class="section"><div class="card eta-card '+(e.arrived?'arrived':'')+'" id="etaCard"><span class="eta-icon">'+ico(e.arrived?'map-pin-check':modeIcon)+'</span><div class="eta-main"><p class="eyebrow">ETA HACIA '+esc(String(e.label||'DESTINO').toUpperCase())+'</p><div class="eta-value"><strong>'+esc(eta)+'</strong><span>'+esc(distance)+'</span></div><p>'+esc(e.arrived?'Ya estás en el destino.':'Estimado '+e.mode_label+', '+source+'.')+'</p><small>Ruta aproximada desde distancia geográfica'+esc(targetNote)+'. No reemplaza navegación vial.</small></div><div class="eta-actions"><button class="btn small secondary" data-action="eta-focus">'+ico('crosshair')+' Ver ruta</button><button class="btn small ghost" data-action="destination">'+ico('shuffle')+' Cambiar</button></div></div></section>';
+}
+function updateEtaDom(){
+ const current=document.querySelector('#etaCard');if(!current)return;
+ const wrapper=document.createElement('div');wrapper.innerHTML=etaCard();
+ const next=wrapper.querySelector('#etaCard');if(next)current.replaceWith(next);
+ refreshIcons();
+}
+function focusEtaOnMap(){
+ const e=etaState();if(!e.available||!map)return;
+ const own=e.own;
+ map.fitBounds([[Number(own.latitude),Number(own.longitude)],[Number(e.latitude),Number(e.longitude)]],{maxZoom:16});
+}
+
 function encounterStatsTeaser(){
  const s=encounterStatsCache;
  if(!s)return '<section class="section"><button class="card encounter-teaser" data-action="encounter-stats-open"><span class="encounter-teaser-icon">'+ico('heart-handshake')+'</span><span><p class="eyebrow">NUESTROS ENCUENTROS</p><h3>Construyendo el contador…</h3><p>Veces que hemos coincidido y tiempo compartido.</p></span>'+ico('chevron-right')+'</button></section>';
@@ -643,7 +680,7 @@ function mapView(){
  const own=(cloud.locations||[]).find(l=>l.person===cloud.person)||{},partner=(cloud.locations||[]).find(l=>l.person!==cloud.person)||{};
  return '<section><div class="section-head"><div><p class="eyebrow">NUESTRO MAPA</p><h2>Acompañarnos</h2><p>Ubicación voluntaria, recorridos y lugares importantes.</p></div><button class="btn small secondary" data-action="map-refresh">Actualizar</button></div>'+
  '<div class="map-wrap"><div id="map"></div><button class="map-fab" data-action="status-menu" aria-label="Estado rápido">'+ico('sparkles')+'</button><div id="statusMenu" class="map-status-menu">'+['Ya voy','Voy bien','Llegué','En camino','Necesito una pausa'].map(s=>'<button data-action="status-set" data-status="'+attr(s)+'">'+esc(s)+'</button>').join('')+'<button data-action="status-custom">Otro…</button></div></div>'+
- '<div class="grid" style="margin-top:12px">'+personCard(own)+personCard(partner)+'</div>'+coupleDistanceCard({mapMode:true})+
+ '<div class="grid" style="margin-top:12px">'+personCard(own)+personCard(partner)+'</div>'+coupleDistanceCard({mapMode:true})+etaCard()+
  '<div class="section"><div class="card"><div class="row between"><div><h3>Compartir ubicación</h3><p>'+(native.tracking?'Android la mantiene activa en segundo plano.':'Está detenida en este teléfono.')+'</p></div><span class="badge '+(native.tracking?'good':'')+'">'+(native.tracking?'Activa':'Pausada')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small" data-action="'+(native.tracking?'location-stop':'location-start')+'">'+(native.tracking?'Detener':'Comenzar')+'</button><button class="btn small secondary" data-action="app-settings">Permisos</button></div></div></div>'+
  '<div class="section"><div class="card"><h3>Cómo me muevo normalmente</h3><p>Ayuda a interpretar cuando Android detecta que vas en vehículo.</p><div class="chips" style="margin-top:12px">'+
  ['','motorcycle','transit'].map(value=>'<button class="chip '+((own.transport_preference||'')===value?'active':'')+'" data-action="transport-set" data-value="'+value+'">'+ico(value==='motorcycle'?'bike':value==='transit'?'bus-front':'navigation')+(value==='motorcycle'?'Moto':value==='transit'?'Transporte público':'Automático')+'</button>').join('')+
@@ -791,8 +828,9 @@ function openPlace(){
  showModal('Guardar este lugar','<form id="placeForm" class="stack" style="margin-top:16px"><div class="field"><label>Nombre</label><input class="input" name="name" placeholder="Casa, oficina, nuestro parque…" required></div><div class="field"><label>Tipo</label><select name="kind"><option value="home">Casa</option><option value="work">Trabajo</option><option value="memory">Recuerdo</option><option value="adventure">Aventura</option></select></div><div class="field"><label>Nota</label><textarea name="note" placeholder="Algo que quieras recordar de este lugar"></textarea></div><input type="hidden" name="latitude" value="'+Number(own.latitude)+'"><input type="hidden" name="longitude" value="'+Number(own.longitude)+'"><button class="btn" type="submit">Guardar lugar actual</button></form>','place');
 }
 function openDestination(){
- const partner=cloud.person==='0'?'1':'0',places=mapData?.places||[];
- showModal('Acompáñame','<form id="destinationForm" class="stack" style="margin-top:16px"><div class="field"><label>Voy hacia</label><select name="destination"><option value="person:'+partner+'">'+esc(partnerName())+'</option>'+places.map(p=>'<option value="place:'+p.id+'">'+esc(p.name)+'</option>').join('')+'<option value="none">Ningún destino</option></select></div><button class="btn" type="submit">Guardar destino</button></form>','destination');
+ const partner=cloud.person==='0'?'1':'0',places=mapData?.places||[],active=(mapData?.destinations||[]).find(d=>String(d.person)===String(cloud.person)&&d.active!==false);
+ const current=active?(active.kind==='person'?'person:'+active.target_person:'place:'+active.place_id):'none';
+ showModal('Acompáñame','<form id="destinationForm" class="stack" style="margin-top:16px"><div class="field"><label>Voy hacia</label><select name="destination"><option value="person:'+partner+'" '+(current==='person:'+partner?'selected':'')+'>'+esc(partnerName())+'</option>'+places.map(p=>'<option value="place:'+p.id+'" '+(current==='place:'+p.id?'selected':'')+'>'+esc(p.name)+'</option>').join('')+'<option value="none" '+(current==='none'?'selected':'')+'>Ningún destino</option></select></div><p class="muted">El ETA se actualizará con tu ubicación y forma de moverte.</p><button class="btn" type="submit">Guardar destino</button></form>','destination');
 }
 
 function storyDocuments(){
@@ -883,6 +921,7 @@ document.addEventListener('click',async e=>{
   if(a==='encounter-map'){closeModal();go('map');await refreshMap({detail:true});setTimeout(()=>document.querySelector('#encounter-history')?.scrollIntoView({behavior:'smooth',block:'center'}),120);return;}
   if(a==='couple-distance-map'){go('map');await refreshMap({quiet:true,detail:false});setTimeout(()=>{focusCoupleOnMap();document.querySelector('#coupleDistanceCard')?.scrollIntoView({behavior:'smooth',block:'center'});},120);return;}
   if(a==='couple-distance-focus'){focusCoupleOnMap();return;}
+  if(a==='eta-focus'){focusEtaOnMap();return;}
   if(a==='map'){go('map');return;}
   if(a==='moments'){go('moments');return;}
   if(a==='add-memory'){if(!mapData)await refreshMap({quiet:true,detail:false});openItemForm('memory');return;}
@@ -1001,7 +1040,7 @@ document.addEventListener('submit',async e=>{
    pendingVoiceDraft=null;voiceReady=false;closeModal();await refreshState();toast('Mensaje de voz guardado.');return;
   }
   if(e.target.id==='placeForm'){const fd=new FormData(e.target);await api('place-save',{name:fd.get('name'),kind:fd.get('kind'),note:fd.get('note'),latitude:Number(fd.get('latitude')),longitude:Number(fd.get('longitude'))});closeModal();await refreshMap();toast('Lugar guardado.');return;}
-  if(e.target.id==='destinationForm'){const value=String(new FormData(e.target).get('destination'));if(value==='none')await api('destination-save',{kind:'none'});else{const [kind,id]=value.split(':');await api('destination-save',kind==='person'?{kind,target_person:id,label:partnerName()}:{kind,place_id:Number(id)});}closeModal();await refreshMap();toast('Destino actualizado.');return;}
+  if(e.target.id==='destinationForm'){const value=String(new FormData(e.target).get('destination'));if(value==='none')await api('destination-save',{kind:'none'});else{const [kind,id]=value.split(':');await api('destination-save',kind==='person'?{kind,target_person:id,label:partnerName()}:{kind,place_id:Number(id)});}closeModal();await refreshMap({detail:false});if(view==='map')setTimeout(()=>document.querySelector('#etaCard')?.scrollIntoView({behavior:'smooth',block:'center'}),80);toast(value==='none'?'Destino desactivado.':'Destino actualizado · ETA listo.');return;}
   if(e.target.id==='settingsForm'){const fd=new FormData(e.target);await api('settings-save',{version:cloud.settings.version,data:{names:[fd.get('name0'),fd.get('name1')],startDate:fd.get('startDate'),albumUrl:fd.get('albumUrl')}});await refreshState();toast('Ajustes guardados.');return;}
  }catch(err){toast(err.message||'No pudimos guardar.');}
 });
