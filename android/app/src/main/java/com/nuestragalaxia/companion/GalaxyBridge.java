@@ -32,6 +32,7 @@ public final class GalaxyBridge {
         activity.pickMedia(requestId,kind);
     }
     @JavascriptInterface public void pickPhotos(String requestId){ activity.pickPhotos(requestId); }
+    @JavascriptInterface public void capturePhoto(String requestId){ activity.capturePhoto(requestId); }
     @JavascriptInterface public void pickDriveFolder(String requestId){ activity.pickDriveFolder(requestId); }
     @JavascriptInterface public void syncDriveFolder(String requestId){ activity.syncDriveFolder(requestId); }
     @JavascriptInterface public void disconnectDriveFolder(String requestId){ activity.disconnectDriveFolder(requestId); }
