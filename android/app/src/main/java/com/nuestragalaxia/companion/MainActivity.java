@@ -33,7 +33,7 @@ public final class MainActivity extends ComponentActivity {
         "bond-save","bond-update","bond-guess","bond-delete","bond-widget",
         "map-state","place-save","place-delete","status-set","transport-set","destination-save","trip",
         "media-list","media-delete","presence-set","backup-export","backup-import",
-        "pair-code-create","profile-repair","device-revoke"
+        "pair-code-create","profile-repair","device-revoke","monthly-summary"
     );
 
     private DeviceStore store;
