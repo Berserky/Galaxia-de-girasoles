@@ -812,3 +812,30 @@ html:not([data-theme="daylight"]) .gmap-attrib{backdrop-filter:blur(6px)}
 @media(max-width:360px){.goal-form-grid{grid-template-columns:1fr}.goal-step{grid-template-columns:32px minmax(0,1fr) 58px}}
 @media(min-width:700px){.goals-summary{grid-template-columns:repeat(4,minmax(0,1fr))}.goals-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(prefers-reduced-motion:reduce){.goal-progress i,.goal-card,.goal-step,.plan-roulette,.plan-roulette.result,.wrapped-card{transition:none!important;animation:none!important}.wrapped-deck{scroll-behavior:auto}}
+
+
+/* Mega Update 3.0 · Galaxy Bond Engine 2.0 */
+.bond-garden{overflow:hidden;padding:0}
+.bond-garden-scene{position:relative;min-height:172px;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 9%,var(--surface)) 0%,var(--surface2) 70%);border-bottom:1px solid var(--border);overflow:hidden}
+.bond-garden-scene .garden-sun{position:absolute;right:18px;top:15px;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.bond-garden-scene .garden-ground{position:absolute;left:-8%;right:-8%;height:70px;bottom:-28px;border-radius:50% 50% 0 0;background:color-mix(in srgb,var(--accent) 8%,var(--surface2))}
+.garden-flowers{position:absolute;left:7%;right:7%;bottom:28px;height:96px;display:flex;align-items:flex-end;justify-content:space-around}
+.garden-flower{display:grid;place-items:center;color:var(--accent);transform-origin:50% 100%;animation:gardenSway 4.5s ease-in-out infinite alternate}
+.garden-flower:nth-child(even){animation-delay:-2s}.garden-flower .ui-icon{width:31px;height:31px}.garden-flower.f2,.garden-flower.f6{transform:scale(.8)}.garden-flower.f3,.garden-flower.f5{transform:scale(1.15)}
+.garden-glow{position:absolute;left:50%;top:25%;transform:translateX(-50%);color:var(--accent);opacity:.65}.garden-glow .ui-icon{width:42px;height:42px}
+.bond-garden-copy{padding:16px}.bond-garden-copy h3{margin:4px 0 5px}.bond-garden-copy>p{margin:0;color:var(--muted)}
+.bond-streak-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:14px 0 8px}
+.bond-streak-grid span{padding:10px 8px;border-radius:14px;background:var(--surface2);text-align:center;border:1px solid var(--border)}
+.bond-streak-grid b,.bond-streak-grid small{display:block}.bond-streak-grid b{font-size:20px}.bond-streak-grid small{font-size:8px;color:var(--muted);margin-top:2px}
+.bond-unlockables{display:flex;gap:6px;overflow-x:auto;padding:7px 0 2px;scrollbar-width:none}.bond-unlockables::-webkit-scrollbar{display:none}
+.bond-unlockables>span{flex:0 0 118px;padding:9px;border:1px solid var(--border);border-radius:13px;background:var(--surface);display:grid;grid-template-columns:24px 1fr;align-items:center;column-gap:6px}
+.bond-unlockables>span.locked{opacity:.48}.bond-unlockables .ui-icon{grid-row:1/3;width:20px;height:20px;color:var(--accent)}
+.bond-unlockables b,.bond-unlockables small{display:block}.bond-unlockables b{font-size:10px}.bond-unlockables small{font-size:8px;color:var(--muted)}
+.bond-gesture-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.bond-gesture-grid .gesture{min-height:92px;display:grid;grid-template-columns:34px 1fr;grid-template-rows:auto auto;column-gap:8px;text-align:left;align-items:center}
+.bond-gesture-grid .gesture>span{grid-row:1/3}.bond-gesture-grid .gesture b{font-size:13px}.bond-gesture-grid .gesture small{font-size:8px;color:var(--muted)}
+.bond-gesture-row{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:9px;align-items:center}.bond-gesture-row>span{width:38px;height:38px;border-radius:12px;background:var(--surface2);display:grid;place-items:center;color:var(--accent)}
+.bond-gesture-row b,.bond-gesture-row small{display:block}.bond-gesture-row small{color:var(--muted);font-size:9px;margin-top:2px}
+@keyframes gardenSway{from{rotate:-2deg}to{rotate:2deg}}
+@media(min-width:700px){.bond-gesture-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.bond-garden{display:grid;grid-template-columns:minmax(260px,.9fr) 1.1fr}.bond-garden-scene{min-height:100%;border-bottom:0;border-right:1px solid var(--border)}}
+@media(prefers-reduced-motion:reduce){.bond-garden-scene,.garden-flower,.garden-glow{animation:none!important;transition:none!important}.garden-flower{rotate:0deg}}
