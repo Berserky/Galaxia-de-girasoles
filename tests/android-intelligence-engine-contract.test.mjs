@@ -89,7 +89,10 @@ test('classic search remains present and UI explicitly falls back to it',()=>{
  assert.ok(app.includes('Nuestra IA 2.0'));
 });
 
-test('UI exposes semantic search connections narrator voice transcription and book',()=>{
+test('UI exposes Intelligence as first-class navigation plus semantic tools',()=>{
+ assert.ok(app.includes("['ai','IA']"),'Galaxy Intelligence debe ser visible en navegación principal');
+ assert.ok(app.includes("if(view==='ai'){app.innerHTML=header()+intelligenceHubView()"),'La pestaña IA debe renderizar una vista propia');
+ assert.ok(app.includes('function intelligenceHubView('),'Falta hub visible de Galaxy Intelligence');
  for(const marker of ['Nuestra IA 2.0','IA de conexiones','IA narradora','Libro de Nuestra Galaxia','Transcribir','Eliminar transcripción'])
   assert.ok(app.includes(marker),marker);
  assert.ok(css.includes('/* Mega Update 3.0 · Galaxy Intelligence Engine */'));
