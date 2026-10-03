@@ -32,6 +32,7 @@ public final class GalaxyBridge {
         activity.pickMedia(requestId,kind);
     }
     @JavascriptInterface public void pickPhotos(String requestId){ activity.pickPhotos(requestId); }
+    @JavascriptInterface public void capturePhoto(String requestId){ activity.capturePhoto(requestId); }
     @JavascriptInterface public void pickDriveFolder(String requestId){ activity.pickDriveFolder(requestId); }
     @JavascriptInterface public void syncDriveFolder(String requestId){ activity.syncDriveFolder(requestId); }
     @JavascriptInterface public void disconnectDriveFolder(String requestId){ activity.disconnectDriveFolder(requestId); }
@@ -60,6 +61,14 @@ public final class GalaxyBridge {
 
     @JavascriptInterface public void testMomentNotification(String requestId){
         activity.testMomentNotification(requestId);
+    }
+
+    @JavascriptInterface public void setBondHaptics(String requestId,boolean enabled){
+        activity.setBondHaptics(requestId,enabled);
+    }
+
+    @JavascriptInterface public void setContextPushPrefs(String requestId,boolean nearby,boolean arrivedSafe){
+        activity.setContextPushPrefs(requestId,nearby,arrivedSafe);
     }
 
     @JavascriptInterface public void addWidget(String requestId){

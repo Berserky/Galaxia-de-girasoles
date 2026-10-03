@@ -694,3 +694,188 @@ html:not([data-theme="daylight"]) .gmap-attrib{backdrop-filter:blur(6px)}
 .notification-health span{display:inline-flex;align-items:center;gap:5px;padding:6px 9px;border-radius:999px;background:var(--surface2);color:var(--muted);font-size:10px}
 .notification-health span.good{background:var(--good-surface);color:var(--good)}
 @media(prefers-reduced-motion:reduce){#app>section{animation:none}}
+
+
+/* Mega Update 3.0 · Galaxy Insights Engine */
+.relationship-clock{display:grid;grid-template-columns:48px minmax(0,1fr);gap:13px;align-items:center}
+.relationship-clock-icon{width:48px;height:48px;border-radius:16px;display:grid;place-items:center;background:var(--surface2);color:var(--accent)}
+.relationship-clock h3,.relationship-clock p{margin:2px 0}
+.insights-teaser-grid{display:grid;grid-template-columns:1fr;gap:9px}
+.insight-period-card{width:100%;display:grid;grid-template-columns:44px minmax(0,1fr) 18px;gap:12px;align-items:center;text-align:left;color:var(--text)}
+.insight-period-card>span:first-child{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:var(--surface2);color:var(--accent)}
+.insight-period-card>span:nth-child(2){min-width:0}
+.insight-period-card h3,.insight-period-card p{margin:2px 0}
+.insight-period-card>.ui-icon{width:16px;height:16px;color:var(--muted)}
+.insights-summary{padding-top:4px}
+.insights-nav{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;gap:10px;align-items:center;text-align:center}
+.insights-nav h2,.insights-nav p{margin:2px 0}.insights-nav .btn{min-width:42px;padding:8px}.insights-nav .btn:disabled{opacity:.28}
+.insights-hero{margin-top:18px;padding:17px;border-radius:20px;background:color-mix(in srgb,var(--accent) 10%,var(--surface));display:flex;gap:12px;align-items:center}
+.insights-hero>span{width:43px;height:43px;border-radius:14px;background:var(--surface);display:grid;place-items:center;color:var(--accent);flex:0 0 auto}
+.insights-hero b{display:block;font-size:15px}.insights-hero p{margin:3px 0 0}
+.insights-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:12px}
+.insights-metric{min-height:116px;border:1px solid var(--border);border-radius:18px;background:var(--surface);padding:14px;display:flex;flex-direction:column;align-items:flex-start}
+.insights-metric>span{width:34px;height:34px;border-radius:12px;background:var(--surface2);display:grid;place-items:center;color:var(--accent);margin-bottom:10px}
+.insights-metric>span .ui-icon{width:17px;height:17px}.insights-metric b{font-size:21px;line-height:1}
+.insights-metric small{font-size:11px;color:var(--muted);margin-top:5px}.insights-metric em{font-style:normal;font-size:9px;color:var(--muted);margin-top:3px}
+.insight-comparison,.insight-trends,.insights-places{margin-top:12px}.insight-comparison ul,.insight-trends ul{margin:10px 0 0;padding-left:19px;color:var(--muted);display:grid;gap:6px}
+.insight-chip-row{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.insight-chip-row span{display:inline-flex;gap:5px;align-items:center;border:1px solid var(--border);border-radius:999px;padding:7px 9px;background:var(--surface2);font-size:10px;color:var(--muted)}
+.insight-chip-row .ui-icon{width:13px;height:13px;color:var(--accent)}
+.insights-highlights,.insight-photos,.insights-emotions,.insights-achievements{margin-top:20px}
+.insight-photos .gallery{margin-top:10px}
+.emotion-legend{display:flex;gap:12px;flex-wrap:wrap;margin:10px 0}.emotion-legend span{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--muted)}.emotion-legend i{width:9px;height:9px;border-radius:50%;background:var(--accent)}
+.emotion-legend span:nth-child(2) i{background:var(--good)}
+.emotion-heatmap{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
+.emotion-day{min-width:0;border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:6px 4px;display:grid;grid-template-columns:1fr 1fr;gap:3px;text-align:center}
+.emotion-day time{grid-column:1/-1;font-size:9px;color:var(--muted)}
+.emotion-person{min-height:25px;border-radius:8px;display:grid;place-items:center;background:var(--surface2);color:var(--muted)}
+.emotion-person[data-mood="feliz"],.emotion-person[data-mood="tranquilo"]{background:color-mix(in srgb,var(--good) 13%,var(--surface));color:var(--good)}
+.emotion-person[data-mood="sensible"],.emotion-person[data-mood="abrazo"]{background:color-mix(in srgb,var(--accent) 13%,var(--surface));color:var(--accent)}
+.emotion-person[data-mood="cansado"]{background:color-mix(in srgb,var(--muted) 13%,var(--surface));color:var(--muted)}
+.emotion-person .ui-icon{width:13px;height:13px}
+.achievement-grid{display:grid;grid-template-columns:1fr;gap:8px}
+.achievement-card{border:1px solid var(--border);border-radius:17px;background:var(--surface);padding:12px;display:grid;grid-template-columns:38px minmax(0,1fr);gap:10px;align-items:start;opacity:.7}
+.achievement-card.unlocked{opacity:1;border-color:color-mix(in srgb,var(--accent) 30%,var(--border))}
+.achievement-card>span{width:38px;height:38px;border-radius:12px;background:var(--surface2);display:grid;place-items:center;color:var(--accent)}
+.achievement-card b{font-size:12px}.achievement-card p{font-size:10px;margin:3px 0 8px}
+.achievement-progress{height:5px;border-radius:999px;background:var(--surface2);overflow:hidden}.achievement-progress i{display:block;height:100%;background:var(--accent);border-radius:inherit}
+.wrapped-deck{display:grid;grid-auto-flow:column;grid-auto-columns:min(84vw,330px);gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:12px 1px 5px;margin-top:8px}
+.wrapped-card{min-height:190px;border:1px solid var(--border);border-radius:24px;padding:22px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 14%,var(--surface)),var(--surface));scroll-snap-align:center;display:flex;flex-direction:column;justify-content:flex-end;animation:wrappedRise .45s ease both}
+.wrapped-card:nth-child(2){animation-delay:.06s}.wrapped-card:nth-child(3){animation-delay:.12s}.wrapped-card:nth-child(4){animation-delay:.18s}
+.wrapped-card h2{font-size:30px;margin:5px 0}.wrapped-card p{margin:3px 0}
+@keyframes wrappedRise{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+@media(max-width:360px){.insights-metrics{grid-template-columns:1fr}.insights-metric{min-height:96px}.emotion-heatmap{gap:3px}.emotion-day{padding:5px 2px}}
+@media(min-width:700px){.insights-teaser-grid{grid-template-columns:repeat(3,1fr)}.achievement-grid{grid-template-columns:repeat(2,1fr)}}
+@media(prefers-reduced-motion:reduce){.wrapped-card{animation:none}.wrapped-deck{scroll-behavior:auto}}
+
+.insights-extra{margin-top:12px}
+.insights-extra h3{margin:0 0 10px}
+.insight-extra-row{display:flex;flex-wrap:wrap;gap:8px}
+.insight-extra-row span{display:inline-flex;align-items:center;gap:6px;padding:8px 10px;border-radius:999px;background:var(--surface2);font-size:10px;color:var(--muted)}
+.insight-extra-row .ui-icon{width:14px;height:14px;color:var(--accent)}
+
+
+/* Mega Update 3.0 · Galaxy Date Engine */
+.date-question-card h3{margin:10px 0 4px;line-height:1.35}
+.date-question-actions{margin-top:12px}.date-question-privacy{display:flex;align-items:center;gap:6px;margin:9px 0 0;font-size:10px}.date-question-privacy .ui-icon{width:13px;height:13px}
+.icon-btn.active{color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--surface2))}
+.question-decks{display:grid;gap:9px;margin-top:14px}
+.question-deck{width:100%;display:grid;grid-template-columns:42px minmax(0,1fr) 18px;gap:10px;align-items:center;text-align:left}
+.question-deck>span{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:var(--surface2);color:var(--accent)}
+.question-deck div{display:grid;gap:2px}.question-deck small{color:var(--muted)}.question-deck>.ui-icon{width:15px;height:15px;color:var(--muted)}
+.deck-question-result{margin-top:14px}.deck-question-result h3{font-size:19px;line-height:1.4;margin:10px 0 16px}
+.date-plan-fields{display:grid;gap:10px}.date-plan-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.date-constraints{min-width:0}.date-experience{margin-top:14px}.date-experience h3{font-size:21px;margin:12px 0 7px}.date-reasons{padding-left:19px;color:var(--muted);display:grid;gap:6px;margin:12px 0 16px}
+.plan-roulette{min-height:130px;border:1px dashed color-mix(in srgb,var(--accent) 45%,var(--border));border-radius:22px;background:color-mix(in srgb,var(--accent) 7%,var(--surface));display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:6px;padding:18px;animation:rouletteFloat 1.8s ease-in-out infinite alternate}
+.plan-roulette>.ui-icon{width:34px;height:34px;color:var(--accent)}.plan-roulette small{color:var(--muted)}.plan-roulette.result{animation:rouletteReveal .35s ease both;align-items:flex-start;text-align:left}
+@keyframes rouletteFloat{from{transform:translateY(0)}to{transform:translateY(-4px)}}@keyframes rouletteReveal{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
+.date-planner-result{margin-top:12px}.date-planner-result ol{list-style:none;padding:0;margin:14px 0;display:grid;gap:9px}.date-planner-result li{display:grid;grid-template-columns:32px minmax(0,1fr);gap:10px;border:1px solid var(--border);border-radius:16px;padding:11px;background:var(--surface)}
+.date-planner-result li>span{width:32px;height:32px;border-radius:10px;background:var(--surface2);display:grid;place-items:center;color:var(--accent);font-weight:800}.date-planner-result li small{display:block;color:var(--muted);margin:3px 0}.date-planner-result li p{margin:4px 0 0}
+.date-mode{display:grid;gap:12px;margin-top:8px}.date-mode-hero{padding:20px;border-radius:22px;text-align:center;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 15%,var(--surface)),var(--surface));border:1px solid var(--border)}
+.date-mode-hero h2{font-size:34px;margin:4px 0}.date-mode-hero p{margin:0}.date-mode-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.date-mode-tool{min-height:116px;display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:5px}
+.date-mode-tool>.ui-icon{width:22px;height:22px;color:var(--accent);margin-bottom:5px}.date-mode-tool small{color:var(--muted);line-height:1.25}.date-mode-question h3{margin:6px 0 0;line-height:1.4}
+.date-mode-photos{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.date-mode-photos img,.date-mode-photos span{width:100%;aspect-ratio:1;border-radius:12px;object-fit:cover;background:var(--surface2);display:grid;place-items:center;color:var(--muted)}
+.date-mode-save{width:100%;min-height:48px}.plan-pick{text-align:left;width:100%}.plan-pick b,.plan-pick small{display:block}.plan-pick small{color:var(--muted);margin-top:3px}
+@media(max-width:360px){.date-plan-grid,.date-mode-grid{grid-template-columns:1fr}.date-mode-tool{min-height:92px}}
+@media(prefers-reduced-motion:reduce){.plan-roulette,.plan-roulette.result,.wrapped-card{animation:none!important}.wrapped-deck{scroll-behavior:auto}.question-deck,.date-mode-tool{transition:none!important}}
+
+
+/* Mega Update 3.0 · Galaxy Goals Engine */
+.goals-page{padding-bottom:12px}
+.goals-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}
+.goals-summary .card{min-height:105px;display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.goals-summary .card>span{width:32px;height:32px;border-radius:10px;background:var(--surface2);display:grid;place-items:center;color:var(--accent);margin-bottom:4px}
+.goals-summary .card b{font-size:21px}.goals-summary .card small{color:var(--muted)}
+.goals-create{margin:14px 0}.goals-filter{margin-bottom:12px}
+.goals-list{gap:9px}.goal-card{width:100%;text-align:left;color:var(--text);display:block}
+.goal-card h3{margin:10px 0 5px;font-size:17px}.goal-card p{margin:0 0 9px;color:var(--muted)}
+.goal-status{font-size:10px;color:var(--muted)}.goal-money{font-size:12px}.goal-money b{font-size:18px;color:var(--text)}
+.goal-progress{height:7px;border-radius:999px;background:var(--surface2);overflow:hidden;margin:12px 0 7px}
+.goal-progress.large{height:10px;margin:14px 0 8px}.goal-progress i{display:block;height:100%;border-radius:inherit;background:var(--accent);transition:width .28s ease}
+.goal-meta small{font-size:9px;color:var(--muted)}
+.goal-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.goal-participants{display:flex;flex-wrap:wrap;gap:8px}.goal-participants label{display:flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid var(--border);border-radius:12px;background:var(--surface2)}
+.goal-detail{display:grid;gap:12px;margin-top:8px}.goal-detail>p{margin:0}
+.goal-detail-section{border-top:1px solid var(--border);padding-top:14px}.goal-detail-section h3,.goal-detail-section p{margin:0}.goal-detail-section .row>div p{font-size:10px;color:var(--muted);margin-top:2px}
+.goal-steps,.goal-links{display:grid;gap:7px;margin-top:10px}
+.goal-step{display:grid;grid-template-columns:34px minmax(0,1fr) 64px;gap:8px;align-items:center;padding:9px;border:1px solid var(--border);border-radius:14px;background:var(--surface)}
+.goal-step.done{opacity:.72}.goal-step.done b{text-decoration:line-through}
+.goal-step-check,.goal-step-order button,.goal-link>button,.goal-contribution>button{border:0;background:transparent;color:var(--muted);display:grid;place-items:center;padding:6px;border-radius:9px}
+.goal-step-check{color:var(--accent)}.goal-step span b,.goal-step span small{display:block}.goal-step span small{font-size:9px;color:var(--muted)}
+.goal-step-order{display:flex;justify-content:flex-end}.goal-step-order button:disabled{opacity:.25}
+.goal-link{display:grid;grid-template-columns:34px minmax(0,1fr) 32px;gap:8px;align-items:center;padding:9px;border-radius:13px;background:var(--surface2)}
+.goal-link>span{width:34px;height:34px;border-radius:10px;background:var(--surface);color:var(--accent);display:grid;place-items:center}
+.goal-link b,.goal-link small{display:block}.goal-link small{color:var(--muted);font-size:9px}
+.goal-money-hero{display:flex;align-items:baseline;gap:7px;padding:14px;margin-top:10px;border-radius:17px;background:color-mix(in srgb,var(--accent) 9%,var(--surface2))}
+.goal-money-hero b{font-size:25px}.goal-money-hero span{color:var(--muted);font-size:11px}
+.goal-contribution{display:flex;align-items:center;justify-content:space-between;padding:9px 10px;border:1px solid var(--border);border-radius:13px;background:var(--surface)}
+.goal-contribution b,.goal-contribution small{display:block}.goal-contribution small{color:var(--muted);font-size:9px;margin-top:2px}
+@media(max-width:360px){.goal-form-grid{grid-template-columns:1fr}.goal-step{grid-template-columns:32px minmax(0,1fr) 58px}}
+@media(min-width:700px){.goals-summary{grid-template-columns:repeat(4,minmax(0,1fr))}.goals-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(prefers-reduced-motion:reduce){.goal-progress i,.goal-card,.goal-step,.plan-roulette,.plan-roulette.result,.wrapped-card{transition:none!important;animation:none!important}.wrapped-deck{scroll-behavior:auto}}
+
+
+/* Mega Update 3.0 · Galaxy Bond Engine 2.0 */
+.bond-garden{overflow:hidden;padding:0}
+.bond-garden-scene{position:relative;min-height:172px;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 9%,var(--surface)) 0%,var(--surface2) 70%);border-bottom:1px solid var(--border);overflow:hidden}
+.bond-garden-scene .garden-sun{position:absolute;right:18px;top:15px;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.bond-garden-scene .garden-ground{position:absolute;left:-8%;right:-8%;height:70px;bottom:-28px;border-radius:50% 50% 0 0;background:color-mix(in srgb,var(--accent) 8%,var(--surface2))}
+.garden-flowers{position:absolute;left:7%;right:7%;bottom:28px;height:96px;display:flex;align-items:flex-end;justify-content:space-around}
+.garden-flower{display:grid;place-items:center;color:var(--accent);transform-origin:50% 100%;animation:gardenSway 4.5s ease-in-out infinite alternate}
+.garden-flower:nth-child(even){animation-delay:-2s}.garden-flower .ui-icon{width:31px;height:31px}.garden-flower.f2,.garden-flower.f6{transform:scale(.8)}.garden-flower.f3,.garden-flower.f5{transform:scale(1.15)}
+.garden-glow{position:absolute;left:50%;top:25%;transform:translateX(-50%);color:var(--accent);opacity:.65}.garden-glow .ui-icon{width:42px;height:42px}
+.bond-garden-copy{padding:16px}.bond-garden-copy h3{margin:4px 0 5px}.bond-garden-copy>p{margin:0;color:var(--muted)}
+.bond-streak-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:14px 0 8px}
+.bond-streak-grid span{padding:10px 8px;border-radius:14px;background:var(--surface2);text-align:center;border:1px solid var(--border)}
+.bond-streak-grid b,.bond-streak-grid small{display:block}.bond-streak-grid b{font-size:20px}.bond-streak-grid small{font-size:8px;color:var(--muted);margin-top:2px}
+.bond-unlockables{display:flex;gap:6px;overflow-x:auto;padding:7px 0 2px;scrollbar-width:none}.bond-unlockables::-webkit-scrollbar{display:none}
+.bond-unlockables>span{flex:0 0 118px;padding:9px;border:1px solid var(--border);border-radius:13px;background:var(--surface);display:grid;grid-template-columns:24px 1fr;align-items:center;column-gap:6px}
+.bond-unlockables>span.locked{opacity:.48}.bond-unlockables .ui-icon{grid-row:1/3;width:20px;height:20px;color:var(--accent)}
+.bond-unlockables b,.bond-unlockables small{display:block}.bond-unlockables b{font-size:10px}.bond-unlockables small{font-size:8px;color:var(--muted)}
+.bond-gesture-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.bond-gesture-grid .gesture{min-height:92px;display:grid;grid-template-columns:34px 1fr;grid-template-rows:auto auto;column-gap:8px;text-align:left;align-items:center}
+.bond-gesture-grid .gesture>span{grid-row:1/3}.bond-gesture-grid .gesture b{font-size:13px}.bond-gesture-grid .gesture small{font-size:8px;color:var(--muted)}
+.bond-gesture-row{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:9px;align-items:center}.bond-gesture-row>span{width:38px;height:38px;border-radius:12px;background:var(--surface2);display:grid;place-items:center;color:var(--accent)}
+.bond-gesture-row b,.bond-gesture-row small{display:block}.bond-gesture-row small{color:var(--muted);font-size:9px;margin-top:2px}
+@keyframes gardenSway{from{rotate:-2deg}to{rotate:2deg}}
+@media(min-width:700px){.bond-gesture-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.bond-garden{display:grid;grid-template-columns:minmax(260px,.9fr) 1.1fr}.bond-garden-scene{min-height:100%;border-bottom:0;border-right:1px solid var(--border)}}
+@media(prefers-reduced-motion:reduce){.bond-garden-scene,.garden-flower,.garden-glow,.plan-roulette,.plan-roulette.result,.wrapped-card,.goal-progress i,.goal-card,.goal-step{animation:none!important;transition:none!important}.garden-flower{rotate:0deg}.wrapped-deck{scroll-behavior:auto}}
+
+
+/* Mega Update 3.0 · Galaxy Context Engine */
+.context-engine{display:grid;gap:12px}
+.context-controls{gap:10px}.context-controls .card{display:grid;gap:10px}.context-detail{font-size:11px;color:var(--muted);margin:0}
+.context-session{border:1px solid var(--border);background:var(--surface);border-radius:18px;padding:14px;display:grid;gap:10px}
+.context-session.empty-session{grid-template-columns:38px 1fr;align-items:center}.context-session.empty-session>span{width:38px;height:38px;border-radius:12px;background:var(--surface2);display:grid;place-items:center;color:var(--accent)}
+.context-session small{display:block;color:var(--muted);margin-top:2px}
+.context-progress{height:8px;border-radius:99px;background:var(--surface2);overflow:hidden}.context-progress i{display:block;height:100%;border-radius:inherit;background:var(--accent);transition:width .35s ease}
+.context-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.context-metrics span{padding:9px;border:1px solid var(--border);border-radius:13px;background:var(--surface2);text-align:center}.context-metrics b,.context-metrics small{display:block}.context-metrics b{font-size:14px}.context-metrics small{font-size:8px}
+.context-actions{gap:8px}.context-suggestions .stack{gap:9px}.context-suggestion{display:grid;grid-template-columns:40px minmax(0,1fr);gap:10px;align-items:start}.context-suggestion .item-actions{grid-column:1/-1}
+.context-suggestion .item-icon{width:40px;height:40px;border-radius:13px;background:var(--surface2);display:grid;place-items:center;color:var(--accent)}
+.context-recap{display:grid;gap:14px}.context-recap-hero{display:grid;grid-template-columns:46px 1fr;gap:10px;align-items:start}.context-recap-hero>span{width:46px;height:46px;border-radius:15px;background:var(--surface2);display:grid;place-items:center;color:var(--accent)}
+.context-recap-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.context-recap-grid span{padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--surface2);text-align:center}.context-recap-grid b,.context-recap-grid small{display:block}.context-recap-grid small{color:var(--muted);font-size:9px}
+.toggle-row{display:grid;grid-template-columns:22px 1fr;gap:10px;align-items:start;padding:10px;border:1px solid var(--border);border-radius:14px;background:var(--surface2)}.toggle-row input{margin-top:3px}.toggle-row b,.toggle-row small{display:block}.toggle-row small{color:var(--muted);margin-top:2px}
+@media(min-width:700px){.context-recap-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.context-suggestion{grid-template-columns:42px minmax(0,1fr) auto}.context-suggestion .item-actions{grid-column:auto}}
+@media(prefers-reduced-motion:reduce){.context-progress i,.goal-progress i,.goal-card,.goal-step,.question-deck,.date-mode-tool,.plan-roulette,.plan-roulette.result,.wrapped-card{transition:none!important;animation:none!important}.wrapped-deck{scroll-behavior:auto}}
+
+
+/* Mega Update 3.0 · Galaxy Intelligence Engine */
+.intelligence-intro{display:grid;gap:10px}.intelligence-intro p{margin:0}
+.intelligence-tools{display:grid;gap:8px;margin-top:14px}.intelligence-tool{display:grid;grid-template-columns:42px 1fr;gap:10px;text-align:left;align-items:center;color:var(--text)}
+.intelligence-tool>span,.intelligence-feature-head>span,.intelligence-book-head>span{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 10%,var(--surface2));color:var(--accent)}
+.intelligence-tool b,.intelligence-tool small{display:block}.intelligence-tool small{color:var(--muted);font-size:9px;margin-top:2px}
+.intelligence-search-divider{display:grid;grid-template-columns:30px minmax(0,1fr);gap:4px 8px;align-items:center;margin:14px 0 8px;padding-top:12px;border-top:1px solid var(--border)}
+.intelligence-search-divider>span{grid-row:1/3;color:var(--accent)}.intelligence-search-divider b{font-size:11px}.intelligence-search-divider small{font-size:9px;color:var(--muted)}
+.universal-search-result .badge.mini{justify-self:end;font-size:7px}
+.intelligence-feature-head,.intelligence-book-head{display:grid;grid-template-columns:48px minmax(0,1fr);gap:10px;align-items:start;margin-bottom:14px}
+.intelligence-feature-head h3,.intelligence-feature-head p,.intelligence-book-head h2,.intelligence-book-head p{margin:0}.intelligence-feature-head p,.intelligence-book-head p{color:var(--muted);margin-top:3px}
+.intelligence-source-picker{max-height:58vh;overflow:auto}.intelligence-source-choice{display:grid;grid-template-columns:32px minmax(0,1fr) 20px;align-items:center;gap:8px;text-align:left;color:var(--text)}
+.intelligence-source-choice>span{color:var(--accent)}.intelligence-connection ul{margin:8px 0 0;padding-left:18px}.intelligence-connection li{margin:4px 0;color:var(--muted)}
+.intelligence-memory-picker{display:grid;gap:7px;max-height:52vh;overflow:auto}.intelligence-narrative{display:grid;gap:12px;padding:4px 0}.intelligence-narrative h2,.intelligence-narrative p{margin:0}.intelligence-narrative p{line-height:1.65}.intelligence-narrative small{color:var(--muted);font-size:8px}
+.intelligence-fallback{padding:22px}
+.intelligence-book-head{margin-top:4px}.intelligence-book-sections{display:grid;gap:8px}.intelligence-book-section{padding:0;overflow:hidden}
+.intelligence-book-section summary{cursor:pointer;display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:8px;align-items:center;padding:13px;list-style:none}.intelligence-book-section summary::-webkit-details-marker{display:none}.intelligence-book-section summary>span{color:var(--accent)}.intelligence-book-section summary small{color:var(--muted)}
+.intelligence-book-section[open] summary{border-bottom:1px solid var(--border)}.intelligence-book-section>div{padding:10px 13px 13px}
+.ai-sources .ai-match{display:grid;grid-template-columns:38px minmax(0,1fr);gap:7px;align-items:start}.ai-sources .ai-match .badge{grid-row:1/3}.ai-sources .ai-match b,.ai-sources .ai-match small{display:block}.ai-sources .ai-match small{color:var(--muted)}
+.voice-transcript{margin-top:11px;padding:11px;border:1px solid var(--border);border-radius:14px;background:var(--surface2);display:grid;gap:8px}.voice-transcript p{margin:0;white-space:pre-wrap}.voice-transcript details summary{cursor:pointer;color:var(--accent);font-size:10px}.voice-transcript-segments{display:grid;gap:5px;margin-top:7px}.voice-transcript-segments span{font-size:10px;color:var(--muted)}.voice-transcript-segments b{color:var(--text);margin-right:5px}.voice-ai-note{font-size:9px;margin-top:8px}
+@media(min-width:700px){.intelligence-tools{grid-template-columns:repeat(3,minmax(0,1fr))}.intelligence-book-sections{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(prefers-reduced-motion:reduce){.context-progress i,.goal-progress i,.goal-card,.goal-step,.question-deck,.date-mode-tool,.plan-roulette,.plan-roulette.result,.wrapped-card,.intelligence-tool,.intelligence-book-section{transition:none!important;animation:none!important}.wrapped-deck{scroll-behavior:auto}.garden-flower,.garden-glow,.bond-garden-scene{animation:none!important}}

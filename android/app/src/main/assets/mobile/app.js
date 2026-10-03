@@ -31,7 +31,7 @@ const dailyQuestions=[
  '¿Qué aprendiste de mí recientemente?','¿Cómo sería un domingo perfecto juntos?','¿Qué te gustaría que nunca dejáramos de hacer?',
  '¿Qué plan harías conmigo con cero presupuesto?','¿Qué quieres agradecerme hoy?','¿Qué quieres que vivamos antes de terminar este año?'
 ];
-const surpriseIdeas=[
+const legacySurpriseIdeas=[
  {title:'Café y caminata',body:'Elegir un café nuevo y caminar sin afán por el barrio.',minutes:90,budget:45000,where:'salir'},
  {title:'Noche de película',body:'Cada uno propone una película, se sortea una y preparan algo rico.',minutes:150,budget:25000,where:'casa'},
  {title:'Cocinar juntos',body:'Comprar ingredientes para una receta que ninguno haya hecho.',minutes:120,budget:55000,where:'casa'},
@@ -42,9 +42,11 @@ const surpriseIdeas=[
  {title:'Álbum del mes',body:'Elegir juntos las mejores fotos del mes y escribir una frase para cada una.',minutes:60,budget:0,where:'casa'}
 ];
 
-let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',memoriesTabsScroll=0,media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
+let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',memoriesTabsScroll=0,media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),insightsCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
 let toastTimer,refreshing=false,updateState={text:'La app está al día.',progress:0,busy:false},pendingVoiceDraft=null,voiceReady=false,voiceRecording=false,voiceResumeMusic=false,lastSurprise=null;
-let presenceLastSignature='',voiceTimer=null,voiceSeconds=0;
+let dateContext=null,dateContextLoadedAt=0,dateQuestionNonce=0,dateMode=null,dateModeTimer=null,dateLastExperience=null;
+let goalsState=null,goalsLoadedAt=0,goalsFilter='active';
+let presenceLastSignature='',voiceTimer=null,voiceSeconds=0,intelligenceSearchNonce=0;
 let welcomeStep=0,welcomePreview=false,welcomeGift=true,welcomeEntering=false,tourStep=-1;
 const welcomeMusic=new Audio('../musica.mp3');welcomeMusic.loop=true;welcomeMusic.volume=.32;
 const globalPlayer=document.getElementById('globalPlayer'),providerPlayer=document.getElementById('providerPlayer');
@@ -171,7 +173,7 @@ function nowCard(){
  const me=String(cloud.person),other=me==='0'?'1':'0';
  return '<section class="section now-section"><div class="section-head"><div><p class="eyebrow">AHORA</p><h2>Cómo estamos</h2><p>Solo se comparte lo que cada uno decide activar.</p></div><button class="btn small ghost" data-action="now-settings">'+ico('sliders-horizontal')+' Privacidad</button></div><div class="now-grid">'+nowPersonCard(me,true)+nowPersonCard(other,false)+'</div></section>';
 }
-const dailyQuestion=()=>{const d=cloud?.today||new Date().toISOString().slice(0,10);let n=0;for(const c of d)n+=c.charCodeAt(0);return dailyQuestions[n%dailyQuestions.length];};
+const dailyQuestion=()=>{if(dateContext?.question?.text)return dateContext.question.text;const d=cloud?.today||new Date().toISOString().slice(0,10);let n=0;for(const ch of d)n+=ch.charCodeAt(0);return dailyQuestions[n%dailyQuestions.length];};
 const currentMonday=()=>{const d=new Date((cloud?.today||new Date().toISOString().slice(0,10))+'T12:00:00');const day=d.getDay()||7;d.setDate(d.getDate()-day+1);return d.toISOString().slice(0,10);};
 const coupleDays=()=>{const s=cloud?.settings?.data?.startDate;if(!s)return 0;return Math.max(0,Math.floor((Date.parse((cloud?.today||s)+'T12:00:00Z')-Date.parse(s+'T12:00:00Z'))/86400000));};
 const dateDistance=d=>Math.round((Date.parse(d+'T12:00:00Z')-Date.parse((cloud?.today||d)+'T12:00:00Z'))/86400000);
@@ -182,8 +184,31 @@ function livingMoment(){
  const last=memories.slice().sort((a,b)=>String(b.data.date).localeCompare(String(a.data.date)))[0];
  return last?{icon:'sparkles',label:'DE SU HISTORIA',title:last.data.title,body:'Un recuerdo para volver a mirar hoy.',action:'memory',id:last.id}:{icon:'sparkles',label:'MOMENTOS VIVOS',title:'Su historia empieza aquí',body:'Guarden algo de hoy para encontrarlo más adelante.',action:'add-memory'};
 }
-function anniversaryInfo(){const start=cloud?.settings?.data?.startDate,today=cloud?.today;if(!start||!today)return null;const a=new Date(start+'T12:00:00'),b=new Date(today+'T12:00:00');if(a.getUTCDate()!==b.getUTCDate())return null;let months=(b.getUTCFullYear()-a.getUTCFullYear())*12+b.getUTCMonth()-a.getUTCMonth();if(months<=0)return null;return {months,years:Math.floor(months/12)};}
-function anniversaryBanner(){const a=anniversaryInfo();if(!a)return'';const title=a.months%12===0?'Hoy cumplen '+a.years+' '+(a.years===1?'año':'años'):'Hoy cumplen '+a.months+' meses';return '<section class="anniversary-mode"><div class="anniversary-stars"></div><p class="eyebrow">UN DÍA DE USTEDES</p><h2>'+esc(title)+'</h2><p>La galaxia guarda lo que han construido hasta hoy.</p><button class="btn small" data-action="anniversary-open">'+ico('sparkles')+' Abrir nuestro día</button></section>';}
+function anniversaryInfo(){
+ const start=cloud?.settings?.data?.startDate,today=cloud?.today;if(!start||!today)return null;
+ const clock=window.GalaxyInsights?.relationshipClock(start,new Date(today+'T12:00:00-05:00').toISOString());
+ if(!clock)return null;
+ const anniversary=window.GalaxyInsights?.anniversaryDay(start,today.slice(0,7));
+ if(anniversary!==today)return null;
+ const months=clock.years*12+clock.months;
+ if(months<=0)return null;
+ return {months,years:Math.floor(months/12)};
+}
+function anniversaryInsightsBanner(){
+ const a=anniversaryInfo();if(!a)return'';
+ const title=a.months%12===0?'Hoy cumplen '+a.years+' '+(a.years===1?'año':'años'):'Hoy cumplen '+a.months+' meses';
+ return '<section class="anniversary-mode"><div class="anniversary-stars"></div><p class="eyebrow">UN DÍA DE USTEDES</p><h2>'+esc(title)+'</h2><p>El mes que acaba de pasar ya tiene su propia constelación de momentos.</p><button class="btn small" data-action="anniversary-open">'+ico('sparkles')+' Abrir nuestro aniversario</button></section>';
+}
+function anniversaryBanner(){return anniversaryInsightsBanner();}
+function relationshipClockCard(){
+ const start=cloud?.settings?.data?.startDate;if(!start)return'';
+ const clock=window.GalaxyInsights?.relationshipClock(start,new Date().toISOString());if(!clock)return'';
+ const pieces=[];
+ if(clock.years)pieces.push(clock.years+' '+(clock.years===1?'año':'años'));
+ if(clock.months)pieces.push(clock.months+' '+(clock.months===1?'mes':'meses'));
+ pieces.push(clock.days+' '+(clock.days===1?'día':'días'));
+ return '<section class="section"><div class="card relationship-clock"><span class="relationship-clock-icon">'+ico('clock')+'</span><div><p class="eyebrow">NUESTRO RELOJ</p><h3>'+esc(pieces.join(' · '))+'</h3><p>'+Number(clock.totalDays).toLocaleString('es-CO')+' días · '+Number(clock.totalHours).toLocaleString('es-CO')+' horas desde que empezó esta historia.</p></div></div></section>';
+}
 function livingMomentCard(){const m=livingMoment();return '<section class="section"><button class="card living-moment" data-action="'+m.action+'" '+(m.id?'data-id="'+m.id+'"':'')+'><span class="item-icon">'+ico(m.icon)+'</span><div><p class="eyebrow">'+esc(m.label)+'</p><h3>'+esc(m.title)+'</h3><p>'+esc(m.body)+'</p></div></button></section>';}
 function surpriseNotes(){return items('note').filter(x=>x.data?.surprise);}
 function surpriseUnlocked(i){const d=i.data||{};if(d.unlockType==='date')return !d.unlockDate||d.unlockDate<=cloud.today;if(d.unlockType==='place'){const own=(cloud.locations||[]).find(l=>l.person===cloud.person&&l.sharing);if(!own)return false;const km=(a,b,c,e)=>{const R=6371,p=Math.PI/180,da=(c-a)*p,dl=(e-b)*p,q=Math.sin(da/2)**2+Math.cos(a*p)*Math.cos(c*p)*Math.sin(dl/2)**2;return 2*R*Math.asin(Math.sqrt(q));};return km(Number(own.latitude),Number(own.longitude),Number(d.latitude),Number(d.longitude))*1000<=Number(d.radius||150);}return true;}
@@ -209,7 +234,7 @@ function scheduleRender(){
 async function refreshState({quiet=false}={}){
  if(!native.paired||refreshing)return;
  refreshing=true;
- try{cloud=await api('mobile-state');native=nativeState();if(!quiet)render();}
+ try{cloud=await api('mobile-state');native=nativeState();await loadDateContext(false).catch(()=>{});if(!quiet)render();}
  catch(e){if(!quiet)toast(e.message);}
  finally{refreshing=false;}
 }
@@ -222,7 +247,7 @@ async function refreshMap({quiet=false,detail=false}={}){
  if(!native.paired)return;
  try{
    const next=await api('map-state',{detail});
-   mapData=detail||!mapData?next:{...mapData,...next};
+   mapData=detail||!mapData?next:{...mapData,...next,context:{...(mapData?.context||{}),...(next?.context||{})}};
    if(view==='map'&&!quiet)render();
    else if(view==='map'){drawMap({fit:false});updateCoupleDistanceDom();updateEtaDom();}
  }catch(e){if(!quiet)toast(e.message);}
@@ -238,6 +263,22 @@ async function loadMedia(kind,force=false){
  return media[kind];
 }
 
+async function loadGoals(force=false){
+ if(!native.paired)return goalsState;
+ if(!force&&goalsState&&Date.now()-goalsLoadedAt<3*60*1000)return goalsState;
+ const result=await api('goals-engine',{operation:'list'});
+ goalsState=result;goalsLoadedAt=Date.now();
+ if(view==='goals')render();
+ return result;
+}
+const goalById=id=>(goalsState?.goals||[]).find(goal=>String(goal.id)===String(id));
+const moneyLabel=value=>'$ '+Math.max(0,Number(value)||0).toLocaleString('es-CO');
+const goalCategoryLabel=value=>({travel:'Viaje',home:'En casa',learning:'Aprender',experience:'Experiencia',project:'Proyecto',wellbeing:'Bienestar',other:'Otro'})[value]||'Otro';
+const goalStatusLabel=value=>({active:'Activo',paused:'En pausa',completed:'Completado',archived:'Archivado'})[value]||value;
+async function refreshGoal(id){
+ await loadGoals(true);
+ const goal=goalById(id);if(goal)openGoalDetail(id);else{closeModal();render();}
+}
 function header(){
  return '<header class="header"><div class="brand"><div class="brand-mark">'+ico('sparkles')+'</div><div><strong>Nuestra Galaxia</strong><small>'+esc(native.paired?(myName()+' & '+partnerName()):'Un espacio para dos')+'</small></div></div><div class="header-actions"><button class="header-search" data-action="universal-search-open" aria-label="Buscar en nuestra galaxia">'+ico('search')+'</button><div class="avatar">'+esc((native.paired?myName():'N').slice(0,1).toUpperCase())+'</div></div></header>';
 }
@@ -331,66 +372,171 @@ function renderTourOverlay(){
 function homeView(){
  const own=ownDaily(),partner=partnerDaily(),next=cloud.nextEvent,garden=cloud.bond?.garden||{days:0,stage:0};
  const locs=cloud.locations||[];
- return anniversaryBanner()+'<section class="hero"><p class="eyebrow">NUESTRO UNIVERSO</p><h1>'+esc(myName())+' & '+esc(partnerName())+'</h1><p>Un lugar para acompañarnos, guardar lo vivido y seguir construyendo lo que viene.</p><div class="hero-stats"><div class="hero-stat"><b>'+coupleDays()+'</b><small>días juntos</small></div><div class="hero-stat"><b>'+items('memory').length+'</b><small>recuerdos</small></div><div class="hero-stat"><b>'+garden.days+'</b><small>días del girasol</small></div></div></section>'+monthlySummaryTeaser()+todayHistoryTeaser()+coupleDistanceCard()+encounterStatsTeaser()+nowCard()+
+ return anniversaryInsightsBanner()+'<section class="hero"><p class="eyebrow">NUESTRO UNIVERSO</p><h1>'+esc(myName())+' & '+esc(partnerName())+'</h1><p>Un lugar para acompañarnos, guardar lo vivido y seguir construyendo lo que viene.</p><div class="hero-stats"><div class="hero-stat"><b>'+coupleDays()+'</b><small>días juntos</small></div><div class="hero-stat"><b>'+items('memory').length+'</b><small>recuerdos</small></div><div class="hero-stat"><b>'+garden.days+'</b><small>días del girasol</small></div></div></section>'+monthlySummaryTeaser()+todayHistoryTeaser()+coupleDistanceCard()+encounterStatsTeaser()+nowCard()+
  '<section class="section"><div class="section-head"><div><h2>¿Cómo estás hoy?</h2><p>Tu estado se comparte solo con tu persona.</p></div></div><div class="mood-grid">'+Object.entries(moods).map(([id,m])=>'<button class="mood '+(own.mood===id?'active':'')+'" data-action="mood" data-value="'+id+'"><span>'+ico(m[0])+'</span>'+m[1]+'</button>').join('')+'</div>'+(partner.mood?'<div class="card" style="margin-top:10px"><span class="badge">'+esc(partnerName())+'</span> <b>'+esc(moods[partner.mood]?.[1]||partner.mood)+'</b></div>':'')+'</section>'+
- '<section class="section"><div class="card"><p class="eyebrow">PREGUNTA DEL DÍA</p><h3>'+esc(dailyQuestion())+'</h3>'+dailyAnswerMarkup(own,partner)+'</div></section>'+
+ dailyQuestionCard(own,partner)+
  '<section class="section"><div class="grid">'+
  actionCard('map-pin','Nuestro mapa','Ver dónde estamos y nuestros recorridos','map')+
  actionCard('heart','Enviar un gesto','Abrazo, beso o “te extraño”','moments')+
  actionCard('images','Guardar recuerdo','Algo que no queremos olvidar','add-memory')+
  actionCard('circle-check-big','Nuevo plan','Algo para hacer juntos','add-plan')+
+ actionCard('target','Nuestros objetivos','Metas, pasos y ahorro manual','goals-open')+
  '</div></section>'+livingMomentCard()+
  (next?'<section class="section"><div class="card"><p class="eyebrow">PRÓXIMA FECHA</p><h3>'+esc(next.title)+'</h3><p>'+esc(fmtDate(next.date))+'</p></div></section>':'')+
  '<section class="section"><div class="section-head"><div><h2>Cerca, aunque estemos lejos</h2><p>Estado actual del mapa compartido.</p></div></div><div class="stack">'+locs.map(personCard).join('')+'</div></section>';
 }
 function actionCard(iconName,title,copy,action){return '<button class="action-card" data-action="'+action+'"><span class="icon">'+ico(iconName)+'</span><b>'+esc(title)+'</b><small>'+esc(copy)+'</small></button>';}
+function insightsTeaser(){
+ const today=String(cloud?.today||''),month=today.slice(0,7),year=today.slice(0,4);
+ const card=(action,iconName,eyebrow,title,copy,key)=>'<button class="card insight-period-card" data-action="'+action+'" data-key="'+attr(key)+'"><span>'+ico(iconName)+'</span><span><p class="eyebrow">'+esc(eyebrow)+'</p><h3>'+esc(title)+'</h3><p>'+esc(copy)+'</p></span>'+ico('chevron-right')+'</button>';
+ return '<section class="section insights-teaser"><div class="section-head"><div><h2>Nuestra historia, en datos</h2><p>Lo que vivimos, sin convertirlo en una competencia.</p></div></div><div class="insights-teaser-grid">'+
+  card('insights-week-open','calendar','NUESTRA SEMANA','Esta semana','Encuentros, lugares, moods y caminos.',today)+
+  card('insights-month-open','calendar-heart','NUESTRO MES',window.GalaxyMonthly?.monthLabel(month)||month,'Cómo se fue construyendo este mes.',month)+
+  card('insights-year-open','sparkles','GALAXIA WRAPPED',year,'El año completo en una constelación.',year)+
+ '</div></section>';
+}
 function monthlySummaryTeaser(){
  const month=String(cloud?.today||'').slice(0,7),label=window.GalaxyMonthly?.monthLabel(month)||'Nuestro mes';
- return '<section class="section"><button class="card monthly-teaser" data-action="monthly-summary-open" data-month="'+attr(month)+'"><span class="monthly-teaser-icon">'+ico('calendar-heart')+'</span><span><p class="eyebrow">NUESTRO MES</p><h3>'+esc(label)+'</h3><p>Recuerdos, planes, kilómetros, encuentros y pequeños gestos en un solo lugar.</p></span>'+ico('chevron-right')+'</button></section>';
+ return '<section class="section"><button class="card monthly-teaser" data-action="insights-month-open" data-key="'+attr(month)+'"><span class="monthly-teaser-icon">'+ico('calendar-heart')+'</span><span><p class="eyebrow">NUESTRO MES</p><h3>'+esc(label)+'</h3><p>Recuerdos, planes, kilómetros, encuentros y pequeños gestos en un solo lugar.</p></span>'+ico('chevron-right')+'</button></section>';
 }
-function monthlyMetric(iconName,value,label,detail=''){
- return '<div class="monthly-metric"><span>'+ico(iconName)+'</span><b>'+esc(value)+'</b><small>'+esc(label)+'</small>'+(detail?'<em>'+esc(detail)+'</em>':'')+'</div>';
+function insightMetric(iconName,value,label,detail=''){
+ return '<div class="insights-metric"><span>'+ico(iconName)+'</span><b>'+esc(value)+'</b><small>'+esc(label)+'</small>'+(detail?'<em>'+esc(detail)+'</em>':'')+'</div>';
 }
-function monthlySummaryMarkup(summary){
- const month=summary.month,current=String(cloud?.today||'').slice(0,7),counts=summary.counts||{},trips=summary.trips||{},encounters=summary.encounters||{},connection=summary.connection||{},bond=summary.bond||{};
- const label=window.GalaxyMonthly?.monthLabel(month)||month,has=window.GalaxyMonthly?.summaryHasActivity(summary);
- const km=(Number(trips.distance_m||0)/1000).toFixed(Number(trips.distance_m||0)>=10000?0:1);
- const together=fmtDuration(Number(encounters.together_seconds||0));
- const previous=window.GalaxyMonthly?.shiftMonth(month,-1)||'',next=window.GalaxyMonthly?.shiftMonth(month,1)||'',canNext=window.GalaxyMonthly?.canGoNext(month,current);
- const highlights=(summary.highlights||[]).map(i=>'<button class="monthly-highlight" data-action="universal-search-result" data-type="item" data-id="'+attr(i.id)+'" data-kind="'+attr(i.kind)+'"><span>'+ico(kindMeta[i.kind]?.[0]||'sparkles')+'</span><span><b>'+esc(i.title||'Parte de nuestra historia')+'</b><small>'+esc(fmtDate(i.date))+'</small></span>'+ico('chevron-right')+'</button>').join('');
- return '<div class="monthly-summary"><div class="monthly-nav"><button class="btn small ghost" data-action="monthly-summary-month" data-month="'+attr(previous)+'" aria-label="Mes anterior">'+ico('chevron-left')+'</button><div><p class="eyebrow">NUESTRO MES</p><h2>'+esc(label)+'</h2></div><button class="btn small ghost" data-action="monthly-summary-month" data-month="'+attr(next)+'" aria-label="Mes siguiente" '+(canNext?'':'disabled')+'>'+ico('chevron-right')+'</button></div>'+
- (has?'<div class="monthly-hero"><span>'+ico('sparkles')+'</span><div><b>'+Number(counts.saved||0)+' cosas guardadas</b><p>Un vistazo a lo que construyeron juntos este mes.</p></div></div>'+
- '<div class="monthly-metrics">'+
- monthlyMetric('images',counts.memories||0,'recuerdos')+
- monthlyMetric('circle-check-big',counts.plansDone||0,'planes vividos')+
- monthlyMetric('calendar-heart',counts.events||0,'fechas especiales')+
- monthlyMetric('route',km+' km','recorridos',Number(trips.count||0)+' rutas')+
- monthlyMetric('heart-handshake',encounters.count||0,'encuentros',together+' juntos')+
- monthlyMetric('smile',connection.mood_days||0,'días conectados',Number(connection.answer_days||0)+' preguntas de ambos')+
- monthlyMetric('hand-heart',bond.gestures||0,'gestos enviados')+
- monthlyMetric('mic',bond.voices||0,'mensajes de voz')+
- '</div>'+
- ((Number(counts.songs||0)+Number(counts.notes||0)+Number(counts.journeys||0)+Number(counts.wishesDone||0))?'<div class="monthly-extra card"><h3>También pasó</h3><div class="monthly-extra-row">'+
- (counts.songs?'<span>'+ico('music')+counts.songs+' canciones</span>':'')+
- (counts.notes?'<span>'+ico('file-text')+counts.notes+' notas</span>':'')+
- (counts.journeys?'<span>'+ico('route')+counts.journeys+' viajes</span>':'')+
- (counts.wishesDone?'<span>'+ico('star')+counts.wishesDone+' deseos vividos</span>':'')+
- '</div></div>':'')+
- (highlights?'<div class="monthly-highlights"><div class="section-head"><div><h3>Momentos del mes</h3><p>Algunas cosas para volver a mirar.</p></div></div>'+highlights+'</div>':'')
- :'<div class="universal-search-empty">'+ico('moon-star')+'<h3>Este mes todavía está empezando</h3><p>Cuando guarden recuerdos, recorridos, planes o gestos, su historia mensual aparecerá aquí.</p></div>')+
+function monthlyMetric(iconName,value,label,detail=''){return insightMetric(iconName,value,label,detail);}
+function insightPeriodTitle(period){
+ if(!period)return'Nuestra historia';
+ if(period.kind==='week')return window.GalaxyInsights?.periodLabel('week',period.startDay,period.endDay)||'Nuestra semana';
+ if(period.kind==='month')return window.GalaxyMonthly?.monthLabel(period.key)||period.key;
+ if(period.kind==='year')return 'Galaxia Wrapped '+period.key;
+ if(period.kind==='anniversary')return 'Nuestro aniversario';
+ return 'Nuestra historia';
+}
+function insightPeriodNav(summary){
+ const period=summary.period;if(!period||!['week','month','year'].includes(period.kind))return'';
+ const prev=window.GalaxyInsights?.shiftPeriod(period,-1),next=window.GalaxyInsights?.shiftPeriod(period,1);
+ return '<div class="insights-nav"><button class="btn small ghost" data-action="insights-period" data-kind="'+attr(period.kind)+'" data-key="'+attr(prev?.key||'')+'" aria-label="Periodo anterior">'+ico('chevron-left')+'</button><div><p class="eyebrow">'+esc(period.kind==='year'?'GALAXIA WRAPPED':period.kind==='week'?'NUESTRA SEMANA':'NUESTRO MES')+'</p><h2>'+esc(insightPeriodTitle(period))+'</h2></div><button class="btn small ghost" data-action="insights-period" data-kind="'+attr(period.kind)+'" data-key="'+attr(next?.key||'')+'" aria-label="Periodo siguiente" '+(next?'':'disabled')+'>'+ico('chevron-right')+'</button></div>';
+}
+function insightExtras(summary){
+ const counts=summary.counts||{},bond=summary.bond||{},connection=summary.connection||{},rows=[];
+ if(Number(counts.songs||0))rows.push('<span>'+ico('music')+Number(counts.songs||0)+' canciones</span>');
+ if(Number(counts.events||0))rows.push('<span>'+ico('calendar-heart')+Number(counts.events||0)+' fechas especiales</span>');
+ if(Number(counts.journeys||0))rows.push('<span>'+ico('route')+Number(counts.journeys||0)+' viajes guardados</span>');
+ if(Number(bond.voices||0))rows.push('<span>'+ico('mic')+Number(bond.voices||0)+' mensajes de voz</span>');
+ if(Number(connection.answer_days||0))rows.push('<span>'+ico('message-circle')+Number(connection.answer_days||0)+' preguntas respondidas por ambos</span>');
+ if(Number(counts.notes||0))rows.push('<span>'+ico('file-text')+Number(counts.notes||0)+' notas</span>');
+ if(Number(counts.wishesDone||0))rows.push('<span>'+ico('star')+Number(counts.wishesDone||0)+' deseos vividos</span>');
+ if(Number(counts.goalsCompleted||0))rows.push('<span>'+ico('target')+Number(counts.goalsCompleted||0)+' objetivos completados</span>');
+ if(Number(counts.savingsAchieved||0))rows.push('<span>'+ico('piggy-bank')+Number(counts.savingsAchieved||0)+' metas de ahorro logradas</span>');
+ if(Number(summary.goals?.goal_contribution_amount||0))rows.push('<span>'+ico('coins')+moneyLabel(summary.goals.goal_contribution_amount)+' en aportes manuales</span>');
+ return rows.length?'<div class="card insights-extra"><h3>También pasó</h3><div class="insight-extra-row">'+rows.join('')+'</div></div>':'';
+}
+function insightHighlights(summary){
+ const rows=summary.highlights||[];if(!rows.length)return'';
+ return '<div class="insights-highlights"><div class="section-head"><div><h3>Momentos para volver a mirar</h3><p>Recuerdos y eventos de este periodo.</p></div></div>'+rows.map(i=>'<button class="monthly-highlight" data-action="universal-search-result" data-type="item" data-id="'+attr(i.id)+'" data-kind="'+attr(i.kind)+'"><span>'+ico(kindMeta[i.kind]?.[0]||'sparkles')+'</span><span><b>'+esc(i.title||'Parte de nuestra historia')+'</b><small>'+esc(fmtDate(i.date))+'</small></span>'+ico('chevron-right')+'</button>').join('')+'</div>';
+}
+function insightPlaces(summary){
+ const rows=summary.places?.visits||[];if(!rows.length)return'';
+ return '<div class="card insights-places"><h3>Lugares de este periodo</h3><div class="insight-chip-row">'+rows.map(p=>'<span>'+ico('map-pin')+esc(p.name)+' · '+Number(p.count||0)+'</span>').join('')+'</div></div>';
+}
+function insightPhotos(summary){
+ const rows=summary.photos||[];if(!rows.length)return'';
+ return '<div class="insight-photos"><div class="section-head"><div><h3>Fotos cercanas a estos días</h3><p>Solo mostramos fotos con contexto temporal disponible.</p></div></div><div class="gallery">'+rows.slice(0,9).map(p=>'<figure class="photo"><img src="'+attr(p.url||'')+'" alt="'+attr(p.name||'Foto de nuestra historia')+'"></figure>').join('')+'</div></div>';
+}
+function moodName(value){return moods[value]?.[1]||value||'Sin registrar';}
+function emotionalHeatmap(summary){
+ const period=summary.period,calendar=summary.moods?.calendar||[];if(!period||!['month','week'].includes(period.kind))return'';
+ const byDay=new Map(calendar.map(row=>[row.day,row])),cells=[];let day=period.startDay;
+ const stop=period.current&&cloud?.today&&cloud.today<period.endDay?window.GalaxyInsights.addDays(cloud.today,1):period.endDay;
+ while(day&&day<stop){
+  const row=byDay.get(day),people=new Map((row?.people||[]).map(p=>[String(p.person),p]));
+  const one=people.get('0'),two=people.get('1');
+  const label=fmtDate(day)+': '+esc(names()[0]||'Persona 1')+' '+moodName(one?.mood)+', '+esc(names()[1]||'Persona 2')+' '+moodName(two?.mood);
+  cells.push('<div class="emotion-day" aria-label="'+attr(label)+'"><time>'+Number(day.slice(8))+'</time><span class="emotion-person" data-mood="'+attr(one?.mood||'none')+'" title="'+attr((names()[0]||'Persona 1')+': '+moodName(one?.mood))+'">'+ico(moods[one?.mood]?.[0]||'minus')+'</span><span class="emotion-person" data-mood="'+attr(two?.mood||'none')+'" title="'+attr((names()[1]||'Persona 2')+': '+moodName(two?.mood))+'">'+ico(moods[two?.mood]?.[0]||'minus')+'</span></div>');
+  day=window.GalaxyInsights.addDays(day,1);
+ }
+ const connection=summary.connection||{};
+ return '<section class="insights-emotions"><div class="section-head"><div><h3>Calendario emocional</h3><p>Un registro descriptivo de cómo se sintió cada uno.</p></div></div><div class="emotion-legend" aria-label="Leyenda del calendario"><span><i></i>'+esc(names()[0]||'Persona 1')+'</span><span><i></i>'+esc(names()[1]||'Persona 2')+'</span></div><div class="emotion-heatmap">'+cells.join('')+'</div><p class="muted">'+Number(connection.exact_mood_days||0)+' coincidencias exactas · '+Number(connection.compatible_mood_days||0)+' días con estados compatibles.</p></section>';
+}
+function emotionalTrends(summary){
+ const cmp=summary.comparison;if(!cmp)return'';
+ const d=cmp.deltas||{},phrases=[];
+ if(Number(d.mood_days)>0)phrases.push('Registraron mood juntos en '+Math.abs(Number(d.mood_days))+' días más que en el periodo comparable.');
+ else if(Number(d.mood_days)<0)phrases.push('Hubo '+Math.abs(Number(d.mood_days))+' días menos con mood de ambos que en el periodo comparable.');
+ if(Number(d.answer_days)>0)phrases.push('Respondieron juntos '+Math.abs(Number(d.answer_days))+' preguntas más.');
+ if(Number(d.compatible_mood_days)>0)phrases.push('Coincidieron en estados compatibles '+Math.abs(Number(d.compatible_mood_days))+' días más.');
+ const current=summary.moods?.distribution||{},previous=cmp.moods?.distribution||{};
+ const moodTotals=(source,key)=>Number(source?.['0']?.[key]||0)+Number(source?.['1']?.[key]||0);
+ for(const key of Object.keys(moods)){
+  const delta=moodTotals(current,key)-moodTotals(previous,key);
+  if(delta>=2){phrases.push('Este periodo registraron '+moodName(key).toLowerCase()+' más veces que en el anterior.');break;}
+ }
+ if(!phrases.length)return'';
+ return '<div class="card insight-trends"><h3>Tendencias del periodo</h3><p class="muted">Comparaciones descriptivas; no son una evaluación de la relación.</p><ul>'+phrases.slice(0,3).map(p=>'<li>'+esc(p)+'</li>').join('')+'</ul></div>';
+}
+function achievementGrid(summary){
+ const achievements=summary.achievements||[];if(!achievements.length)return'';
+ const sorted=achievements.slice().sort((a,b)=>Number(b.unlocked)-Number(a.unlocked)||Number(b.progress)-Number(a.progress));
+ return '<section class="insights-achievements"><div class="section-head"><div><h3>Logros de nuestra galaxia</h3><p>Se calculan desde la historia existente; no crean datos paralelos.</p></div></div><div class="achievement-grid">'+sorted.map(a=>'<article class="achievement-card '+(a.unlocked?'unlocked':'')+'"><span>'+ico(a.icon||'award')+'</span><div><b>'+esc(a.title)+'</b><p>'+esc(a.description||'')+'</p><div class="achievement-progress" aria-label="'+Math.round(Number(a.progress||0)*100)+'%"><i style="width:'+Math.round(Number(a.progress||0)*100)+'%"></i></div></div></article>').join('')+'</div></section>';
+}
+function wrappedCards(summary){
+ if(summary.period?.kind!=='year')return'';
+ const entries=Object.entries(summary.series||{}),score=row=>Number(row.memories||0)+Number(row.plansDone||0)+Number(row.events||0)+Number(row.songs||0)+Number(row.mood_days||0);
+ const active=entries.slice().sort((a,b)=>score(b[1])-score(a[1]))[0];
+ const monthName=active?window.GalaxyMonthly?.monthLabel(active[0]):'';
+ const places=(summary.places?.visits||[]).length;
+ return '<div class="wrapped-deck" aria-label="Galaxia Wrapped">'+
+  '<article class="wrapped-card"><p class="eyebrow">GALAXIA WRAPPED</p><h2>'+Number(summary.counts?.memories||0)+' recuerdos</h2><p>Los momentos que decidieron guardar este año.</p></article>'+
+  '<article class="wrapped-card"><p class="eyebrow">CAMINOS</p><h2>'+esc(fmtDistance(Number(summary.trips?.distance_m||0)))+'</h2><p>'+Number(summary.trips?.count||0)+' recorridos registrados.</p></article>'+
+  '<article class="wrapped-card"><p class="eyebrow">TIEMPO JUNTOS</p><h2>'+esc(fmtDuration(Number(summary.encounters?.together_seconds||0)))+'</h2><p>'+Number(summary.encounters?.count||0)+' encuentros detectados.</p></article>'+
+  '<article class="wrapped-card"><p class="eyebrow">NUESTRA MÚSICA</p><h2>'+Number(summary.counts?.songs||0)+' canciones</h2><p>Las canciones que quedaron guardadas en su historia.</p></article>'+
+  '<article class="wrapped-card"><p class="eyebrow">CÓMO ESTUVIMOS</p><h2>'+Number(summary.connection?.mood_days||0)+' días con mood</h2><p>'+Number(summary.questions?.answered_together_days||0)+' preguntas respondidas por ambos.</p></article>'+
+  '<article class="wrapped-card"><p class="eyebrow">PEQUEÑOS GESTOS</p><h2>'+Number(summary.bond?.gestures||0)+' gestos</h2><p>Momentos rápidos para decir “estoy aquí”.</p></article>'+
+  '<article class="wrapped-card"><p class="eyebrow">LUGARES Y VIAJES</p><h2>'+places+' lugares</h2><p>'+Number(summary.counts?.journeys||0)+' viajes guardados dentro de la galaxia.</p></article>'+
+  '<article class="wrapped-card"><p class="eyebrow">OBJETIVOS COMPARTIDOS</p><h2>'+Number(summary.counts?.goalsCompleted||0)+' logrados</h2><p>'+Number(summary.goals?.active_progress_pct||0)+'% de progreso promedio en los objetivos activos.</p></article>'+
+  (active?'<article class="wrapped-card"><p class="eyebrow">MES CON MÁS HISTORIA</p><h2>'+esc(monthName||active[0])+'</h2><p>El mes con más actividad guardada dentro de Nuestra Galaxia.</p></article>':'')+
  '</div>';
 }
-async function openMonthlySummary(month=String(cloud?.today||'').slice(0,7)){
- if(!window.GalaxyMonthly?.validMonth(month))return;
- const cached=monthlyCache.get(month);
- showModal('Nuestro mes',cached?monthlySummaryMarkup(cached):'<div class="monthly-loading">'+loading('Preparando nuestro mes')+'<p>Reuniendo recuerdos, recorridos y momentos…</p></div>');
+function comparisonMarkup(summary){
+ const d=summary.comparison?.deltas;if(!d)return'';
+ const rows=[];
+ const add=(value,up,down)=>{if(Number(value)>0)rows.push(up.replace('{n}',Math.abs(Number(value))));else if(Number(value)<0)rows.push(down.replace('{n}',Math.abs(Number(value))));};
+ add(d.memories,'{n} recuerdos más que en el periodo comparable.','{n} recuerdos menos que en el periodo comparable.');
+ add(d.distance_m,'Más kilómetros registrados que en el periodo comparable.','Menos kilómetros registrados que en el periodo comparable.');
+ add(d.together_seconds,'Más tiempo de encuentro registrado.','Menos tiempo de encuentro registrado.');
+ return rows.length?'<div class="card insight-comparison"><h3>Frente al periodo anterior</h3><ul>'+rows.slice(0,3).map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul></div>':'';
+}
+function insightsSummaryMarkup(summary){
+ const counts=summary.counts||{},trips=summary.trips||{},encounters=summary.encounters||{},connection=summary.connection||{},bond=summary.bond||{},has=Number(counts.saved||0)+Number(trips.count||0)+Number(encounters.count||0)+Number(bond.gestures||0)+Number(bond.voices||0)+Number(counts.goalsCompleted||0)+Number(counts.savingsAchieved||0)+Number(summary.goals?.goal_contribution_amount||0)>0;
+ return '<div class="insights-summary">'+insightPeriodNav(summary)+wrappedCards(summary)+
+ (has?'<div class="insights-hero"><span>'+ico('sparkles')+'</span><div><b>'+Number(counts.saved||0)+' momentos guardados</b><p>Una lectura del periodo construida con su propia historia.</p></div></div>'+
+ '<div class="insights-metrics">'+
+ insightMetric('images',counts.memories||0,'recuerdos')+
+ insightMetric('circle-check-big',counts.plansDone||0,'planes vividos')+
+ insightMetric('route',fmtDistance(Number(trips.distance_m||0)),'recorridos',Number(trips.count||0)+' rutas')+
+ insightMetric('heart-handshake',encounters.count||0,'encuentros',fmtDuration(Number(encounters.together_seconds||0))+' juntos')+
+ insightMetric('smile',connection.mood_days||0,'días con mood de ambos',Number(connection.answer_days||0)+' preguntas de ambos')+
+ insightMetric('hand-heart',bond.gestures||0,'gestos')+
+ '</div>'+insightExtras(summary)+comparisonMarkup(summary)+insightPlaces(summary)+emotionalHeatmap(summary)+emotionalTrends(summary)+insightPhotos(summary)+insightHighlights(summary)+achievementGrid(summary)
+ :'<div class="universal-search-empty">'+ico('moon-star')+'<h3>Este periodo todavía está escribiéndose</h3><p>Cuando existan recuerdos, recorridos, encuentros o gestos, aparecerán aquí.</p></div>'+achievementGrid(summary))+
+ '</div>';
+}
+function monthlySummaryMarkup(summary){return insightsSummaryMarkup(summary);}
+function defaultInsightKey(kind){
+ const day=String(cloud?.today||'');
+ return kind==='week'?day:kind==='month'?day.slice(0,7):kind==='year'?day.slice(0,4):'';
+}
+async function openInsights(kind,key=defaultInsightKey(kind)){
+ const cacheKey=kind+':'+String(key||''),cached=insightsCache.get(cacheKey),title=kind==='year'?'Galaxia Wrapped':kind==='week'?'Nuestra semana':kind==='anniversary'?'Nuestro aniversario':'Nuestro mes';
+ showModal(title,cached?insightsSummaryMarkup(cached):'<div class="monthly-loading">'+loading('Preparando nuestra historia')+'<p>Reuniendo recuerdos, caminos y momentos…</p></div>');
  if(cached)return;
  try{
-  const summary=await api('monthly-summary',{month});
-  monthlyCache.set(month,summary);
-  if(modal.open)showModal('Nuestro mes',monthlySummaryMarkup(summary));
- }catch(error){if(modal.open)showModal('Nuestro mes','<div class="universal-search-empty">'+ico('circle-alert')+'<h3>No pudimos preparar este mes</h3><p>'+esc(error.message||'Intenta nuevamente.')+'</p></div>');}
+  const summary=await api('insights-summary',{kind,key});
+  insightsCache.set(cacheKey,summary);
+  if(kind==='month')monthlyCache.set(String(key),summary);
+  if(modal.open)showModal(title,insightsSummaryMarkup(summary));
+ }catch(error){if(modal.open)showModal(title,'<div class="universal-search-empty">'+ico('circle-alert')+'<h3>No pudimos preparar este periodo</h3><p>'+esc(error.message||'Intenta nuevamente.')+'</p></div>');}
 }
+async function openMonthlySummary(month=String(cloud?.today||'').slice(0,7)){return openInsights('month',month);}
 
 function todayHistoryTeaser(){
  const day=String(cloud?.today||''),matches=(cloud?.items||[]).filter(i=>{
@@ -578,9 +724,28 @@ function universalSearchResultsMarkup(query){
   return '<button class="universal-search-result" data-action="universal-search-result" data-type="'+attr(r.type)+'" data-id="'+attr(r.id)+'" data-kind="'+attr(r.kind||'')+'"><span class="search-result-icon">'+ico(iconName)+'</span><span class="search-result-copy"><b>'+esc(r.title)+'</b><small>'+esc(r.subtitle||'')+'</small></span>'+ico('chevron-right')+'</button>';
  }).join('')+'</div><p class="universal-search-count">'+rows.length+' resultado'+(rows.length===1?'':'s')+'</p>';
 }
+function intelligenceSearchExtraMarkup(result,classicRows=[]){
+ const classicKeys=new Set((classicRows||[]).map(r=>(r.type==='place'?'place':r.kind)+':'+String(r.id)));
+ const rows=(result?.results||[]).filter(r=>!classicKeys.has(String(r.sourceType)+':'+String(r.sourceId))).slice(0,12);
+ const mode=result?.mode||'fallback';
+ if(!rows.length)return '<p class="universal-search-count intelligence-search-status">Búsqueda clásica activa'+(mode.includes('fallback')?' · fallback':'')+'.</p>';
+ return '<div class="intelligence-search-divider"><span>'+ico('sparkles')+'</span><b>Relacionados por Galaxy Intelligence</b><small>Exactos y texto completo tienen prioridad sobre similitud semántica.</small></div><div class="universal-search-list">'+rows.map(r=>'<button class="universal-search-result" data-action="intelligence-search-result" data-source-type="'+attr(r.sourceType||'')+'" data-source-id="'+attr(r.sourceId||'')+'" data-title="'+attr(r.title||'Momento')+'" data-snippet="'+attr(r.snippet||'')+'"><span class="search-result-icon">'+ico(r.sourceType==='place'?'map-pin':r.sourceType==='song'?'music':r.sourceType==='trip'?'route':r.sourceType==='goal'?'target':r.sourceType==='voice-transcript'?'audio-lines':'sparkles')+'</span><span class="search-result-copy"><b>'+esc(r.title||'Momento')+'</b><small>'+esc(r.snippet||r.date||'')+'</small></span><span class="badge mini">'+(r.exact?'Exacta':r.fulltext?'Texto':r.semantic?'Semántica':'Relacionada')+'</span></button>').join('')+'</div><p class="universal-search-count">'+rows.length+' resultado'+(rows.length===1?'':'s')+' adicional'+(rows.length===1?'':'es')+'.</p>';
+}
 function renderUniversalSearchResults(query){
  const el=document.querySelector('#universalSearchResults');if(!el)return;
- el.innerHTML=universalSearchResultsMarkup(query);refreshIcons();
+ const q=String(query||'').trim(),classic=universalSearchRows(q);
+ el.innerHTML=universalSearchResultsMarkup(q);refreshIcons();
+ if(q.length<2||!native.paired)return;
+ const nonce=++intelligenceSearchNonce;
+ api('intelligence-search',{query:q,limit:24}).then(result=>{
+  if(nonce!==intelligenceSearchNonce||!document.querySelector('#universalSearchResults'))return;
+  const target=document.querySelector('#universalSearchResults');
+  if(target){target.innerHTML=universalSearchResultsMarkup(q)+intelligenceSearchExtraMarkup(result,classic);refreshIcons();}
+ }).catch(()=>{
+  if(nonce!==intelligenceSearchNonce)return;
+  const target=document.querySelector('#universalSearchResults');
+  if(target&&!target.querySelector('.intelligence-search-status'))target.insertAdjacentHTML('beforeend','<p class="universal-search-count intelligence-search-status">Galaxy Intelligence no respondió · fallback clásico activo.</p>');
+ });
 }
 function openUniversalSearch(){
  showModal('Buscar en nuestra galaxia','<div class="universal-search"><label class="universal-search-box">'+ico('search')+'<input id="universalSearchInput" class="input" autocomplete="off" autocapitalize="sentences" placeholder="Un recuerdo, lugar, canción, plan…" aria-label="Buscar en nuestra galaxia"></label><div id="universalSearchResults" aria-live="polite"></div></div>');
@@ -613,6 +778,12 @@ function dailyAnswerMarkup(own,partner){
  else if(own.answer)html+='<p class="muted" style="font-size:12px;margin-top:10px">La respuesta de '+esc(partnerName())+' aparecerá cuando ambos hayan respondido.</p>';
  return html;
 }
+function dailyQuestionCard(own,partner){
+ const q=dateContext?.question||{},both=!!own?.answer&&!!partner?.answer;
+ const deckLabels={funny:'Divertidas',memories:'Recuerdos',future:'Futuro',intimate:'Íntimas y emocionales',absurd:'Absurdas',travel:'Viajes','would-you-rather':'¿Qué prefieres?'};
+ return '<section class="section"><div class="card date-question-card"><div class="row between"><div><p class="eyebrow">PREGUNTA DEL DÍA 2.0</p><small class="muted">'+esc(deckLabels[q.deck]||'Una pregunta para hoy')+'</small></div><button class="icon-btn '+(q.favorite?'active':'')+'" data-action="date-question-favorite" aria-label="'+(q.favorite?'Quitar de favoritas':'Marcar como favorita')+'">'+ico('star')+'</button></div><h3>'+esc(dailyQuestion())+'</h3>'+dailyAnswerMarkup(own,partner)+'<div class="row wrap date-question-actions"><button class="btn small secondary" data-action="date-question-decks">'+ico('layers-3')+' Barajas</button><button class="btn small ghost" data-action="date-question-memory" '+(both?'':'disabled')+'>'+ico('bookmark-plus')+' '+(q.memoryId?'Ver recuerdo':'Guardar como recuerdo')+'</button></div>'+(both?'':'<p class="muted date-question-privacy">'+ico('lock')+' Las dos respuestas se unen a un recuerdo solo cuando ambos hayan contestado.</p>')+'</div></section>';
+}
+
 function personCard(l){
  const name=names()[Number(l.person)]||'Nosotros',live=!!l.sharing,motion=transportLabel(l),kmh=Math.max(0,Number(l.speed||0)*3.6);
  return '<div class="card person-card"><div class="bubble">'+esc(name.slice(0,1))+'</div><div><b><span class="status-dot '+(live?'live':'')+'"></span>'+esc(name)+'</b><p>'+(live?esc(motion)+(l.status?' · '+esc(l.status):''):'Ubicación pausada')+'</p></div><div class="speed">'+(live?kmh.toFixed(kmh<10?1:0):'—')+'<small>km/h</small></div></div>';
@@ -623,6 +794,54 @@ function transportLabel(l){
  if(l.motion==='still')return'Quieto/a';
  if(l.motion==='vehicle')return l.transport_preference==='motorcycle'?'En moto · probable':l.transport_preference==='transit'?'En transporte público · probable':'En vehículo';
  return'Moviéndose';
+}
+
+function goalsView(){
+ const goals=goalsState?.goals||[],active=goals.filter(g=>['active','paused'].includes(g.status)),done=goals.filter(g=>g.status==='completed'),savings=goals.filter(g=>g.kind==='savings');
+ const visible=goalsFilter==='active'?active:goalsFilter==='completed'?done:goalsFilter==='savings'?savings:goals;
+ const average=active.length?Math.round(active.reduce((sum,g)=>sum+Number(g.progressPct||0),0)/active.length):0;
+ return '<section class="goals-page"><div class="section-head"><div><p class="eyebrow">GALAXY GOALS</p><h2>Nuestros objetivos</h2><p>Planes y deseos siguen siendo suyos. Aquí viven las metas que necesitan pasos y seguimiento.</p></div></div>'+
+ '<div class="goals-summary"><div class="card"><span>'+ico('target')+'</span><b>'+active.length+'</b><small>en marcha</small></div><div class="card"><span>'+ico('circle-check-big')+'</span><b>'+done.length+'</b><small>completados</small></div><div class="card"><span>'+ico('piggy-bank')+'</span><b>'+savings.length+'</b><small>ahorros manuales</small></div><div class="card"><span>'+ico('chart-no-axes-column-increasing')+'</span><b>'+average+'%</b><small>progreso activo</small></div></div>'+
+ '<div class="row wrap goals-create"><button class="btn" data-action="goal-new">'+ico('target')+' Nuevo objetivo</button><button class="btn secondary" data-action="goal-savings-new">'+ico('piggy-bank')+' Meta de ahorro</button></div>'+
+ '<div class="chips goals-filter"><button class="chip '+(goalsFilter==='active'?'active':'')+'" data-action="goals-filter" data-value="active">En marcha</button><button class="chip '+(goalsFilter==='all'?'active':'')+'" data-action="goals-filter" data-value="all">Todos</button><button class="chip '+(goalsFilter==='savings'?'active':'')+'" data-action="goals-filter" data-value="savings">Ahorro</button><button class="chip '+(goalsFilter==='completed'?'active':'')+'" data-action="goals-filter" data-value="completed">Logrados</button></div>'+
+ '<div class="stack goals-list">'+(goalsState?visible.length?visible.map(goalCard).join(''):'<div class="empty">'+ico('target')+' No hay objetivos en este filtro.</div>':loading('Cargando objetivos'))+'</div></section>';
+}
+function goalCard(goal){
+ const pct=Math.max(0,Math.min(100,Number(goal.progressPct)||0)),participants=(goal.participants||[]).map(p=>names()[Number(p)]||p).join(' + ');
+ const amount=goal.kind==='savings'?'<p class="goal-money"><b>'+moneyLabel(goal.accumulatedAmount)+'</b> / '+moneyLabel(goal.target_amount)+'</p>':'';
+ return '<button class="card goal-card" data-action="goal-open" data-id="'+attr(goal.id)+'"><div class="row between"><span class="badge">'+esc(goal.kind==='savings'?'Ahorro manual':goalCategoryLabel(goal.category))+'</span><span class="goal-status">'+esc(goalStatusLabel(goal.status))+'</span></div><h3>'+esc(goal.title)+'</h3>'+(goal.description?'<p>'+esc(goal.description)+'</p>':'')+amount+'<div class="goal-progress"><i style="width:'+pct+'%"></i></div><div class="row between goal-meta"><small>'+pct+'% · '+esc(participants||'Nosotros')+'</small><small>'+(goal.target_date?fmtDate(goal.target_date):'Sin fecha límite')+'</small></div></button>';
+}
+function goalParticipantsFields(selected=['0','1']){
+ return '<div class="field"><label>Participantes</label><div class="goal-participants"><label><input type="checkbox" name="participant0" '+(selected.includes('0')?'checked':'')+'> '+esc(names()[0]||'Persona 1')+'</label><label><input type="checkbox" name="participant1" '+(selected.includes('1')?'checked':'')+'> '+esc(names()[1]||'Persona 2')+'</label></div></div>';
+}
+function openGoalForm(kind='goal',goal=null){
+ const editing=!!goal,actualKind=goal?.kind||kind;modal.dataset.goalId=goal?.id||'';modal.dataset.goalVersion=String(goal?.version||'');
+ const categories=[['travel','Viaje'],['home','En casa'],['learning','Aprender'],['experience','Experiencia'],['project','Proyecto'],['wellbeing','Bienestar'],['other','Otro']];
+ showModal(editing?'Editar objetivo':actualKind==='savings'?'Nueva meta de ahorro':'Nuevo objetivo','<form id="goalForm" class="stack" style="margin-top:14px"><input type="hidden" name="kind" value="'+attr(actualKind)+'"><div class="field"><label>Título</label><input class="input" name="title" maxlength="160" required value="'+attr(goal?.title||'')+'"></div><div class="field"><label>Descripción</label><textarea name="description" maxlength="4000">'+esc(goal?.description||'')+'</textarea></div><div class="field"><label>Categoría</label><select name="category">'+categories.map(([id,label])=>'<option value="'+id+'" '+((goal?.category||'other')===id?'selected':'')+'>'+label+'</option>').join('')+'</select></div><div class="goal-form-grid"><div class="field"><label>Fecha objetivo (opcional)</label><input class="input" type="date" name="targetDate" value="'+attr(goal?.target_date||'')+'"></div><div class="field"><label>Estado</label><select name="status"><option value="active" '+((goal?.status||'active')==='active'?'selected':'')+'>Activo</option><option value="paused" '+(goal?.status==='paused'?'selected':'')+'>En pausa</option><option value="completed" '+(goal?.status==='completed'?'selected':'')+'>Completado</option><option value="archived" '+(goal?.status==='archived'?'selected':'')+'>Archivado</option></select></div></div>'+(actualKind==='savings'?'<div class="field"><label>Objetivo monetario</label><input class="input" type="number" min="1" step="1000" name="targetAmount" required value="'+attr(goal?.target_amount||'')+'" placeholder="800000"><small>Registro manual. Sin conexión bancaria.</small></div>':'')+goalParticipantsFields(goal?.participants||['0','1'])+'<div class="form-actions"><button type="button" class="btn secondary" data-action="modal-close">Cancelar</button><button class="btn" type="submit">Guardar objetivo</button></div></form>','goal-form');
+}
+function openGoalDetail(id){
+ const goal=goalById(id);if(!goal)return;
+ const pct=Math.max(0,Math.min(100,Number(goal.progressPct)||0)),steps=goal.steps||[],links=goal.links||[],contributions=goal.contributions||[];
+ const stepsHtml=steps.length?steps.map((step,index)=>'<div class="goal-step '+(step.completed_at?'done':'')+'"><button class="goal-step-check" data-action="goal-step-toggle" data-goal-id="'+attr(goal.id)+'" data-step-id="'+attr(step.id)+'" data-completed="'+(step.completed_at?'true':'false')+'" aria-label="'+(step.completed_at?'Marcar pendiente':'Completar paso')+'">'+ico(step.completed_at?'circle-check-big':'circle')+'</button><span><b>'+esc(step.title)+'</b><small>'+(step.completed_at?'Completado':'Pendiente')+'</small></span><div class="goal-step-order"><button data-action="goal-step-up" data-goal-id="'+attr(goal.id)+'" data-index="'+index+'" '+(index===0?'disabled':'')+' aria-label="Subir paso">'+ico('chevron-up')+'</button><button data-action="goal-step-down" data-goal-id="'+attr(goal.id)+'" data-index="'+index+'" '+(index===steps.length-1?'disabled':'')+' aria-label="Bajar paso">'+ico('chevron-down')+'</button></div></div>').join(''):'<div class="empty compact">Agrega pasos para convertir la meta en algo concreto.</div>';
+ const linkHtml=links.length?links.map(link=>'<div class="goal-link"><span>'+ico(link.relation==='memory'?'heart':link.relation==='note'?'file-text':'circle-check-big')+'</span><div><b>'+esc(link.item?.title||'Contenido relacionado')+'</b><small>'+esc(link.relation)+'</small></div><button data-action="goal-link-delete" data-goal-id="'+attr(goal.id)+'" data-link-id="'+attr(link.id)+'" aria-label="Quitar relación">'+ico('x')+'</button></div>').join(''):'<p class="muted">Sin notas, recuerdos o planes relacionados todavía.</p>';
+ const contributionHtml=goal.kind==='savings'?'<section class="goal-detail-section"><div class="row between"><div><h3>Aportes manuales</h3><p>Sin conexión bancaria. Solo registra lo que ustedes decidan.</p></div><button class="btn small" data-action="goal-contribution-add" data-id="'+attr(goal.id)+'">+ Aporte</button></div><div class="goal-money-hero"><b>'+moneyLabel(goal.accumulatedAmount)+'</b><span>de '+moneyLabel(goal.target_amount)+'</span></div><div class="stack compact">'+(contributions.length?contributions.map(row=>'<div class="goal-contribution"><div><b>'+moneyLabel(row.amount)+'</b><small>'+fmtDate(row.contribution_date)+(row.note?' · '+esc(row.note):'')+'</small></div><button data-action="goal-contribution-delete" data-goal-id="'+attr(goal.id)+'" data-contribution-id="'+attr(row.id)+'" aria-label="Eliminar aporte">'+ico('trash-2')+'</button></div>').join(''):'<p class="muted">Todavía no hay aportes registrados.</p>')+'</div></section>':'';
+ showModal(goal.title,'<div class="goal-detail"><div class="row between"><span class="badge">'+esc(goal.kind==='savings'?'Ahorro manual':goalCategoryLabel(goal.category))+'</span><span>'+esc(goalStatusLabel(goal.status))+'</span></div>'+(goal.description?'<p>'+esc(goal.description)+'</p>':'')+'<div class="goal-progress large"><i style="width:'+pct+'%"></i></div><div class="row between"><b>'+pct+'%</b><small>'+(goal.target_date?'Meta: '+fmtDate(goal.target_date):'Sin fecha límite')+'</small></div><section class="goal-detail-section"><div class="row between"><div><h3>Pasos</h3><p>'+Number(goal.stepsCompleted||0)+' de '+Number(goal.stepsTotal||0)+' completados</p></div><button class="btn small secondary" data-action="goal-step-add" data-id="'+attr(goal.id)+'">+ Paso</button></div><div class="goal-steps">'+stepsHtml+'</div></section>'+contributionHtml+'<section class="goal-detail-section"><div class="row between"><div><h3>Relacionado</h3><p>Referencias, no copias.</p></div><button class="btn small secondary" data-action="goal-link-add" data-id="'+attr(goal.id)+'">+ Vincular</button></div><div class="goal-links">'+linkHtml+'</div></section><div class="form-actions"><button class="btn secondary" data-action="goal-edit" data-id="'+attr(goal.id)+'">'+ico('pencil')+' Editar</button><button class="btn ghost" data-action="goal-delete" data-id="'+attr(goal.id)+'">'+ico('trash-2')+' Eliminar</button></div></div>','goal-detail');
+}
+function openGoalStepAdd(id){
+ showModal('Nuevo paso','<form id="goalStepForm" class="stack"><input type="hidden" name="goalId" value="'+attr(id)+'"><div class="field"><label>Paso</label><input class="input" name="title" maxlength="300" required autofocus></div><button class="btn" type="submit">Agregar paso</button></form>','goal-step');
+}
+function openGoalContribution(id){
+ const goal=goalById(id);if(!goal)return;
+ showModal('Registrar aporte','<form id="goalContributionForm" class="stack"><input type="hidden" name="goalId" value="'+attr(id)+'"><div class="field"><label>Valor</label><input class="input" type="number" min="1" step="1000" name="amount" required></div><div class="field"><label>Fecha</label><input class="input" type="date" name="date" value="'+attr(cloud.today)+'" required></div><div class="field"><label>Nota (opcional)</label><input class="input" name="note" maxlength="300"></div><p class="muted">'+ico('shield-check')+' Aporte manual. Sin conexión bancaria.</p><button class="btn" type="submit">Guardar aporte</button></form>','goal-contribution');
+}
+function openGoalLink(id){
+ const candidates=(cloud.items||[]).filter(item=>['memory','note','plan'].includes(item.kind)),goal=goalById(id);
+ const linked=new Set((goal?.links||[]).map(link=>String(link.item_id)));
+ showModal('Relacionar contenido','<form id="goalLinkForm" class="stack"><input type="hidden" name="goalId" value="'+attr(id)+'"><div class="field"><label>Contenido</label><select name="itemId" required><option value="">Elige…</option>'+candidates.filter(item=>!linked.has(String(item.id))).map(item=>'<option value="'+attr(item.id)+'" data-kind="'+attr(item.kind)+'">'+esc((kindMeta[item.kind]?.[1]||item.kind)+' · '+(item.data?.title||''))+'</option>').join('')+'</select></div><button class="btn" type="submit">Vincular sin duplicar</button></form>','goal-link');
+}
+function openGoalConvert(item){
+ if(!item||!['plan','wish'].includes(item.kind))return;
+ showModal('Convertir en objetivo','<form id="goalConvertForm" class="stack"><input type="hidden" name="itemId" value="'+attr(item.id)+'"><div class="card compact"><p class="eyebrow">'+esc(item.kind==='plan'?'PLAN':'DESEO')+'</p><h3>'+esc(item.data?.title||'Sin título')+'</h3><p>'+esc(item.data?.body||'')+'</p></div>'+goalParticipantsFields(['0','1'])+'<label class="row"><input type="checkbox" name="keepOriginal" checked> Conservar el '+(item.kind==='plan'?'plan':'deseo')+' original</label><p class="muted">El objetivo quedará relacionado con el original. No duplicaremos su contenido.</p><button class="btn" type="submit">Crear objetivo</button></form>','goal-convert');
 }
 
 function memoriesView(){
@@ -643,10 +862,16 @@ function constellationView(){
  if(!nodes.length)return '';
  return '<section class="section"><div class="section-head"><div><h2>Constelación de recuerdos</h2><p>Cada estrella es una parte de su historia. Las líneas siguen el orden en que la vivieron.</p></div></div><div class="constellation" aria-label="Constelación de recuerdos">'+nodes.map((i,n)=>{const x=10+((n*37)%80),y=12+((n*53)%72),size=8+(n%4)*2;return '<button class="constellation-star" style="--x:'+x+'%;--y:'+y+'%;--s:'+size+'px" data-action="constellation-item" data-id="'+i.id+'" aria-label="'+attr(i.data?.title||'Recuerdo')+'"><i></i><span>'+esc(i.data?.title||'Recuerdo')+'</span></button>';}).join('')+'</div></section>';
 }
+function linkedDailyQuestionAnswers(i){
+ const source=i?.data?.source;if(i?.kind!=='memory'||source?.type!=='daily-question'||!source.day)return'';
+ const rows=(cloud?.daily||[]).filter(row=>String(row.day)===String(source.day)&&row.answer).sort((a,b)=>String(a.person).localeCompare(String(b.person)));
+ if(rows.length<2)return'Las respuestas siguen vinculadas a la pregunta original.';
+ return rows.map(row=>(names()[Number(row.person)]||('Persona '+row.person))+': '+row.answer).join('\n');
+}
 function itemCard(i){
  const d=i.data||{},meta=kindMeta[i.kind]||['sparkles',i.kind],date=d.date?fmtDate(d.date):fmtDateTime(i.created),done=d.done?' · Hecho':'',locked=i.kind==='capsule'&&String(d.date||d.unlockDate||'')>String(cloud.today||''),voices=locked?[]:linkedVoices(i.id);
  if(locked)return '<div class="card item" data-item-id="'+attr(i.id)+'"><div class="item-icon">'+ico('lock')+'</div><div class="item-main"><div class="meta">Se abre '+esc(date)+'</div><h3>'+esc(d.title||'Cápsula')+'</h3><p class="muted">Este contenido seguirá guardado hasta la fecha elegida.</p></div></div>';
- return '<div class="card item" data-item-id="'+attr(i.id)+'"><div class="item-icon">'+ico(meta[0])+'</div><div class="item-main"><div class="meta">'+esc(date)+esc(done)+'</div><h3>'+esc(d.title||meta[1])+'</h3>'+(d.body?'<p>'+esc(d.body)+'</p>':'')+(voices.length?'<div class="stack" style="margin-top:10px">'+voices.map(voiceCard).join('')+'</div>':'')+'<div class="item-actions">'+(['memory','capsule','journey'].includes(i.kind)?'<button class="btn small secondary" data-action="voice-for-item" data-id="'+i.id+'">'+ico('mic')+' Añadir voz</button>':'')+'<button class="btn small secondary" data-action="item-edit" data-id="'+i.id+'">Editar</button><button class="btn small ghost" data-action="item-delete" data-id="'+i.id+'">Eliminar</button></div></div></div>';
+ return '<div class="card item" data-item-id="'+attr(i.id)+'"><div class="item-icon">'+ico(meta[0])+'</div><div class="item-main"><div class="meta">'+esc(date)+esc(done)+'</div><h3>'+esc(d.title||meta[1])+'</h3>'+((d.body||linkedDailyQuestionAnswers(i))?'<p>'+esc(d.body||linkedDailyQuestionAnswers(i)).replace(/\n/g,'<br>')+'</p>':'')+(voices.length?'<div class="stack" style="margin-top:10px">'+voices.map(voiceCard).join('')+'</div>':'')+'<div class="item-actions">'+(['memory','capsule','journey'].includes(i.kind)?'<button class="btn small secondary" data-action="voice-for-item" data-id="'+i.id+'">'+ico('mic')+' Añadir voz</button>':'')+(['plan','wish'].includes(i.kind)?'<button class="btn small secondary" data-action="goal-convert-item" data-id="'+i.id+'">'+ico('target')+' Convertir en objetivo</button>':'')+'<button class="btn small secondary" data-action="item-edit" data-id="'+i.id+'">Editar</button><button class="btn small ghost" data-action="item-delete" data-id="'+i.id+'">Eliminar</button></div></div></div>';
 }
 function storyTimeline(){
  const entries=(cloud?.items||[]).filter(x=>['memory','journey','event','capsule','song'].includes(x.kind)).filter(x=>x.kind!=='capsule'||String(x.data?.date||'')<=String(cloud.today||'')).slice().sort((a,b)=>String(b.data?.date||b.created).localeCompare(String(a.data?.date||a.created))).slice(0,12);
@@ -701,18 +926,42 @@ function openMusicUrl(){
  showModal('Añadir desde un enlace','<form id="musicUrlForm" class="stack" style="margin-top:16px"><div class="field"><label>Nombre de la canción</label><input class="input" name="title" maxlength="160" placeholder="Nuestra canción" required></div><div class="field"><label>Enlace</label><input class="input" type="url" name="url" inputmode="url" placeholder="https://…" required></div><p class="muted">La plataforma se detectará automáticamente.</p><button class="btn" type="submit">Guardar en nuestra música</button></form>','music-url');
 }
 
+function bondGestureCatalog(){
+ const catalog=cloud?.bond?.gestures||{};
+ const builtins=(catalog.builtins?.length?catalog.builtins:[
+  {id:'hug',name:'Abrazo',icon:'hand-heart',text:'Tu pareja te envió un abrazo.',behavior:'message_haptic',builtin:true},
+  {id:'kiss',name:'Beso',icon:'heart',text:'Tu pareja te envió un beso.',behavior:'message_haptic',builtin:true},
+  {id:'miss',name:'Te extraño',icon:'message-circle',text:'Tu pareja te extraña.',behavior:'message',builtin:true},
+  {id:'tap',name:'Toque',icon:'hand',text:'Un toque de tu persona.',behavior:'haptic',builtin:true}
+ ]);
+ return [...builtins,...(catalog.custom||[])];
+}
+function bondGardenVisual(garden){
+ const stage=Number(garden?.stage||0),flowers=Math.min(7,Math.max(1,stage));
+ return '<div class="bond-garden-scene" data-stage="'+stage+'" aria-label="Jardín etapa '+stage+'"><span class="garden-sun">'+ico('sun')+'</span><div class="garden-ground"></div><div class="garden-flowers">'+Array.from({length:flowers},(_,i)=>'<span class="garden-flower f'+(i+1)+'">'+ico(stage<2?'sprout':'flower-2')+'</span>').join('')+'</div>'+(stage>=4?'<span class="garden-glow">'+ico('sparkles')+'</span>':'')+'</div>';
+}
+function bondUnlockables(garden){
+ const rows=garden?.unlockables||[];if(!rows.length)return'';
+ return '<div class="bond-unlockables">'+rows.map(row=>'<span class="'+(row.unlocked?'unlocked':'locked')+'">'+ico(row.unlocked?'sparkles':'lock')+'<b>'+esc(row.label||'Etapa')+'</b><small>'+Number(row.days||0)+' días</small></span>').join('')+'</div>';
+}
+function openBondGestureForm(gesture=null){
+ const icons=['hand','hand-heart','heart','message-circle','sparkles','star','sun','flower-2','smile','music','coffee','map-pin','moon','bell','waves'];
+ const behaviors=[['message','Mensaje'],['haptic','Solo toque háptico'],['message_haptic','Mensaje + toque háptico']];
+ showModal(gesture?'Editar gesto':'Nuevo gesto','<form id="bondGestureForm" class="stack"><input type="hidden" name="id" value="'+attr(gesture?.id||'')+'"><input type="hidden" name="version" value="'+attr(gesture?.version||'')+'"><div class="field"><label>Nombre</label><input class="input" name="name" maxlength="40" required value="'+attr(gesture?.name||'')+'" placeholder="Aquí estoy"></div><div class="field"><label>Icono Lucide</label><select name="icon">'+icons.map(icon=>'<option value="'+icon+'" '+((gesture?.icon||'heart')===icon?'selected':'')+'>'+icon+'</option>').join('')+'</select></div><div class="field"><label>Texto</label><input class="input" name="text" maxlength="180" required value="'+attr(gesture?.text||'')+'" placeholder="Pensé en ti"></div><div class="field"><label>Comportamiento</label><select name="behavior">'+behaviors.map(([id,label])=>'<option value="'+id+'" '+((gesture?.behavior||'message')===id?'selected':'')+'>'+label+'</option>').join('')+'</select></div><p class="muted">Los hápticos solo vibran en teléfonos que los hayan activado. Las notificaciones siguen teniendo su propio permiso.</p><button class="btn" type="submit">Guardar gesto</button></form>','bond-gesture');
+}
+function openBondGestureManager(){
+ const custom=cloud?.bond?.gestures?.custom||[];
+ showModal('Gestos personalizados','<div class="row between"><p class="muted">Son atajos compartidos. El historial conserva el texto original aunque luego elimines un gesto.</p><button class="btn small" data-action="bond-gesture-new">+ Crear</button></div><div class="stack" style="margin-top:12px">'+(custom.length?custom.map(g=>'<div class="card bond-gesture-row"><span>'+ico(g.icon||'heart')+'</span><div><b>'+esc(g.name)+'</b><small>'+esc(g.text)+' · '+esc(g.behavior)+'</small></div><div class="row"><button class="btn small secondary" data-action="bond-gesture-edit" data-id="'+attr(g.id)+'">Editar</button>'+(String(g.created_by)===String(cloud.person)?'<button class="btn small ghost" data-action="bond-gesture-delete" data-id="'+attr(g.id)+'">Eliminar</button>':'')+'</div></div>').join(''):'<div class="empty">Todavía no han creado gestos propios.</div>')+'</div>','bond-gestures');
+}
 function momentsView(){
  const bond=cloud.bond||{entries:[],garden:{days:0,stage:0}},entries=bond.entries||[];
  const games=entries.filter(x=>x.type==='game'),rituals=entries.filter(x=>x.type==='ritual'),notes=entries.filter(x=>x.type==='sharednote'),voices=entries.filter(x=>x.type==='voice');
- const stage=Number(bond.garden?.stage||0),plant=ico(stage===0?'sprout':'flower-2')+(stage>=3?ico('sparkles','garden-sparkle'):'');
- const pct=Math.min(100,(bond.garden?.days||0)/30*100);
- return '<section><div class="section-head"><div><p class="eyebrow">MOMENTOS PARA DOS</p><h2>Conectar</h2><p>Pequeñas cosas que nos acercan.</p></div></div>'+
- '<div class="card garden"><div class="garden-plant">'+plant+'</div><div><h3>Nuestro girasol</h3><p>'+Number(bond.garden?.days||0)+' días en los que ambos dejaron algo en la galaxia.</p><div class="progress"><i style="width:'+pct+'%"></i></div></div></div>'+
- '<div class="section"><div class="gesture-grid">'+
- '<button class="gesture" data-action="gesture" data-gesture="hug"><span>'+ico('hand-heart')+'</span>Abrazo</button>'+
- '<button class="gesture" data-action="gesture" data-gesture="kiss"><span>'+ico('heart')+'</span>Beso</button>'+
- '<button class="gesture" data-action="gesture" data-gesture="miss"><span>'+ico('message-circle')+'</span>Te extraño</button></div></div>'+
- '<div class="section"><div class="grid">'+actionCard('dice-5','Cita sorpresa','Una idea según el momento','surprise')+actionCard('gamepad-2','Juego de nosotros','Adivinar lo que elegiría el otro','new-game')+actionCard('notebook-pen','Ritual semanal','Agradecer, pedir y planear','new-ritual')+actionCard('mic','Mensaje de voz','Dejar una voz para el otro','new-voice')+'</div></div>'+
+ const garden=bond.garden||{},total=Number(garden.totalDays??garden.days??bond.totalDays??0),current=Number(garden.currentStreak??bond.currentStreak??0),record=Number(garden.recordStreak??bond.recordStreak??0);
+ const gestures=bondGestureCatalog();
+ return '<section><div class="section-head"><div><p class="eyebrow">GALAXY BOND 2.0</p><h2>Conectar</h2><p>Pequeñas cosas que nos acercan sin convertir el cariño en una obligación.</p></div></div>'+
+ '<div class="card bond-garden">'+bondGardenVisual(garden)+'<div class="bond-garden-copy"><p class="eyebrow">NUESTRO JARDÍN</p><h3>Nuestro jardín · '+esc(garden.label||'Nuestro girasol')+'</h3><p>'+total+' días acumulados en los que ambos dejaron algo en la galaxia. Ese progreso nunca se reinicia.</p><div class="bond-streak-grid"><span><b>'+total+'</b><small>Días totales</small></span><span><b>'+current+'</b><small>Racha actual</small></span><span><b>'+record+'</b><small>Récord</small></span></div><div class="progress"><i style="width:'+Number(garden.progressPct||0)+'%"></i></div>'+bondUnlockables(garden)+'</div></div>'+
+ '<div class="section"><div class="section-head"><div><h2>Pensé en ti</h2><p>Mensajes rápidos y toques que ustedes pueden personalizar.</p></div><button class="btn small secondary" data-action="bond-gesture-manage">'+ico('settings-2')+' Personalizar</button></div><div class="gesture-grid bond-gesture-grid">'+gestures.map(g=>'<button class="gesture" data-action="bond-send-gesture" data-gesture-id="'+attr(g.id)+'"><span>'+ico(g.icon||'heart')+'</span><b>'+esc(g.name||'Gesto')+'</b><small>'+esc(g.behavior==='haptic'?'Toque háptico':g.behavior==='message_haptic'?'Mensaje + toque':'Mensaje')+'</small></button>').join('')+'</div></div>'+
+ '<div class="section"><div class="grid">'+actionCard('sparkles','Cita sorpresa 2.0','Tiempo, presupuesto y contexto real','surprise')+actionCard('timer','Modo Cita','Música, preguntas, fotos y recap','date-mode-open')+actionCard('dices','Ruleta de planes','Elegir entre planes pendientes','plan-roulette-open')+actionCard('list-ordered','Planificar una cita','Armar una secuencia con tiempo y presupuesto','date-planner-open')+actionCard('layers-3','Barajas de preguntas','Elegir un tema para conversar','date-question-decks')+actionCard('gamepad-2','Juego de nosotros','Adivinar lo que elegiría el otro','new-game')+actionCard('notebook-pen','Ritual semanal','Agradecer, pedir y planear','new-ritual')+actionCard('mic','Mensaje de voz','Dejar una voz para el otro','new-voice')+'</div></div>'+
  surpriseNotesView()+
  momentSection('Juego de nosotros',games,gameCard,'No hay preguntas pendientes todavía.')+
  momentSection('Ritual semanal',rituals,ritualCard,'El primer ritual puede empezar esta semana.')+
@@ -737,11 +986,61 @@ function sharedNoteCard(e){
  const d=e.data||{};
  return '<div class="card"><span class="badge">Compartida · v'+Number(e.version||1)+'</span><h3 style="margin-top:9px">'+esc(d.title)+'</h3><p>'+esc(d.body||'')+'</p><div class="item-actions"><button class="btn small secondary" data-action="sharednote-edit" data-id="'+e.id+'">Editar</button><button class="btn small ghost" data-action="bond-delete" data-id="'+e.id+'">Eliminar</button></div></div>';
 }
+function voiceTimestamp(seconds){
+ const s=Math.max(0,Number(seconds)||0),m=Math.floor(s/60),r=Math.floor(s%60);return m+':'+String(r).padStart(2,'0');
+}
+function voiceTranscriptMarkup(transcript){
+ if(!transcript?.text)return'';
+ const segments=(transcript.segments||[]).slice(0,12);
+ return '<div class="voice-transcript"><div class="row between"><b>'+ico('captions')+' Transcripción</b><span class="badge mini">opcional</span></div><p>'+esc(transcript.text)+'</p>'+(segments.length?'<details><summary>Ver timestamps</summary><div class="voice-transcript-segments">'+segments.map(s=>'<span><b>'+voiceTimestamp(s.start)+'</b> '+esc(s.text)+'</span>').join('')+'</div></details>':'')+'</div>';
+}
 function voiceCard(e){
- const d=e.data||{};
- return '<div class="card audio-card"><span class="badge">'+(e.author===cloud.person?'Tu voz':esc(partnerName()))+'</span><h3 style="margin-top:9px">'+esc(d.title)+'</h3>'+(d.body?'<p>'+esc(d.body)+'</p>':'')+(d.audioUrl?'<audio controls preload="none" src="'+attr(d.audioUrl)+'"></audio>':'<p>El enlace de este audio necesita actualizarse.</p>')+(e.author===cloud.person?'<div class="item-actions"><button class="btn small ghost" data-action="bond-delete" data-id="'+e.id+'">Eliminar</button></div>':'')+'</div>';
+ const d=e.data||{},mine=e.author===cloud.person,transcript=d.transcript||null;
+ return '<div class="card audio-card" data-voice-id="'+attr(e.id)+'"><span class="badge">'+(mine?'Tu voz':esc(partnerName()))+'</span><h3 style="margin-top:9px">'+esc(d.title)+'</h3>'+(d.body?'<p>'+esc(d.body)+'</p>':'')+(d.audioUrl?'<audio controls preload="none" src="'+attr(d.audioUrl)+'"></audio>':'<p>El enlace de este audio necesita actualizarse.</p>')+voiceTranscriptMarkup(transcript)+(mine?'<div class="item-actions">'+(transcript?'<button class="btn small secondary" data-action="voice-transcript-delete" data-id="'+attr(e.id)+'">'+ico('captions-off')+' Eliminar transcripción</button>':'<button class="btn small secondary" data-action="voice-transcribe" data-id="'+attr(e.id)+'">'+ico('captions')+' Transcribir</button>')+'<button class="btn small ghost" data-action="bond-delete" data-id="'+attr(e.id)+'">Eliminar audio</button></div>':'')+(mine?'<p class="muted voice-ai-note">Transcribir es opcional. El audio original se mantiene aunque elimines su transcripción.</p>':'')+'</div>';
 }
 
+function contextSettings(){
+ return mapData?.context?.settings||{near_enabled:false,near_distance_m:300,near_cooldown_minutes:60,arrived_safe_enabled:false,date_suggestions:true,memory_suggestions:true,shared_trip_detection:false};
+}
+function contextSession(){
+ return mapData?.context?.session||null;
+}
+function contextEnginePanel(){
+ const s=contextSettings(),session=contextSession(),distance=Number(s.near_distance_m||300),cooldown=Number(s.near_cooldown_minutes||60);
+ const sessionTitle=session?.mode==='return_home'?'Regreso a casa':'Acompáñame 2.0';
+ const sessionBlock=session?'<div class="context-session"><div class="row between"><div><p class="eyebrow">'+esc(sessionTitle.toUpperCase())+'</p><h3>'+esc(session.label||'Destino')+'</h3></div><span class="badge good">Activo</span></div><div class="context-progress"><i style="width:'+Math.max(0,Math.min(100,Number(session.progress_pct||0)))+'%"></i></div><div class="context-metrics"><span><b>'+Math.max(0,Math.min(100,Number(session.progress_pct||0)))+'%</b><small>progreso</small></span><span><b>'+(session.last_distance_m==null?'—':esc(fmtDistance(session.last_distance_m)))+'</b><small>restante</small></span><span><b>'+(session.last_eta_s==null?'—':esc(fmtDuration(session.last_eta_s)))+'</b><small>ETA</small></span></div><button class="btn small ghost" data-action="context-session-stop">'+ico('square')+' Terminar sesión</button></div>':'<div class="context-session empty-session"><span>'+ico('route')+'</span><div><b>Sin sesión activa</b><small>Acompáñame y Regreso solo funcionan cuando tú los inicias.</small></div></div>';
+ return '<section class="section context-engine"><div class="section-head"><div><p class="eyebrow">Galaxy Context Engine</p><h2>Contexto, sin diez GPS distintos</h2><p>Una sola capa interpreta proximidad, lugares, encuentros, recorridos y llegadas.</p></div></div>'+
+ '<div class="grid context-controls"><div class="card"><div class="row between"><div><h3>Estamos cerca</h3><p>Aviso opcional cuando ambos comparten ubicación y entran en tu radio.</p></div><span class="badge '+(s.near_enabled?'good':'')+'">'+(s.near_enabled?'Activo':'Apagado')+'</span></div><p class="context-detail">'+distance+' m · cooldown '+cooldown+' min</p><button class="btn small '+(s.near_enabled?'secondary':'')+'" data-action="context-near-toggle">'+ico(s.near_enabled?'bell-off':'bell')+' '+(s.near_enabled?'Desactivar':'Activar')+'</button></div>'+
+ '<div class="card"><div class="row between"><div><h3>Llegué bien</h3><p>Solo avisa al otro al alcanzar un destino de Acompáñame/Regreso.</p></div><span class="badge '+(s.arrived_safe_enabled?'good':'')+'">'+(s.arrived_safe_enabled?'Activo':'Apagado')+'</span></div><button class="btn small '+(s.arrived_safe_enabled?'secondary':'')+'" data-action="context-arrived-toggle">'+ico(s.arrived_safe_enabled?'bell-off':'shield-check')+' '+(s.arrived_safe_enabled?'Desactivar':'Activar')+'</button></div></div>'+
+ sessionBlock+
+ '<div class="row wrap context-actions"><button class="btn secondary" data-action="destination">'+ico('navigation')+' Acompáñame 2.0</button><button class="btn secondary" data-action="context-return-home">'+ico('house')+' Regreso a casa</button><button class="btn ghost" data-action="context-settings-open">'+ico('settings-2')+' Preferencias</button></div></section>';
+}
+function contextSuggestionsView(){
+ const list=mapData?.context?.suggestions||[];if(!list.length)return'';
+ return '<section class="section context-suggestions"><div class="section-head"><div><p class="eyebrow">DESPUÉS DE VERNOS</p><h2>Contexto sugerido</h2><p>La galaxia propone; ustedes deciden. Nada se convierte en cita o recuerdo automáticamente.</p></div></div><div class="stack">'+list.map(s=>{
+  const p=s.payload||{};
+  if(s.kind==='date')return '<article class="card context-suggestion"><span class="item-icon">'+ico('calendar-heart')+'</span><div><h3>¿Esto fue una cita?</h3><p>'+(p.durationS?esc(fmtDuration(p.durationS))+' juntos':'Estuvieron juntos un buen rato')+(p.place?.name?' · '+esc(p.place.name):'')+'.</p></div><div class="item-actions"><button class="btn small" data-action="context-suggestion-accept" data-id="'+attr(s.id)+'">Sí, fue una cita</button><button class="btn small ghost" data-action="context-suggestion-dismiss" data-id="'+attr(s.id)+'">No</button></div></article>';
+  return '<article class="card context-suggestion"><span class="item-icon">'+ico('camera')+'</span><div><h3>'+esc(p.title||'¿Guardamos un recuerdo de este encuentro?')+'</h3><p>'+(p.durationS?esc(fmtDuration(p.durationS))+' juntos':'Encuentro detectado')+(p.place?.name?' · '+esc(p.place.name):'')+'.</p></div><div class="item-actions"><button class="btn small" data-action="context-suggestion-accept" data-id="'+attr(s.id)+'">Guardar recuerdo</button><button class="btn small ghost" data-action="context-suggestion-dismiss" data-id="'+attr(s.id)+'">Ahora no</button></div></article>';
+ }).join('')+'</div></section>';
+}
+function openContextSettings(){
+ const s=contextSettings();
+ showModal('Preferencias de contexto','<form id="contextSettingsForm" class="stack"><label class="toggle-row"><input type="checkbox" name="nearEnabled" '+(s.near_enabled?'checked':'')+'><span><b>Estamos cerca</b><small>Aviso cuando entren en el radio elegido.</small></span></label><div class="field"><label>Radio de cercanía</label><select name="nearDistanceM">'+[150,300,500,1000,2000].map(v=>'<option value="'+v+'" '+(Number(s.near_distance_m)===v?'selected':'')+'>'+v+' m</option>').join('')+'</select></div><div class="field"><label>Cooldown</label><select name="nearCooldownMinutes">'+[15,30,60,120,240].map(v=>'<option value="'+v+'" '+(Number(s.near_cooldown_minutes)===v?'selected':'')+'>'+v+' min</option>').join('')+'</select></div><label class="toggle-row"><input type="checkbox" name="arrivedSafeEnabled" '+(s.arrived_safe_enabled?'checked':'')+'><span><b>Llegué bien automático</b><small>Solo durante una sesión que tú iniciaste.</small></span></label><label class="toggle-row"><input type="checkbox" name="dateSuggestions" '+(s.date_suggestions!==false?'checked':'')+'><span><b>Preguntar si fue una cita</b><small>Nunca se asumirá automáticamente.</small></span></label><label class="toggle-row"><input type="checkbox" name="memorySuggestions" '+(s.memory_suggestions!==false?'checked':'')+'><span><b>Sugerir recuerdos</b><small>Después de encuentros reales.</small></span></label><label class="toggle-row"><input type="checkbox" name="sharedTripDetection" '+(s.shared_trip_detection===true?'checked':'')+'><span><b>Recorridos juntos</b><small>Usa proximidad, duración y movimiento coherente.</small></span></label><p class="muted">Estas opciones no encienden la ubicación. Compartir GPS sigue siendo una acción separada y visible.</p><button class="btn" type="submit">Guardar preferencias</button></form>','context-settings');
+}
+function contextRecapMarkup(title,recap){
+ const r=recap||{},places=r.places||[],photos=r.photos||[],songs=r.songs||[],memories=r.memories||[],points=r.map?.points||[];
+ return '<div class="context-recap"><div class="context-recap-hero"><span>'+ico(r.kind==='date'?'calendar-heart':'route')+'</span><div><p class="eyebrow">'+esc(title.toUpperCase())+'</p><h3>'+esc(fmtDuration(r.durationS||0))+' · '+esc(fmtDistance(r.distanceM||0))+'</h3><p>'+(Number(r.walkingM||0)>0?'Caminata inferida: '+esc(fmtDistance(r.walkingM))+'. ':'')+'Solo usamos segmentos suficientemente coherentes para estimar distancia.</p></div></div>'+(points.length>=2?'<div id="contextRecapMap" class="context-recap-map" aria-label="Mapa del recorrido"></div>':'')+'<div class="context-recap-grid"><span><b>'+places.length+'</b><small>lugares</small></span><span><b>'+photos.length+'</b><small>fotos candidatas</small></span><span><b>'+songs.length+'</b><small>canciones</small></span><span><b>'+memories.length+'</b><small>recuerdos</small></span></div>'+(places.length?'<div class="chips">'+places.map(p=>'<span class="chip static">'+ico('map-pin')+esc(p.name)+'</span>').join('')+'</div>':'')+'<p class="muted">El mapa usa el historial privado ya guardado; no hace geocoding adicional.</p></div>';
+}
+function renderContextRecapMap(recap){
+ const el=document.querySelector('#contextRecapMap'),points=(recap?.map?.points||[]).filter(p=>Number.isFinite(Number(p.latitude))&&Number.isFinite(Number(p.longitude)));
+ if(!el||points.length<2||!window.GalaxyMap)return;
+ const coords=points.map(p=>[Number(p.latitude),Number(p.longitude)]);
+ const mini=new window.GalaxyMap(el,{center:coords[0],zoom:14});
+ mini.addPolyline(coords,{className:'context-recap-route'});
+ mini.addMarker({lat:coords[0][0],lon:coords[0][1],icon:'play',popup:'Inicio'});
+ const last=coords[coords.length-1];mini.addMarker({lat:last[0],lon:last[1],icon:'flag',popup:'Final'});
+ mini.fitBounds(coords,{maxZoom:16});
+}
 function mapView(){
  const own=(cloud.locations||[]).find(l=>l.person===cloud.person)||{},partner=(cloud.locations||[]).find(l=>l.person!==cloud.person)||{};
  return '<section><div class="section-head"><div><p class="eyebrow">NUESTRO MAPA</p><h2>Acompañarnos</h2><p>Ubicación voluntaria, recorridos y lugares importantes.</p></div><button class="btn small secondary" data-action="map-refresh">Actualizar</button></div>'+
@@ -751,8 +1050,9 @@ function mapView(){
  '<div class="section"><div class="card"><h3>Cómo me muevo normalmente</h3><p>Ayuda a interpretar cuando Android detecta que vas en vehículo.</p><div class="chips" style="margin-top:12px">'+
  ['','motorcycle','transit'].map(value=>'<button class="chip '+((own.transport_preference||'')===value?'active':'')+'" data-action="transport-set" data-value="'+value+'">'+ico(value==='motorcycle'?'bike':value==='transit'?'bus-front':'navigation')+(value==='motorcycle'?'Moto':value==='transit'?'Transporte público':'Automático')+'</button>').join('')+
  '</div></div></div>'+
- '<div class="section"><div class="grid">'+actionCard('route',own.trip_active?'Terminar recorrido':'Iniciar recorrido',own.trip_active?'Guardaremos el resumen al finalizar':'Registra distancia, duración y movimiento','trip-toggle')+actionCard('map-pin','Guardar este lugar','Casa, trabajo, recuerdo o aventura','place-new')+actionCard('navigation','Acompáñame','Elegir a dónde voy','destination')+'</div></div>'+
- frequentPlacesView()+mapHistoryView()+'</section>';
+ contextEnginePanel()+
+ '<div class="section"><div class="grid">'+actionCard('route',own.trip_active?'Terminar recorrido':'Iniciar recorrido',own.trip_active?'Guardaremos el resumen al finalizar':'Registra distancia, duración y movimiento','trip-toggle')+actionCard('map-pin','Guardar este lugar','Casa, trabajo, recuerdo o aventura','place-new')+actionCard('navigation','Acompáñame 2.0','Destino, progreso, ETA y llegada','destination')+'</div></div>'+
+ contextSuggestionsView()+frequentPlacesView()+mapHistoryView()+'</section>';
 }
 function frequentPlacesFresh(){return !!frequentPlacesData&&Date.now()-frequentPlacesLoadedAt<15*60*1000;}
 async function loadFrequentPlaces(force=false){
@@ -797,7 +1097,7 @@ function mapHistoryView(){
  if(!mapData)return '<div class="section">'+loading('Cargando recorridos')+'</div>';
  const trips=mapData.trips||[],events=mapData.events||[],encounters=mapData.encounters||[];
  return historyPlacesView()+'<section class="section" id="encounter-history"><div class="section-head"><div><h2>Actividad reciente</h2><p>Recorridos, llegadas y encuentros.</p></div></div><div class="stack">'+
- (trips.slice(0,4).map(t=>'<div class="card"><span class="badge">'+(names()[Number(t.person)]||'Nosotros')+'</span><h3 style="margin-top:8px">'+fmtDistance(t.distance_m)+' · '+fmtDuration(t.duration_s)+'</h3><p>'+esc(fmtDateTime(t.started_at))+(t.max_speed?' · máx. '+(Number(t.max_speed)*3.6).toFixed(0)+' km/h':'')+'</p></div>').join('')||
+ (trips.slice(0,4).map(t=>'<div class="card"><span class="badge">'+(names()[Number(t.person)]||'Nosotros')+'</span><h3 style="margin-top:8px">'+fmtDistance(t.distance_m)+' · '+fmtDuration(t.duration_s)+'</h3><p>'+esc(fmtDateTime(t.started_at))+(t.max_speed?' · máx. '+(Number(t.max_speed)*3.6).toFixed(0)+' km/h':'')+'</p><button class="btn small secondary" data-action="context-trip-recap" data-id="'+attr(t.id)+'">'+ico('map')+' Recap de recorrido</button></div>').join('')||
  events.slice(0,4).map(e=>'<div class="card"><h3>'+(e.event==='arrived'?'Llegada':'Salida')+'</h3><p>'+esc(fmtDateTime(e.happened_at))+'</p></div>').join('')||
  encounters.slice(0,3).map(e=>'<div class="card"><h3 class="icon-title">'+ico('heart')+'Nos encontramos</h3><p>'+esc(fmtDateTime(e.started_at))+'</p></div>').join('')||
  '<div class="empty">Aquí aparecerán los recorridos y encuentros que vayamos guardando.</div>')+
@@ -900,10 +1200,10 @@ function moreView(){
  return '<section><div class="section-head"><div><p class="eyebrow">NUESTRA APP</p><h2>Más</h2><p>Privacidad, respaldo, nuestra historia inteligente y ajustes.</p></div></div>'+
  '<div class="card"><div class="row between"><div><h3>Privacidad de “Ahora”</h3><p>Tu ubicación sigue teniendo su propio interruptor. Aquí decides si compartes batería y la canción que estás escuchando.</p></div>'+ico('shield-check')+'</div><div class="privacy-grid"><button class="privacy-toggle '+(presence.shareBattery?'active':'')+'" data-action="presence-battery">'+ico('battery-charging')+'<span><b>Batería</b><small>'+(presence.shareBattery?'Compartida':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(presence.shareListening?'active':'')+'" data-action="presence-listening">'+ico('music')+'<span><b>Escuchando</b><small>'+(presence.shareListening?'Compartido':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(native.tracking?'active':'')+'" data-action="map">'+ico('map-pin')+'<span><b>Ubicación</b><small>'+(native.tracking?'Compartiendo':'Pausada')+'</small></span></button></div></div>'+gpsHistoryPrivacyCard()+
  themeSettingsCard()+
- '<div class="card"><div class="row between"><div><h3>Nuestra IA</h3><p>Pregunta por recuerdos, planes, lugares, viajes y momentos guardados. Responde usando únicamente su propia historia.</p></div>'+ico('sparkles')+'</div><button class="btn small" style="margin-top:14px" data-action="our-ai">Preguntar a nuestra historia</button></div>'+
+ '<div class="card"><div class="row between"><div><h3>Galaxy Goals</h3><p>Objetivos compartidos, pasos y metas de ahorro registradas manualmente.</p></div>'+ico('target')+'</div><button class="btn small" style="margin-top:14px" data-action="goals-open">Abrir nuestros objetivos</button></div>'+'<div class="card"><div class="row between"><div><h3>Nuestra IA 2.0</h3><p>Búsqueda híbrida, conexiones, narración y Libro de Nuestra Galaxia con fuentes privadas y fallback clásico.</p></div>'+ico('sparkles')+'</div><button class="btn small" style="margin-top:14px" data-action="our-ai">Abrir Galaxy Intelligence</button></div>'+
  '<div class="card"><div class="row between"><div><h3>Copia de nuestra galaxia</h3><p>Exporta los datos a un archivo JSON o restaura una copia. Fotos, música y audios permanecen en su almacenamiento privado y se conservan por referencia.</p></div>'+ico('archive')+'</div><div class="row wrap" style="margin-top:14px"><button class="btn small secondary" data-action="backup-export">'+ico('download')+' Exportar</button><button class="btn small ghost" data-action="backup-import">'+ico('upload')+' Restaurar</button></div></div>'+
- '<div class="card"><div class="row between"><div><h3>Widget “Nuestra Galaxia”</h3><p>Foto, próxima fecha y un abrazo desde el escritorio.</p></div><span class="badge '+(native.canPinWidget?'good':'')+'">'+(native.canPinWidget?'Disponible':'Manual')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small" data-action="widget-add">Añadir widget</button><button class="btn small secondary" data-action="widget-photo">Elegir foto</button><button class="btn small ghost" data-action="widget-photo-clear">Quitar foto</button></div></div>'+
- '<div class="card"><div class="row between"><div><h3>Notificaciones de momentos</h3><p>Gestos y fechas especiales. Android revisa en segundo plano y también al abrir la app.</p></div><span class="badge '+(native.momentNotifications&&native.notificationsGranted&&native.notificationsEnabled?'good':'')+'">'+(native.momentNotifications?(native.notificationsGranted&&native.notificationsEnabled?'Listas':'Requieren ajuste'):'Pausadas')+'</span></div><div class="notification-health"><span class="'+(native.notificationsGranted?'good':'')+'">'+ico(native.notificationsGranted?'check':'circle-alert')+' Permiso '+(native.notificationsGranted?'concedido':'pendiente')+'</span><span class="'+(native.notificationsEnabled?'good':'')+'">'+ico(native.notificationsEnabled?'bell-ring':'bell-off')+' Sistema '+(native.notificationsEnabled?'habilitado':'bloqueado')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small secondary" data-action="moment-notifications">'+(native.momentNotifications?'Desactivar':'Activar')+'</button>'+(native.momentNotifications?'<button class="btn small ghost" data-action="moment-notification-test">'+ico('bell-ring')+' Probar ahora</button>':'')+(!native.notificationsEnabled?'<button class="btn small ghost" data-action="app-settings">'+ico('settings')+' Ajustes</button>':'')+'</div></div>'+
+ '<div class="card"><div class="row between"><div><h3>Widget “Nuestra Galaxia” 2.0</h3><p>Foto, fecha, mood, distancia, ETA, canción, próximo plan, jardín y gesto rápido. Elige módulos al añadir cada widget.</p></div><span class="badge '+(native.canPinWidget?'good':'')+'">'+(native.canPinWidget?'Disponible':'Manual')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small" data-action="widget-add">Añadir widget</button><button class="btn small secondary" data-action="widget-photo">Elegir foto</button><button class="btn small ghost" data-action="widget-photo-clear">Quitar foto</button></div></div>'+
+ '<div class="card"><div class="row between"><div><h3>Notificaciones de momentos</h3><p>Gestos y fechas especiales. Android revisa en segundo plano y también al abrir la app.</p></div><span class="badge '+(native.momentNotifications&&native.notificationsGranted&&native.notificationsEnabled?'good':'')+'">'+(native.momentNotifications?(native.notificationsGranted&&native.notificationsEnabled?'Listas':'Requieren ajuste'):'Pausadas')+'</span></div><div class="notification-health"><span class="'+(native.notificationsGranted?'good':'')+'">'+ico(native.notificationsGranted?'check':'circle-alert')+' Permiso '+(native.notificationsGranted?'concedido':'pendiente')+'</span><span class="'+(native.notificationsEnabled?'good':'')+'">'+ico(native.notificationsEnabled?'bell-ring':'bell-off')+' Sistema '+(native.notificationsEnabled?'habilitado':'bloqueado')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small secondary" data-action="moment-notifications">'+(native.momentNotifications?'Desactivar':'Activar')+'</button><button class="btn small '+(native.bondHaptics?'secondary':'ghost')+'" data-action="bond-haptics">'+ico('smartphone')+' Hápticos '+(native.bondHaptics?'activos':'apagados')+'</button>'+(native.momentNotifications?'<button class="btn small ghost" data-action="moment-notification-test">'+ico('bell-ring')+' Probar ahora</button>':'')+(!native.notificationsEnabled?'<button class="btn small ghost" data-action="app-settings">'+ico('settings')+' Ajustes</button>':'')+'</div><p class="muted" style="margin-top:10px">Push instantáneo: '+(native.pushConfigured?'configurado':'pendiente de Firebase')+'. Notificaciones y vibración se controlan por separado.</p></div>'+
  '<div class="card"><h3>Nuestros datos</h3><form id="settingsForm" class="stack" style="margin-top:12px"><div class="grid"><div class="field"><label>Nombre 1</label><input class="input" name="name0" value="'+attr(data.names?.[0]||'')+'" required></div><div class="field"><label>Nombre 2</label><input class="input" name="name1" value="'+attr(data.names?.[1]||'')+'" required></div></div><div class="field"><label>Inicio de nuestra historia</label><input class="input" type="date" name="startDate" value="'+attr(data.startDate||'')+'"></div><div class="field"><label>Álbum de Google Fotos (opcional)</label><input class="input" name="albumUrl" value="'+attr(data.albumUrl||'')+'" placeholder="https://photos.app.goo.gl/…"></div><button class="btn" type="submit">Guardar ajustes</button></form></div>'+
  (Number(cloud?.person)===0?'<div class="card"><div class="row between"><div><h3>Previsualización de Adri</h3><p>Solo tú puedes ver este control. Abre la bienvenida exactamente como la verá Adri, sin marcarla como completada.</p></div>'+ico('sparkles')+'</div><button class="btn small secondary" style="margin-top:14px" data-action="welcome-replay">Previsualizar bienvenida</button></div>':'')+
  deviceProfilesCard()+'<div class="card"><h3>Permisos de Android</h3><p>Ubicación: '+(native.locationGranted?'concedida':'pendiente')+' · Segundo plano: '+(native.backgroundLocationGranted?'concedido':'opcional')+' · Notificaciones: '+(native.notificationsGranted?'concedidas':'pendientes')+'</p><button class="btn small secondary" style="margin-top:14px" data-action="app-settings">Abrir ajustes del sistema</button></div>'+
@@ -952,7 +1252,7 @@ function showModal(title,body,formId=''){
  refreshIcons();
 }
 async function resetVoiceDraft(){stopVoiceTimer();if(voiceRecording||voiceReady){try{await GalaxyNative.call('discardVoiceRecording');}catch{}}voiceRecording=false;voiceReady=false;if(voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}}
-function closeModal(){if(modal.dataset.form==='voice'&&pendingVoiceDraft!==null)resetVoiceDraft();if(modal.open)modal.close();delete modal.dataset.editId;delete modal.dataset.version;delete modal.dataset.kind;delete modal.dataset.form;}
+function closeModal(){if(modal.dataset.form==='voice'&&pendingVoiceDraft!==null)resetVoiceDraft();if(dateModeTimer){clearInterval(dateModeTimer);dateModeTimer=null;}if(modal.open)modal.close();delete modal.dataset.editId;delete modal.dataset.version;delete modal.dataset.kind;delete modal.dataset.form;}
 function openItemForm(kind,item){
  const d=item?.data||{},meta=kindMeta[kind]||['sparkles','Contenido'],editing=!!item?.id,places=mapData?.places||[];
  modal.dataset.editId=item?.id||'';modal.dataset.version=item?.version||'';modal.dataset.kind=kind;
@@ -961,6 +1261,7 @@ function openItemForm(kind,item){
  const body='<form id="itemForm" class="stack" style="margin-top:16px"><div class="field"><label>Título</label><input class="input" name="title" value="'+attr(d.title||'')+'" required maxlength="160"></div><div class="field"><label>Texto</label><textarea name="body" placeholder="Escribe aquí…">'+esc(d.body||'')+'</textarea></div>'+
  (needsDate?'<div class="field"><label>Fecha</label><input class="input" type="date" name="date" value="'+attr(d.date||'')+'"></div>':'')+
  '<div class="field"><label>Categoría</label><input class="input" name="category" value="'+attr(d.category||'')+'" placeholder="'+attr(meta[1])+'"></div>'+placeField+
+ (kind==='plan'?'<div class="date-plan-fields"><div class="field"><label>Cuándo</label><select name="planCategory"><option value="this-week" '+(d.planCategory==='this-week'?'selected':'')+'>Esta semana</option><option value="when-possible" '+(!d.planCategory||d.planCategory==='when-possible'?'selected':'')+'>Cuando podamos</option><option value="someday" '+(d.planCategory==='someday'?'selected':'')+'>Algún día</option><option value="travel" '+(d.planCategory==='travel'?'selected':'')+'>Viaje</option><option value="home" '+(d.planCategory==='home'?'selected':'')+'>En casa</option></select></div><div class="date-plan-grid"><div class="field"><label>Presupuesto estimado</label><input class="input" type="number" min="0" step="1000" name="budget" value="'+attr(d.budget??'')+'" placeholder="0"></div><div class="field"><label>Duración (min)</label><input class="input" type="number" min="15" step="15" name="minutes" value="'+attr(d.minutes??'')+'" placeholder="120"></div></div><div class="field"><label>Entorno</label><select name="where"><option value="salir" '+(d.where!=='casa'?'selected':'')+'>Salir</option><option value="casa" '+(d.where==='casa'?'selected':'')+'>En casa</option></select></div></div>':'')+
  (kind==='event'?'<label class="row"><input type="checkbox" name="annual" '+(d.annual?'checked':'')+'> Se repite cada año</label>':'')+
  (kind==='plan'||kind==='wish'?'<label class="row"><input type="checkbox" name="done" '+(d.done?'checked':'')+'> Ya lo hicimos</label>':'')+
  '<div class="form-actions"><button class="btn secondary" type="button" data-action="modal-close">Cancelar</button><button class="btn" type="submit">Guardar</button></div></form>';
@@ -993,10 +1294,100 @@ function openSurpriseNote(){
  const placeOptions=(own?'<option value="current">Donde estoy ahora</option>':'')+places.map(p=>'<option value="saved:'+p.id+'">'+esc(p.name)+'</option>').join('');
  showModal('Nueva nota sorpresa','<form id="surpriseNoteForm" class="stack" style="margin-top:16px"><div class="field"><label>Título</label><input class="input" name="title" required maxlength="160"></div><div class="field"><label>Mensaje</label><textarea name="body" required></textarea></div><div class="field"><label>Desbloquear</label><select name="unlockType" data-role="surprise-unlock"><option value="date">En una fecha</option>'+(hasPlace?'<option value="place">Al llegar a un lugar</option>':'')+'</select></div><div class="field" data-role="surprise-date"><label>Fecha</label><input class="input" type="date" name="unlockDate" value="'+attr(cloud.today)+'"></div>'+(hasPlace?'<div class="field" data-role="surprise-place" hidden><label>Lugar</label><select name="placeChoice">'+placeOptions+'</select><small>La sorpresa se abrirá dentro de un radio aproximado de 150 m.</small></div>':'')+'<button class="btn" type="submit">Guardar sorpresa</button></form>','surprise-note');
 }
-function openSurprise(){
- const idea=surpriseIdeas[Math.floor(Math.random()*surpriseIdeas.length)];lastSurprise=idea;
- showModal('Cita sorpresa','<div class="card" style="margin-top:16px"><span class="badge">'+idea.minutes+' min · '+(idea.budget?('$ '+idea.budget.toLocaleString('es-CO')):'$ 0')+' · '+esc(idea.where)+'</span><h3 style="margin-top:10px">'+esc(idea.title)+'</h3><p>'+esc(idea.body)+'</p></div><div class="form-actions"><button class="btn secondary" data-action="surprise-again">Otra idea</button><button class="btn" data-action="surprise-save">Guardar como plan</button></div>');
+async function loadDateContext(force=false){
+ if(!native.paired||!cloud)return dateContext;
+ if(!force&&dateContext&&Date.now()-dateContextLoadedAt<5*60*1000)return dateContext;
+ const next=await api('date-engine',{operation:'context'});
+ dateContext=next;dateContextLoadedAt=Date.now();
+ return next;
 }
+function dateDeckLabel(id){
+ return ({funny:'Divertidas',memories:'Recuerdos',future:'Futuro',intimate:'Íntimas / emocionales',absurd:'Absurdas',travel:'Viajes','would-you-rather':'¿Qué prefieres?'})[id]||id;
+}
+async function openQuestionDecks(){
+ await loadDateContext();
+ const decks=dateContext?.decks||[];
+ showModal('Barajas de preguntas','<div class="question-decks">'+decks.map(deck=>'<button class="card question-deck" data-action="date-deck-question" data-deck="'+attr(deck.id)+'"><span>'+ico(deck.id==='travel'?'plane':deck.id==='memories'?'history':deck.id==='future'?'telescope':deck.id==='intimate'?'heart-handshake':deck.id==='absurd'?'wand-sparkles':deck.id==='would-you-rather'?'split':'laugh')+'</span><div><b>'+esc(dateDeckLabel(deck.id))+'</b><small>'+Number(deck.count||0)+' preguntas</small></div>'+ico('chevron-right')+'</button>').join('')+'</div>');
+}
+async function openDeckQuestion(deck){
+ const result=await api('date-engine',{operation:'question',deck,seed:(cloud.today||'')+'|'+deck+'|'+(++dateQuestionNonce)});
+ const q=result.question||{};
+ showModal(dateDeckLabel(deck),'<div class="card deck-question-result"><p class="eyebrow">PARA CONVERSAR</p><h3>'+esc(q.text||'Pregunta')+'</h3><div class="row wrap"><button class="btn small secondary" data-action="date-deck-question" data-deck="'+attr(deck)+'">'+ico('refresh-cw')+' Otra</button><button class="btn small" data-action="date-mode-with-question" data-question-id="'+attr(q.id||'')+'" data-question-text="'+attr(q.text||'')+'">'+ico('timer')+' Llevar a Modo Cita</button></div></div>');
+}
+function dateConstraintsForm(id,title,submitLabel,defaults={}){
+ const minutes=Number(defaults.minutes||120),budget=Number(defaults.budget??50000),where=defaults.where||'cualquiera';
+ return '<form id="'+id+'" class="stack date-constraints" style="margin-top:16px"><div class="date-plan-grid"><div class="field"><label>Tiempo disponible</label><select name="minutes"><option value="30" '+(minutes===30?'selected':'')+'>30 min</option><option value="60" '+(minutes===60?'selected':'')+'>1 hora</option><option value="120" '+(minutes===120?'selected':'')+'>2 horas</option><option value="180" '+(minutes===180?'selected':'')+'>3 horas</option><option value="240" '+(minutes===240?'selected':'')+'>4 horas</option><option value="360" '+(minutes===360?'selected':'')+'>6 horas</option></select></div><div class="field"><label>Presupuesto total</label><input class="input" type="number" min="0" step="5000" name="budget" value="'+attr(budget)+'"></div></div><div class="field"><label>¿Dónde?</label><select name="where"><option value="cualquiera" '+(where==='cualquiera'?'selected':'')+'>Donde encaje mejor</option><option value="casa" '+(where==='casa'?'selected':'')+'>En casa</option><option value="salir" '+(where==='salir'?'selected':'')+'>Salir</option></select></div><div class="field"><label>Distancia máxima (opcional)</label><select name="maxDistanceM"><option value="">Sin límite</option><option value="3000">3 km</option><option value="7000">7 km</option><option value="15000">15 km</option></select></div><button class="btn" type="submit">'+esc(submitLabel)+'</button></form>';
+}
+async function openSurprise2(){
+ await loadDateContext();
+ showModal('Cita sorpresa 2.0',dateConstraintsForm('dateSuggestionForm','Cita sorpresa','Sorpréndenos',{minutes:120,budget:50000,where:'cualquiera'}),'date-suggestion');
+}
+function dateCandidateMarkup(experience){
+ const candidate=experience?.candidate;if(!candidate)return '<div class="empty">No encontré un plan compatible. Prueba con más tiempo, presupuesto o sin limitar el lugar.</div>';
+ dateLastExperience=experience;
+ return '<div class="date-experience card"><p class="eyebrow">PROPUESTA DE GALAXY DATE</p><span class="badge">'+Number(candidate.minutes||0)+' min · $ '+Number(candidate.budget||0).toLocaleString('es-CO')+' · '+esc(candidate.where||'')+'</span><h3>'+esc(candidate.title||'Una cita')+'</h3><p>'+esc(candidate.body||'')+'</p>'+(experience.reasons?.length?'<ul class="date-reasons">'+experience.reasons.map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul>':'')+'<div class="row wrap"><button class="btn secondary" data-action="date-experience-save">'+ico('bookmark-plus')+' Guardar plan</button><button class="btn" data-action="date-mode-start-experience">'+ico('timer')+' Empezar Modo Cita</button></div></div>';
+}
+async function openPlanRoulette(){
+ await loadDateContext();
+ const categories=[['','Todos'],['this-week','Esta semana'],['when-possible','Cuando podamos'],['someday','Algún día'],['travel','Viaje'],['home','En casa']];
+ showModal('Ruleta de planes','<form id="dateRouletteForm" class="stack"><div class="plan-roulette" aria-live="polite">'+ico('dices')+'<b>Que decida la galaxia</b><small>Solo usa planes pendientes reales.</small></div><div class="field"><label>Categoría</label><select name="category">'+categories.map(([id,label])=>'<option value="'+id+'">'+esc(label)+'</option>').join('')+'</select></div><button class="btn" type="submit">Girar ruleta</button></form>','date-roulette');
+}
+function rouletteResult(plan){
+ if(!plan)return '<div class="empty">No hay planes pendientes en esa categoría.</div>';
+ const d=plan.data||plan;
+ return '<div class="card plan-roulette result"><p class="eyebrow">LA GALAXIA ELIGIÓ</p><h3>'+esc(d.title||'Plan pendiente')+'</h3><p>'+esc(d.body||'')+'</p><div class="row wrap"><button class="btn" data-action="date-mode-start-plan" data-plan-id="'+attr(plan.id||'')+'">'+ico('timer')+' Empezar Modo Cita</button></div></div>';
+}
+async function openDatePlanner(){
+ await loadDateContext();
+ showModal('Planificador de cita',dateConstraintsForm('datePlannerForm','Planificador','Armar nuestra cita',{minutes:180,budget:100000,where:'cualquiera'}),'date-planner');
+}
+function plannerMarkup(experience){
+ const steps=experience?.steps||[];
+ if(!steps.length)return '<div class="empty">No pude armar una secuencia con esos límites. Prueba ampliando tiempo o presupuesto.</div>';
+ dateLastExperience={candidate:steps[0],planner:experience};
+ return '<div class="date-planner-result"><div class="row between"><div><p class="eyebrow">PLAN SECUENCIAL</p><h3>'+Number(experience.totalMinutes||0)+' min · $ '+Number(experience.totalBudget||0).toLocaleString('es-CO')+'</h3></div>'+ico('list-ordered')+'</div><ol>'+steps.map((step,index)=>'<li><span>'+Number(index+1)+'</span><div><b>'+esc(step.title)+'</b><small>'+Number(step.minutes||0)+' min · $ '+Number(step.budget||0).toLocaleString('es-CO')+'</small><p>'+esc(step.body||'')+'</p></div></li>').join('')+'</ol><div class="row wrap"><button class="btn secondary" data-action="date-planner-save">'+ico('bookmark-plus')+' Guardar como plan</button><button class="btn" data-action="date-mode-start-experience">'+ico('timer')+' Empezar Modo Cita</button></div></div>';
+}
+function newDateModeSession(planId=''){
+ return {sessionId:(crypto.randomUUID?.()||(Date.now().toString(36)+'-'+Math.random().toString(36).slice(2))),startedAt:new Date().toISOString(),planId:String(planId||''),songId:'',photos:[],photoPaths:[],questionIds:[],locationEnabled:false,placeId:null,question:null};
+}
+function dateModeElapsed(session=dateMode){
+ if(!session?.startedAt)return 0;
+ return Math.max(0,Math.floor((Date.now()-Date.parse(session.startedAt))/1000));
+}
+function dateModePlan(){
+ return (cloud?.items||[]).find(item=>item.kind==='plan'&&String(item.id)===String(dateMode?.planId||''))||null;
+}
+function dateModeSong(){
+ rebuildMusicQueue();return musicQueue[musicIndex]||null;
+}
+function updateDateModeTimer(){
+ if(dateModeTimer){clearInterval(dateModeTimer);dateModeTimer=null;}
+ dateModeTimer=setInterval(()=>{const el=modal.querySelector('[data-role="date-elapsed"]');if(el&&dateMode)el.textContent=fmtDuration(dateModeElapsed());},1000);
+}
+function dateModeMarkup(){
+ const plan=dateModePlan(),song=dateModeSong(),photos=dateMode?.photos||[],q=dateMode?.question;
+ const locationLabel=dateMode?.locationEnabled?(dateMode.placeId?'Lugar guardado vinculado':'Ubicación contextual activa'):'Sin ubicación';
+ return '<div class="date-mode"><div class="date-mode-hero"><p class="eyebrow">MODO CITA</p><h2 data-role="date-elapsed">'+fmtDuration(dateModeElapsed())+'</h2><p>Una pantalla temporal para acompañar este momento.</p></div><div class="date-mode-grid"><button class="card date-mode-tool" data-action="date-mode-music">'+ico('music')+'<b>Música</b><small>'+esc(song?.title||'Elegir nuestra música')+'</small></button><button class="card date-mode-tool" data-action="date-mode-question">'+ico('message-circle-question')+'<b>Pregunta</b><small>'+esc(q?.text||'Sacar una pregunta')+'</small></button><button class="card date-mode-tool" data-action="date-mode-camera">'+ico('camera')+'<b>Cámara / fotos</b><small>'+photos.length+' foto'+(photos.length===1?'':'s')+' en esta cita</small></button><button class="card date-mode-tool" data-action="date-mode-plan">'+ico('circle-check-big')+'<b>Plan actual</b><small>'+esc(plan?.data?.title||'Elegir un plan pendiente')+'</small></button><button class="card date-mode-tool" data-action="date-mode-location">'+ico('map-pin')+'<b>Ubicación</b><small>'+esc(locationLabel)+'</small></button></div>'+(q?'<div class="card date-mode-question"><p class="eyebrow">PREGUNTA PARA AHORA</p><h3>'+esc(q.text)+'</h3></div>':'')+(photos.length?'<div class="date-mode-photos">'+photos.slice(-4).map(photo=>photo.url?'<img src="'+attr(photo.url)+'" alt="Foto tomada durante la cita">':'<span>'+ico('image')+'</span>').join('')+'</div>':'')+'<button class="btn date-mode-save" data-action="date-mode-save">'+ico('heart')+' Guardar esta noche</button></div>';
+}
+function openDateMode(planId=''){
+ if(!dateMode)dateMode=newDateModeSession(planId);
+ else if(planId)dateMode.planId=String(planId);
+ showModal('Modo Cita',dateModeMarkup(),'date-mode');
+ updateDateModeTimer();
+}
+function openDateModePlanPicker(){
+ const plans=(dateContext?.pendingPlans||[]).slice();
+ showModal('Plan actual','<div class="stack">'+(plans.length?plans.map(plan=>'<button class="card plan-pick" data-action="date-mode-plan-select" data-plan-id="'+attr(plan.id)+'"><b>'+esc(plan.title||'Plan')+'</b><small>'+esc(dateDeckLabel(plan.planCategory)||'Pendiente')+'</small></button>').join(''):'<div class="empty">No hay planes pendientes. Puedes seguir en Modo Cita sin uno.</div>')+'<button class="btn ghost" data-action="date-mode-open">Volver al modo cita</button></div>');
+}
+async function openDateModeLocation(){
+ await loadDateContext();
+ if(!dateContext?.locationAvailable){
+  dateMode.locationEnabled=false;dateMode.placeId=null;toast('No hay GPS compartido activo. El Modo Cita funciona igual sin ubicación.');openDateMode();return;
+ }
+ const places=dateContext.places||[];
+ showModal('Contexto de ubicación','<div class="stack"><button class="card plan-pick" data-action="date-mode-location-select" data-place-id=""><b>Usar solo ubicación contextual</b><small>No guarda coordenadas en el recap.</small></button>'+places.slice(0,12).map(place=>'<button class="card plan-pick" data-action="date-mode-location-select" data-place-id="'+attr(place.id)+'"><b>'+esc(place.name)+'</b><small>'+(place.distanceM==null?'Lugar guardado':esc(fmtDistance(place.distanceM)))+'</small></button>').join('')+'<button class="btn ghost" data-action="date-mode-location-off">No usar ubicación</button></div>');
+}
+
 function openPlace(){
  const own=(mapData?.locations||cloud.locations||[]).find(l=>l.person===cloud.person&&l.sharing);
  if(!own){toast('Activa tu ubicación para guardar el lugar actual.');return;}
@@ -1005,7 +1396,7 @@ function openPlace(){
 function openDestination(){
  const partner=cloud.person==='0'?'1':'0',places=mapData?.places||[],active=(mapData?.destinations||[]).find(d=>String(d.person)===String(cloud.person)&&d.active!==false);
  const current=active?(active.kind==='person'?'person:'+active.target_person:'place:'+active.place_id):'none';
- showModal('Acompáñame','<form id="destinationForm" class="stack" style="margin-top:16px"><div class="field"><label>Voy hacia</label><select name="destination"><option value="person:'+partner+'" '+(current==='person:'+partner?'selected':'')+'>'+esc(partnerName())+'</option>'+places.map(p=>'<option value="place:'+p.id+'" '+(current==='place:'+p.id?'selected':'')+'>'+esc(p.name)+'</option>').join('')+'<option value="none" '+(current==='none'?'selected':'')+'>Ningún destino</option></select></div><p class="muted">El ETA se actualizará con tu ubicación y forma de moverte.</p><button class="btn" type="submit">Guardar destino</button></form>','destination');
+ showModal('Acompáñame 2.0','<form id="destinationForm" class="stack" style="margin-top:16px"><div class="field"><label>Voy hacia</label><select name="destination"><option value="person:'+partner+'" '+(current==='person:'+partner?'selected':'')+'>'+esc(partnerName())+'</option>'+places.map(p=>'<option value="place:'+p.id+'" '+(current==='place:'+p.id?'selected':'')+'>'+esc(p.name)+'</option>').join('')+'<option value="none" '+(current==='none'?'selected':'')+'>Ningún destino</option></select></div><p class="muted">La sesión muestra distancia restante, progreso, ETA e histórico. No activará tu ubicación por sí sola.</p><button class="btn" type="submit">Iniciar Acompáñame</button></form>','destination');
 }
 
 function storyDocuments(){
@@ -1032,15 +1423,64 @@ function aiResult(question){
  return docs.length?{title:'Esto encontré en su historia',body:'Relacioné tu pregunta con '+docs.length+' momentos guardados.',matches:docs.slice(0,6)}:{title:'Todavía no encuentro algo relacionado',body:'Prueba con nombres de lugares, palabras de un recuerdo, “planes pendientes”, “viajes”, “canciones” o “cuántos días juntos”.',matches:[]};
 }
 function aiResultMarkup(result){
- return '<div class="ai-answer"><span class="badge">Nuestra historia</span><h3>'+esc(result.title)+'</h3><p>'+esc(result.body)+'</p>'+(result.matches?.length?'<div class="stack compact">'+result.matches.map(m=>'<div class="ai-match"><b>'+esc(m.title||'Momento')+'</b><small>'+esc(m.body||m.date||'')+'</small></div>').join('')+'</div>':'')+'</div>';
+ const title=result?.title||'Nuestra historia',body=result?.answer||result?.body||'',sources=result?.sources||result?.matches||[],mode=result?.mode||'classic';
+ return '<div class="ai-answer"><div class="row between"><span class="badge">Nuestra historia</span><small class="muted">'+esc(mode.includes('fallback')?'fallback seguro':mode==='ai-grounded'?'IA con fuentes':'búsqueda verificada')+'</small></div><h3>'+esc(title)+'</h3><p>'+esc(body)+'</p>'+(sources.length?'<div class="stack compact ai-sources">'+sources.slice(0,10).map((m,i)=>'<div class="ai-match"><span class="badge mini">'+esc(m.ref||('S'+(i+1)))+'</span><div><b>'+esc(m.title||'Momento')+'</b><small>'+esc(m.snippet||m.body||m.date||'')+'</small></div></div>').join('')+'</div>':'')+'</div>';
 }
 function openOurAI(){
- showModal('Nuestra IA','<div class="ai-intro"><p>Busca dentro de lo que ustedes han guardado. Nada de esta función sale a un servicio de IA externo.</p><div class="chips"><button class="chip" data-action="ai-question" data-question="¿Cuántos días llevamos juntos?">Días juntos</button><button class="chip" data-action="ai-question" data-question="¿Qué planes tenemos pendientes?">Planes</button><button class="chip" data-action="ai-question" data-question="¿Qué lugares hemos guardado?">Lugares</button><button class="chip" data-action="ai-question" data-question="Muéstrame nuestros viajes">Viajes</button></div></div><form id="ourAiForm" class="stack" style="margin-top:14px"><div class="field"><label>Pregunta</label><input class="input" name="question" placeholder="Ej. ¿qué recuerdos tenemos de Útica?" required></div><button class="btn" type="submit">'+ico('sparkles')+' Buscar en nuestra historia</button></form><div data-role="ai-result" style="margin-top:14px">'+aiResultMarkup(aiResult(''))+'</div>','our-ai');
+ showModal('Nuestra IA 2.0','<div class="ai-intro intelligence-intro"><p><b>Galaxy Intelligence</b> combina coincidencia exacta, texto completo y búsqueda semántica dentro de Supabase/PostgreSQL. La búsqueda clásica sigue disponible como fallback.</p><p class="muted">'+ico('shield-check')+' Solo una selección mínima de fuentes puede enviarse al proveedor generativo cuando esa función está configurada. Coordenadas exactas no forman parte del índice semántico.</p><div class="chips"><button class="chip" data-action="ai-question" data-question="¿Cuándo estuvimos por última vez en Útica?">Última vez en Útica</button><button class="chip" data-action="ai-question" data-question="¿Qué recuerdo tenemos relacionado con pesca?">Pesca</button><button class="chip" data-action="ai-question" data-question="Busca la noche donde escuchamos nuestra canción">Música y noches</button></div></div><form id="ourAiForm" class="stack" style="margin-top:14px"><div class="field"><label>Pregunta sobre nuestra historia</label><input class="input" name="question" maxlength="600" placeholder="Ej. ¿qué recuerdos tenemos de Útica?" required></div><button class="btn" type="submit">'+ico('sparkles')+' Preguntar a Nuestra IA 2.0</button></form><div class="intelligence-tools"><button class="card intelligence-tool" type="button" data-action="intelligence-connections-open"><span>'+ico('git-branch')+'</span><div><b>IA de conexiones</b><small>Descubre relaciones y explica por qué existen.</small></div></button><button class="card intelligence-tool" type="button" data-action="intelligence-narrator-open"><span>'+ico('book-open-text')+'</span><div><b>IA narradora</b><small>Un capítulo basado únicamente en 5–10 recuerdos reales.</small></div></button><button class="card intelligence-tool" type="button" data-action="intelligence-book-open"><span>'+ico('book-heart')+'</span><div><b>Libro de Nuestra Galaxia</b><small>Historia organizada por capítulos, lista para evolucionar.</small></div></button></div><div data-role="ai-result" style="margin-top:14px">'+aiResultMarkup(aiResult(''))+'</div>','our-ai');
 }
-function showAiAnswer(question){
- const result=aiResult(question),box=modal.querySelector('[data-role="ai-result"]');if(box)box.innerHTML=aiResultMarkup(result);refreshIcons();
+async function showAiAnswer(question){
+ const q=String(question||'').trim(),box=modal.querySelector('[data-role="ai-result"]');if(!q||!box)return;
+ box.innerHTML='<div class="monthly-loading">'+loading('Buscando en nuestra historia')+'<p>Combinando exactos, texto completo y semántica…</p></div>';
+ try{
+  const result=await api('intelligence-ask',{question:q});
+  if(box.isConnected)box.innerHTML=aiResultMarkup({title:'Esto encontré',...result});
+ }catch(error){
+  const fallback=aiResult(q);
+  if(box.isConnected)box.innerHTML=aiResultMarkup({...fallback,answer:fallback.body,mode:'classic-fallback'});
+ }
+ refreshIcons();
 }
-
+function intelligenceSourceOptions(){
+ const rows=[];
+ for(const item of cloud?.items||[])if(['memory','song','plan','note','journey'].includes(item.kind))rows.push({type:item.kind,id:item.id,title:item.data?.title||item.kind});
+ for(const p of cloud?.places||mapData?.places||[])rows.push({type:'place',id:p.id,title:p.name});
+ return rows.slice(0,80);
+}
+function openIntelligenceConnectionsPicker(){
+ const rows=intelligenceSourceOptions();
+ showModal('IA de conexiones','<div class="intelligence-feature-head"><span>'+ico('git-branch')+'</span><div><h3>Conexiones explicables</h3><p>Elige una pieza de su historia. Cada relación mostrará sus razones: lugar, época, viaje o similitud semántica.</p></div></div><div class="stack intelligence-source-picker">'+(rows.length?rows.map(r=>'<button class="card compact intelligence-source-choice" data-action="intelligence-connections-run" data-source-type="'+attr(r.type)+'" data-source-id="'+attr(r.id)+'"><span>'+ico(r.type==='song'?'music':r.type==='place'?'map-pin':r.type==='journey'?'route':'heart')+'</span><b>'+esc(r.title)+'</b>'+ico('chevron-right')+'</button>').join(''):'<div class="empty">Guarden primero recuerdos, canciones, lugares o planes.</div>')+'</div>','intelligence-connections');
+}
+async function openIntelligenceConnections(sourceType,sourceId){
+ showModal('IA de conexiones','<div class="monthly-loading">'+loading('Buscando conexiones')+'<p>Comparando contexto y relaciones verificables…</p></div>','intelligence-connections');
+ try{
+  const result=await api('intelligence-connections',{sourceType,sourceId}),rows=result.connections||[];
+  showModal('IA de conexiones','<div class="intelligence-feature-head"><span>'+ico('git-branch')+'</span><div><p class="eyebrow">FUENTE</p><h3>'+esc(result.source?.title||'Momento')+'</h3></div></div><div class="stack">'+(rows.length?rows.map(r=>'<article class="card intelligence-connection"><h3>'+esc(r.title||'Conexión')+'</h3><p class="muted">'+esc(r.date||'')+'</p><ul>'+((r.reasons||[]).map(reason=>'<li>'+esc(reason)+'</li>').join(''))+'</ul></article>').join(''):'<div class="empty">Todavía no encontré una conexión suficientemente útil.</div>')+'</div>','intelligence-connections');
+ }catch(error){showModal('IA de conexiones','<div class="empty">'+ico('circle-alert')+' No pudimos calcular conexiones ahora.</div>');}
+}
+function openIntelligenceNarrator(){
+ const memories=items('memory').slice(0,20);
+ showModal('IA narradora','<form id="intelligenceNarratorForm" class="stack"><div class="intelligence-feature-head"><span>'+ico('book-open-text')+'</span><div><h3>Un capítulo, sin inventar</h3><p>Selecciona entre 5 y 10 recuerdos. Cada párrafo deberá apuntar a fuentes reales.</p></div></div><div class="intelligence-memory-picker">'+memories.map((m,i)=>'<label class="toggle-row"><input type="checkbox" name="sourceId" value="'+attr(m.id)+'" '+(i<5?'checked':'')+'><span><b>'+esc(m.data?.title||'Recuerdo')+'</b><small>'+esc(fmtDate(m.data?.date||String(m.created||'').slice(0,10)))+'</small></span></label>').join('')+'</div><button class="btn" type="submit">'+ico('sparkles')+' Crear capítulo</button></form><div data-role="narrative-result"></div>','intelligence-narrator');
+}
+function narrativeMarkup(result){
+ if(!result?.available)return '<div class="empty intelligence-fallback">'+ico('shield-check')+'<h3>No se generó un capítulo</h3><p>'+esc(result?.error||'La IA narradora no está disponible. Los recuerdos originales siguen intactos.')+'</p></div>';
+ const n=result.narrative||{};
+ return '<article class="intelligence-narrative"><p class="eyebrow">CAPÍTULO BASADO EN FUENTES</p><h2>'+esc(n.title||'Nuestro capítulo')+'</h2>'+((n.paragraphs||[]).map(p=>'<p>'+esc(p.text)+' <small>['+(p.sourceIds||[]).map(esc).join(', ')+']</small></p>').join(''))+'</article>';
+}
+async function openIntelligenceBook(){
+ showModal('Libro de Nuestra Galaxia','<div class="monthly-loading">'+loading('Ordenando nuestra historia')+'<p>Preparando capítulos internos…</p></div>','intelligence-book');
+ try{
+  const book=await api('intelligence-book'),chapterIcons={beginning:'sparkles',firsts:'footprints',dates:'calendar-heart',trips:'route',places:'map-pin',music:'music',photos:'images',quotes:'quote',stats:'chart-no-axes-column-increasing',narrative:'book-open-text'};
+  const labels={beginning:'Inicio',firsts:'Primeras veces',dates:'Citas',trips:'Viajes',places:'Lugares',music:'Música',photos:'Fotos',quotes:'Frases',stats:'Estadísticas',narrative:'Capítulos narrativos'};
+  showModal('Libro de Nuestra Galaxia','<div class="intelligence-book-head"><span>'+ico('book-heart')+'</span><div><p class="eyebrow">VERSIÓN INTERNA 1</p><h2>Libro de Nuestra Galaxia</h2><p>Organizado para una futura exportación, sin hacer del PDF un requisito de este Galaxy.</p></div></div><div class="intelligence-book-sections">'+(book.sections||[]).map(section=>'<details class="card intelligence-book-section"><summary><span>'+ico(chapterIcons[section.id]||'book-open')+'</span><b>'+esc(labels[section.id]||section.title)+'</b><small>'+Number(section.items?.length||0)+'</small></summary><div class="stack compact">'+((section.items||[]).length?section.items.map(item=>'<div class="ai-match"><b>'+esc(item.title||'Momento')+'</b><small>'+esc(item.date||'')+(item.snippet?' · '+esc(item.snippet):'')+'</small></div>').join(''):'<p class="muted">Este capítulo crecerá con su historia.</p>')+'</div></details>').join('')+'</div>','intelligence-book');
+ }catch(error){showModal('Libro de Nuestra Galaxia','<div class="empty">'+ico('circle-alert')+' No pudimos organizar el libro ahora.</div>');}
+}
+async function openIntelligenceSearchResult(btn){
+ const type=String(btn.dataset.sourceType||''),id=String(btn.dataset.sourceId||'');
+ if(type==='place'){const fake={dataset:{type:'place',id}};await openUniversalSearchResult(fake);return;}
+ if(kindMeta[type]){const fake={dataset:{type:'item',id,kind:type}};await openUniversalSearchResult(fake);return;}
+ showModal(btn.dataset.title||'Resultado','<div class="ai-answer"><span class="badge">'+esc(type||'Historia')+'</span><h3>'+esc(btn.dataset.title||'Momento')+'</h3><p>'+esc(btn.dataset.snippet||'Contenido relacionado dentro de su historia.')+'</p></div>');
+}
 async function busy(task,success){
  try{await task();if(success)toast(success);}
  catch(e){toast(e.message);}
@@ -1051,6 +1491,7 @@ async function submitItem(form){
  if(fd.has('date'))data.date=fd.get('date');
  if(kind==='event')data.annual=fd.get('annual')==='on';
  if(kind==='plan'||kind==='wish')data.done=fd.get('done')==='on';
+ if(kind==='plan'){data.planCategory=fd.get('planCategory');data.budget=Math.max(0,Number(fd.get('budget')||0));data.minutes=Math.max(15,Number(fd.get('minutes')||120));data.where=fd.get('where')==='casa'?'casa':'salir';}
  if(fd.has('placeId')&&String(fd.get('placeId')||''))data.placeId=Number(fd.get('placeId'));
  await api('item-save',{...(id?{id,version}:{}),kind,data});closeModal();await refreshState();toast('Guardado en nuestra galaxia.');
 }
@@ -1060,7 +1501,7 @@ async function deleteItem(id){
  await api('item-delete',{id,version:item.version});await refreshState();toast('Eliminado.');
 }
 async function saveDaily(field,value){await api('daily-save',{field,value});await refreshState();}
-async function sendGesture(gesture){await api('bond-save',{type:'gesture',data:{gesture}});await refreshState({quiet:true});render();toast(gesture==='hug'?'Abrazo enviado.':gesture==='kiss'?'Beso enviado.':'Le contaste que le extrañas.');}
+async function sendGesture(gestureId){const definition=bondGestureCatalog().find(g=>String(g.id)===String(gestureId));await api('bond-send-gesture',{gestureId});await refreshState({quiet:true});render();toast(definition?.behavior==='haptic'?'Toque enviado.':(definition?.name||'Gesto')+' enviado.');}
 async function bondDelete(id){
  const e=cloud.bond.entries.find(x=>x.id===id);if(!e||!confirm('¿Eliminar este momento?'))return;
  await api('bond-delete',{id,version:e.version});await refreshState();toast('Momento eliminado.');
@@ -1084,10 +1525,30 @@ document.addEventListener('click',async e=>{
   if(a==='welcome-skip'){finishAdriWelcome();return;}
   if(a==='welcome-replay'){welcomePreview=true;welcomeStep=0;welcomeGift=true;welcomeEntering=false;tourStep=-1;render();window.scrollTo(0,0);return;}
   if(a==='modal-close'){closeModal();return;}
+  if(a==='goals-open'){view='goals';render();await loadGoals(true);return;}
+  if(a==='goals-filter'){goalsFilter=btn.dataset.value||'active';render();return;}
+  if(a==='goal-new'){openGoalForm('goal');return;}
+  if(a==='goal-savings-new'){openGoalForm('savings');return;}
+  if(a==='goal-open'){openGoalDetail(btn.dataset.id);return;}
+  if(a==='goal-edit'){const goal=goalById(btn.dataset.id);if(goal)openGoalForm(goal.kind,goal);return;}
+  if(a==='goal-delete'){const goal=goalById(btn.dataset.id);if(goal&&confirm('¿Eliminar este objetivo? Sus planes, deseos, notas y recuerdos relacionados se conservarán.')){const result=await api('goals-engine',{operation:'delete',goalId:goal.id,expectedVersion:goal.version});goalsState=null;closeModal();await loadGoals(true);toast(result.ok?'Objetivo eliminado.':'No se pudo eliminar.');}return;}
+  if(a==='goal-step-add'){openGoalStepAdd(btn.dataset.id);return;}
+  if(a==='goal-step-toggle'){const goal=goalById(btn.dataset.goalId);if(goal){await api('goals-engine',{operation:'step-toggle',goalId:goal.id,expectedVersion:goal.version,stepId:btn.dataset.stepId,completed:btn.dataset.completed!=='true'});await refreshGoal(goal.id);}return;}
+  if(a==='goal-step-up'){const goal=goalById(btn.dataset.goalId),index=Number(btn.dataset.index);if(goal&&index>0){const ids=(goal.steps||[]).map(step=>String(step.id));[ids[index],ids[index-1]]=[ids[index-1],ids[index]];await api('goals-engine',{operation:'step-reorder',goalId:goal.id,expectedVersion:goal.version,stepIds:ids});await refreshGoal(goal.id);}return;}
+  if(a==='goal-step-down'){const goal=goalById(btn.dataset.goalId),index=Number(btn.dataset.index);if(goal&&index>=0&&index<(goal.steps||[]).length-1){const ids=(goal.steps||[]).map(step=>String(step.id));[ids[index],ids[index+1]]=[ids[index+1],ids[index]];await api('goals-engine',{operation:'step-reorder',goalId:goal.id,expectedVersion:goal.version,stepIds:ids});await refreshGoal(goal.id);}return;}
+  if(a==='goal-contribution-add'){openGoalContribution(btn.dataset.id);return;}
+  if(a==='goal-contribution-delete'){const goal=goalById(btn.dataset.goalId);if(goal&&confirm('¿Eliminar este aporte manual?')){await api('goals-engine',{operation:'contribution-delete',goalId:goal.id,expectedVersion:goal.version,contributionId:btn.dataset.contributionId});await refreshGoal(goal.id);}return;}
+  if(a==='goal-link-add'){openGoalLink(btn.dataset.id);return;}
+  if(a==='goal-link-delete'){const goal=goalById(btn.dataset.goalId);if(goal){await api('goals-engine',{operation:'link-delete',goalId:goal.id,expectedVersion:goal.version,linkId:btn.dataset.linkId});await refreshGoal(goal.id);}return;}
+  if(a==='goal-convert-item'){openGoalConvert(cloud.items.find(item=>String(item.id)===String(btn.dataset.id)));return;}
   if(a==='universal-search-open'){openUniversalSearch();return;}
   if(a==='universal-search-result'){await openUniversalSearchResult(btn);return;}
   if(a==='monthly-summary-open'){await openMonthlySummary(btn.dataset.month||String(cloud.today||'').slice(0,7));return;}
   if(a==='monthly-summary-month'){if(!btn.disabled)await openMonthlySummary(btn.dataset.month);return;}
+  if(a==='insights-week-open'){await openInsights('week',btn.dataset.key||cloud.today);return;}
+  if(a==='insights-month-open'){await openInsights('month',btn.dataset.key||String(cloud.today||'').slice(0,7));return;}
+  if(a==='insights-year-open'){await openInsights('year',btn.dataset.key||String(cloud.today||'').slice(0,4));return;}
+  if(a==='insights-period'){if(!btn.disabled&&btn.dataset.key)await openInsights(btn.dataset.kind,btn.dataset.key);return;}
   if(a==='today-history-open'){await openTodayHistory();return;}
   if(a==='today-history-refresh'){await openTodayHistory(true);return;}
   if(a==='today-history-item'){await openTodayHistoryItem(btn);return;}
@@ -1109,6 +1570,11 @@ document.addEventListener('click',async e=>{
   if(a==='item-delete'){await deleteItem(btn.dataset.id);return;}
   if(a==='mood'){await busy(()=>saveDaily('mood',btn.dataset.value),'Estado guardado.');return;}
   if(a==='gesture'){await busy(()=>sendGesture(btn.dataset.gesture));return;}
+  if(a==='bond-send-gesture'){await busy(()=>sendGesture(btn.dataset.gestureId));return;}
+  if(a==='bond-gesture-manage'){openBondGestureManager();return;}
+  if(a==='bond-gesture-new'){openBondGestureForm();return;}
+  if(a==='bond-gesture-edit'){const gesture=cloud?.bond?.gestures?.custom?.find(g=>String(g.id)===String(btn.dataset.id));if(gesture)openBondGestureForm(gesture);return;}
+  if(a==='bond-gesture-delete'){const gesture=cloud?.bond?.gestures?.custom?.find(g=>String(g.id)===String(btn.dataset.id));if(gesture&&confirm('¿Eliminar este gesto personalizado? El historial anterior se conservará.')){await api('bond-gesture-delete',{id:gesture.id,version:gesture.version});closeModal();await refreshState();toast('Gesto eliminado.');}return;}
   if(a==='new-game'){openGame();return;}
   if(a==='new-ritual'){openRitual();return;}
   if(a==='ritual-edit'){openRitual(cloud.bond.entries.find(x=>x.id===btn.dataset.id));return;}
@@ -1116,7 +1582,7 @@ document.addEventListener('click',async e=>{
   if(a==='sharednote-edit'){openSharedNote(cloud.bond.entries.find(x=>x.id===btn.dataset.id));return;}
   if(a==='new-voice'){openVoice();return;}
   if(a==='voice-for-item'){openVoice(btn.dataset.id);return;}
-  if(a==='anniversary-open'){memoryTab='memory';go('memories');setTimeout(()=>document.querySelector('.constellation')?.scrollIntoView({behavior:'smooth',block:'center'}),80);return;}
+  if(a==='anniversary-open'){await openInsights('anniversary','');return;}
   if(a==='constellation-item'){const i=cloud.items.find(x=>x.id===btn.dataset.id);if(i)showModal(i.data?.title||'Recuerdo','<div class="card" style="margin-top:16px"><span class="badge">'+esc(kindMeta[i.kind]?.[1]||'Historia')+'</span><p style="margin-top:10px">'+esc(i.data?.body||fmtDate(i.data?.date)||'Parte de nuestra historia.')+'</p>'+(linkedVoices(i.id).length?linkedVoices(i.id).map(voiceCard).join(''):'')+'</div>');return;}
   if(a==='voice-record-start'){voiceResumeMusic=musicPlaying;if(musicPlaying)toggleMusic();await GalaxyNative.call('startVoiceRecording');voiceRecording=true;voiceReady=false;startVoiceTimer();modal.querySelector('[data-role="voice-status"]').textContent='Grabando… 0 s / 60 s';btn.hidden=true;modal.querySelector('[data-action="voice-record-stop"]').hidden=false;return;}
   if(a==='voice-record-stop'){const info=await GalaxyNative.call('stopVoiceRecording');stopVoiceTimer();voiceRecording=false;voiceReady=true;modal.querySelector('[data-role="voice-status"]').textContent='Grabación lista · '+Math.max(1,Math.round((info.durationMs||0)/1000))+' s. Escúchala antes de guardar.';btn.hidden=true;modal.querySelector('[data-action="voice-record-start"]').hidden=false;modal.querySelector('[data-action="voice-preview"]').hidden=false;modal.querySelector('[data-action="voice-discard"]').hidden=false;if(voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}return;}
@@ -1125,10 +1591,29 @@ document.addEventListener('click',async e=>{
   if(a==='voice-file'){const form=modal.querySelector('#voiceForm'),fd=new FormData(form);pendingVoiceDraft={title:String(fd.get('title')||''),body:String(fd.get('body')||''),referenceId:String(fd.get('referenceId')||'')};if(!pendingVoiceDraft.title.trim()){toast('Ponle un título al mensaje.');return;}const upload=await GalaxyNative.call('pickMedia','voice');await api('bond-save',{type:'voice',data:{...pendingVoiceDraft,audioPath:upload.path,mime:upload.mime}});pendingVoiceDraft=null;closeModal();await refreshState();toast('Mensaje de voz guardado.');return;}
   if(a==='bond-delete'){await busy(()=>bondDelete(btn.dataset.id));return;}
   if(a==='game-guess'){await busy(async()=>{await api('bond-guess',{id:btn.dataset.id,guess:btn.dataset.guess});await refreshState();},'Respuesta enviada.');return;}
-  if(a==='surprise'){openSurprise();return;}
+  if(a==='surprise'){await openSurprise2();return;}
   if(a==='surprise-note-new'){if(!mapData)await refreshMap({quiet:true,detail:false});openSurpriseNote();return;}
-  if(a==='surprise-again'){openSurprise();return;}
-  if(a==='surprise-save'&&lastSurprise){await busy(async()=>{await api('item-save',{kind:'plan',data:{title:lastSurprise.title,body:lastSurprise.body,category:'Cita sorpresa',done:false}});closeModal();await refreshState();},'Cita guardada en Planes.');return;}
+  if(a==='date-question-decks'){await openQuestionDecks();return;}
+  if(a==='date-deck-question'){await openDeckQuestion(btn.dataset.deck);return;}
+  if(a==='date-question-favorite'){const result=await api('date-engine',{operation:'favorite',favorite:!dateContext?.question?.favorite});if(dateContext)dateContext.question=result.question;render();toast(result.question?.favorite?'Pregunta guardada en favoritas.':'Pregunta quitada de favoritas.');return;}
+  if(a==='date-question-memory'){const result=await api('date-engine',{operation:'favorite-memory',day:cloud.today});await refreshState({quiet:true});await loadDateContext(true);render();toast(result.existing?'Ese recuerdo ya estaba guardado.':'Pregunta y respuestas guardadas como un recuerdo.');return;}
+  if(a==='plan-roulette-open'){await openPlanRoulette();return;}
+  if(a==='date-planner-open'){await openDatePlanner();return;}
+  if(a==='date-mode-open'){await loadDateContext();openDateMode();return;}
+  if(a==='date-mode-with-question'){dateMode=dateMode||newDateModeSession();dateMode.question={id:btn.dataset.questionId,text:btn.dataset.questionText};if(btn.dataset.questionId&&!dateMode.questionIds.includes(btn.dataset.questionId))dateMode.questionIds.push(btn.dataset.questionId);openDateMode();return;}
+  if(a==='date-mode-question'){const result=await api('date-engine',{operation:'question',seed:(cloud.today||'')+'|date-mode|'+(++dateQuestionNonce)});dateMode.question=result.question;if(result.question?.id&&!dateMode.questionIds.includes(result.question.id))dateMode.questionIds.push(result.question.id);openDateMode();return;}
+  if(a==='date-mode-camera'){const photo=await GalaxyNative.call('capturePhoto');dateMode.photos.push(photo);if(photo.path&&!dateMode.photoPaths.includes(photo.path))dateMode.photoPaths.push(photo.path);media.photo=null;mediaLoadedAt.photo=0;openDateMode();toast('Foto añadida a esta cita y al álbum privado.');return;}
+  if(a==='date-mode-music'){rebuildMusicQueue();if(!musicQueue.length){closeModal();memoryTab='music';go('memories');toast('Añade una canción y vuelve a Modo Cita.');return;}if(musicIndex<0)playMusicAt(0);else toggleMusic();dateMode.songId=musicQueue[musicIndex]?.id||'';openDateMode();return;}
+  if(a==='date-mode-plan'){await loadDateContext();openDateModePlanPicker();return;}
+  if(a==='date-mode-plan-select'){dateMode.planId=String(btn.dataset.planId||'');openDateMode();return;}
+  if(a==='date-mode-location'){await openDateModeLocation();return;}
+  if(a==='date-mode-location-select'){dateMode.locationEnabled=true;dateMode.placeId=btn.dataset.placeId?Number(btn.dataset.placeId):null;openDateMode();return;}
+  if(a==='date-mode-location-off'){dateMode.locationEnabled=false;dateMode.placeId=null;openDateMode();return;}
+  if(a==='date-mode-save'){const endedAt=new Date().toISOString(),session={...dateMode,endedAt,elapsedSeconds:dateModeElapsed(),photoPaths:dateMode.photoPaths||[],questionIds:dateMode.questionIds||[]};const result=await api('date-engine',{operation:'date-recap-save',session});dateMode=null;if(dateModeTimer){clearInterval(dateModeTimer);dateModeTimer=null;}closeModal();await refreshState();toast(result.existing?'Esta cita ya estaba guardada.':'Esta noche quedó guardada como recuerdo.');return;}
+  if(a==='date-experience-save'&&dateLastExperience?.candidate){const x=dateLastExperience.candidate;await api('item-save',{kind:'plan',data:{title:x.title,body:x.body,category:'Galaxy Date',planCategory:x.planCategory||'when-possible',budget:Number(x.budget||0),minutes:Number(x.minutes||120),where:x.where||'salir',done:false,source:{type:'date-engine',candidateId:x.id}}});await refreshState({quiet:true});await loadDateContext(true);toast('Plan guardado.');return;}
+  if(a==='date-planner-save'&&dateLastExperience?.planner){const p=dateLastExperience.planner;await api('item-save',{kind:'plan',data:{title:'Cita planificada · '+cloud.today,body:p.steps.map((x,n)=>(n+1)+'. '+x.title).join('\n'),category:'Galaxy Date',planCategory:'when-possible',budget:Number(p.totalBudget||0),minutes:Number(p.totalMinutes||0),where:p.constraints?.where==='casa'?'casa':'salir',done:false,source:{type:'date-engine-planner',stepIds:p.steps.map(x=>x.id)}}});await refreshState({quiet:true});await loadDateContext(true);toast('Cita planificada guardada.');return;}
+  if(a==='date-mode-start-experience'&&dateLastExperience){const id=dateLastExperience.candidate?.source==='pending'?dateLastExperience.candidate.id:'';dateMode=newDateModeSession(id);openDateMode(id);return;}
+  if(a==='date-mode-start-plan'){dateMode=newDateModeSession(btn.dataset.planId);openDateMode(btn.dataset.planId);return;}
   if(a==='album-add'){openAlbumAdd();return;}
   if(a==='photos-picker'){await importPhotosPicker();return;}
   if(a==='photo-file'){closeModal();await GalaxyNative.call('pickMedia','photo');await refreshPhotoAlbum();toast('Foto añadida desde el teléfono.');return;}
@@ -1147,13 +1632,28 @@ document.addEventListener('click',async e=>{
   if(a==='history-place'){if(map)map.setView([Number(btn.dataset.lat),Number(btn.dataset.lon)],16);document.querySelector('#map')?.scrollIntoView({behavior:'smooth',block:'center'});return;}
   if(a==='memory-at-place'){openItemForm('memory',{data:{placeId:Number(btn.dataset.id)}});return;}
   if(a==='our-ai'){if(!mapData)await refreshMap({quiet:true,detail:true});openOurAI();return;}
-  if(a==='ai-question'){const q=btn.dataset.question||'';const input=modal.querySelector('#ourAiForm [name="question"]');if(input)input.value=q;showAiAnswer(q);return;}
+  if(a==='ai-question'){const q=btn.dataset.question||'';const input=modal.querySelector('#ourAiForm [name="question"]');if(input)input.value=q;await showAiAnswer(q);return;}
+  if(a==='intelligence-search-result'){await openIntelligenceSearchResult(btn);return;}
+  if(a==='intelligence-connections-open'){openIntelligenceConnectionsPicker();return;}
+  if(a==='intelligence-connections-run'){await openIntelligenceConnections(btn.dataset.sourceType,btn.dataset.sourceId);return;}
+  if(a==='intelligence-narrator-open'){openIntelligenceNarrator();return;}
+  if(a==='intelligence-book-open'){await openIntelligenceBook();return;}
+  if(a==='voice-transcribe'){if(!confirm('¿Transcribir este audio para poder buscar dentro de él? El audio original se conservará.'))return;toast('Transcribiendo audio…');await api('intelligence-transcribe',{bondId:btn.dataset.id});await refreshState({quiet:true});render();toast('Transcripción lista.');return;}
+  if(a==='voice-transcript-delete'){if(!confirm('¿Eliminar solo la transcripción? El audio original se conservará.'))return;await api('intelligence-transcript-delete',{bondId:btn.dataset.id});await refreshState({quiet:true});render();toast('Transcripción eliminada. El audio sigue intacto.');return;}
   if(a==='backup-export'){const backup=await api('backup-export');await GalaxyNative.call('exportJson','nuestra-galaxia-backup-'+(cloud.today||'copia')+'.json',JSON.stringify(backup));toast('Copia guardada en el teléfono.');return;}
   if(a==='gps-history-export'){await exportGpsHistory();return;}
   if(a==='gps-history-delete-open'){openGpsHistoryDelete();return;}
   if(a==='gps-history-map'){closeModal();go('map');return;}
   if(a==='theme-set'){const state=window.GalaxyTheme?.applyTheme(btn.dataset.value);render();toast(state?.selected==='auto'?'Tema automático · ahora '+window.GalaxyTheme.LABELS[state.active]+'.':'Tema '+window.GalaxyTheme.LABELS[state?.active]+' activado.');return;}
   if(a==='backup-import'){if(!confirm('Restaurar una copia añadirá lo que falte sin borrar lo que ya existe. ¿Continuar?'))return;const file=await GalaxyNative.call('importJson'),backup=JSON.parse(file.json||'{}'),result=await api('backup-import',{backup});await refreshState({quiet:true});await refreshMap({quiet:true,detail:true});render();const r=result.restored||{};toast('Copia restaurada: '+Number(r.items||0)+' contenidos, '+Number(r.places||0)+' lugares y '+Number(r.bond||0)+' momentos.');return;}
+  if(a==='context-near-toggle'){const s=contextSettings(),next=!s.near_enabled;const result=await api('context-settings',{operation:'save',nearEnabled:next});await GalaxyNative.call('setContextPushPrefs',!!result.settings.near_enabled,!!result.settings.arrived_safe_enabled);await refreshMap({detail:true});toast(next?'Avisos de cercanía activados.':'Avisos de cercanía apagados.');return;}
+  if(a==='context-arrived-toggle'){const s=contextSettings(),next=!s.arrived_safe_enabled;const result=await api('context-settings',{operation:'save',arrivedSafeEnabled:next});await GalaxyNative.call('setContextPushPrefs',!!result.settings.near_enabled,!!result.settings.arrived_safe_enabled);await refreshMap({detail:true});toast(next?'Llegué bien automático activado.':'Llegué bien automático apagado.');return;}
+  if(a==='context-settings-open'){openContextSettings();return;}
+  if(a==='context-return-home'){if(!native.tracking){toast('Activa Compartir ubicación antes de iniciar Regreso a casa. La app no la activará automáticamente.');return;}await api('context-session',{operation:'start',mode:'return_home'});await refreshMap({detail:true});toast('Regreso a casa iniciado.');return;}
+  if(a==='context-session-stop'){await api('context-session',{operation:'stop'});await refreshMap({detail:true});toast('Sesión terminada.');return;}
+  if(a==='context-suggestion-dismiss'){await api('context-suggestion',{operation:'dismiss',id:btn.dataset.id});await refreshMap({detail:true});toast('Sugerencia descartada.');return;}
+  if(a==='context-suggestion-accept'){const suggestion=(mapData?.context?.suggestions||[]).find(s=>String(s.id)===String(btn.dataset.id));const result=await api('context-suggestion',{operation:'accept',id:btn.dataset.id});if(suggestion?.kind==='date'){const recap=await api('context-recap',{kind:'date',sourceEventId:suggestion.source_event_id});showModal('Recap de cita',contextRecapMarkup('Recap de cita',recap.recap));setTimeout(()=>renderContextRecapMap(recap.recap),30);}else{await refreshState({quiet:true});toast(result.item?'Recuerdo guardado.':'Sugerencia aceptada.');}await refreshMap({quiet:true,detail:true});return;}
+  if(a==='context-trip-recap'){const recap=await api('context-recap',{kind:'trip',tripId:Number(btn.dataset.id)});showModal('Recap de recorrido',contextRecapMarkup('Recap de recorrido',recap.recap));setTimeout(()=>renderContextRecapMap(recap.recap),30);return;}
   if(a==='map-refresh'){await refreshMap({detail:true});return;}
   if(a==='status-menu'){$('#statusMenu')?.classList.toggle('open');return;}
   if(a==='status-set'){await api('status-set',{status:btn.dataset.status});$('#statusMenu')?.classList.remove('open');await refreshMap();toast('Estado actualizado.');return;}
@@ -1188,6 +1688,7 @@ document.addEventListener('click',async e=>{
   if(a==='widget-photo-select'){await api('bond-widget',{photoPath:btn.dataset.path});closeModal();await GalaxyNative.call('refreshMoments');await refreshState();toast('Foto del widget actualizada.');return;}
   if(a==='widget-photo-clear'){await api('bond-widget',{photoPath:''});await GalaxyNative.call('refreshMoments');await refreshState();toast('Foto del widget retirada.');return;}
   if(a==='moment-notifications'){await GalaxyNative.call('setMomentNotifications',!native.momentNotifications);native=nativeState();render();toast(native.momentNotifications?'Notificaciones activadas. Usa “Probar ahora” para verificar Android.':'Notificaciones pausadas.');return;}
+  if(a==='bond-haptics'){await GalaxyNative.call('setBondHaptics',!native.bondHaptics);native=nativeState();render();toast(native.bondHaptics?'Toques hápticos activados.':'Toques hápticos apagados.');return;}
   if(a==='moment-notification-test'){await GalaxyNative.call('testMomentNotification');native=nativeState();toast('Notificación de prueba enviada. Revisa la bandeja de Android.');return;}
   if(a==='update-check'){await GalaxyNative.call('checkUpdate');return;}
   if(a==='unpair'){if(confirm('¿Desvincular este teléfono de Nuestra Galaxia?')){await GalaxyNative.call('unpair');native=nativeState();cloud=null;render();}return;}
@@ -1209,14 +1710,24 @@ document.addEventListener('change',e=>{
 document.addEventListener('submit',async e=>{
  e.preventDefault();
  try{
-  if(e.target.id==='ourAiForm'){const q=String(new FormData(e.target).get('question')||'');showAiAnswer(q);return;}
+  if(e.target.id==='ourAiForm'){const q=String(new FormData(e.target).get('question')||'');await showAiAnswer(q);return;}
+  if(e.target.id==='intelligenceNarratorForm'){const ids=new FormData(e.target).getAll('sourceId').map(String);if(ids.length<5||ids.length>10)throw new Error('Selecciona entre 5 y 10 recuerdos.');const box=modal.querySelector('[data-role="narrative-result"]');if(box)box.innerHTML='<div class="monthly-loading">'+loading('Escribiendo solo con fuentes reales')+'<p>Validaremos cada párrafo antes de mostrarlo…</p></div>';const result=await api('intelligence-narrate',{sourceIds:ids});if(box)box.innerHTML=narrativeMarkup(result);refreshIcons();return;}
   if(e.target.id==='gpsHistoryDeleteForm'){const value=new FormData(e.target).get('confirmation');if(!window.GalaxyGpsHistory?.validDeleteConfirmation(value))throw new Error('Escribe BORRAR exactamente para confirmar.');const submit=e.target.querySelector('button[type="submit"]');if(submit)submit.disabled=true;await deleteGpsHistory();return;}
   if(e.target.id==='pairForm'){
    const code=new FormData(e.target).get('code');await GalaxyNative.call('pair',String(code));native=nativeState();await refreshState();toast('Teléfono vinculado como '+myName()+'.');return;
   }
   if(e.target.id==='musicUrlForm'){const fd=new FormData(e.target),url=String(fd.get('url')||'').trim(),title=String(fd.get('title')||'').trim(),platform=detectMusicPlatform(url);if(!/^https:\/\//i.test(url))throw new Error('Usa un enlace https válido.');await api('item-save',{kind:'song',data:{title,url,platform}});closeModal();await refreshState();rebuildMusicQueue();renderGlobalPlayer();toast('Canción añadida a Nuestra música.');return;}
+  if(e.target.id==='dateSuggestionForm'){const fd=new FormData(e.target),constraints={minutes:Number(fd.get('minutes')),budget:Number(fd.get('budget')),where:String(fd.get('where')),maxDistanceM:fd.get('maxDistanceM')?Number(fd.get('maxDistanceM')):null};const result=await api('date-engine',{operation:'surprise',constraints,seed:cloud.today+'|surprise|'+(++dateQuestionNonce)});showModal('Cita sorpresa 2.0',dateCandidateMarkup(result.experience));return;}
+  if(e.target.id==='dateRouletteForm'){const fd=new FormData(e.target),result=await api('date-engine',{operation:'roulette',category:String(fd.get('category')||''),seed:cloud.today+'|roulette|'+(++dateQuestionNonce)});showModal('Ruleta de planes',rouletteResult(result.plan));return;}
+  if(e.target.id==='datePlannerForm'){const fd=new FormData(e.target),constraints={minutes:Number(fd.get('minutes')),budget:Number(fd.get('budget')),where:String(fd.get('where')),maxDistanceM:fd.get('maxDistanceM')?Number(fd.get('maxDistanceM')):null};const result=await api('date-engine',{operation:'planner',constraints,seed:cloud.today+'|planner|'+(++dateQuestionNonce)});showModal('Nuestra cita',plannerMarkup(result.experience));return;}
+  if(e.target.id==='goalForm'){const fd=new FormData(e.target),id=modal.dataset.goalId,version=Number(modal.dataset.goalVersion||0),participants=[fd.get('participant0')==='on'?'0':'',fd.get('participant1')==='on'?'1':''].filter(Boolean),goal={kind:String(fd.get('kind')||'goal'),title:String(fd.get('title')||''),description:String(fd.get('description')||''),category:String(fd.get('category')||'other'),targetDate:String(fd.get('targetDate')||''),status:String(fd.get('status')||'active'),participants,...(String(fd.get('kind'))==='savings'?{targetAmount:Number(fd.get('targetAmount'))}:{})};const result=await api('goals-engine',{operation:id?'update':'create',...(id?{goalId:id,expectedVersion:version}:{}),goal});closeModal();await loadGoals(true);if(result.goal){render();openGoalDetail(result.goal.id);}toast(id?'Objetivo actualizado.':'Objetivo creado.');return;}
+  if(e.target.id==='goalStepForm'){const fd=new FormData(e.target),goal=goalById(fd.get('goalId'));if(!goal)throw new Error('Objetivo no encontrado.');await api('goals-engine',{operation:'step-add',goalId:goal.id,expectedVersion:goal.version,title:String(fd.get('title')||'')});await refreshGoal(goal.id);return;}
+  if(e.target.id==='goalContributionForm'){const fd=new FormData(e.target),goal=goalById(fd.get('goalId'));if(!goal)throw new Error('Objetivo no encontrado.');await api('goals-engine',{operation:'contribution-add',goalId:goal.id,expectedVersion:goal.version,contribution:{amount:Number(fd.get('amount')),date:String(fd.get('date')||''),note:String(fd.get('note')||'')}});await refreshGoal(goal.id);return;}
+  if(e.target.id==='goalLinkForm'){const fd=new FormData(e.target),goal=goalById(fd.get('goalId')),item=cloud.items.find(x=>String(x.id)===String(fd.get('itemId')));if(!goal||!item)throw new Error('Contenido no disponible.');await api('goals-engine',{operation:'link-add',goalId:goal.id,expectedVersion:goal.version,itemId:item.id,relation:item.kind});await refreshGoal(goal.id);return;}
+  if(e.target.id==='goalConvertForm'){const fd=new FormData(e.target),participants=[fd.get('participant0')==='on'?'0':'',fd.get('participant1')==='on'?'1':''].filter(Boolean),result=await api('goals-engine',{operation:'convert-item',itemId:String(fd.get('itemId')||''),keepOriginal:fd.get('keepOriginal')==='on',participants});closeModal();await refreshState({quiet:true});await loadGoals(true);view='goals';render();if(result.goal)openGoalDetail(result.goal.id);toast('Objetivo creado desde el contenido original.');return;}
   if(e.target.id==='dailyForm'){await saveDaily('answer',new FormData(e.target).get('answer'));toast('Respuesta guardada.');return;}
   if(e.target.id==='itemForm'){await submitItem(e.target);return;}
+  if(e.target.id==='bondGestureForm'){const fd=new FormData(e.target),id=String(fd.get('id')||''),version=Number(fd.get('version')||0),gesture={name:String(fd.get('name')||''),icon:String(fd.get('icon')||''),text:String(fd.get('text')||''),behavior:String(fd.get('behavior')||'message')};await api('bond-gesture-save',{...(id?{id,version}:{}),gesture});closeModal();await refreshState();toast(id?'Gesto actualizado.':'Gesto creado.');return;}
   if(e.target.id==='gameForm'){const fd=new FormData(e.target);await api('bond-save',{type:'game',data:{questionId:fd.get('questionId'),answer:fd.get('answer')}});closeModal();await refreshState();toast('Pregunta guardada.');return;}
   if(e.target.id==='ritualForm'){const fd=new FormData(e.target),data={week:fd.get('week'),gratitude:fd.get('gratitude'),need:fd.get('need'),plan:fd.get('plan')},id=modal.dataset.editId,version=Number(modal.dataset.version||0);if(id)await api('bond-update',{id,version,data});else await api('bond-save',{type:'ritual',data});closeModal();await refreshState();toast('Ritual guardado.');return;}
   if(e.target.id==='sharedNoteForm'){const fd=new FormData(e.target),data={title:fd.get('title'),body:fd.get('body')},id=modal.dataset.editId,version=Number(modal.dataset.version||0);if(id)await api('bond-update',{id,version,data});else await api('bond-save',{type:'sharednote',data});closeModal();await refreshState();toast('Nota compartida guardada.');return;}
@@ -1229,8 +1740,9 @@ document.addEventListener('submit',async e=>{
    await api('bond-save',{type:'voice',data:{...pendingVoiceDraft,audioPath:upload.path,mime:upload.mime}});
    pendingVoiceDraft=null;voiceReady=false;closeModal();await refreshState();toast('Mensaje de voz guardado.');return;
   }
+  if(e.target.id==='contextSettingsForm'){const fd=new FormData(e.target),payload={operation:'save',nearEnabled:fd.get('nearEnabled')==='on',nearDistanceM:Number(fd.get('nearDistanceM')),nearCooldownMinutes:Number(fd.get('nearCooldownMinutes')),arrivedSafeEnabled:fd.get('arrivedSafeEnabled')==='on',dateSuggestions:fd.get('dateSuggestions')==='on',memorySuggestions:fd.get('memorySuggestions')==='on',sharedTripDetection:fd.get('sharedTripDetection')==='on'};const result=await api('context-settings',payload);await GalaxyNative.call('setContextPushPrefs',!!result.settings.near_enabled,!!result.settings.arrived_safe_enabled);closeModal();await refreshMap({detail:true});toast('Preferencias de contexto guardadas.');return;}
   if(e.target.id==='placeForm'){const fd=new FormData(e.target);await api('place-save',{name:fd.get('name'),kind:fd.get('kind'),note:fd.get('note'),latitude:Number(fd.get('latitude')),longitude:Number(fd.get('longitude'))});closeModal();frequentPlacesLoadedAt=0;await refreshMap();await loadFrequentPlaces(true).catch(()=>{});toast('Lugar guardado.');return;}
-  if(e.target.id==='destinationForm'){const value=String(new FormData(e.target).get('destination'));if(value==='none')await api('destination-save',{kind:'none'});else{const [kind,id]=value.split(':');await api('destination-save',kind==='person'?{kind,target_person:id,label:partnerName()}:{kind,place_id:Number(id)});}closeModal();await refreshMap({detail:false});if(view==='map')setTimeout(()=>document.querySelector('#etaCard')?.scrollIntoView({behavior:'smooth',block:'center'}),80);toast(value==='none'?'Destino desactivado.':'Destino actualizado · ETA listo.');return;}
+  if(e.target.id==='destinationForm'){const value=String(new FormData(e.target).get('destination'));if(value==='none')await api('context-session',{operation:'stop'});else{if(!native.tracking)throw new Error('Activa Compartir ubicación primero. Acompáñame no la activa automáticamente.');const [kind,id]=value.split(':');await api('context-session',{operation:'start',mode:'accompany',destinationKind:kind,...(kind==='person'?{targetPerson:id,label:partnerName()}:{placeId:Number(id)})});}closeModal();await refreshMap({detail:true});if(view==='map')setTimeout(()=>document.querySelector('#etaCard')?.scrollIntoView({behavior:'smooth',block:'center'}),80);toast(value==='none'?'Sesión desactivada.':'Acompáñame 2.0 iniciado.');return;}
   if(e.target.id==='settingsForm'){const fd=new FormData(e.target);await api('settings-save',{version:cloud.settings.version,data:{names:[fd.get('name0'),fd.get('name1')],startDate:fd.get('startDate'),albumUrl:fd.get('albumUrl')}});await refreshState();toast('Ajustes guardados.');return;}
  }catch(err){toast(err.message||'No pudimos guardar.');}
 });

@@ -113,15 +113,16 @@ public final class BondWorker extends Worker {
                 if(gestures==null)gestures=new JSONArray();
                 List<String> fresh=bond.consume(gestures);
 
-                if(token.equals(new DeviceStore(c).token())&&bond.enabled()&&notificationsAllowed(c)){
+                if(token.equals(new DeviceStore(c).token())){
                     for(int i=0;i<gestures.length();i++){
                         JSONObject g=gestures.optJSONObject(i);
-                        if(g!=null&&fresh.contains(g.optString("id"))){
-                            notify(c,g.optString("id"),"Un gesto para ti",gestureText(g.optString("gesture")));
-                        }
+                        if(g==null||!fresh.contains(g.optString("id")))continue;
+                        String behavior=g.optString("behavior","message");
+                        if(("haptic".equals(behavior)||"message_haptic".equals(behavior))&&bond.hapticEnabled())GalaxyFirebaseService.performHaptic(c);
+                        if(!"haptic".equals(behavior)&&bond.enabled()&&notificationsAllowed(c))notify(c,g.optString("id"),"Un gesto para ti",gestureText(g));
                     }
                     JSONObject next=data.optJSONObject("nextEvent");
-                    if(next!=null){
+                    if(bond.enabled()&&notificationsAllowed(c)&&next!=null){
                         String today=LocalDate.now(ZoneId.of("America/Bogota")).toString();
                         if(today.equals(next.optString("date"))&&bond.consumeDate(today+":"+next.optString("title"))){
                             notify(c,"date-"+today,"Hoy es un día especial",next.optString("title","Nuestra fecha"));
@@ -129,6 +130,13 @@ public final class BondWorker extends Worker {
                     }
                 }
 
+                /*
+                 * Date notifications are handled above after gesture/haptic delivery so
+                 * haptic-only users do not need to grant notification permission.
+                 */
+                /* legacy-date-anchor
+                    JSONObject next=data.optJSONObject("nextEvent");
+                 */
                 BondWidget.updateAll(c);
                 return Result.success();
             }catch(ApiClient.ApiException e){
@@ -178,10 +186,19 @@ public final class BondWorker extends Worker {
         notify(c,"test-"+System.currentTimeMillis(),"Nuestra Galaxia está lista","Las notificaciones de momentos ya pueden aparecer en este teléfono.");
     }
 
-    private static String gestureText(String gesture){
-        return "kiss".equals(gesture)?"Tu pareja te envió un beso.":
-            "miss".equals(gesture)?"Tu pareja te extraña.":
+    private static String gestureText(JSONObject gesture){
+        String custom=gesture.optString("text","").trim();
+        if(!custom.isEmpty())return custom;
+        String id=gesture.optString("gesture","");
+        return "kiss".equals(id)?"Tu pareja te envió un beso.":
+            "miss".equals(id)?"Tu pareja te extraña.":
+            "tap".equals(id)?"Un toque de tu persona.":
             "Tu pareja te envió un abrazo.";
+    }
+
+    public static void showPushNotification(Context c,String id,String title,String body){
+        if(!notificationsAllowed(c))return;
+        notify(c,id,title,body);
     }
 
     private static void notify(Context c,String id,String title,String body){

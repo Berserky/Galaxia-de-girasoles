@@ -48,5 +48,14 @@ public final class ApiClient {
         post(new JSONObject().put("action","location").put("sharing",false),token);
     }
     public static JSONObject moments(String token) throws Exception {return post(new JSONObject().put("action","moments"),token);}
+    public static JSONObject pushRegister(String token,String fcmToken,JSONObject events) throws Exception {
+        return post(new JSONObject().put("action","push-token-register").put("token",fcmToken).put("events",events==null?new JSONObject():events),token);
+    }
+    public static JSONObject pushPreferences(String token,JSONObject events) throws Exception {
+        return post(new JSONObject().put("action","push-preferences").put("events",events==null?new JSONObject():events),token);
+    }
+    public static void pushUnregister(String token) throws Exception {
+        post(new JSONObject().put("action","push-token-unregister"),token);
+    }
     public static void gesture(String token,String gesture) throws Exception {post(new JSONObject().put("action","gesture").put("gesture",gesture),token);}
 }

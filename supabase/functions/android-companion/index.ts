@@ -1,7 +1,21 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.117.2";
+import { aggregateInsightRows, evaluateAchievements, isInsightVisibleItem, periodBounds, previousPeriod } from "./insights.ts";
+import { QUESTION_DECKS, buildDateRecap, buildSequentialPlan, buildSurpriseExperience, normalizePlanCategory, questionById, roulettePendingPlans, selectQuestion } from "./date-engine.ts";
+import { buildGoalDateSuggestions, buildGoalInsightSummary, computeGoalProgress, conversionDraft, normalizeContribution, normalizeGoalInput, reorderStepIds } from "./goals-engine.ts";
+import { BUILTIN_GESTURES, computeBondProgress, gestureSnapshot, normalizeCustomGesture, resolveGesture } from "./bond-engine.ts";
+import { PUSH_EVENT_TYPES, sanitizePushPayload, sendFcmData } from "./push-engine.ts";
+import { CONTEXT_EVENTS, buildDateContextRecap, buildEncounterSuggestion, buildTripContextRecap, contextStep, emptyContextState, haversineM, summarizeTrack } from "./context-engine.ts";
+import { bookSections, buildIntelligenceDocument, contentHashInput, explainConnection, normalizeSearchText, sanitizeTranscriptSegments, validateNarrative } from "./intelligence-engine.ts";
+import { aiProviderConfig, extractJsonObject, generateGroundedResponse, gteSmallEmbedding, transcribeAudioBlob } from "./intelligence-provider.ts";
 
 const url=Deno.env.get("SUPABASE_URL")!;
+// FCM HTTP v1 transport lives in push-engine.ts; credentials are server-side only.
+const FCM_HTTP_V1="https://fcm.googleapis.com/v1/projects/";
+const FCM_OAUTH_TOKEN_URL="https://oauth2.googleapis.com/token";
+// Galaxy Intelligence secrets are Edge-only. Never return these values to clients.
+const INTELLIGENCE_SECRET_NAMES=["OPENAI_API_KEY","GALAXY_AI_MODEL","GALAXY_TRANSCRIBE_MODEL"];
+const INTELLIGENCE_EMBEDDING_MODEL="gte-small";
 let service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"";
 try{
   const modern=JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")||"{}");
@@ -92,7 +106,11 @@ async function deviceRevoke(req:Request,body:any){
   if(!row||row.revoked_at)return json({ok:true});
   if(String(d.person)!=="0"&&String(row.person)!==String(d.person))return json({error:"No puedes administrar ese dispositivo."},403);
   await ok(db.from("galaxy_devices").update({revoked_at:new Date().toISOString()}).eq("id",targetId));
-  await ok(db.from("galaxy_device_place_presence").delete().eq("device_id",targetId));
+  await Promise.all([
+    ok(db.from("galaxy_device_place_presence").delete().eq("device_id",targetId)),
+    ok(db.from("galaxy_push_tokens").delete().eq("device_id",targetId)),
+    ok(db.from("galaxy_push_subscriptions").delete().eq("device_id",targetId))
+  ]);
   return json({ok:true});
 }
 
@@ -100,6 +118,333 @@ function point(body:any){
   const lat=Number(body.latitude),lon=Number(body.longitude),accuracy=Number(body.accuracy),speed=Number(body.speed),heading=Number(body.heading),motion=["still","walking","vehicle"].includes(body.motion)?body.motion:null;
   if(!Number.isFinite(lat)||lat<-90||lat>90||!Number.isFinite(lon)||lon<-180||lon>180)throw new Error("Ubicación no válida");
   return {lat,lon,accuracy:Number.isFinite(accuracy)&&accuracy>=0?accuracy:null,speed:Number.isFinite(speed)&&speed>=0?speed:null,heading:Number.isFinite(heading)&&heading>=0&&heading<=360?heading:null,motion};
+}
+
+
+function clampInt(value:any,min:number,max:number,fallback:number){
+ const n=Math.round(Number(value));return Number.isFinite(n)?Math.max(min,Math.min(max,n)):fallback;
+}
+function freshContextLocation(row:any,now=Date.now()){
+ return !!row?.sharing&&Number.isFinite(Number(row.latitude))&&Number.isFinite(Number(row.longitude))
+  &&!!row.updated_at&&now-Date.parse(row.updated_at)<=4*60*1000;
+}
+function contextDedupe(event:any){
+ const p=event?.payload||{},type=String(event?.type||"");
+ const identity=
+  p.sessionId||p.startedAt||
+  (p.placeId!=null?(String(p.person||"")+"|"+String(p.placeId)+"|"+String(p.candidateSince||event.occurredAt||"")):"")||
+  (p.targetPerson!=null?(String(p.targetPerson)+"|"+String(p.candidateSince||event.occurredAt||"")):"")||
+  String(event?.occurredAt||"");
+ return (type+"|"+identity).slice(0,240);
+}
+async function contextSettingsRows(){
+ return await ok(db.from("galaxy_context_settings").select("*").order("person"));
+}
+async function contextOwnSettings(person:string){
+ const row=(await ok(db.from("galaxy_context_settings").select("*").eq("person",person).limit(1)))?.[0];
+ return row||{person,near_enabled:false,near_distance_m:300,near_cooldown_minutes:60,arrived_safe_enabled:false,date_suggestions:true,memory_suggestions:true,shared_trip_detection:false};
+}
+async function contextEventByDedupe(key:string){
+ return (await ok(db.from("galaxy_context_events").select("*").eq("dedupe_key",key).limit(1)))?.[0]||null;
+}
+async function persistContextEvent(d:any,event:any){
+ const key=contextDedupe(event),payload=event?.payload&&typeof event.payload==="object"?event.payload:{};
+ const person=["0","1"].includes(String(payload.person))?String(payload.person):null;
+ const target=["0","1"].includes(String(payload.targetPerson))?String(payload.targetPerson):null;
+ const inserted=await ok(db.from("galaxy_context_events").upsert({
+  event_type:String(event.type),dedupe_key:key,person,partner_person:target,source_device_id:d?.id||null,
+  occurred_at:event.occurredAt||new Date().toISOString(),payload
+ },{onConflict:"dedupe_key",ignoreDuplicates:true}).select("*"));
+ if(inserted?.[0])return {row:inserted[0],isNew:true};
+ return {row:await contextEventByDedupe(key),isNew:false};
+}
+async function contextMaybePush(d:any,eventRow:any,event:any,settings:any[]){
+ const payload=event?.payload||{};
+ if(event.type==="USER_NEAR_PARTNER"){
+  const target=String(payload.targetPerson||"");
+  const pref=(settings||[]).find((x:any)=>String(x.person)===target);
+  if(!pref?.near_enabled||!["0","1"].includes(target))return;
+  await dispatchPushEvent(d,target,"nearby",{title:"Están cerca",body:"Nuestra Galaxia detectó que están a unos "+Math.max(0,Math.round(Number(payload.distanceM)||0))+" m."});
+ }
+ if(event.type==="DESTINATION_REACHED"){
+  const person=String(payload.person||""),pref=(settings||[]).find((x:any)=>String(x.person)===person);
+  if(!pref?.arrived_safe_enabled||!["0","1"].includes(person))return;
+  const target=person==="0"?"1":"0";
+  await dispatchPushEvent(d,target,"arrived_safe",{title:"Llegó bien",body:(payload.label?"Llegó a "+String(payload.label)+".":"Llegó a su destino.")},{requireSubscription:false});
+ }
+}
+async function contextCreateSuggestions(eventRow:any,event:any,settings:any[]){
+ if(event.type!=="ENCOUNTER_ENDED")return;
+ const payload=event.payload||{},started=Date.parse(String(payload.startedAt||"")),ended=Date.parse(String(payload.endedAt||event.occurredAt||""));
+ const durationS=Number.isFinite(started)&&Number.isFinite(ended)?Math.max(0,Math.round((ended-started)/1000)):0;
+ if(!Number.isFinite(started)||!Number.isFinite(ended)||durationS<5*60)return;
+ const startedIso=new Date(started).toISOString(),endedIso=new Date(ended).toISOString();
+ let place:any=null;
+ const recent=(await ok(db.from("galaxy_place_events").select("place_id,happened_at").gte("happened_at",new Date(ended-4*3600000).toISOString()).lte("happened_at",new Date(ended+15*60000).toISOString()).order("happened_at",{ascending:false}).limit(10)))||[];
+ if(recent.length)place=(await ok(db.from("galaxy_places").select("id,name,kind").eq("id",recent[0].place_id).limit(1)))?.[0]||null;
+ const enabled=(settings||[]).filter((x:any)=>["0","1"].includes(String(x.person)));
+ const needsMemory=enabled.some((x:any)=>x.memory_suggestions!==false);
+ const assets=needsMemory?await contextWindowAssets(startedIso,endedIso,"0"):null;
+ const trip=(await ok(db.from("galaxy_trip_history").select("id,person,started_at,ended_at,distance_m,duration_s,dominant_motion").lte("started_at",endedIso).gte("ended_at",startedIso).order("started_at",{ascending:false}).limit(1)))?.[0]||null;
+ for(const pref of enabled){
+  const person=String(pref.person);
+  if(pref.memory_suggestions!==false){
+   const suggestion=buildEncounterSuggestion({
+    encounter:{id:eventRow.id,started_at:startedIso,ended_at:endedIso},place,trip,
+    photos:assets?.photos||[],songs:assets?.songs||[]
+   });
+   await ok(db.from("galaxy_context_suggestions").upsert({
+    kind:"memory",source_event_id:eventRow.id,person,status:"pending",payload:suggestion
+   },{onConflict:"source_event_id,kind,person",ignoreDuplicates:true}));
+  }
+  if(pref.date_suggestions!==false&&durationS>=2*3600){
+   await ok(db.from("galaxy_context_suggestions").upsert({
+    kind:"date",source_event_id:eventRow.id,person,status:"pending",
+    payload:{question:"¿Esto fue una cita?",requiresConfirmation:true,durationS,place:place?{id:place.id,name:place.name,kind:place.kind}:null,trip:trip?{id:trip.id,distanceM:trip.distance_m,durationS:trip.duration_s}:null}
+   },{onConflict:"source_event_id,kind,person",ignoreDuplicates:true}));
+  }
+ }
+}
+async function contextLegacySideEffects(d:any,eventRow:any,event:any){
+ const p=event.payload||{};
+ if(event.type==="ENCOUNTER_STARTED"){
+  const open=(await ok(db.from("galaxy_encounters").select("id").is("ended_at",null).limit(1)))?.[0];
+  if(!open)await ok(db.from("galaxy_encounters").insert({started_at:p.startedAt||event.occurredAt,distance_m:Math.max(0,Math.round(Number(p.distanceM)||0)),created_by:String(d.person)}));
+ }
+ if(event.type==="ENCOUNTER_ENDED"){
+  const open=(await ok(db.from("galaxy_encounters").select("id,started_at").is("ended_at",null).limit(1)))?.[0];
+  if(open)await ok(db.from("galaxy_encounters").update({ended_at:p.endedAt||event.occurredAt}).eq("id",open.id));
+ }
+ if(event.type==="PLACE_ENTERED"&&p.placeId!=null){
+  await ok(db.from("galaxy_place_events").insert({person:String(p.person),place_id:Number(p.placeId),event:"arrived",happened_at:event.occurredAt}));
+  if(p.name)await ok(db.from("galaxy_locations").update({status:"Llegué a "+text(p.name,80)}).eq("person",String(p.person)));
+ }
+ if(event.type==="PLACE_LEFT"&&p.placeId!=null){
+  await ok(db.from("galaxy_place_events").insert({person:String(p.person),place_id:Number(p.placeId),event:"left",happened_at:event.occurredAt}));
+ }
+ if(event.type==="SHARED_TRIP_DETECTED"){
+  await ok(db.from("galaxy_shared_trips").upsert({
+   source_event_id:eventRow.id,started_at:p.startedAt||event.occurredAt,sample_count:Math.max(0,Number(p.samples)||0),status:"detected",updated_at:new Date().toISOString()
+  },{onConflict:"source_event_id",ignoreDuplicates:true}));
+ }
+ if(event.type==="DESTINATION_REACHED"){
+  const sessionId=String(p.sessionId||"");
+  if(sessionId){
+   const session=(await ok(db.from("galaxy_context_sessions").select("*").eq("id",sessionId).limit(1)))?.[0];
+   if(session?.status==="active"){
+    const arrivedAt=event.occurredAt||new Date().toISOString();
+    await ok(db.from("galaxy_context_sessions").update({status:"arrived",arrived_at:arrivedAt,ended_at:arrivedAt,last_distance_m:Math.max(0,Math.round(Number(p.distanceM)||0)),progress_pct:100,updated_at:arrivedAt}).eq("id",sessionId));
+    if(session.auto_finish)await ok(db.from("galaxy_destinations").delete().eq("person",String(session.person)));
+   }
+  }
+ }
+}
+async function resolveContextDestinations(sessions:any[],locations:any[],places:any[]){
+ const out:any[]=[];
+ for(const s of sessions||[]){
+  let target:any=null;
+  if(s.destination_kind==="place")target=(places||[]).find((p:any)=>Number(p.id)===Number(s.place_id));
+  else target=(locations||[]).find((l:any)=>String(l.person)===String(s.target_person)&&freshContextLocation(l));
+  if(!target)continue;
+  out.push({person:String(s.person),sessionId:String(s.id),mode:String(s.mode),label:String(s.label),placeId:s.place_id??null,latitude:Number(target.latitude),longitude:Number(target.longitude),arrivalRadiusM:60});
+ }
+ return out;
+}
+async function updateContextSessionProgress(d:any,sessions:any[],locations:any[],places:any[]){
+ const person=String(d.person),session=(sessions||[]).find((s:any)=>String(s.person)===person&&s.status==="active");
+ if(!session)return;
+ const own=(locations||[]).find((l:any)=>String(l.person)===person&&freshContextLocation(l));
+ if(!own)return;
+ let target:any=null;
+ if(session.destination_kind==="place")target=(places||[]).find((p:any)=>Number(p.id)===Number(session.place_id));
+ else target=(locations||[]).find((l:any)=>String(l.person)===String(session.target_person)&&freshContextLocation(l));
+ if(!target)return;
+ const distance=Math.max(0,Math.round(dist(own,target))),etaMin=widgetEtaMinutes(distance,String(own.transport_preference||"auto"),Number.isFinite(Number(own.speed))?Number(own.speed):null),etaS=etaMin==null?null:etaMin*60;
+ const initial=Math.max(distance,Number(session.initial_distance_m)||0),progress=initial>0?Math.max(0,Math.min(100,Math.round((1-distance/initial)*100))):0;
+ const now=new Date(),lastUpdate=Date.parse(String(session.updated_at||"")),significant=Math.abs(distance-Number(session.last_distance_m??distance))>=25||Math.abs(progress-Number(session.progress_pct||0))>=2;
+ if(!Number.isFinite(lastUpdate)||now.getTime()-lastUpdate>=15000||significant){
+  const patch:any={last_distance_m:distance,last_eta_s:etaS,progress_pct:progress,updated_at:now.toISOString()};
+  if(session.initial_distance_m==null)patch.initial_distance_m=distance;
+  const sampleDue=!session.last_eta_sample_at||now.getTime()-Date.parse(session.last_eta_sample_at)>=60000||Math.abs(progress-Number(session.progress_pct||0))>=10;
+  if(sampleDue)patch.last_eta_sample_at=now.toISOString();
+  await ok(db.from("galaxy_context_sessions").update(patch).eq("id",session.id).eq("status","active"));
+  if(sampleDue)await ok(db.from("galaxy_context_eta_history").insert({session_id:session.id,captured_at:now.toISOString(),distance_m:distance,eta_s:etaS,progress_pct:progress}));
+ }
+}
+async function closeSharedTripIfNeeded(previous:any,next:any,at:string){
+ if(previous?.shared?.active!==true||next?.shared?.active===true)return;
+ const open=(await ok(db.from("galaxy_shared_trips").select("*").eq("status","detected").is("ended_at",null).order("started_at",{ascending:false}).limit(1)))?.[0];
+ if(!open)return;
+ const ended=new Date(at),started=Date.parse(open.started_at);
+ const rows=await ok(db.from("galaxy_location_history").select("latitude,longitude,speed,motion,captured_at").eq("person","0").gte("captured_at",open.started_at).lte("captured_at",ended.toISOString()).order("captured_at",{ascending:true}).limit(5000));
+ const summary=summarizeTrack(rows||[]);
+ await ok(db.from("galaxy_shared_trips").update({ended_at:ended.toISOString(),duration_s:Number.isFinite(started)?Math.max(summary.durationS,Math.round((ended.getTime()-started)/1000)):summary.durationS,distance_m:summary.distanceM,status:"ended",updated_at:ended.toISOString()}).eq("id",open.id));
+}
+async function contextTick(d:any){
+ const now=new Date(),[locations,stateRow,places,settings,sessions]=await Promise.all([
+  ok(db.from("galaxy_locations").select("*").order("person")),
+  ok(db.from("galaxy_context_state").select("data").eq("singleton",true).single()),
+  ok(db.from("galaxy_places").select("id,owner,name,kind,latitude,longitude").limit(500)),
+  contextSettingsRows(),
+  ok(db.from("galaxy_context_sessions").select("*").eq("status","active").order("started_at"))
+ ]);
+ const people=(locations||[]).filter((row:any)=>freshContextLocation(row,now.getTime())).map((row:any)=>({...row,captured_at:row.updated_at}));
+ const nearProfiles=Object.fromEntries((settings||[]).filter((x:any)=>x.near_enabled).map((x:any)=>[String(x.person),{enabled:true,distanceM:Number(x.near_distance_m)||300,cooldownS:(Number(x.near_cooldown_minutes)||60)*60}]));
+ const destinations=await resolveContextDestinations(sessions||[],locations||[],places||[]);
+ const previous=stateRow?.data&&Object.keys(stateRow.data).length?stateRow.data:emptyContextState();
+ const result=contextStep(previous,{at:now.toISOString(),people,places:places||[],destinations},{nearProfiles,sharedTripEnabled:(settings||[]).length===2&&(settings||[]).every((x:any)=>x.shared_trip_detection===true)});
+ await ok(db.from("galaxy_context_state").upsert({singleton:true,data:result.state,updated_at:now.toISOString()},{onConflict:"singleton"}));
+ for(const event of result.events||[]){
+  const persisted=await persistContextEvent(d,event),row=persisted?.row;
+  if(!row||persisted.isNew!==true)continue;
+  await contextLegacySideEffects(d,row,event);
+  await contextMaybePush(d,row,event,settings||[]);
+  await contextCreateSuggestions(row,event,settings||[]);
+ }
+ await updateContextSessionProgress(d,sessions||[],locations||[],places||[]);
+ await closeSharedTripIfNeeded(previous,result.state,now.toISOString());
+ return result.events||[];
+}
+
+async function contextSettingsAction(req:Request,body:any){
+ const d=await device(req),person=String(d.person),operation=String(body.operation||"get");
+ if(operation==="get")return json({settings:await contextOwnSettings(person)});
+ if(operation!=="save")return json({error:"Operación de contexto no válida."},400);
+ const current=await contextOwnSettings(person),next={
+  person,
+  near_enabled:Object.hasOwn(body,"nearEnabled")?!!body.nearEnabled:!!current.near_enabled,
+  near_distance_m:Object.hasOwn(body,"nearDistanceM")?clampInt(body.nearDistanceM,80,5000,300):Number(current.near_distance_m)||300,
+  near_cooldown_minutes:Object.hasOwn(body,"nearCooldownMinutes")?clampInt(body.nearCooldownMinutes,5,1440,60):Number(current.near_cooldown_minutes)||60,
+  arrived_safe_enabled:Object.hasOwn(body,"arrivedSafeEnabled")?!!body.arrivedSafeEnabled:!!current.arrived_safe_enabled,
+  date_suggestions:Object.hasOwn(body,"dateSuggestions")?!!body.dateSuggestions:current.date_suggestions!==false,
+  memory_suggestions:Object.hasOwn(body,"memorySuggestions")?!!body.memorySuggestions:current.memory_suggestions!==false,
+  shared_trip_detection:Object.hasOwn(body,"sharedTripDetection")?!!body.sharedTripDetection:current.shared_trip_detection===true,
+  updated_at:new Date().toISOString()
+ };
+ const saved=await ok(db.from("galaxy_context_settings").upsert(next,{onConflict:"person"}).select("*").single());
+ await ok(db.from("galaxy_push_subscriptions").upsert([
+  {device_id:d.id,event_type:"nearby",enabled:!!saved.near_enabled,updated_at:new Date().toISOString()},
+  {device_id:d.id,event_type:"arrived_safe",enabled:!!saved.arrived_safe_enabled,updated_at:new Date().toISOString()}
+ ],{onConflict:"device_id,event_type"}));
+ return json({settings:saved});
+}
+async function contextSessionAction(req:Request,body:any){
+ const d=await device(req),person=String(d.person),operation=String(body.operation||"state");
+ if(operation==="state"){
+  const session=(await ok(db.from("galaxy_context_sessions").select("*").eq("person",person).eq("status","active").order("started_at",{ascending:false}).limit(1)))?.[0]||null;
+  const eta=session?await ok(db.from("galaxy_context_eta_history").select("captured_at,distance_m,eta_s,progress_pct").eq("session_id",session.id).order("captured_at",{ascending:false}).limit(60)):[];
+  return json({session,etaHistory:eta||[]});
+ }
+ if(operation==="stop"){
+  const now=new Date().toISOString();
+  await ok(db.from("galaxy_context_sessions").update({status:"cancelled",ended_at:now,updated_at:now}).eq("person",person).eq("status","active"));
+  await ok(db.from("galaxy_destinations").delete().eq("person",person));
+  return json({ok:true,session:null});
+ }
+ if(operation!=="start")return json({error:"Operación de sesión no válida."},400);
+ const mode=String(body.mode||"accompany");
+ if(!["accompany","return_home"].includes(mode))return json({error:"Modo de acompañamiento no válido."},400);
+ let destinationKind=String(body.destinationKind||""),targetPerson:string|null=null,placeId:number|null=null,label="";
+ if(mode==="return_home"){
+  const home=(await ok(db.from("galaxy_places").select("id,name").eq("owner",person).eq("kind","home").order("created_at",{ascending:false}).limit(1)))?.[0];
+  if(!home)return json({error:"Guarda primero un lugar tipo Casa."},409);
+  destinationKind="place";placeId=Number(home.id);label=text(home.name||"Casa",80)||"Casa";
+ }else if(destinationKind==="person"){
+  targetPerson=String(body.targetPerson||"");if(!["0","1"].includes(targetPerson)||targetPerson===person)return json({error:"Destino no válido."},400);
+  label=text(body.label||"Mi persona",80)||"Mi persona";
+ }else if(destinationKind==="place"){
+  const place=(await ok(db.from("galaxy_places").select("id,name").eq("id",Number(body.placeId)).limit(1)))?.[0];
+  if(!place)return json({error:"Lugar no encontrado."},404);
+  placeId=Number(place.id);label=text(body.label||place.name,80)||"Destino";
+ }else return json({error:"Destino no válido."},400);
+ const now=new Date().toISOString();
+ await ok(db.from("galaxy_context_sessions").update({status:"cancelled",ended_at:now,updated_at:now}).eq("person",person).eq("status","active"));
+ const locations=await ok(db.from("galaxy_locations").select("*").order("person")),places=await ok(db.from("galaxy_places").select("id,latitude,longitude").limit(500));
+ const own=(locations||[]).find((x:any)=>String(x.person)===person&&freshContextLocation(x));
+ let target:any=destinationKind==="place"?(places||[]).find((x:any)=>Number(x.id)===Number(placeId)):(locations||[]).find((x:any)=>String(x.person)===targetPerson&&freshContextLocation(x));
+ const initial=own&&target?Math.max(0,Math.round(dist(own,target))):null;
+ const session=await ok(db.from("galaxy_context_sessions").insert({person,mode,destination_kind:destinationKind,target_person:targetPerson,place_id:placeId,label,status:"active",auto_finish:true,initial_distance_m:initial,last_distance_m:initial,progress_pct:0,started_at:now,updated_at:now}).select("*").single());
+ if(destinationKind==="person")await ok(db.from("galaxy_destinations").upsert({person,kind:"person",target_person:targetPerson,place_id:null,label,active:true,updated_at:now},{onConflict:"person"}));
+ else await ok(db.from("galaxy_destinations").upsert({person,kind:"place",target_person:null,place_id:placeId,label,active:true,updated_at:now},{onConflict:"person"}));
+ return json({ok:true,session});
+}
+async function contextEventsFeed(req:Request,body:any){
+ await device(req);
+ const limit=clampInt(body.limit,1,100,40),after=text(body.after||"",40);
+ let query=db.from("galaxy_context_events").select("id,event_type,person,partner_person,occurred_at,payload").order("occurred_at",{ascending:false}).limit(limit);
+ if(after)query=query.lt("occurred_at",after);
+ const rows=await ok(query);
+ return json({events:rows||[]});
+}
+async function contextSuggestionAction(req:Request,body:any){
+ const d=await device(req),person=String(d.person),operation=String(body.operation||"list");
+ if(operation==="list"){
+  const rows=await ok(db.from("galaxy_context_suggestions").select("*").eq("person",person).eq("status","pending").order("created_at",{ascending:false}).limit(30));
+  return json({suggestions:rows||[]});
+ }
+ const id=String(body.id||"");if(!id)return json({error:"Sugerencia no válida."},400);
+ const row=(await ok(db.from("galaxy_context_suggestions").select("*").eq("id",id).eq("person",person).limit(1)))?.[0];
+ if(!row)return json({error:"La sugerencia ya no existe."},404);
+ if(operation==="dismiss"||operation==="accept"){
+  const status=operation==="accept"?"accepted":"dismissed",resolved=new Date().toISOString();
+  await ok(db.from("galaxy_context_suggestions").update({status,resolved_at:resolved}).eq("id",id).eq("person",person).eq("status","pending"));
+  if(operation==="accept"&&row.kind==="memory"){
+   const p=row.payload||{};
+   const item=await ok(db.from("galaxy_items").insert({kind:"memory",author:String(d.person),data:{title:text(p.title||"Después de vernos",120),body:"Recuerdo sugerido por Galaxy Context Engine.",contextSourceEventId:row.source_event_id,placeId:p.place?.id||null,date:today()}}).select("*").single());
+   await recordParticipation(String(d.person));
+   return json({ok:true,status,item});
+  }
+  return json({ok:true,status});
+ }
+ return json({error:"Operación de sugerencia no válida."},400);
+}
+async function contextStateAction(req:Request){
+ const d=await device(req),person=String(d.person);
+ const [settings,sessionRows,suggestions,events]=await Promise.all([
+  contextOwnSettings(person),
+  ok(db.from("galaxy_context_sessions").select("*").eq("person",person).eq("status","active").order("started_at",{ascending:false}).limit(1)),
+  ok(db.from("galaxy_context_suggestions").select("*").eq("person",person).eq("status","pending").order("created_at",{ascending:false}).limit(10)),
+  ok(db.from("galaxy_context_events").select("id,event_type,person,partner_person,occurred_at,payload").order("occurred_at",{ascending:false}).limit(20))
+ ]);
+ const session=sessionRows?.[0]||null;
+ const etaHistory=session?await ok(db.from("galaxy_context_eta_history").select("captured_at,distance_m,eta_s,progress_pct").eq("session_id",session.id).order("captured_at",{ascending:false}).limit(30)):[];
+ return json({settings,session,etaHistory:etaHistory||[],suggestions:suggestions||[],events:events||[]});
+}
+async function contextWindowAssets(startIso:string,endIso:string,person:string){
+ const start=Date.parse(startIso),end=Date.parse(endIso);
+ const [track,placeEvents,memories,songs,photos]=await Promise.all([
+  ok(db.from("galaxy_location_history").select("person,latitude,longitude,accuracy,speed,heading,motion,captured_at").eq("person",person).gte("captured_at",startIso).lte("captured_at",endIso).order("captured_at",{ascending:true}).limit(5000)),
+  ok(db.from("galaxy_place_events").select("place_id,happened_at").eq("person",person).gte("happened_at",startIso).lte("happened_at",endIso).order("happened_at",{ascending:true}).limit(100)),
+  ok(db.from("galaxy_items").select("id,data,created").eq("kind","memory").gte("created",new Date(start-12*3600000).toISOString()).lte("created",new Date(end+12*3600000).toISOString()).limit(100)),
+  ok(db.from("galaxy_items").select("id,data,created").eq("kind","song").gte("created",new Date(start-24*3600000).toISOString()).lte("created",new Date(end+24*3600000).toISOString()).limit(100)),
+  listBucket("galaxy-photos")
+ ]);
+ const ids=[...new Set((placeEvents||[]).map((x:any)=>Number(x.place_id)).filter(Number.isFinite))];
+ const places=ids.length?await ok(db.from("galaxy_places").select("id,name,kind").in("id",ids)):[];
+ const photoRows=(photos||[]).filter((x:any)=>{const t=Date.parse(String(x.created||""));return Number.isFinite(t)&&t>=start-6*3600000&&t<=end+6*3600000;}).slice(0,40);
+ return {track:track||[],places:places||[],photos:photoRows,songs:(songs||[]).map((x:any)=>({id:x.id,title:text(x.data?.title||"Canción",160),created:x.created})),memories:memories||[]};
+}
+async function contextRecapAction(req:Request,body:any){
+ const d=await device(req),kind=String(body.kind||""),person=String(body.person??d.person);
+ if(kind==="date"){
+  const event=(await ok(db.from("galaxy_context_events").select("*").eq("id",String(body.sourceEventId||"")).limit(1)))?.[0];
+  if(!event||event.event_type!=="ENCOUNTER_ENDED")return json({error:"Encuentro no encontrado."},404);
+  const start=String(event.payload?.startedAt||""),end=String(event.payload?.endedAt||event.occurred_at||"");
+  if(!start||!end)return json({error:"Encuentro incompleto."},409);
+  const assets=await contextWindowAssets(start,end,person);
+  return json({recap:buildDateContextRecap({encounter:{started_at:start,ended_at:end},...assets})});
+ }
+ if(kind==="trip"){
+  const trip=(await ok(db.from("galaxy_trip_history").select("*").eq("id",Number(body.tripId)).limit(1)))?.[0];
+  if(!trip)return json({error:"Recorrido no encontrado."},404);
+  if(String(trip.person)!==person&&person!==String(d.person))return json({error:"Recorrido no disponible."},403);
+  const assets=await contextWindowAssets(String(trip.started_at),String(trip.ended_at),String(trip.person));
+  const recap=buildTripContextRecap({trip, ...assets});
+  if(!recap.distanceM&&Number(trip.distance_m)>0)recap.distanceM=Number(trip.distance_m);
+  if(!recap.durationS&&Number(trip.duration_s)>0)recap.durationS=Number(trip.duration_s);
+  return json({recap});
+ }
+ return json({error:"Tipo de recap no válido."},400);
 }
 
 async function history(req:Request,body:any){
@@ -111,59 +456,21 @@ async function history(req:Request,body:any){
   return json({ok:true});
 }
 
-async function smartPlaces(d:any,p:any){
-  const places=await ok(db.from("galaxy_places").select("id,name,latitude,longitude,kind").eq("owner",d.person).in("kind",["home","work"])),now=Date.now();
-  for(const place of places||[]){
-    const meters=dist({latitude:p.lat,longitude:p.lon},place),presence=(await ok(db.from("galaxy_device_place_presence").select("*").eq("device_id",d.id).eq("place_id",place.id).limit(1)))?.[0];
-    if(meters<=80){
-      if(!presence){await ok(db.from("galaxy_device_place_presence").insert({device_id:d.id,place_id:place.id,entered_at:new Date().toISOString(),arrived:false}));continue;}
-      if(!presence.arrived&&now-Date.parse(presence.entered_at)>=45000){
-        await ok(db.from("galaxy_place_events").insert({person:d.person,place_id:place.id,event:"arrived"}));
-        await ok(db.from("galaxy_device_place_presence").update({arrived:true}).eq("device_id",d.id).eq("place_id",place.id));
-        await ok(db.from("galaxy_locations").update({status:"Llegué a "+place.name}).eq("person",d.person));
-      }
-    }else if(meters>150&&presence){
-      if(presence.arrived)await ok(db.from("galaxy_place_events").insert({person:d.person,place_id:place.id,event:"left"}));
-      await ok(db.from("galaxy_device_place_presence").delete().eq("device_id",d.id).eq("place_id",place.id));
-    }
-  }
-}
-
-async function encounter(){
-  const [locs,runtime,openRows]=await Promise.all([
-    ok(db.from("galaxy_locations").select("person,latitude,longitude,sharing,updated_at").eq("sharing",true)),
-    ok(db.from("galaxy_encounter_runtime").select("*").eq("singleton",true).single()),
-    ok(db.from("galaxy_encounters").select("id,started_at").is("ended_at",null).limit(1))
-  ]);
-  const open=openRows?.[0];
-  if(!locs||locs.length!==2||locs.some((x:any)=>x.latitude==null||x.longitude==null)){
-    if(runtime.near_since)await ok(db.from("galaxy_encounter_runtime").update({near_since:null}).eq("singleton",true));
-    if(open)await ok(db.from("galaxy_encounters").update({ended_at:new Date().toISOString()}).eq("id",open.id));
-    return;
-  }
-  const meters=dist(locs[0],locs[1]);
-  if(meters<=80){
-    if(!runtime.near_since){await ok(db.from("galaxy_encounter_runtime").update({near_since:new Date().toISOString()}).eq("singleton",true));return;}
-    if(!open&&Date.now()-Date.parse(runtime.near_since)>=60000)await ok(db.from("galaxy_encounters").insert({started_at:runtime.near_since,distance_m:Math.round(meters),created_by:locs[0].person}));
-  }else if(meters>150){
-    if(runtime.near_since)await ok(db.from("galaxy_encounter_runtime").update({near_since:null}).eq("singleton",true));
-    if(open)await ok(db.from("galaxy_encounters").update({ended_at:new Date().toISOString()}).eq("id",open.id));
-  }
-}
+// Place, encounter, proximity and destination transitions are derived only by contextTick().
 
 async function location(req:Request,body:any){
   const d=await device(req),now=new Date().toISOString();
   if(body.sharing===false){
     await ok(db.from("galaxy_locations").update({sharing:false,latitude:null,longitude:null,accuracy:null,speed:null,heading:null,motion:null,status:null,updated_at:now}).eq("person",d.person));
     await ok(db.from("galaxy_device_place_presence").delete().eq("device_id",d.id));
-    await encounter();
+    await contextTick(d);
     return json({ok:true});
   }
   const p=point(body),existing=(await ok(db.from("galaxy_locations").select("*").eq("person",d.person).limit(1)))?.[0]||{};
   await ok(db.from("galaxy_locations").upsert({person:d.person,sharing:true,latitude:p.lat,longitude:p.lon,accuracy:p.accuracy,speed:p.speed,heading:p.heading,motion:p.motion,status:existing.status||null,trip_active:!!existing.trip_active,trip_started_at:existing.trip_started_at||null,transport_preference:existing.transport_preference||null,updated_at:now},{onConflict:"person"}));
   if(body.history===true)await history(req,body);
   if(existing.trip_active&&body.trip_point===true)await ok(db.from("galaxy_trip_points").insert({person:d.person,latitude:p.lat,longitude:p.lon}));
-  await smartPlaces(d,p);await encounter();
+  if(body.trip_point===true)await contextTick(d);
   return json({ok:true,person:d.person});
 }
 
@@ -191,15 +498,141 @@ async function signed(bucket:string,path:string,seconds=900){
   return error?null:data.signedUrl;
 }
 
+
+function fcmCredentials(){
+ const raw=Deno.env.get("FCM_SERVICE_ACCOUNT_JSON")||"";
+ if(!raw)return null;
+ try{
+  const value=JSON.parse(raw);
+  return value?.project_id&&value?.client_email&&value?.private_key?value:null;
+ }catch{return null;}
+}
+function pushEventEnabledMap(value:any){
+ const source=value&&typeof value==="object"&&!Array.isArray(value)?value:{};
+ return Object.fromEntries(PUSH_EVENT_TYPES.map(type=>[type,source[type]===true]));
+}
+async function savePushPreferences(deviceId:string,value:any){
+ const enabled=pushEventEnabledMap(value),now=new Date().toISOString();
+ await ok(db.from("galaxy_push_subscriptions").upsert(
+  PUSH_EVENT_TYPES.map(event_type=>({device_id:deviceId,event_type,enabled:!!enabled[event_type],updated_at:now})),
+  {onConflict:"device_id,event_type"}
+ ));
+ return enabled;
+}
+async function pushTokenRegister(req:Request,body:any){
+ const d=await device(req),token=text(body.token,4096);
+ if(token.length<20)return json({error:"Token push no válido."},400);
+ await ok(db.from("galaxy_push_tokens").delete().eq("token",token).neq("device_id",d.id));
+ await ok(db.from("galaxy_push_tokens").upsert({device_id:d.id,token,platform:"android",updated_at:new Date().toISOString()},{onConflict:"device_id"}));
+ const subscriptions=await savePushPreferences(String(d.id),body.events||{});
+ return json({ok:true,pushConfigured:!!fcmCredentials(),subscriptions});
+}
+async function pushTokenUnregister(req:Request){
+ const d=await device(req);
+ await Promise.all([
+  ok(db.from("galaxy_push_tokens").delete().eq("device_id",d.id)),
+  ok(db.from("galaxy_push_subscriptions").delete().eq("device_id",d.id))
+ ]);
+ return json({ok:true});
+}
+async function pushPreferences(req:Request,body:any){
+ const d=await device(req),subscriptions=await savePushPreferences(String(d.id),body.events||{});
+ return json({ok:true,subscriptions,pushConfigured:!!fcmCredentials()});
+}
+async function dispatchPushEvent(sourceDevice:any,targetPerson:string,eventType:string,payload:any,options:any={}){
+ if(!PUSH_EVENT_TYPES.includes(eventType))throw new Error("Tipo de evento push no válido.");
+ const sanitized=sanitizePushPayload(eventType,payload);
+ const event=await ok(db.from("galaxy_push_events").insert({
+  source_device_id:sourceDevice?.id||null,source_person:String(sourceDevice?.person||"0"),target_person:targetPerson,event_type:eventType,payload:sanitized
+ }).select("id").single());
+ sanitized.eventId=String(event.id);
+ const [devices,tokens,subscriptions]=await Promise.all([
+  ok(db.from("galaxy_devices").select("id").eq("person",targetPerson).is("revoked_at",null).limit(20)),
+  ok(db.from("galaxy_push_tokens").select("device_id,token").limit(50)),
+  ok(db.from("galaxy_push_subscriptions").select("device_id,event_type,enabled").eq("event_type",eventType).eq("enabled",true).limit(50))
+ ]);
+ const allowed=new Set((subscriptions||[]).map((row:any)=>String(row.device_id)));
+ const tokenByDevice=new Map((tokens||[]).map((row:any)=>[String(row.device_id),String(row.token)]));
+ const credentials=fcmCredentials(),deliveries:any[]=[],requireSubscription=options?.requireSubscription!==false;
+ for(const target of devices||[]){
+  const deviceId=String(target.id),token=tokenByDevice.get(deviceId);
+  if(!token||(requireSubscription&&!allowed.has(deviceId))){
+   deliveries.push({event_id:event.id,device_id:deviceId,status:"skipped",error_code:!token?"no-token":"disabled"});
+   continue;
+  }
+  if(!credentials){
+   deliveries.push({event_id:event.id,device_id:deviceId,status:"skipped",error_code:"fcm-not-configured"});
+   continue;
+  }
+  try{
+   await sendFcmData(credentials,token,eventType,sanitized,eventType==="gesture"?900:3600);
+   deliveries.push({event_id:event.id,device_id:deviceId,status:"sent",error_code:null});
+  }catch(error:any){
+   const code=text(error?.code||"",80),unregistered=/UNREGISTERED|NOT_FOUND/i.test(code)||/UNREGISTERED/i.test(String(error?.message||""));
+   deliveries.push({event_id:event.id,device_id:deviceId,status:unregistered?"unregistered":"failed",error_code:code||"fcm-error"});
+   if(unregistered)await ok(db.from("galaxy_push_tokens").delete().eq("device_id",deviceId));
+  }
+ }
+ if(deliveries.length)await ok(db.from("galaxy_push_deliveries").upsert(deliveries,{onConflict:"event_id,device_id"}));
+ return {eventId:event.id,sent:deliveries.filter(x=>x.status==="sent").length,configured:!!credentials};
+}
+
+async function bondGestureCatalog(req:Request){
+ await device(req);
+ const custom=await ok(db.from("galaxy_bond_gestures").select("*").eq("enabled",true).order("created_at",{ascending:true}).limit(50));
+ return json({builtins:BUILTIN_GESTURES,custom:custom||[]});
+}
+async function bondGestureSave(req:Request,body:any){
+ const d=await device(req);
+ let value;try{value=normalizeCustomGesture(body.gesture||body);}catch(e){return json({error:e instanceof Error?e.message:"Gesto no válido."},400);}
+ if(body.id){
+  const row=(await ok(db.from("galaxy_bond_gestures").select("*").eq("id",String(body.id)).limit(1)))?.[0];
+  if(!row)return json({error:"El gesto ya no existe."},404);
+  if(String(row.created_by)!==String(d.person))return json({error:"Solo quien creó este gesto puede editarlo."},403);
+  if(Number(body.version)!==Number(row.version))return json({error:"Este gesto cambió en otro dispositivo."},409);
+  const updated=await ok(db.from("galaxy_bond_gestures").update({...value}).eq("id",row.id).eq("version",row.version).select("*").single());
+  return json({gesture:updated});
+ }
+ const created=await ok(db.from("galaxy_bond_gestures").insert({...value,created_by:String(d.person)}).select("*").single());
+ return json({gesture:created},201);
+}
+async function bondGestureDelete(req:Request,body:any){
+ const d=await device(req),row=(await ok(db.from("galaxy_bond_gestures").select("*").eq("id",String(body.id||"")).limit(1)))?.[0];
+ if(!row)return json({ok:true});
+ if(String(row.created_by)!==String(d.person))return json({error:"Solo quien creó este gesto puede eliminarlo."},403);
+ if(Number(body.version)!==Number(row.version))return json({error:"Este gesto cambió en otro dispositivo."},409);
+ await ok(db.from("galaxy_bond_gestures").delete().eq("id",row.id).eq("version",row.version));
+ return json({ok:true});
+}
+async function bondSendGesture(req:Request,body:any){
+ const d=await device(req),person=String(d.person),id=String(body.gestureId||body.gesture||"");
+ const builtin=resolveGesture(id,[]);
+ if(!builtin&&!uuidish(id))return json({error:"Gesto no válido."},400);
+ const custom=builtin?[]:await ok(db.from("galaxy_bond_gestures").select("*").eq("enabled",true).limit(50));
+ const definition=builtin||resolveGesture(id,custom||[]);
+ if(!definition)return json({error:"Gesto no válido."},400);
+ const recent=await ok(db.from("galaxy_bond").select("id").eq("author",person).eq("type","gesture").gt("created",new Date(Date.now()-60000).toISOString()).limit(20));
+ if((recent?.length||0)>=20)return json({error:"Espera un momento antes de enviar otro gesto"},429);
+ const snapshot=gestureSnapshot(definition);
+ const row=await ok(db.from("galaxy_bond").insert({type:"gesture",author:person,data:{gesture:snapshot.gestureId,...snapshot}}).select("*").single());
+ await recordParticipation(person);
+ const target=person==="0"?"1":"0";
+ const push=await dispatchPushEvent(d,target,"gesture",{
+  title:"Un gesto para ti",body:snapshot.text,icon:snapshot.icon,behavior:snapshot.behavior,gestureId:String(row.id)
+ });
+ return json({entry:row,push},201);
+}
+
 async function bondState(person:string){
-  const [entries,participation,config]=await Promise.all([
+  const [entries,participation,config,customGestures,transcripts]=await Promise.all([
     ok(db.from("galaxy_bond").select("*").order("created",{ascending:false}).limit(200)),
     ok(db.from("galaxy_bond_participation").select("day,person")),
-    ok(db.from("galaxy_bond_config").select("photo_path").eq("id",1).maybeSingle())
+    ok(db.from("galaxy_bond_config").select("photo_path").eq("id",1).maybeSingle()),
+    ok(db.from("galaxy_bond_gestures").select("*").eq("enabled",true).order("created_at",{ascending:true}).limit(50)),
+    ok(db.from("galaxy_voice_transcripts").select("bond_id,transcript,segments,created_at,updated_at").limit(200))
   ]);
-  const days=new Map<string,Set<string>>();
-  for(const row of participation||[]){if(!days.has(row.day))days.set(row.day,new Set());days.get(row.day)!.add(row.person);}
-  const earned=[...days.values()].filter(s=>s.has("0")&&s.has("1")).length;
+  const transcriptMap=new Map((transcripts||[]).map((row:any)=>[String(row.bond_id),row]));
+  const progress=computeBondProgress(participation||[],new Date());
   const visible=await Promise.all((entries||[]).map(async(row:any)=>{
     const copy=structuredClone(row);
     if(copy.type==="game"&&copy.author!==person&&!Object.hasOwn(copy.data||{},"guess"))delete copy.data.answer;
@@ -219,11 +652,15 @@ async function bondState(person:string){
           }
         }
       }
-      if(reveal)copy.data.audioUrl=await signed("galaxy-voice",copy.data.audioPath,900);else{delete copy.data.audioPath;copy.data.locked=true;}
+      if(reveal){
+        copy.data.audioUrl=await signed("galaxy-voice",copy.data.audioPath,900);
+        const transcript:any=transcriptMap.get(String(copy.id));
+        if(transcript)copy.data.transcript={text:transcript.transcript,segments:transcript.segments||[],createdAt:transcript.created_at,updatedAt:transcript.updated_at};
+      }else{delete copy.data.audioPath;delete copy.data.transcript;copy.data.locked=true;}
     }
     return copy;
   }));
-  return {entries:visible,garden:{days:earned,stage:earned>=30?4:earned>=14?3:earned>=7?2:earned>=1?1:0},widget:{photoPath:config?.photo_path||""}};
+  return {entries:visible,garden:{...progress.garden,currentStreak:progress.currentStreak,recordStreak:progress.recordStreak},currentStreak:progress.currentStreak,recordStreak:progress.recordStreak,totalDays:progress.totalDays,gestures:{builtins:BUILTIN_GESTURES,custom:customGestures||[]},widget:{photoPath:config?.photo_path||""}};
 }
 
 function maskedDaily(rows:any[],person:string){
@@ -280,9 +717,299 @@ async function mobileState(req:Request){
   return json({
     person,device:{id:d.id,name:d.name},today:day,settings,items:safeItems,daily:maskedDaily(daily||[],person),
     bond,locations,places,presence:safePresence,devices,nextEvent:nextCalendarEvent(safeItems.filter((i:any)=>i.kind==="event"),day),
-    capabilities:{photos:true,music:true,voice:true,widget:true,backgroundLocation:true,trips:true,backup:true,presence:true,profileManagement:true}
+    capabilities:{photos:true,music:true,voice:true,widget:true,backgroundLocation:true,trips:true,backup:true,presence:true,profileManagement:true,intelligence:true,transcription:true,book:true}
   });
 }
+
+
+function intelligenceVisible(row:any,person:string,day=today()){
+ if(!row||row.searchable===false)return false;
+ if(row.owner_person&&String(row.owner_person)!==String(person)){
+  if(!row.visible_after||String(row.visible_after)>day)return false;
+ }
+ return true;
+}
+function minimalContext(rows:any[]){
+ return (rows||[]).slice(0,10).map((row:any,index:number)=>({
+  ref:"S"+(index+1),sourceType:String(row.source_type||row.sourceType||""),sourceId:String(row.source_id||row.sourceId||""),
+  title:text(row.title||"Momento",180),date:row.occurred_on||row.occurredOn||null,
+  snippet:text(row.content||"",900)
+ }));
+}
+async function intelligenceUsage(person:string,operation:"ask"|"narrate"|"transcribe",limit:number){
+ const day=today(),row=(await ok(db.from("galaxy_intelligence_usage").select("*").eq("day",day).eq("person",person).eq("operation",operation).limit(1)))?.[0];
+ const count=Number(row?.count)||0;
+ if(count>=limit)throw new Error("Límite diario de IA alcanzado. Intenta mañana.");
+ await ok(db.from("galaxy_intelligence_usage").upsert({day,person,operation,count:count+1,updated_at:new Date().toISOString()},{onConflict:"day,person,operation"}));
+ return count+1;
+}
+async function syncIntelligenceDocument(doc:any){
+ if(!doc?.sourceType||!doc?.sourceId)return {status:"ignored"};
+ if(doc.searchable===false||(!text(doc.title,500)&&!text(doc.content,20000))){
+  await ok(db.from("galaxy_intelligence_documents").delete().eq("source_type",String(doc.sourceType)).eq("source_id",String(doc.sourceId)));
+  return {status:"deleted"};
+ }
+ const hash=await sha(contentHashInput(doc));
+ const existing=(await ok(db.from("galaxy_intelligence_documents").select("id,content_hash,embedding_status").eq("source_type",String(doc.sourceType)).eq("source_id",String(doc.sourceId)).limit(1)))?.[0];
+ if(existing&&existing.content_hash===hash&&existing.embedding_status==="ready")return {status:"unchanged",id:existing.id};
+ const base={
+  source_type:String(doc.sourceType),source_id:String(doc.sourceId),source_version:text(doc.sourceVersion||"",160),
+  title:text(doc.title,500),content:text(doc.content,20000),occurred_on:doc.occurredOn||null,
+  metadata:doc.metadata&&typeof doc.metadata==="object"?doc.metadata:{},
+  owner_person:["0","1"].includes(String(doc.ownerPerson))?String(doc.ownerPerson):null,
+  visible_after:doc.visibleAfter||null,searchable:doc.searchable!==false,
+  content_hash:hash,embedding:null,embedding_model:INTELLIGENCE_EMBEDDING_MODEL,embedding_status:"pending",embedding_error:null,updated_at:new Date().toISOString()
+ };
+ const saved=await ok(db.from("galaxy_intelligence_documents").upsert(base,{onConflict:"source_type,source_id"}).select("id").single());
+ try{
+  const vector=await gteSmallEmbedding((base.title+"\n"+base.content).slice(0,12000));
+  if(!vector)throw new Error("embedding-error: contenido vacío");
+  await ok(db.from("galaxy_intelligence_documents").update({embedding:vector,embedding_status:"ready",embedding_error:null,updated_at:new Date().toISOString()}).eq("id",saved.id).eq("content_hash",hash));
+  return {status:"ready",id:saved.id};
+ }catch(error){
+  const message=text(error instanceof Error?error.message:"embedding-error",300);
+  await ok(db.from("galaxy_intelligence_documents").update({embedding:null,embedding_status:"error",embedding_error:message,updated_at:new Date().toISOString()}).eq("id",saved.id).eq("content_hash",hash));
+  return {status:"embedding-error",id:saved.id,fallback:true};
+ }
+}
+async function deleteIntelligenceSource(type:string,id:string){
+ const sourceId=String(id||"");if(!sourceId)return;
+ if(type==="item"){
+  await ok(db.from("galaxy_intelligence_documents").delete().eq("source_id",sourceId).in("source_type",["memory","song","event","plan","note","capsule","wish","journey"]));
+  return;
+ }
+ await ok(db.from("galaxy_intelligence_documents").delete().eq("source_type",type).eq("source_id",sourceId));
+}
+async function syncIntelligenceItem(row:any){if(row)await syncIntelligenceDocument(buildIntelligenceDocument("item",row,{today:today()}));}
+async function syncIntelligencePlace(row:any){if(row)await syncIntelligenceDocument(buildIntelligenceDocument("place",row,{today:today()}));}
+async function syncIntelligenceTrip(row:any){if(row)await syncIntelligenceDocument(buildIntelligenceDocument("trip",row,{today:today()}));}
+async function syncIntelligenceGoal(idOrRow:any){
+ let goal=typeof idOrRow==="object"?idOrRow:(await ok(db.from("galaxy_goals").select("*").eq("id",String(idOrRow)).limit(1)))?.[0];
+ if(!goal)return;
+ const steps=await ok(db.from("galaxy_goal_steps").select("title,completed_at,position").eq("goal_id",goal.id).order("position"));
+ goal={...goal,description:[goal.description,...(steps||[]).map((s:any)=>text(s.title,300))].filter(Boolean).join(" · ")};
+ await syncIntelligenceDocument(buildIntelligenceDocument("goal",goal,{today:today()}));
+}
+async function syncIntelligenceBond(row:any){
+ if(!row)return;
+ if(["sharednote","ritual"].includes(String(row.type)))await syncIntelligenceDocument(buildIntelligenceDocument("bond",row,{today:today()}));
+}
+async function syncIntelligenceDaily(day:string){
+ const rows=await ok(db.from("galaxy_daily").select("day,person,answer").eq("day",day).order("person"));
+ await ok(db.from("galaxy_intelligence_documents").delete().eq("source_type","answer").like("source_id",day+":%"));
+ const answered=(rows||[]).filter((x:any)=>text(x.answer,3000));
+ if(answered.length!==2)return;
+ const question=(await ok(db.from("galaxy_daily_questions").select("question_id").eq("day",day).limit(1)))?.[0];
+ for(const row of answered)await syncIntelligenceDocument(buildIntelligenceDocument("daily-answer",{...row,question_id:question?.question_id,ownerOnly:false},{today:today()}));
+}
+async function intelligenceVoicePrivacy(voice:any){
+ const data=voice?.data||{},author=String(voice?.author||""),ref=String(data.referenceId||"");
+ if(!ref)return {ownerPerson:null,visibleAfter:null};
+ const target=(await ok(db.from("galaxy_items").select("kind,data,author").eq("id",ref).limit(1)))?.[0];
+ if(!target)return {ownerPerson:null,visibleAfter:null};
+ if(target.kind==="capsule"&&target.data?.date)return {ownerPerson:author,visibleAfter:String(target.data.date)};
+ if(target.kind==="note"&&target.data?.surprise){
+  if(target.data.unlockType==="date")return {ownerPerson:author,visibleAfter:String(target.data.unlockDate||"")||null};
+  if(target.data.unlockType==="place")return {ownerPerson:author,visibleAfter:null};
+ }
+ return {ownerPerson:null,visibleAfter:null};
+}
+async function syncIntelligenceVoiceTranscript(bondId:string){
+ const [voice,transcript]=await Promise.all([
+  ok(db.from("galaxy_bond").select("*").eq("id",bondId).eq("type","voice").limit(1)),
+  ok(db.from("galaxy_voice_transcripts").select("*").eq("bond_id",bondId).limit(1))
+ ]);
+ const row=voice?.[0],tr=transcript?.[0];
+ if(!row||!tr){await deleteIntelligenceSource("voice-transcript",bondId);return;}
+ const privacy=await intelligenceVoicePrivacy(row),data=row.data||{};
+ await syncIntelligenceDocument(buildIntelligenceDocument("voice-transcript",{
+  bondId,author:row.author,title:data.title||"Mensaje de voz",text:tr.transcript,segments:tr.segments,
+  created_at:row.created,mime:data.mime,referenceId:data.referenceId,...privacy
+ },{today:today()}));
+}
+async function syncIntelligencePhotoContext(path:string){
+ const row=(await ok(db.from("galaxy_photo_context").select("*").eq("path",path).limit(1)))?.[0];
+ if(!row){await deleteIntelligenceSource("photo",path);return;}
+ await syncIntelligenceDocument(buildIntelligenceDocument("photo-context",row,{today:today()}));
+}
+async function classicIntelligenceFallback(person:string,query:string,limit=20){
+ const q=normalizeSearchText(query);if(!q)return[];
+ const rows=await ok(db.from("galaxy_intelligence_documents").select("id,source_type,source_id,title,content,occurred_on,metadata,owner_person,visible_after,searchable").limit(1000));
+ return (rows||[]).filter((r:any)=>intelligenceVisible(r,person)&&normalizeSearchText((r.title||"")+" "+(r.content||"")).includes(q))
+  .sort((a:any,b:any)=>String(b.occurred_on||"").localeCompare(String(a.occurred_on||""))).slice(0,limit)
+  .map((r:any,index:number)=>({...r,final_score:100-index,exact_rank:index+1,fulltext_rank:null,semantic_rank:null}));
+}
+async function intelligenceSearchRows(person:string,query:string,limit=20){
+ const q=text(query,500);if(!q)return {results:[],mode:"empty",embeddingStatus:"skipped"};
+ let vector:any=null,embeddingStatus="ready";
+ try{vector=await gteSmallEmbedding(q);}catch{embeddingStatus="fallback";}
+ try{
+  const rows=await ok(db.rpc("galaxy_intelligence_hybrid_search",{query_text:q,query_embedding:vector,query_person:person,match_count:Math.max(1,Math.min(50,limit))}));
+  return {results:(rows||[]).filter((r:any)=>intelligenceVisible(r,person)),mode:vector?"hybrid":"keyword-fallback",embeddingStatus};
+ }catch{
+  return {results:await classicIntelligenceFallback(person,q,limit),mode:"classic-fallback",embeddingStatus:"fallback"};
+ }
+}
+async function intelligenceSearch(req:Request,body:any){
+ const d=await device(req),query=text(body.query,500),limit=Math.max(1,Math.min(40,Number(body.limit)||20));
+ const result=await intelligenceSearchRows(String(d.person),query,limit);
+ return json({...result,query,results:result.results.map((r:any)=>({
+  id:r.id,sourceType:r.source_type,sourceId:r.source_id,title:r.title,snippet:text(r.content,500),date:r.occurred_on,
+  metadata:r.metadata||{},score:Number(r.final_score)||0,exact:!!r.exact_rank,fulltext:!!r.fulltext_rank,semantic:!!r.semantic_rank
+ }))});
+}
+function deterministicGroundedAnswer(question:string,rows:any[]){
+ const plain=normalizeSearchText(question),dated=(rows||[]).filter((x:any)=>x.occurred_on).sort((a:any,b:any)=>String(b.occurred_on).localeCompare(String(a.occurred_on)));
+ if(/ultima vez|cuando estuvimos|mas reciente/.test(plain)&&dated.length){
+  const r=dated[0];return {title:"La coincidencia más reciente",answer:(r.title||"Momento")+" · "+r.occurred_on+".",grounded:true};
+ }
+ return null;
+}
+async function intelligenceAsk(req:Request,body:any){
+ const d=await device(req),person=String(d.person),question=text(body.question,600);
+ if(!question)return json({error:"Escribe una pregunta."},400);
+ const search=await intelligenceSearchRows(person,question,10),rows=search.results||[],sources=minimalContext(rows);
+ if(!rows.length)return json({answer:"No encontré contenido de ustedes que respalde una respuesta.",sources:[],mode:"zero-results",grounded:true});
+ const deterministic=deterministicGroundedAnswer(question,rows);
+ if(deterministic)return json({...deterministic,sources,mode:search.mode});
+ const cfg=aiProviderConfig();
+ if(!cfg.configured)return json({answer:"Encontré momentos relacionados, pero la narración de IA no está configurada. Te muestro las fuentes sin inventar una respuesta.",sources,mode:"fallback",grounded:true,providerAvailable:false});
+ await intelligenceUsage(person,"ask",30);
+ try{
+  const context=JSON.stringify(sources);
+  const answer=await generateGroundedResponse(
+   "Responde en español únicamente con hechos presentes en las FUENTES. No infieras hechos nuevos. Si las fuentes no bastan, dilo. Cita las fuentes con [S1], [S2], etc. Nunca menciones coordenadas ni datos no presentes.",
+   "PREGUNTA:\n"+question+"\n\nFUENTES:\n"+context,700);
+  return json({answer,sources,mode:"ai-grounded",grounded:true,providerAvailable:true});
+ }catch{
+  return json({answer:"La IA generativa falló, así que no voy a completar huecos. Estas son las coincidencias verificables.",sources,mode:"provider-fallback",grounded:true,providerAvailable:false});
+ }
+}
+async function intelligenceConnections(req:Request,body:any){
+ const d=await device(req),person=String(d.person),sourceType=text(body.sourceType,40),sourceId=text(body.sourceId,300);
+ const source=(await ok(db.from("galaxy_intelligence_documents").select("*").eq("source_type",sourceType).eq("source_id",sourceId).limit(1)))?.[0];
+ if(!source||!intelligenceVisible(source,person))return json({error:"Fuente no disponible."},404);
+ const related=await intelligenceSearchRows(person,(source.title+" "+source.content).slice(0,800),12);
+ const rows=(related.results||[]).filter((r:any)=>String(r.id)!==String(source.id)).slice(0,8);
+ return json({source:{sourceType:source.source_type,sourceId:source.source_id,title:source.title},connections:rows.map((r:any)=>({
+  sourceType:r.source_type,sourceId:r.source_id,title:r.title,date:r.occurred_on,
+  reasons:explainConnection({sourceType:source.source_type,title:source.title,occurredOn:source.occurred_on,metadata:source.metadata},{sourceType:r.source_type,title:r.title,occurredOn:r.occurred_on,metadata:r.metadata},Number(r.semantic_score)||0)
+ }))});
+}
+async function intelligenceNarrate(req:Request,body:any){
+ const d=await device(req),person=String(d.person),requested=Array.isArray(body.sourceIds)?body.sourceIds.map(String).slice(0,10):[];
+ let query=db.from("galaxy_intelligence_documents").select("*").in("source_type",["memory","journey","trip"]).order("occurred_on",{ascending:true}).limit(10);
+ if(requested.length)query=query.in("source_id",requested);
+ const rows=(await ok(query)||[]).filter((r:any)=>intelligenceVisible(r,person)).slice(0,10);
+ if(rows.length<5)return json({error:"Se necesitan entre 5 y 10 recuerdos disponibles para narrar un capítulo."},409);
+ const cfg=aiProviderConfig(),sources=rows.map((r:any)=>({sourceId:String(r.source_id),title:text(r.title,180),date:r.occurred_on,content:text(r.content,1200)}));
+ if(!cfg.configured)return json({available:false,error:"La IA narradora no está configurada.",sources});
+ await intelligenceUsage(person,"narrate",10);
+ try{
+  const raw=await generateGroundedResponse(
+   "Escribe un capítulo en español usando EXCLUSIVAMENTE las fuentes entregadas. No inventes hechos, lugares, diálogos ni emociones. Devuelve solo JSON con {title,paragraphs:[{text,sourceIds:[...]}]}. Cada párrafo debe citar al menos una fuente por su sourceId.",
+   JSON.stringify({sources}),1400);
+  const narrative=validateNarrative(extractJsonObject(raw),sources);
+  return json({available:true,narrative,sources:sources.map(x=>({sourceId:x.sourceId,title:x.title,date:x.date}))});
+ }catch{
+  return json({available:false,error:"La narración no pudo validarse contra las fuentes. No se guardó contenido inventado.",sources:sources.map(x=>({sourceId:x.sourceId,title:x.title,date:x.date}))});
+ }
+}
+async function intelligenceTranscriptDelete(req:Request,body:any){
+ const d=await device(req),person=String(d.person),bondId=String(body.bondId||"");
+ const voice=(await ok(db.from("galaxy_bond").select("id,author,type").eq("id",bondId).eq("type","voice").limit(1)))?.[0];
+ if(!voice)return json({error:"Audio no encontrado."},404);
+ if(String(voice.author)!==person)return json({error:"Solo quien grabó el audio puede eliminar su transcripción."},403);
+ await ok(db.from("galaxy_voice_transcripts").delete().eq("bond_id",bondId));
+ await deleteIntelligenceSource("voice-transcript",bondId);
+ return json({ok:true,audioPreserved:true});
+}
+async function intelligenceTranscribe(req:Request,body:any){
+ const d=await device(req),person=String(d.person),bondId=String(body.bondId||"");
+ const voice=(await ok(db.from("galaxy_bond").select("*").eq("id",bondId).eq("type","voice").limit(1)))?.[0];
+ if(!voice)return json({error:"Audio no encontrado."},404);
+ if(String(voice.author)!==person)return json({error:"Solo quien grabó el audio puede activar su transcripción."},403);
+ const path=text(voice.data?.audioPath,200),mime=text(voice.data?.mime||"audio/mp4",80);
+ if(!path)return json({error:"El audio original no está disponible."},409);
+ await intelligenceUsage(person,"transcribe",8);
+ const {data:blob,error}=await db.storage.from("galaxy-voice").download(path);
+ if(error||!blob)return json({error:"No pude abrir el audio original."},503);
+ try{
+  const result=await transcribeAudioBlob(blob,path.split("/").pop()||"voice.m4a",mime);
+  const segments=sanitizeTranscriptSegments(result.segments);
+  const saved=await ok(db.from("galaxy_voice_transcripts").upsert({bond_id:bondId,transcript:text(result.text,30000),segments,provider:result.provider,model:result.model,status:"ready",last_error:null,updated_at:new Date().toISOString()},{onConflict:"bond_id"}).select("*").single());
+  await syncIntelligenceVoiceTranscript(bondId);
+  return json({transcript:{bondId,text:saved.transcript,segments:saved.segments,createdAt:saved.created_at,updatedAt:saved.updated_at},audioPreserved:true});
+ }catch{
+  return json({error:"La transcripción falló. El audio original se conserva intacto."},503);
+ }
+}
+async function intelligenceBook(req:Request,body:any){
+ const d=await device(req),person=String(d.person);
+ const rows=(await ok(db.from("galaxy_intelligence_documents").select("source_type,source_id,title,content,occurred_on,metadata,owner_person,visible_after,searchable").order("occurred_on",{ascending:true}).limit(1000))||[]).filter((r:any)=>intelligenceVisible(r,person));
+ const sections=bookSections().map(section=>({id:section.id,title:section.title,items:[] as any[]}));
+ const byId=Object.fromEntries(sections.map((x:any)=>[x.id,x]));
+ const push=(id:string,row:any)=>byId[id]?.items.push({sourceType:row.source_type,sourceId:row.source_id,title:row.title,date:row.occurred_on,snippet:text(row.content,360)});
+ for(const row of rows){
+  if(row.source_type==="memory"){push("beginning",row);push("firsts",row);}
+  if(["event","answer"].includes(row.source_type))push("dates",row);
+  if(["journey","trip"].includes(row.source_type))push("trips",row);
+  if(row.source_type==="place")push("places",row);
+  if(row.source_type==="song")push("music",row);
+  if(row.source_type==="photo")push("photos",row);
+  if(["answer","sharednote","voice-transcript"].includes(row.source_type))push("quotes",row);
+ }
+ for(const s of sections)s.items=s.items.slice(0,20);
+ const stats={documents:rows.length,memories:rows.filter((x:any)=>x.source_type==="memory").length,trips:rows.filter((x:any)=>["journey","trip"].includes(x.source_type)).length,places:rows.filter((x:any)=>x.source_type==="place").length,songs:rows.filter((x:any)=>x.source_type==="song").length,photos:rows.filter((x:any)=>x.source_type==="photo").length};
+ byId.stats.items=[{sourceType:"stats",sourceId:"current",title:"Estadísticas de nuestra historia",date:today(),snippet:Object.entries(stats).map(([k,v])=>k+": "+v).join(" · ")}];
+ byId.narrative.items=[];
+ return json({title:"Libro de Nuestra Galaxia",version:1,sections,stats,narratorAvailable:aiProviderConfig().configured,pdfReadyContract:true});
+}
+async function intelligenceIndexAction(req:Request,body:any){
+ const d=await device(req),operation=String(body.operation||"status");
+ if(operation==="status"){
+  const rows=await ok(db.from("galaxy_intelligence_documents").select("embedding_status"));
+  const counts:any={total:0,ready:0,pending:0,error:0};for(const r of rows||[]){counts.total++;counts[r.embedding_status]=(counts[r.embedding_status]||0)+1;}
+  return json({counts,embeddingModel:INTELLIGENCE_EMBEDDING_MODEL,providerConfigured:aiProviderConfig().configured});
+ }
+ if(operation==="photo-context-save"){
+  const path=text(body.path,300),caption=text(body.caption,3000),context=text(body.context,5000),takenOn=text(body.takenOn,10);
+  if(!path)return json({error:"Foto no válida."},400);
+  await ok(db.from("galaxy_photo_context").upsert({path,author:String(d.person),caption:caption||null,context:context||null,taken_on:validDate(takenOn)?takenOn:null,updated_at:new Date().toISOString()},{onConflict:"path"}));
+  await syncIntelligencePhotoContext(path);return json({ok:true});
+ }
+ if(operation==="photo-context-delete"){
+  const path=text(body.path,300);await ok(db.from("galaxy_photo_context").delete().eq("path",path));await deleteIntelligenceSource("photo",path);return json({ok:true});
+ }
+ if(operation==="rebuild"){
+  const limit=Math.max(1,Math.min(25,Number(body.limit)||15)),offset=Math.max(0,Number(body.offset)||0);
+ const sources:any[]=[];
+ const [items,places,trips,goals,bond,photoContexts]=await Promise.all([
+  ok(db.from("galaxy_items").select("*").order("created").range(offset,offset+limit-1)),
+  offset===0?ok(db.from("galaxy_places").select("*").order("created_at").limit(limit)):Promise.resolve([]),
+  offset===0?ok(db.from("galaxy_trip_history").select("*").order("started_at").limit(limit)):Promise.resolve([]),
+  offset===0?ok(db.from("galaxy_goals").select("*").order("created_at").limit(limit)):Promise.resolve([]),
+  offset===0?ok(db.from("galaxy_bond").select("*").in("type",["sharednote","ritual"]).order("created").limit(limit)):Promise.resolve([]),
+  offset===0?ok(db.from("galaxy_photo_context").select("*").order("created_at").limit(limit)):Promise.resolve([])
+ ]);
+ for(const row of items||[])sources.push(buildIntelligenceDocument("item",row,{today:today()}));
+ for(const row of places||[])sources.push(buildIntelligenceDocument("place",row,{today:today()}));
+ for(const row of trips||[])sources.push(buildIntelligenceDocument("trip",row,{today:today()}));
+ for(const row of goals||[])sources.push(buildIntelligenceDocument("goal",row,{today:today()}));
+ for(const row of bond||[])sources.push(buildIntelligenceDocument("bond",row,{today:today()}));
+ for(const row of photoContexts||[])sources.push(buildIntelligenceDocument("photo-context",row,{today:today()}));
+ let ready=0,errors=0;for(const doc of sources){const result=await syncIntelligenceDocument(doc);if(result.status==="ready"||result.status==="unchanged")ready++;if(result.status==="embedding-error")errors++;}
+ if(offset===0){
+  const days=await ok(db.from("galaxy_daily").select("day").not("answer","is",null).order("day",{ascending:false}).limit(120));
+  for(const day of [...new Set((days||[]).map((x:any)=>String(x.day)))])await syncIntelligenceDaily(day);
+  const transcripts=await ok(db.from("galaxy_voice_transcripts").select("bond_id").limit(limit));for(const tr of transcripts||[])await syncIntelligenceVoiceTranscript(String(tr.bond_id));
+ }
+  return json({ok:true,processed:sources.length,ready,errors,nextOffset:(items||[]).length===limit?offset+limit:null});
+ }
+ return json({error:"Operación de índice no válida."},400);
+}
+
+async function intelligenceBestEffort(label:string,work:()=>Promise<any>){try{return await work();}catch(error){console.warn("intelligence-index",label,error instanceof Error?error.message:"error");return null;}}
 
 function cleanItem(kind:string,data:any){
   if(!allowedKinds.has(kind))throw new Error("Tipo de contenido no válido");
@@ -304,10 +1031,12 @@ async function itemSave(req:Request,body:any){
     if(!row)return json({error:"El contenido ya no existe"},404);
     if(Number(body.version)!==Number(row.version))return json({error:"Este contenido cambió. Actualiza antes de guardar otra vez."},409);
     const updated=await ok(db.from("galaxy_items").update({data}).eq("id",row.id).eq("version",row.version).select("*").single());
+    await intelligenceBestEffort("item-update",()=>syncIntelligenceItem(updated));
     return json({item:updated});
   }
   const created=await ok(db.from("galaxy_items").insert({kind,data,author:String(d.person)}).select("*").single());
   await recordParticipation(String(d.person));
+  await intelligenceBestEffort("item-create",()=>syncIntelligenceItem(created));
   return json({item:created},201);
 }
 
@@ -317,6 +1046,7 @@ async function itemDelete(req:Request,body:any){
   if(!row)return json({error:"El contenido ya no existe"},404);
   if(Number(body.version)!==Number(row.version))return json({error:"Este contenido cambió. Actualiza antes de borrarlo."},409);
   await ok(db.from("galaxy_items").delete().eq("id",row.id).eq("version",row.version));
+  await intelligenceBestEffort("item-delete",()=>deleteIntelligenceSource("item",String(row.id)));
   return json({ok:true});
 }
 
@@ -343,7 +1073,316 @@ async function dailySave(req:Request,body:any){
     await ok(db.from("galaxy_daily").upsert({day,person:String(d.person),answer:value},{onConflict:"day,person"}));
   }else return json({error:"Campo no válido."},400);
   await recordParticipation(String(d.person));
+  if(field==="answer")await intelligenceBestEffort("daily-answer",()=>syncIntelligenceDaily(day));
   return json({ok:true});
+}
+
+
+
+async function loadGoalData(){
+ const [goals,goalParticipants,goalSteps,goalLinks,goalContributions,items]=await Promise.all([
+  ok(db.from("galaxy_goals").select("*").order("updated_at",{ascending:false}).limit(1000)),
+  ok(db.from("galaxy_goal_participants").select("*").limit(2000)),
+  ok(db.from("galaxy_goal_steps").select("*").order("position",{ascending:true}).limit(5000)),
+  ok(db.from("galaxy_goal_links").select("*").order("created_at",{ascending:true}).limit(5000)),
+  ok(db.from("galaxy_goal_contributions").select("*").order("contribution_date",{ascending:false}).limit(10000)),
+  ok(db.from("galaxy_items").select("id,kind,data,version,author,created").order("created",{ascending:false}).limit(5000))
+ ]);
+ return {goals:goals||[],goalParticipants:goalParticipants||[],goalSteps:goalSteps||[],goalLinks:goalLinks||[],goalContributions:goalContributions||[],items:items||[]};
+}
+function goalView(goal:any,data:any){
+ const id=String(goal.id),steps=(data.goalSteps||[]).filter((row:any)=>String(row.goal_id)===id).sort((a:any,b:any)=>Number(a.position)-Number(b.position));
+ const contributions=(data.goalContributions||[]).filter((row:any)=>String(row.goal_id)===id).sort((a:any,b:any)=>String(b.contribution_date).localeCompare(String(a.contribution_date))||String(b.created_at).localeCompare(String(a.created_at)));
+ const participants=(data.goalParticipants||[]).filter((row:any)=>String(row.goal_id)===id).map((row:any)=>String(row.person)).sort();
+ const itemMap=new Map((data.items||[]).map((item:any)=>[String(item.id),item]));
+ const links=(data.goalLinks||[]).filter((row:any)=>String(row.goal_id)===id).map((row:any)=>{
+  const item:any=itemMap.get(String(row.item_id));
+  return {...row,item:item?{id:item.id,kind:item.kind,title:text(item.data?.title||item.kind,160),body:text(item.data?.body||"",500)}:null};
+ });
+ return {...goal,participants,steps,contributions,links,...computeGoalProgress(goal,steps,contributions)};
+}
+function allGoalViews(data:any){return (data.goals||[]).map((goal:any)=>goalView(goal,data));}
+async function currentGoal(id:string){
+ const row=(await ok(db.from("galaxy_goals").select("*").eq("id",id).limit(1)))?.[0];
+ return row||null;
+}
+async function touchGoalVersion(id:string,expectedVersion:number){
+ if(!Number.isInteger(expectedVersion)||expectedVersion<1)return null;
+ return await ok(db.from("galaxy_goals").update({updated_at:new Date().toISOString()}).eq("id",id).eq("version",expectedVersion).select("*").maybeSingle());
+}
+async function createGoalRecord(person:string,input:any,source:any=null){
+ const normalized=normalizeGoalInput(input),created=await ok(db.from("galaxy_goals").insert({
+  kind:normalized.kind,title:normalized.title,description:normalized.description,category:normalized.category,
+  target_date:normalized.target_date,status:normalized.status,target_amount:normalized.target_amount,created_by:person
+ }).select("*").single());
+ try{
+  await ok(db.from("galaxy_goal_participants").insert(normalized.participants.map((p:string)=>({goal_id:created.id,person:p}))));
+  if(source?.itemId&&source?.relation)await ok(db.from("galaxy_goal_links").insert({goal_id:created.id,item_id:String(source.itemId),relation:String(source.relation)}));
+ }catch(error){
+  await ok(db.from("galaxy_goals").delete().eq("id",created.id));
+  throw error;
+ }
+ return created;
+}
+async function goalResponse(id:string){
+ const data=await loadGoalData(),goal=(data.goals||[]).find((row:any)=>String(row.id)===String(id));
+ return goal?goalView(goal,data):null;
+}
+async function convertItemToGoal(req:Request,body:any){
+ const d=await device(req),id=String(body.itemId||""),item=(await ok(db.from("galaxy_items").select("*").eq("id",id).limit(1)))?.[0];
+ if(!item||!["plan","wish"].includes(String(item.kind)))return json({error:"Solo un plan o deseo puede convertirse en objetivo."},400);
+ const keepOriginal=body.keepOriginal!==false,draft=conversionDraft(item,{keepOriginal,participants:Array.isArray(body.participants)?body.participants:["0","1"]});
+ const normalized={...draft,...(body.goal&&typeof body.goal==="object"?body.goal:{}),participants:draft.participants,kind:String(body.goal?.kind||draft.kind)};
+ const goal=await createGoalRecord(String(d.person),normalized,{itemId:item.id,relation:item.kind==="plan"?"source-plan":"source-wish"});
+ if(!keepOriginal){await ok(db.from("galaxy_items").delete().eq("id",item.id));await intelligenceBestEffort("converted-item-delete",()=>deleteIntelligenceSource("item",String(item.id)));}
+ await recordParticipation(String(d.person));
+ await intelligenceBestEffort("goal-convert",()=>syncIntelligenceGoal(goal));
+ return json({goal:await goalResponse(String(goal.id)),sourcePreserved:keepOriginal},201);
+}
+async function goalsEngine(req:Request,body:any){
+ const d=await device(req),person=String(d.person),operation=String(body.operation||"list");
+ if(operation==="list"){
+  const data=await loadGoalData();
+  return json({goals:allGoalViews(data)});
+ }
+ if(operation==="create"){
+  const goal=await createGoalRecord(person,body.goal||body);
+  await recordParticipation(person);
+  await intelligenceBestEffort("goal-create",()=>syncIntelligenceGoal(goal));
+  return json({goal:await goalResponse(String(goal.id))},201);
+ }
+ if(operation==="convert-item")return await convertItemToGoal(req,body);
+ const id=String(body.goalId||body.id||"");
+ const existing=await currentGoal(id);
+ if(!existing)return json({error:"El objetivo ya no existe."},404);
+ const expectedVersion=Number(body.expectedVersion);
+ if(operation==="update"){
+  let normalized;try{normalized=normalizeGoalInput({...existing,...(body.goal||{}),participants:Array.isArray(body.goal?.participants)?body.goal.participants:body.participants});}catch(e){return json({error:e instanceof Error?e.message:"Objetivo no válido."},400);}
+  const updated=await ok(db.from("galaxy_goals").update({
+   kind:normalized.kind,title:normalized.title,description:normalized.description,category:normalized.category,
+   target_date:normalized.target_date,status:normalized.status,target_amount:normalized.target_amount
+  }).eq("id",id).eq("version",expectedVersion).select("*").maybeSingle());
+  if(!updated)return json({error:"Este objetivo cambió en otro dispositivo. Actualiza antes de guardar."},409);
+  await ok(db.from("galaxy_goal_participants").delete().eq("goal_id",id));
+  await ok(db.from("galaxy_goal_participants").insert(normalized.participants.map((p:string)=>({goal_id:id,person:p}))));
+  await recordParticipation(person);
+  await intelligenceBestEffort("goal-update",()=>syncIntelligenceGoal(updated));
+  return json({goal:await goalResponse(id)});
+ }
+ if(operation==="delete"){
+  const removed=await ok(db.from("galaxy_goals").delete().eq("id",id).eq("version",expectedVersion).select("id").maybeSingle());
+  if(!removed)return json({error:"Este objetivo cambió en otro dispositivo. Actualiza antes de eliminar."},409);
+  await intelligenceBestEffort("goal-delete",()=>deleteIntelligenceSource("goal",id));
+  return json({ok:true});
+ }
+ if(operation==="step-add"){
+  const title=text(body.title,300);if(!title)return json({error:"Escribe el paso."},400);
+  const claimed=await touchGoalVersion(id,expectedVersion);if(!claimed)return json({error:"Este objetivo cambió en otro dispositivo."},409);
+  const rows=await ok(db.from("galaxy_goal_steps").select("position").eq("goal_id",id).order("position",{ascending:false}).limit(1));
+  const position=(rows?.length?Number(rows[0].position)+1:0);
+  await ok(db.from("galaxy_goal_steps").insert({goal_id:id,title,position}));
+  await recordParticipation(person);await intelligenceBestEffort("goal-step-add",()=>syncIntelligenceGoal(id));return json({goal:await goalResponse(id)});
+ }
+ if(operation==="step-toggle"){
+  const stepId=String(body.stepId||""),step=(await ok(db.from("galaxy_goal_steps").select("*").eq("id",stepId).eq("goal_id",id).limit(1)))?.[0];
+  if(!step)return json({error:"El paso ya no existe."},404);
+  const claimed=await touchGoalVersion(id,expectedVersion);if(!claimed)return json({error:"Este objetivo cambió en otro dispositivo."},409);
+  const complete=body.completed!==false;
+  await ok(db.from("galaxy_goal_steps").update({completed_at:complete?new Date().toISOString():null,completed_by:complete?person:null}).eq("id",stepId).eq("goal_id",id));
+  await recordParticipation(person);await intelligenceBestEffort("goal-step-toggle",()=>syncIntelligenceGoal(id));return json({goal:await goalResponse(id)});
+ }
+ if(operation==="step-reorder"){
+  const rows=await ok(db.from("galaxy_goal_steps").select("*").eq("goal_id",id).order("position"));
+  let ordered:string[];try{ordered=reorderStepIds(rows||[],body.stepIds||[]);}catch(e){return json({error:e instanceof Error?e.message:"Orden no válido."},400);}
+  const claimed=await touchGoalVersion(id,expectedVersion);if(!claimed)return json({error:"Este objetivo cambió en otro dispositivo."},409);
+  for(let position=0;position<ordered.length;position++)await ok(db.from("galaxy_goal_steps").update({position}).eq("id",ordered[position]).eq("goal_id",id));
+  await intelligenceBestEffort("goal-step-reorder",()=>syncIntelligenceGoal(id));
+  return json({goal:await goalResponse(id)});
+ }
+ if(operation==="contribution-add"){
+  if(existing.kind!=="savings")return json({error:"Los aportes manuales solo aplican a metas de ahorro."},400);
+  let contribution;try{contribution=normalizeContribution(body.contribution||body,person);}catch(e){return json({error:e instanceof Error?e.message:"Aporte no válido."},400);}
+  const claimed=await touchGoalVersion(id,expectedVersion);if(!claimed)return json({error:"Este objetivo cambió en otro dispositivo."},409);
+  await ok(db.from("galaxy_goal_contributions").insert({goal_id:id,...contribution}));
+  await recordParticipation(person);return json({goal:await goalResponse(id)});
+ }
+ if(operation==="contribution-delete"){
+  if(existing.kind!=="savings")return json({error:"Este objetivo no es una meta de ahorro."},400);
+  const contributionId=String(body.contributionId||""),row=(await ok(db.from("galaxy_goal_contributions").select("id").eq("id",contributionId).eq("goal_id",id).limit(1)))?.[0];
+  if(!row)return json({error:"El aporte ya no existe."},404);
+  const claimed=await touchGoalVersion(id,expectedVersion);if(!claimed)return json({error:"Este objetivo cambió en otro dispositivo."},409);
+  await ok(db.from("galaxy_goal_contributions").delete().eq("id",contributionId).eq("goal_id",id));
+  return json({goal:await goalResponse(id)});
+ }
+ if(operation==="link-add"){
+  const itemId=String(body.itemId||""),relation=String(body.relation||""),item=(await ok(db.from("galaxy_items").select("id,kind").eq("id",itemId).limit(1)))?.[0];
+  const expectedKind=relation==="note"?"note":relation==="memory"?"memory":relation==="plan"?"plan":"";
+  if(!item||!expectedKind||item.kind!==expectedKind)return json({error:"El contenido relacionado no coincide con el tipo elegido."},400);
+  const claimed=await touchGoalVersion(id,expectedVersion);if(!claimed)return json({error:"Este objetivo cambió en otro dispositivo."},409);
+  await ok(db.from("galaxy_goal_links").upsert({goal_id:id,item_id:itemId,relation},{onConflict:"goal_id,item_id,relation",ignoreDuplicates:true}));
+  return json({goal:await goalResponse(id)});
+ }
+ if(operation==="link-delete"){
+  const linkId=String(body.linkId||""),row=(await ok(db.from("galaxy_goal_links").select("id").eq("id",linkId).eq("goal_id",id).limit(1)))?.[0];
+  if(!row)return json({error:"La relación ya no existe."},404);
+  const claimed=await touchGoalVersion(id,expectedVersion);if(!claimed)return json({error:"Este objetivo cambió en otro dispositivo."},409);
+  await ok(db.from("galaxy_goal_links").delete().eq("id",linkId).eq("goal_id",id));
+  return json({goal:await goalResponse(id)});
+ }
+ return json({error:"Operación de Goals Engine no válida."},400);
+}
+
+function datePlanView(row:any){
+ const data=row?.data||{};
+ return {
+  id:String(row?.id||""),title:text(data.title||"Plan",160),body:text(data.body||"",1200),
+  category:text(data.category||"",80),planCategory:normalizePlanCategory(data),done:data.done===true,
+  budget:Number.isFinite(Number(data.budget))?Math.max(0,Number(data.budget)):0,
+  minutes:Number.isFinite(Number(data.minutes))?Math.max(15,Number(data.minutes)):120,
+  where:data.where==="casa"?"casa":"salir",placeId:data.placeId??null
+ };
+}
+function dateQuestionContextKind(context:any){
+ const start=String(context?.startDate||""),day=String(context?.today||"");
+ if(start&&day&&start.slice(8,10)===day.slice(8,10))return "anniversary";
+ if((context?.journeys||[]).length)return "travel";
+ if((context?.memories||[]).length)return "memory";
+ return "daily";
+}
+async function goalSuggestionsForDate(){
+ const [goals,steps,contributions]=await Promise.all([
+  ok(db.from("galaxy_goals").select("*").in("status",["active","paused"]).limit(500)),
+  ok(db.from("galaxy_goal_steps").select("*").limit(3000)),
+  ok(db.from("galaxy_goal_contributions").select("*").limit(5000))
+ ]);
+ const views=(goals||[]).map((goal:any)=>({...goal,...computeGoalProgress(goal,steps||[],contributions||[])}));
+ return buildGoalDateSuggestions(views);
+}
+async function buildDateContext(req:Request,knownDevice:any=null){
+ const d=knownDevice||await device(req),person=String(d.person),day=today(),since=new Date(Date.now()-90*86400000).toISOString();
+ const [settings,items,locations,places,trips,encounters,questionRows,placeEvents,goalSuggestions]=await Promise.all([
+  ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
+  ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:false}).limit(1000)),
+  ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude,transport_preference,updated_at").order("person")),
+  ok(db.from("galaxy_places").select("id,name,kind,latitude,longitude,note,owner,created_at").order("created_at",{ascending:false}).limit(200)),
+  ok(db.from("galaxy_trip_history").select("id,person,started_at,ended_at,distance_m,duration_s,dominant_motion").order("started_at",{ascending:false}).limit(250)),
+  ok(db.from("galaxy_encounters").select("id,started_at,ended_at").order("started_at",{ascending:false}).limit(250)),
+  ok(db.from("galaxy_daily_questions").select("day,question_id,deck,context_kind,favorite,memory_id").order("day",{ascending:false}).limit(40)),
+  ok(db.from("galaxy_place_events").select("place_id,event,happened_at").eq("event","arrived").gte("happened_at",since).order("happened_at",{ascending:false}).limit(1000)),
+  goalSuggestionsForDate()
+ ]);
+ const allItems=items||[],plans=allItems.filter((row:any)=>row.kind==="plan").map(datePlanView);
+ const own=(locations||[]).find((row:any)=>String(row.person)===person&&row.sharing&&row.latitude!=null&&row.longitude!=null);
+ const visitCounts=new Map<string,number>();
+ for(const event of placeEvents||[]){const id=String(event.place_id);visitCounts.set(id,(visitCounts.get(id)||0)+1);}
+ const placeViews=(places||[]).map((place:any)=>{
+  const distanceM=own?Math.round(dist(own,place)):null;
+  return {id:place.id,name:text(place.name,100),kind:text(place.kind,40),note:text(place.note,300),distanceM,visits:visitCounts.get(String(place.id))||0};
+ });
+ const startDate=validDate(settings?.data?.startDate)?String(settings.data.startDate):"";
+ const hour=Number(new Intl.DateTimeFormat("en-US",{timeZone:"America/Bogota",hour:"2-digit",hourCycle:"h23"}).format(new Date()));
+ return {
+  today:day,startDate,nowHour:Number.isFinite(hour)?hour:12,person,
+  recentQuestionIds:(questionRows||[]).map((row:any)=>String(row.question_id)).filter(Boolean).slice(0,14),
+  memories:allItems.filter((row:any)=>row.kind==="memory").slice(0,80).map((row:any)=>({id:row.id,date:row.data?.date||bogotaDay(row.created),title:text(row.data?.title,160)})),
+  journeys:allItems.filter((row:any)=>row.kind==="journey").slice(0,50).map((row:any)=>({id:row.id,date:row.data?.date||bogotaDay(row.created),title:text(row.data?.title,160)})),
+  pendingPlans:plans.filter((plan:any)=>!plan.done),completedPlans:plans.filter((plan:any)=>plan.done),
+  places:placeViews,frequentPlaces:placeViews.filter((place:any)=>Number(place.visits)>=2),
+  trips:trips||[],encounters:encounters||[],
+  location:own?{available:true,latitude:Number(own.latitude),longitude:Number(own.longitude)}:{available:false},
+  transport:text(own?.transport_preference||"auto",24)||"auto",
+  goalSuggestions:goalSuggestions||[],
+  questionRows:questionRows||[]
+ };
+}
+async function ensureDailyQuestion(req:Request,context:any=null,knownDevice:any=null){
+ const ctx=context||await buildDateContext(req,knownDevice),day=String(ctx.today);
+ let row=await ok(db.from("galaxy_daily_questions").select("*").eq("day",day).maybeSingle());
+ if(!row){
+  const selected=selectQuestion(ctx,{seed:"daily|"+day});
+  await ok(db.from("galaxy_daily_questions").upsert({
+   day,question_id:selected.id,deck:selected.deck,context_kind:dateQuestionContextKind(ctx),favorite:false
+  },{onConflict:"day",ignoreDuplicates:true}));
+  row=await ok(db.from("galaxy_daily_questions").select("*").eq("day",day).single());
+ }
+ let question=questionById(row.question_id);
+ if(!question){
+  question=selectQuestion(ctx,{seed:"repair|"+day});
+  row=await ok(db.from("galaxy_daily_questions").update({question_id:question.id,deck:question.deck}).eq("day",day).select("*").single());
+ }
+ return {row,question,context:ctx};
+}
+async function favoriteQuestionMemory(req:Request,body:any){
+ const d=await device(req),day=validDate(body.day)?String(body.day):today();
+ const assignment=await ok(db.from("galaxy_daily_questions").select("*").eq("day",day).maybeSingle());
+ if(!assignment)return json({error:"Esta pregunta todavía no tiene una asignación guardada."},404);
+ if(assignment.memory_id){
+  const item=await ok(db.from("galaxy_items").select("*").eq("id",assignment.memory_id).maybeSingle());
+  if(item)return json({item,existing:true});
+ }
+ const rows=await ok(db.from("galaxy_daily").select("day,person,answer").eq("day",day).order("person"));
+ const answers=(rows||[]).filter((row:any)=>text(row.answer,3000)).map((row:any)=>({person:String(row.person),answer:text(row.answer,3000)}));
+ if(answers.length!==2)return json({error:"El recuerdo puede crearse cuando ambos hayan respondido."},409);
+ const question=questionById(assignment.question_id);
+ if(!question)return json({error:"La pregunta ya no está disponible."},409);
+ const data=cleanItem("memory",{
+  title:question.text,
+  body:"",
+  category:"Pregunta favorita",date:day,
+  source:{type:"daily-question",day,questionId:question.id,deck:question.deck}
+ });
+ const item=await ok(db.from("galaxy_items").insert({kind:"memory",data,author:String(d.person)}).select("*").single());
+ await ok(db.from("galaxy_daily_questions").update({favorite:true,memory_id:item.id}).eq("day",day));
+ await recordParticipation(String(d.person));
+ return json({item,existing:false});
+}
+async function saveDateRecap(req:Request,body:any){
+ const d=await device(req),recap=buildDateRecap(body.session||body,{today:today()}),sessionId=text(recap?.dateMode?.sessionId,100);
+ if(!sessionId)return json({error:"La sesión de Modo Cita no es válida."},400);
+ const recent=await ok(db.from("galaxy_items").select("*").eq("kind","memory").order("created",{ascending:false}).limit(500));
+ const existing=(recent||[]).find((item:any)=>String(item?.data?.dateMode?.sessionId||"")===sessionId);
+ if(existing)return json({item:existing,existing:true});
+ const data=cleanItem("memory",recap);
+ const item=await ok(db.from("galaxy_items").insert({kind:"memory",data,author:String(d.person)}).select("*").single());
+ await recordParticipation(String(d.person));
+ return json({item,existing:false});
+}
+async function dateEngine(req:Request,body:any){
+ const operation=String(body.operation||"context"),d=await device(req);
+ if(operation==="favorite-memory")return await favoriteQuestionMemory(req,body);
+ if(operation==="date-recap-save")return await saveDateRecap(req,body);
+ const context=await buildDateContext(req,d);
+ if(operation==="context"){
+  const assigned=await ensureDailyQuestion(req,context,d);
+  return json({
+   today:context.today,
+   question:{...assigned.question,favorite:!!assigned.row.favorite,memoryId:assigned.row.memory_id||null,contextKind:assigned.row.context_kind},
+   decks:Object.keys(QUESTION_DECKS).map(id=>({id,count:QUESTION_DECKS[id].length})),
+   pendingPlans:context.pendingPlans,
+   categories:["this-week","when-possible","someday","travel","home"],
+   locationAvailable:!!context.location?.available,transport:context.transport,
+   places:context.places.map((place:any)=>({id:place.id,name:place.name,kind:place.kind,distanceM:place.distanceM,visits:place.visits}))
+  });
+ }
+ if(operation==="question"){
+  const question=selectQuestion(context,{deck:String(body.deck||""),seed:String(body.seed||context.today+"|"+body.deck)});
+  return json({question});
+ }
+ if(operation==="favorite"){
+  const assigned=await ensureDailyQuestion(req,context,d),favorite=body.favorite!==false;
+  const row=await ok(db.from("galaxy_daily_questions").update({favorite}).eq("day",assigned.row.day).select("*").single());
+  return json({question:{...assigned.question,favorite:!!row.favorite,memoryId:row.memory_id||null,contextKind:row.context_kind}});
+ }
+ if(operation==="surprise"){
+  return json({experience:buildSurpriseExperience(context,{...(body.constraints||{}),seed:body.seed||context.today+"|surprise"})});
+ }
+ if(operation==="roulette"){
+  return json({plan:roulettePendingPlans(context.pendingPlans,{category:String(body.category||""),seed:String(body.seed||context.today+"|roulette")})});
+ }
+ if(operation==="planner"){
+  return json({experience:buildSequentialPlan(context,{...(body.constraints||{}),seed:body.seed||context.today+"|planner"})});
+ }
+ return json({error:"Operación de Date Engine no válida."},400);
 }
 
 async function presenceSet(req:Request,body:any){
@@ -362,14 +1401,22 @@ async function presenceSet(req:Request,body:any){
 
 async function backupExport(req:Request){
   await device(req);
-  const [settings,items,daily,bond,places]=await Promise.all([
+  const [settings,items,daily,bond,bondGestures,places,goals,goalParticipants,goalSteps,goalLinks,goalContributions,voiceTranscripts,photoContext]=await Promise.all([
     ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
     ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:true}).limit(2000)),
     ok(db.from("galaxy_daily").select("day,person,mood,answer").order("day",{ascending:true}).limit(1000)),
     ok(db.from("galaxy_bond").select("id,type,author,data,created").order("created",{ascending:true}).limit(2000)),
-    ok(db.from("galaxy_places").select("id,owner,name,kind,latitude,longitude,note,created_at").order("created_at",{ascending:true}).limit(500))
+    ok(db.from("galaxy_bond_gestures").select("*").order("created_at",{ascending:true}).limit(100)),
+    ok(db.from("galaxy_places").select("id,owner,name,kind,latitude,longitude,note,created_at").order("created_at",{ascending:true}).limit(500)),
+    ok(db.from("galaxy_goals").select("*").order("created_at",{ascending:true}).limit(1000)),
+    ok(db.from("galaxy_goal_participants").select("*").limit(2000)),
+    ok(db.from("galaxy_goal_steps").select("*").order("position",{ascending:true}).limit(5000)),
+    ok(db.from("galaxy_goal_links").select("*").order("created_at",{ascending:true}).limit(5000)),
+    ok(db.from("galaxy_goal_contributions").select("*").order("contribution_date",{ascending:true}).limit(10000)),
+    ok(db.from("galaxy_voice_transcripts").select("*").order("created_at",{ascending:true}).limit(500)),
+    ok(db.from("galaxy_photo_context").select("*").order("created_at",{ascending:true}).limit(500))
   ]);
-  return json({format:"nuestra-galaxia-backup",version:1,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:items||[],daily:daily||[],bond:bond||[],places:places||[]});
+  return json({format:"nuestra-galaxia-backup",version:2,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:items||[],daily:daily||[],bond:bond||[],bondGestures:bondGestures||[],places:places||[],goals:goals||[],goalParticipants:goalParticipants||[],goalSteps:goalSteps||[],goalLinks:goalLinks||[],goalContributions:goalContributions||[],voiceTranscripts:voiceTranscripts||[],photoContext:photoContext||[]});
 }
 
 function uuidish(v:unknown){return /^[0-9a-f-]{36}$/i.test(String(v||""));}
@@ -377,12 +1424,20 @@ function uuidish(v:unknown){return /^[0-9a-f-]{36}$/i.test(String(v||""));}
 async function backupRestore(req:Request,body:any){
   await device(req);
   const backup=body?.backup;
-  if(!backup||backup.format!=="nuestra-galaxia-backup"||Number(backup.version)!==1)return json({error:"La copia no pertenece a Nuestra Galaxia."},400);
+  if(!backup||backup.format!=="nuestra-galaxia-backup"||![1,2].includes(Number(backup.version)))return json({error:"La copia no pertenece a Nuestra Galaxia."},400);
   const items=Array.isArray(backup.items)?backup.items.slice(0,2000):[];
   const daily=Array.isArray(backup.daily)?backup.daily.slice(0,1000):[];
   const bond=Array.isArray(backup.bond)?backup.bond.slice(0,2000):[];
+  const bondGestures=Array.isArray(backup.bondGestures)?backup.bondGestures.slice(0,100):[];
   const places=Array.isArray(backup.places)?backup.places.slice(0,500):[];
-  let restoredItems=0,restoredDaily=0,restoredBond=0,restoredPlaces=0;
+  const goals=Array.isArray(backup.goals)?backup.goals.slice(0,1000):[];
+  const goalParticipants=Array.isArray(backup.goalParticipants)?backup.goalParticipants.slice(0,2000):[];
+  const goalSteps=Array.isArray(backup.goalSteps)?backup.goalSteps.slice(0,5000):[];
+  const goalLinks=Array.isArray(backup.goalLinks)?backup.goalLinks.slice(0,5000):[];
+  const goalContributions=Array.isArray(backup.goalContributions)?backup.goalContributions.slice(0,10000):[];
+  const voiceTranscripts=Array.isArray(backup.voiceTranscripts)?backup.voiceTranscripts.slice(0,500):[];
+  const photoContext=Array.isArray(backup.photoContext)?backup.photoContext.slice(0,500):[];
+  let restoredItems=0,restoredDaily=0,restoredBond=0,restoredBondGestures=0,restoredPlaces=0,restoredGoals=0,restoredGoalParticipants=0,restoredGoalSteps=0,restoredGoalLinks=0,restoredGoalContributions=0,restoredVoiceTranscripts=0,restoredPhotoContext=0;
 
   if(backup.settings&&typeof backup.settings==="object"&&!Array.isArray(backup.settings)){
     const current=await ok(db.from("galaxy_settings").select("data").eq("id",1).single());
@@ -407,6 +1462,60 @@ async function backupRestore(req:Request,body:any){
     restoredItems++;
   }
 
+  for(const row of goals){
+    const id=String(row?.id||""),createdBy=String(row?.created_by||"");
+    if(!uuidish(id)||!["0","1"].includes(createdBy))continue;
+    let normalized;try{normalized=normalizeGoalInput({...row,targetAmount:row.target_amount,targetDate:row.target_date,participants:["0"]});}catch{continue;}
+    await ok(db.from("galaxy_goals").upsert({
+      id,kind:normalized.kind,title:normalized.title,description:normalized.description,category:normalized.category,
+      target_date:normalized.target_date,status:normalized.status,target_amount:normalized.target_amount,created_by:createdBy,
+      completed_at:row.completed_at||null,created_at:row.created_at||new Date().toISOString(),updated_at:row.updated_at||row.created_at||new Date().toISOString()
+    },{onConflict:"id",ignoreDuplicates:true}));
+    restoredGoals++;
+  }
+
+  for(const row of goalParticipants){
+    const goalId=String(row?.goal_id||""),person=String(row?.person||"");
+    if(!uuidish(goalId)||!["0","1"].includes(person))continue;
+    await ok(db.from("galaxy_goal_participants").upsert({goal_id:goalId,person},{onConflict:"goal_id,person",ignoreDuplicates:true}));
+    restoredGoalParticipants++;
+  }
+
+  for(const row of goalSteps){
+    const id=String(row?.id||""),goalId=String(row?.goal_id||""),title=text(row?.title,300),position=Number(row?.position);
+    if(!uuidish(id)||!uuidish(goalId)||!title||!Number.isInteger(position)||position<0)continue;
+    const completedBy=row.completed_by==null?null:String(row.completed_by);
+    if(completedBy!==null&&!["0","1"].includes(completedBy))continue;
+    await ok(db.from("galaxy_goal_steps").upsert({id,goal_id:goalId,title,position,completed_at:row.completed_at||null,completed_by:completedBy,created_at:row.created_at||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
+    restoredGoalSteps++;
+  }
+
+  for(const row of goalContributions){
+    const id=String(row?.id||""),goalId=String(row?.goal_id||""),contributor=String(row?.contributor||"");
+    if(!uuidish(id)||!uuidish(goalId)||!["0","1"].includes(contributor))continue;
+    let value;try{value=normalizeContribution({amount:row.amount,date:row.contribution_date,note:row.note},contributor);}catch{continue;}
+    await ok(db.from("galaxy_goal_contributions").upsert({id,goal_id:goalId,...value,created_at:row.created_at||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
+    restoredGoalContributions++;
+  }
+
+  for(const row of goalLinks){
+    const id=String(row?.id||""),goalId=String(row?.goal_id||""),itemId=String(row?.item_id||""),relation=String(row?.relation||"");
+    if(!uuidish(id)||!uuidish(goalId)||!uuidish(itemId)||!["note","memory","plan","source-plan","source-wish"].includes(relation))continue;
+    await ok(db.from("galaxy_goal_links").upsert({id,goal_id:goalId,item_id:itemId,relation,created_at:row.created_at||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
+    restoredGoalLinks++;
+  }
+
+  for(const row of bondGestures){
+    const id=String(row?.id||""),createdBy=String(row?.created_by||"");
+    if(!uuidish(id)||!["0","1"].includes(createdBy))continue;
+    let value;try{value=normalizeCustomGesture(row);}catch{continue;}
+    await ok(db.from("galaxy_bond_gestures").upsert({
+      id,...value,created_by:createdBy,enabled:row.enabled!==false,
+      created_at:row.created_at||new Date().toISOString(),updated_at:row.updated_at||row.created_at||new Date().toISOString()
+    },{onConflict:"id",ignoreDuplicates:true}));
+    restoredBondGestures++;
+  }
+
   for(const row of daily){
     const day=String(row?.day||""),person=String(row?.person||""),mood=text(row?.mood,30),answer=text(row?.answer,3000);
     if(!validDate(day)||!["0","1"].includes(person))continue;
@@ -423,7 +1532,29 @@ async function backupRestore(req:Request,body:any){
     await ok(db.from("galaxy_bond").upsert({id,type,author,data,created:row.created||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
     restoredBond++;
   }
-  return json({ok:true,restored:{items:restoredItems,daily:restoredDaily,bond:restoredBond,places:restoredPlaces}});
+  for(const row of voiceTranscripts){
+    const bondId=String(row?.bond_id||""),transcript=text(row?.transcript,30000);
+    if(!uuidish(bondId)||!transcript)continue;
+    const voice=(await ok(db.from("galaxy_bond").select("id").eq("id",bondId).eq("type","voice").limit(1)))?.[0];
+    if(!voice)continue;
+    await ok(db.from("galaxy_voice_transcripts").upsert({
+      bond_id:bondId,transcript,segments:sanitizeTranscriptSegments(row?.segments||[]),
+      provider:text(row?.provider||"backup",40)||"backup",model:text(row?.model||"restored",120)||"restored",
+      status:"ready",last_error:null,created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()
+    },{onConflict:"bond_id"}));
+    restoredVoiceTranscripts++;
+  }
+  for(const row of photoContext){
+    const path=text(row?.path,300),author=String(row?.author||"");
+    if(!path||!["0","1"].includes(author))continue;
+    await ok(db.from("galaxy_photo_context").upsert({
+      path,author,caption:text(row?.caption,3000)||null,context:text(row?.context,5000)||null,
+      taken_on:validDate(row?.taken_on)?String(row.taken_on):null,
+      created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()
+    },{onConflict:"path"}));
+    restoredPhotoContext++;
+  }
+  return json({ok:true,restored:{items:restoredItems,daily:restoredDaily,bond:restoredBond,bondGestures:restoredBondGestures,places:restoredPlaces,goals:restoredGoals,goalParticipants:restoredGoalParticipants,goalSteps:restoredGoalSteps,goalLinks:restoredGoalLinks,goalContributions:restoredGoalContributions,voiceTranscripts:restoredVoiceTranscripts,photoContext:restoredPhotoContext},restoredGoals});
 }
 
 async function recordParticipation(person:string){
@@ -433,9 +1564,15 @@ async function recordParticipation(person:string){
 function validateBond(type:string,data:any){
   if(!data||typeof data!=="object"||Array.isArray(data))throw new Error("Datos no válidos");
   if(type==="gesture"){
-    const gesture=String(data.gesture||"");
-    if(!["hug","kiss","miss"].includes(gesture))throw new Error("Gesto no válido");
-    return {gesture};
+    const gesture=String(data.gesture||data.gestureId||"");
+    const builtin=resolveGesture(gesture,[]);
+    if(builtin){
+      if(!data.name&&!data.text&&!data.icon&&!data.behavior)return {gesture};
+      const snapshot=gestureSnapshot(builtin);return {gesture,...snapshot};
+    }
+    if(!uuidish(gesture))throw new Error("Gesto no válido");
+    const normalized=normalizeCustomGesture(data),snapshot=gestureSnapshot({id:gesture,...normalized});
+    return {gesture,...snapshot};
   }
   if(type==="game"){
     const questionId=String(data.questionId||""),answer=text(data.answer,100);
@@ -484,6 +1621,7 @@ async function bondSave(req:Request,body:any){
   if(type==="voice")await validateVoice(person,payload);
   const row=await ok(db.from("galaxy_bond").insert({type,author:person,data:payload}).select("*").single());
   await recordParticipation(person);
+  await intelligenceBestEffort("bond-create",()=>syncIntelligenceBond(row));
   return json({entry:row},201);
 }
 
@@ -496,6 +1634,7 @@ async function bondUpdate(req:Request,body:any){
   if(row.type==="ritual"&&payload.week!==row.data?.week)return json({error:"La semana no se puede cambiar."},400);
   const updated=await ok(db.from("galaxy_bond").update({data:payload,version:row.version+1}).eq("id",row.id).eq("version",row.version).select("*").single());
   await recordParticipation(person);
+  await intelligenceBestEffort("bond-update",()=>syncIntelligenceBond(updated));
   return json({entry:updated});
 }
 
@@ -518,6 +1657,8 @@ async function bondDelete(req:Request,body:any){
   if(row.type!=="sharednote"&&row.author!==person)return json({error:"Solo su autor puede eliminar este momento."},403);
   if(Number(body.version)!==Number(row.version))return json({error:"Cambió en otro dispositivo. Actualiza antes de borrar."},409);
   await ok(db.from("galaxy_bond").delete().eq("id",row.id).eq("version",row.version));
+  if(["sharednote","ritual"].includes(String(row.type)))await intelligenceBestEffort("bond-delete",()=>deleteIntelligenceSource(String(row.type),String(row.id)));
+  if(row.type==="voice")await intelligenceBestEffort("voice-delete-index",()=>deleteIntelligenceSource("voice-transcript",String(row.id)));
   return json({ok:true});
 }
 
@@ -530,76 +1671,139 @@ async function bondWidget(req:Request,body:any){
 }
 
 async function gesture(req:Request,body:any){
-  return bondSave(req,{type:"gesture",data:{gesture:body.gesture}});
+  return bondSendGesture(req,{gestureId:body.gesture});
 }
 
 function meters(lat1:number,lon1:number,lat2:number,lon2:number){if(![lat1,lon1,lat2,lon2].every(Number.isFinite))return Infinity;const R=6371000,p=Math.PI/180,dLat=(lat2-lat1)*p,dLon=(lon2-lon1)*p,a=Math.sin(dLat/2)**2+Math.cos(lat1*p)*Math.cos(lat2*p)*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(a));}
 
-function monthBounds(month:string){
-  const [year,number]=month.split("-").map(Number);
-  const start=new Date(`${month}-01T00:00:00-05:00`);
-  const nextYear=number===12?year+1:year,nextMonth=number===12?1:number+1;
-  const nextKey=nextYear+"-"+String(nextMonth).padStart(2,"0");
-  const end=new Date(`${nextKey}-01T00:00:00-05:00`);
-  return {start:start.toISOString(),end:end.toISOString(),startDay:month+"-01",endDay:nextKey+"-01"};
-}
 function bogotaDay(value:unknown){
   const date=new Date(String(value||""));
   if(!Number.isFinite(date.getTime()))return"";
   return new Intl.DateTimeFormat("en-CA",{timeZone:"America/Bogota",year:"numeric",month:"2-digit",day:"2-digit"}).format(date);
 }
-async function monthlySummary(req:Request,body:any){
-  await device(req);
-  const currentMonth=today().slice(0,7),month=String(body.month||currentMonth);
-  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)||month>currentMonth)return json({error:"Mes no válido."},400);
-  const bounds=monthBounds(month),now=Date.now();
-  const [items,trips,encounters,daily,bond]=await Promise.all([
-    ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:false}).limit(2000)),
-    ok(db.from("galaxy_trip_history").select("person,started_at,ended_at,distance_m,duration_s").gte("started_at",bounds.start).lt("started_at",bounds.end).order("started_at",{ascending:false}).limit(1000)),
-    ok(db.from("galaxy_encounters").select("id,started_at,ended_at,distance_m").gte("started_at",bounds.start).lt("started_at",bounds.end).order("started_at",{ascending:false}).limit(1000)),
-    ok(db.from("galaxy_daily").select("day,person,mood,answer").gte("day",bounds.startDay).lt("day",bounds.endDay).order("day",{ascending:true}).limit(1000)),
-    ok(db.from("galaxy_bond").select("id,type,author,created").gte("created",bounds.start).lt("created",bounds.end).order("created",{ascending:false}).limit(1000))
-  ]);
-  const monthItems=(items||[]).filter((row:any)=>{
-    const explicit=String(row?.data?.date||row?.data?.unlockDate||"");
-    const effective=explicit&&/^\d{4}-\d{2}-\d{2}$/.test(explicit)?explicit:bogotaDay(row?.created);
-    return effective.startsWith(month);
-  });
-  const counts={
-    saved:monthItems.length,
-    memories:monthItems.filter((x:any)=>x.kind==="memory").length,
-    plansDone:monthItems.filter((x:any)=>x.kind==="plan"&&x.data?.done===true).length,
-    events:monthItems.filter((x:any)=>x.kind==="event").length,
-    songs:monthItems.filter((x:any)=>x.kind==="song").length,
-    notes:monthItems.filter((x:any)=>x.kind==="note").length,
-    journeys:monthItems.filter((x:any)=>x.kind==="journey").length,
-    wishesDone:monthItems.filter((x:any)=>x.kind==="wish"&&x.data?.done===true).length
+
+function insightMetricSnapshot(summary:any){
+  return {
+    memories:Number(summary?.counts?.memories||0),
+    plansDone:Number(summary?.counts?.plansDone||0),
+    events:Number(summary?.counts?.events||0),
+    songs:Number(summary?.counts?.songs||0),
+    distance_m:Number(summary?.trips?.distance_m||0),
+    together_seconds:Number(summary?.encounters?.together_seconds||0),
+    mood_days:Number(summary?.connection?.mood_days||0),
+    answer_days:Number(summary?.connection?.answer_days||0),
+    exact_mood_days:Number(summary?.connection?.exact_mood_days||0),
+    compatible_mood_days:Number(summary?.connection?.compatible_mood_days||0),
+    gestures:Number(summary?.bond?.gestures||0)
   };
-  const tripRows=trips||[],distanceM=tripRows.reduce((sum:number,row:any)=>sum+Math.max(0,Number(row.distance_m||0)),0);
-  const byPerson:Record<string,number>={};
-  for(const row of tripRows){const p=String(row.person);byPerson[p]=(byPerson[p]||0)+Math.max(0,Number(row.distance_m||0));}
-  let togetherSeconds=0;
-  for(const row of encounters||[]){
-    const start=Math.max(Date.parse(row.started_at),Date.parse(bounds.start));
-    const end=Math.min(row.ended_at?Date.parse(row.ended_at):now,Date.parse(bounds.end),now);
-    if(Number.isFinite(start)&&Number.isFinite(end)&&end>start)togetherSeconds+=(end-start)/1000;
+}
+function insightDeltas(current:any,previous:any){
+  const a=insightMetricSnapshot(current),b=insightMetricSnapshot(previous),out:Record<string,number>={};
+  for(const key of Object.keys(a))out[key]=Number(a[key as keyof typeof a]||0)-Number(b[key as keyof typeof b]||0);
+  return out;
+}
+function jointParticipationDays(rows:any[]){
+  const days=new Map<string,Set<string>>();
+  for(const row of rows||[]){const day=String(row.day||"");if(!day)continue;const people=days.get(day)||new Set<string>();people.add(String(row.person));days.set(day,people);}
+  return [...days.values()].filter(people=>people.has("0")&&people.has("1")).length;
+}
+async function listInsightPhotoMetadata(){
+  const found:any[]=[];
+  for(const prefix of ["","0","1"]){
+    const {data,error}=await db.storage.from("galaxy-photos").list(prefix,{limit:100,sortBy:{column:"created_at",order:"desc"}});
+    if(error)continue;
+    for(const file of data||[]){
+      if(!file.id||file.name===".emptyFolderPlaceholder")continue;
+      const path=prefix?prefix+"/"+file.name:file.name;
+      found.push({
+        path,
+        name:file.name,
+        originalName:file.metadata?.originalName||file.metadata?.original_name||file.name,
+        mime:file.metadata?.mimetype||"",
+        size:file.metadata?.size||0,
+        created:file.created_at||file.updated_at||null
+      });
+    }
   }
-  const dailyByDay=new Map<string,any[]>();
-  for(const row of daily||[]){const list=dailyByDay.get(row.day)||[];list.push(row);dailyByDay.set(row.day,list);}
-  let moodDays=0,answerDays=0;
-  for(const rows of dailyByDay.values()){
-    const people=new Set(rows.filter((x:any)=>x.mood).map((x:any)=>String(x.person)));if(people.has("0")&&people.has("1"))moodDays++;
-    const answered=new Set(rows.filter((x:any)=>x.answer).map((x:any)=>String(x.person)));if(answered.has("0")&&answered.has("1"))answerDays++;
+  return found;
+}
+async function signInsightPhotos(rows:any[]){
+  const signedRows:any[]=[];
+  for(const row of rows||[]){
+    if(!row?.path)continue;
+    const url=await signed("galaxy-photos",String(row.path),1800);
+    if(url)signedRows.push({...row,url});
   }
-  const highlights=monthItems.filter((x:any)=>["memory","plan","event","journey"].includes(x.kind)&&!(x.kind==="plan"&&!x.data?.done)).sort((a:any,b:any)=>String(b.data?.date||b.created).localeCompare(String(a.data?.date||a.created))).slice(0,6).map((x:any)=>({id:x.id,kind:x.kind,title:text(x.data?.title||"",160),date:String(x.data?.date||bogotaDay(x.created))}));
-  return json({
-    month,counts,
-    trips:{count:tripRows.length,distance_m:Math.round(distanceM),by_person_m:Object.fromEntries(Object.entries(byPerson).map(([k,v])=>[k,Math.round(v)]))},
-    encounters:{count:(encounters||[]).length,together_seconds:Math.round(togetherSeconds)},
-    connection:{mood_days:moodDays,answer_days:answerDays},
-    bond:{gestures:(bond||[]).filter((x:any)=>x.type==="gesture").length,voices:(bond||[]).filter((x:any)=>x.type==="voice").length},
-    highlights
+  return signedRows;
+}
+
+async function goalInsightRows(){
+ const [goals,steps,contributions]=await Promise.all([
+  ok(db.from("galaxy_goals").select("*").limit(2000)),
+  ok(db.from("galaxy_goal_steps").select("*").limit(10000)),
+  ok(db.from("galaxy_goal_contributions").select("*").limit(20000))
+ ]);
+ return {goals:goals||[],steps:steps||[],contributions:contributions||[]};
+}
+async function buildInsights(req:Request,options:any){
+  const d=await device(req),person=String(d.person),day=today();
+  const settings=await ok(db.from("galaxy_settings").select("data").eq("id",1).single());
+  const startDate=validDate(settings?.data?.startDate)?String(settings.data.startDate):"";
+  const period=periodBounds(String(options?.kind||""),options?.key,day,startDate);
+  if(!period)throw new Error("Periodo de insights no válido.");
+  const previous=previousPeriod(period,day);
+  const rangeStart=previous&&previous.start<period.start?previous.start:period.start;
+  const rangeStartDay=previous&&previous.startDay<period.startDay?previous.startDay:period.startDay;
+  const rangeEnd=period.end,rangeEndDay=period.endDay;
+  const [items,trips,encounters,daily,bond,participation,allBondGestures,placeEvents,places,photos]=await Promise.all([
+    ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:false}).limit(5000)),
+    ok(db.from("galaxy_trip_history").select("id,person,started_at,ended_at,distance_m,duration_s,dominant_motion").order("started_at",{ascending:false}).limit(5000)),
+    ok(db.from("galaxy_encounters").select("id,started_at,ended_at,distance_m").order("started_at",{ascending:false}).limit(5000)),
+    ok(db.from("galaxy_daily").select("day,person,mood,answer").gte("day",rangeStartDay).lt("day",rangeEndDay).order("day",{ascending:true}).limit(5000)),
+    ok(db.from("galaxy_bond").select("id,type,author,created").gte("created",rangeStart).lt("created",rangeEnd).order("created",{ascending:false}).limit(5000)),
+    ok(db.from("galaxy_bond_participation").select("day,person").order("day",{ascending:true}).limit(10000)),
+    ok(db.from("galaxy_bond").select("id").eq("type","gesture").limit(10000)),
+    ok(db.from("galaxy_place_events").select("id,person,place_id,event,happened_at").gte("happened_at",rangeStart).lt("happened_at",rangeEnd).order("happened_at",{ascending:true}).limit(5000)),
+    ok(db.from("galaxy_places").select("id,name").limit(1000)),
+    listInsightPhotoMetadata()
+  ]);
+  const goalRows=await goalInsightRows();
+  const currentGoalInsights=buildGoalInsightSummary(goalRows.goals,goalRows.steps,goalRows.contributions,period);
+  const priorGoalInsights=previous?buildGoalInsightSummary(goalRows.goals,goalRows.steps,goalRows.contributions,previous):null;
+  const nowMs=Date.now(),source={items:items||[],trips:trips||[],encounters:encounters||[],daily:daily||[],bond:bond||[],participation:participation||[],placeEvents:placeEvents||[],places:places||[],photos:photos||[],person,nowMs};
+  const current=aggregateInsightRows({...source,period,goalInsights:currentGoalInsights});
+  current.photos=await signInsightPhotos(current.photos||[]);
+  const prior=previous?aggregateInsightRows({...source,period:previous,goalInsights:priorGoalInsights}):null;
+  const visibleAll=(items||[]).filter((row:any)=>isInsightVisibleItem(row,person,day));
+  const bondProgress=computeBondProgress(participation||[],new Date());
+  const achievements=evaluateAchievements({
+    memories:visibleAll.filter((row:any)=>row.kind==="memory").length,
+    encounters:(encounters||[]).length,
+    distance_m:(trips||[]).reduce((sum:number,row:any)=>sum+Math.max(0,Number(row.distance_m)||0),0),
+    journeys:visibleAll.filter((row:any)=>row.kind==="journey").length,
+    joint_days:bondProgress.totalDays,
+    current_streak:bondProgress.currentStreak,
+    record_streak:bondProgress.recordStreak,
+    gestures:(allBondGestures||[]).length,
+    startDate,today:day
   });
+  return {
+    ...current,
+    achievements,
+    comparison:prior?{period:previous,deltas:insightDeltas(current,prior),summary:insightMetricSnapshot(prior),moods:prior.moods}:null,
+    relationship:{startDate}
+  };
+}
+async function insightsSummary(req:Request,body:any){
+  const kind=String(body.kind||"month");
+  if(!["week","month","year","anniversary","range"].includes(kind))return json({error:"Periodo de insights no válido."},400);
+  const key=kind==="range"?{startDay:String(body.startDay||""),endDay:String(body.endDay||"")}:body.key;
+  return json(await buildInsights(req,{kind,key}));
+}
+async function monthlySummary(req:Request,body:any){
+  const month=String(body.month||today().slice(0,7));
+  const summary=await buildInsights(req,{kind:"month",key:month});
+  return json({...summary,month});
 }
 
 function sameHistoryDay(value:string,day:string){
@@ -859,21 +2063,27 @@ async function gpsHistoryDelete(req:Request){
 }
 
 async function mapState(req:Request,body:any){
-  await device(req);
-  const [locations,places,tripPoints,destinations]=await Promise.all([
+  const d=await device(req),person=String(d.person);
+  const [locations,places,tripPoints,destinations,contextSettings,sessionRows]=await Promise.all([
     ok(db.from("galaxy_locations").select("*").order("person")),
     ok(db.from("galaxy_places").select("*").order("created_at",{ascending:false}).limit(100)),
     ok(db.from("galaxy_trip_points").select("*").order("created_at",{ascending:false}).limit(500)),
-    ok(db.from("galaxy_destinations").select("*"))
+    ok(db.from("galaxy_destinations").select("*")),
+    contextOwnSettings(person),
+    ok(db.from("galaxy_context_sessions").select("*").eq("person",person).eq("status","active").order("started_at",{ascending:false}).limit(1))
   ]);
-  const base={locations,places,tripPoints,destinations};
+  const session=sessionRows?.[0]||null;
+  const base={locations,places,tripPoints,destinations,context:{settings:contextSettings,session}};
   if(body.detail!==true)return json(base);
-  const [trips,events,encounters]=await Promise.all([
+  const [trips,events,encounters,suggestions,etaHistory,contextEvents]=await Promise.all([
     ok(db.from("galaxy_trip_history").select("*").order("started_at",{ascending:false}).limit(40)),
     ok(db.from("galaxy_place_events").select("*").order("happened_at",{ascending:false}).limit(40)),
-    ok(db.from("galaxy_encounters").select("*").order("started_at",{ascending:false}).limit(40))
+    ok(db.from("galaxy_encounters").select("*").order("started_at",{ascending:false}).limit(40)),
+    ok(db.from("galaxy_context_suggestions").select("*").eq("person",person).eq("status","pending").order("created_at",{ascending:false}).limit(10)),
+    session?ok(db.from("galaxy_context_eta_history").select("captured_at,distance_m,eta_s,progress_pct").eq("session_id",session.id).order("captured_at",{ascending:false}).limit(30)):Promise.resolve([]),
+    ok(db.from("galaxy_context_events").select("id,event_type,person,partner_person,occurred_at,payload").order("occurred_at",{ascending:false}).limit(30))
   ]);
-  return json({...base,trips,events,encounters});
+  return json({...base,trips,events,encounters,context:{settings:contextSettings,session,suggestions:suggestions||[],etaHistory:etaHistory||[],events:contextEvents||[]}});
 }
 
 async function placeSave(req:Request,body:any){
@@ -883,9 +2093,11 @@ async function placeSave(req:Request,body:any){
     const row=(await ok(db.from("galaxy_places").select("*").eq("id",Number(body.id)).limit(1)))?.[0];
     if(!row||row.owner!==person)return json({error:"No puedes editar este lugar."},403);
     const place=await ok(db.from("galaxy_places").update({name,kind,latitude,longitude,note:note||null}).eq("id",row.id).select("*").single());
+    await intelligenceBestEffort("place-update",()=>syncIntelligencePlace(place));
     return json({place});
   }
   const place=await ok(db.from("galaxy_places").insert({owner:person,name,kind,latitude,longitude,note:note||null}).select("*").single());
+  await intelligenceBestEffort("place-create",()=>syncIntelligencePlace(place));
   return json({place},201);
 }
 
@@ -893,6 +2105,7 @@ async function placeDelete(req:Request,body:any){
   const d=await device(req),person=String(d.person),row=(await ok(db.from("galaxy_places").select("id,owner").eq("id",Number(body.id)).limit(1)))?.[0];
   if(!row||row.owner!==person)return json({error:"No puedes borrar este lugar."},403);
   await ok(db.from("galaxy_places").delete().eq("id",row.id));
+  await intelligenceBestEffort("place-delete",()=>deleteIntelligenceSource("place",String(row.id)));
   return json({ok:true});
 }
 
@@ -952,6 +2165,7 @@ async function tripAction(req:Request,body:any){
     const trip=await ok(db.from("galaxy_trip_history").insert({person,started_at:loc.trip_started_at,ended_at:ended.toISOString(),distance_m:Math.round(meters),duration_s:duration,max_speed:maxSpeed||null,dominant_motion:dominant(rows||[])}).select("*").single());
     await ok(db.from("galaxy_locations").update({trip_active:false,trip_started_at:null,updated_at:ended.toISOString()}).eq("person",person));
     await ok(db.from("galaxy_trip_points").delete().eq("person",person));
+    await intelligenceBestEffort("trip-complete",()=>syncIntelligenceTrip(trip));
     return json({ok:true,trip_active:false,trip});
   }
   return json({error:"Operación de recorrido no válida."},400);
@@ -986,7 +2200,7 @@ async function mediaDelete(req:Request,body:any){
   if(!bucket||!path)return json({error:"Archivo no válido."},400);
   if(kind==="voice"&&!path.startsWith(String(d.person)+"/"))return json({error:"Solo puedes borrar tus audios."},403);
   await ok(db.storage.from(bucket).remove([path]));
-  if(kind==="photo")await ok(db.from("galaxy_bond_config").update({photo_path:""}).eq("photo_path",path));
+  if(kind==="photo"){await ok(db.from("galaxy_bond_config").update({photo_path:""}).eq("photo_path",path));await ok(db.from("galaxy_photo_context").delete().eq("path",path));await intelligenceBestEffort("photo-delete",()=>deleteIntelligenceSource("photo",path));}
   return json({ok:true});
 }
 
@@ -1015,28 +2229,64 @@ async function upload(req:Request){
   return json({path,mime,url:signedUrl,name:originalName,size:bytes.length},201);
 }
 
+function nextPendingPlan(items:any[],day:string){
+ const rows=(items||[]).filter((item:any)=>item?.data?.done!==true).map((item:any)=>({
+  title:text(item?.data?.title||"Próximo plan",120),
+  date:validDate(item?.data?.date)?String(item.data.date):null,
+  created:String(item?.created||"")
+ })).filter((row:any)=>!row.date||row.date>=day);
+ rows.sort((a:any,b:any)=>{
+  if(a.date&&b.date)return a.date.localeCompare(b.date);
+  if(a.date)return-1;if(b.date)return 1;
+  return a.created.localeCompare(b.created);
+ });
+ return rows[0]||null;
+}
+function widgetEtaMinutes(distanceM:number,transport:string,speed:number|null){
+ if(!Number.isFinite(distanceM)||distanceM<0)return null;
+ const fallbacks:Record<string,number>={walking:1.35,motorcycle:8.3,transit:5,vehicle:7.5,auto:6};
+ const observed=Number(speed),metersPerSecond=Number.isFinite(observed)&&observed>0.8?observed:(fallbacks[transport]||fallbacks.auto);
+ return Math.max(1,Math.round((distanceM*1.15)/metersPerSecond/60));
+}
 async function moments(req:Request){
   const d=await device(req);
   if(!["0","1"].includes(String(d.person)))return json({error:"Dispositivo no válido"},401);
-  const [settings,events,config,gestures,daily,locations,presence,songs]=await Promise.all([
+  const [settings,events,plans,config,gestures,daily,locations,presence,participation]=await Promise.all([
     ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
     ok(db.from("galaxy_items").select("id,data").eq("kind","event")),
+    ok(db.from("galaxy_items").select("id,data,created").eq("kind","plan").order("created",{ascending:false}).limit(100)),
     ok(db.from("galaxy_bond_config").select("photo_path").eq("id",1).maybeSingle()),
     ok(db.from("galaxy_bond").select("id,author,created,data").eq("type","gesture").neq("author",d.person).gte("created",new Date(Date.now()-7*86400000).toISOString()).order("created",{ascending:false}).limit(30)),
     ok(db.from("galaxy_daily").select("person,mood").eq("day",today())),
-    ok(db.from("galaxy_locations").select("person,sharing,motion,status").order("person")),
+    ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude,motion,status,speed,transport_preference,updated_at").order("person")),
     ok(db.from("galaxy_presence").select("*").order("person")),
-    ok(db.from("galaxy_items").select("data,created").eq("kind","song").order("created",{ascending:false}).limit(1))
+    ok(db.from("galaxy_bond_participation").select("day,person"))
   ]);
   const names=(Array.isArray(settings?.data?.names)?settings.data.names:["Nosotros","Dos"]).slice(0,2).map((name:unknown)=>text(name,40));
   let photoUrl=null;if(config?.photo_path)photoUrl=await signed("galaxy-photos",config.photo_path,300);
-  const partner=String(d.person)==="0"?"1":"0",mood=(daily||[]).find((x:any)=>String(x.person)===partner)?.mood||null,loc=(locations||[]).find((x:any)=>String(x.person)===partner),p=(presence||[]).find((x:any)=>String(x.person)===partner),legacy=settings?.data?.presence?.[partner]||{};
+  const person=String(d.person),partner=person==="0"?"1":"0";
+  const mood=(daily||[]).find((x:any)=>String(x.person)===partner)?.mood||null;
+  const loc=(locations||[]).find((x:any)=>String(x.person)===partner),own=(locations||[]).find((x:any)=>String(x.person)===person);
+  const p=(presence||[]).find((x:any)=>String(x.person)===partner),legacy=settings?.data?.presence?.[partner]||{};
   const battery=p?(p.share_battery?p.battery:null):(legacy.shareBattery===true?legacy.battery:null);
   const listening=p?(p.share_song?text(p.song_title,160):""):(legacy.shareListening===true?text(legacy.listening,160):"");
-  const now={mood,sharing:!!loc?.sharing,motion:loc?.sharing?loc?.motion:null,status:loc?.sharing?loc?.status:null,battery,listening,updatedAt:p?.updated_at||loc?.updated_at||legacy.updatedAt||null,latestSong:songs?.[0]?.data?.title||null};
-  return json({names,nextEvent:nextCalendarEvent(events||[],today()),photoUrl,now,gestures:(gestures||[]).filter((g:any)=>["hug","kiss","miss"].includes(g.data?.gesture)).map((g:any)=>({id:g.id,gesture:g.data.gesture,created:g.created,author:g.author}))});
+  const nowMs=Date.now(),fresh=(row:any)=>!!row?.updated_at&&nowMs-Date.parse(row.updated_at)<=15*60*1000;
+  const bothSharing=!!own?.sharing&&!!loc?.sharing&&fresh(own)&&fresh(loc)&&[own?.latitude,own?.longitude,loc?.latitude,loc?.longitude].every((v:any)=>Number.isFinite(Number(v)));
+  const distanceM=bothSharing?Math.round(dist(own,loc)):null;
+  const transport=text(own?.transport_preference||"auto",24)||"auto";
+  const etaMinutes=distanceM==null?null:widgetEtaMinutes(distanceM,transport,Number.isFinite(Number(own?.speed))?Number(own.speed):null);
+  const progress=computeBondProgress(participation||[],new Date());
+  const garden={...progress.garden,currentStreak:progress.currentStreak,recordStreak:progress.recordStreak};
+  const now={mood,sharing:!!loc?.sharing,motion:loc?.sharing?loc?.motion:null,status:loc?.sharing?loc?.status:null,battery,listening,updatedAt:p?.updated_at||loc?.updated_at||legacy.updatedAt||null};
+  const visibleGestures=(gestures||[]).filter((g:any)=>!!(g?.data?.gesture||g?.data?.gestureId)).map((g:any)=>({
+    id:g.id,gesture:g.data?.gesture||g.data?.gestureId,created:g.created,author:g.author,
+    name:text(g.data?.name||"",40),icon:text(g.data?.icon||"",40),text:text(g.data?.text||"",180),behavior:text(g.data?.behavior||"message",30)
+  }));
+  return json({
+    names,nextEvent:nextCalendarEvent(events||[],today()),nextPlan:nextPendingPlan(plans||[],today()),
+    photoUrl,now,distanceM,etaMinutes,garden,gestures:visibleGestures
+  });
 }
-
 Deno.serve(async req=>{
   if(req.method!=="POST")return json({error:"Método no permitido"},405);
   try{
@@ -1046,6 +2296,9 @@ Deno.serve(async req=>{
     if(action==="pair-code-create")return await pairCodeCreate(req,body);
     if(action==="profile-repair")return await profileRepair(req,body);
     if(action==="device-revoke")return await deviceRevoke(req,body);
+    if(action==="push-token-register")return await pushTokenRegister(req,body);
+    if(action==="push-token-unregister")return await pushTokenUnregister(req);
+    if(action==="push-preferences")return await pushPreferences(req,body);
     if(action==="moments")return await moments(req);
     if(action==="gesture")return await gesture(req,body);
     if(action==="history")return await history(req,body);
@@ -1059,12 +2312,33 @@ Deno.serve(async req=>{
     if(action==="backup-export")return await backupExport(req);
     if(action==="backup-restore")return await backupRestore(req,body);
     if(action==="backup-import")return await backupRestore(req,body);
+    if(action==="bond-send-gesture")return await bondSendGesture(req,body);
+    if(action==="bond-gesture-list")return await bondGestureCatalog(req);
+    if(action==="bond-gesture-save")return await bondGestureSave(req,body);
+    if(action==="bond-gesture-delete")return await bondGestureDelete(req,body);
     if(action==="bond-save")return await bondSave(req,body);
     if(action==="bond-update")return await bondUpdate(req,body);
     if(action==="bond-guess")return await bondGuess(req,body);
     if(action==="bond-delete")return await bondDelete(req,body);
     if(action==="bond-widget")return await bondWidget(req,body);
     if(action==="map-state")return await mapState(req,body);
+    if(action==="context-state")return await contextStateAction(req);
+    if(action==="context-settings")return await contextSettingsAction(req,body);
+    if(action==="context-session")return await contextSessionAction(req,body);
+    if(action==="context-events")return await contextEventsFeed(req,body);
+    if(action==="context-suggestion")return await contextSuggestionAction(req,body);
+    if(action==="context-recap")return await contextRecapAction(req,body);
+    if(action==="intelligence-search")return await intelligenceSearch(req,body);
+    if(action==="intelligence-ask")return await intelligenceAsk(req,body);
+    if(action==="intelligence-connections")return await intelligenceConnections(req,body);
+    if(action==="intelligence-narrate")return await intelligenceNarrate(req,body);
+    if(action==="intelligence-book")return await intelligenceBook(req,body);
+    if(action==="intelligence-transcribe")return await intelligenceTranscribe(req,body);
+    if(action==="intelligence-transcript-delete")return await intelligenceTranscriptDelete(req,body);
+    if(action==="intelligence-index")return await intelligenceIndexAction(req,body);
+    if(action==="goals-engine")return await goalsEngine(req,body);
+    if(action==="date-engine")return await dateEngine(req,body);
+    if(action==="insights-summary")return await insightsSummary(req,body);
     if(action==="monthly-summary")return await monthlySummary(req,body);
     if(action==="today-history")return await todayHistory(req,body);
     if(action==="encounter-stats")return await encounterStats(req);

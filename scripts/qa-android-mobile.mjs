@@ -10,6 +10,7 @@ const read=path=>readFileSync(resolve(root,path),'utf8');
 const app=read('android/app/src/main/assets/mobile/app.js');
 const map=read('android/app/src/main/assets/mobile/map.js');
 const search=read('android/app/src/main/assets/mobile/search.js');
+const insights=read('android/app/src/main/assets/mobile/insights.js');
 const monthly=read('android/app/src/main/assets/mobile/monthly.js');
 const todayHistory=read('android/app/src/main/assets/mobile/today-history.js');
 const encounters=read('android/app/src/main/assets/mobile/encounters.js');
@@ -27,10 +28,24 @@ const pendingPoints=read('android/app/src/main/java/com/nuestragalaxia/companion
 const cloudMediaStore=read('android/app/src/main/java/com/nuestragalaxia/companion/CloudMediaStore.java');
 const bondWorker=read('android/app/src/main/java/com/nuestragalaxia/companion/BondWorker.java');
 const bondStore=read('android/app/src/main/java/com/nuestragalaxia/companion/BondStore.java');
+const pushService=read('android/app/src/main/java/com/nuestragalaxia/companion/GalaxyFirebaseService.java');
+const pushManager=read('android/app/src/main/java/com/nuestragalaxia/companion/PushManager.java');
+const widgetPrefs=read('android/app/src/main/java/com/nuestragalaxia/companion/WidgetPrefs.java');
 const trackingService=read('android/app/src/main/java/com/nuestragalaxia/companion/TrackingService.java');
 const updater=read('android/app/src/main/java/com/nuestragalaxia/companion/UpdateManager.java');
 const edge=read('supabase/functions/android-companion/index.ts');
+const serverInsights=read('supabase/functions/android-companion/insights.ts');
+const dateEngine=read('supabase/functions/android-companion/date-engine.ts');
+const goalsEngine=read('supabase/functions/android-companion/goals-engine.ts');
+const bondEngine=read('supabase/functions/android-companion/bond-engine.ts');
+const pushEngine=read('supabase/functions/android-companion/push-engine.ts');
+const contextEngine=read('supabase/functions/android-companion/context-engine.ts');
+const intelligenceEngine=read('supabase/functions/android-companion/intelligence-engine.ts');
+const intelligenceProvider=read('supabase/functions/android-companion/intelligence-provider.ts');
+const contextStore=read('android/app/src/main/java/com/nuestragalaxia/companion/ContextStore.java');
+const schema=read('supabase/schema.sql');
 const build=read('android/app/build.gradle.kts');
+const manifest=read('android/app/src/main/AndroidManifest.xml');
 const workflow=read('.github/workflows/android-companion.yml');
 const widget=read('android/app/src/main/res/layout/widget_bond.xml')+read('android/app/src/main/java/com/nuestragalaxia/companion/BondWidget.java');
 const motionTest=read('android/app/src/test/java/com/nuestragalaxia/companion/MotionClassifierThresholdTest.java');
@@ -43,7 +58,7 @@ assert.equal(emoji.test(widget),false,'El widget no debe usar emojis/dingbats co
 assert.ok(existsSync(resolve(root,'android/app/src/main/assets/mobile/lucide.js')),'Falta Lucide local');
 assert.ok(existsSync(resolve(root,'android/app/src/main/assets/mobile/LICENSE-lucide')),'Falta licencia de Lucide');
 const scriptSources=[...index.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m=>m[1]);
-assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./eta.js','./frequent-places.js','./gps-history.js','./theme.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
+assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./insights.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./eta.js','./frequent-places.js','./gps-history.js','./theme.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
 assert.ok(index.includes("connect-src 'none'"),'La UI local no debe hacer fetch directo ni recibir credenciales');
 assert.equal(/leaflet/i.test(css+index),false,'No deben quedar estilos o assets muertos de Leaflet');
 
@@ -96,11 +111,15 @@ assert.ok(app.includes('function openUniversalSearch()')&&app.includes('function
 assert.ok(app.includes('data-action="universal-search-open"')&&app.includes('data-action="universal-search-result"'),'Faltan accesos del buscador universal');
 assert.ok(css.includes('.universal-search-result')&&css.includes('.search-hit'),'Faltan estilos del buscador universal');
 assert.ok(monthly.includes('function shiftMonth(')&&monthly.includes('function summaryHasActivity('),'Falta módulo mensual independiente');
-assert.ok(app.includes('function monthlySummaryTeaser()')&&app.includes('function openMonthlySummary('),'Falta experiencia mensual Android');
-assert.ok(app.includes('data-action="monthly-summary-open"')&&app.includes("api('monthly-summary'"),'Falta acceso al resumen mensual');
+assert.ok(app.includes('function monthlySummaryTeaser()')&&app.includes('function openMonthlySummary('),'Falta compatibilidad de experiencia mensual Android');
+assert.ok(app.includes('data-action="insights-month-open"')&&app.includes("api('insights-summary'"),'El mes 3.0 debe consumir Galaxy Insights');
+assert.ok(mainActions.has('insights-summary')&&edgeActions.has('insights-summary'),'Falta Galaxy Insights end-to-end');
+assert.ok(insights.includes('function periodFor(')&&insights.includes('function relationshipClock('),'Falta motor temporal reutilizable de Insights');
 assert.ok(mainActions.has('monthly-summary')&&edgeActions.has('monthly-summary'),'Falta resumen mensual end-to-end');
 assert.ok(edge.includes('async function monthlySummary(')&&edge.includes('together_seconds')&&edge.includes('mood_days'),'El backend mensual debe incluir recorridos, encuentros y conexión');
-assert.ok(css.includes('.monthly-metrics')&&css.includes('.monthly-highlight'),'Faltan estilos del resumen mensual');
+assert.ok(css.includes('.insights-metrics')&&css.includes('.monthly-highlight'),'Faltan estilos del resumen común de Insights');
+assert.ok(app.includes('function insightsTeaser()')&&app.includes('function wrappedCards(')&&app.includes('function emotionalHeatmap(')&&app.includes('function achievementGrid('),'Faltan superficies Galaxy Insights 3.0');
+assert.ok(css.includes('.wrapped-card')&&css.includes('.emotion-heatmap')&&css.includes('.achievement-card'),'Faltan estilos Galaxy Insights 3.0');
 assert.ok(todayHistory.includes('sameMonthDay')&&todayHistory.includes('function anniversaryLabel(')&&todayHistory.includes('function groupHasActivity('),'Falta módulo independiente de Un día como hoy');
 assert.ok(app.includes('function todayHistoryTeaser()')&&app.includes('function openTodayHistory(')&&app.includes('function openTodayHistoryItem('),'Falta experiencia completa de Un día como hoy');
 assert.ok(app.includes('data-action="today-history-open"')&&app.includes("api('today-history'"),'Falta acceso a Un día como hoy');
@@ -112,7 +131,7 @@ assert.ok(app.includes('function encounterStatsTeaser()')&&app.includes('functio
 assert.ok(app.includes('data-action="encounter-stats-open"')&&app.includes("api('encounter-stats'"),'Falta acceso al contador de encuentros');
 assert.ok(mainActions.has('encounter-stats')&&edgeActions.has('encounter-stats'),'Falta contador de encuentros end-to-end');
 assert.ok(edge.includes('async function encounterStats(')&&edge.includes('average_seconds')&&edge.includes('current_month')&&edge.includes('longest'),'El backend debe calcular estadísticas completas de encuentros');
-assert.ok(edge.includes('if(!locs||locs.length!==2')&&edge.includes('update({ended_at:new Date().toISOString()})'),'El detector debe cerrar encuentros cuando deja de existir presencia mutua');
+assert.ok(contextEngine.includes('signalLossGraceS')&&contextEngine.includes('ENCOUNTER_ENDED'),'Context Engine debe cerrar encuentros tras pérdida sostenida de presencia mutua');
 assert.ok(css.includes('.encounter-metrics')&&css.includes('.encounter-live')&&css.includes('.encounter-recent'),'Faltan estilos del contador de encuentros');
 assert.ok(distance.includes('function metersBetween(')&&distance.includes('function coupleDistance(')&&distance.includes('function distanceMood('),'Falta motor independiente de distancia de pareja');
 assert.ok(app.includes('function coupleDistanceCard(')&&app.includes('function focusCoupleOnMap('),'Falta distancia entre Sebas y Adri en Android');
@@ -211,7 +230,7 @@ assert.ok(updater.includes('BuildConfig.APPLICATION_ID.equals(info.packageName)'
 assert.ok(updater.includes('version<=BuildConfig.VERSION_CODE'),'El updater debe rechazar APK no superior');
 assert.ok(updater.includes('resumePendingInstall'),'El updater debe retomar la instalación tras conceder permisos');
 assert.ok(updater.includes('MAX_APK_BYTES'),'El updater debe limitar el tamaño de descarga');
-assert.ok(widget.includes('widgetNow')&&widget.includes('nowText'),'El widget debe mostrar el estado Ahora');
+assert.ok(widget.includes('widgetModules')&&widget.includes('moduleValue')&&widget.includes('"mood"'),'El Widget 2.0 debe conservar el estado Ahora mediante módulos dinámicos');
 assert.ok(edge.includes('p.share_battery?p.battery:null')&&edge.includes('p.share_song?text(p.song_title,160):""'),'El widget no debe exponer batería o música sin opt-in');
 assert.ok(edge.includes('sharing:!!loc?.sharing')&&edge.includes('listening'),'El widget debe conservar el contrato sharing/listening');
 
@@ -230,5 +249,80 @@ assert.ok(app.includes("data-action=\"welcome-replay\""),'Falta opción para vol
 assert.ok(css.includes('@media(prefers-reduced-motion:reduce)'),'La bienvenida debe respetar reducir movimiento');
 assert.equal(motionTest.includes('placeholderKeepsUnitTestTaskActive'),false,'La prueba de movimiento no puede ser placeholder');
 assert.ok(motionTest.includes('medianIgnoresSingleGpsSpeedSpike'),'Falta prueba de ruido GPS');
+
+
+// Galaxy Date Engine 3.0
+assert.ok(main.includes('"date-engine"')&&edge.includes('action==="date-engine"'),'Galaxy Date debe estar permitido end-to-end');
+assert.ok(dateEngine.includes('selectQuestion')&&dateEngine.includes('buildSurpriseExperience')&&dateEngine.includes('buildSequentialPlan'),'Galaxy Date necesita un motor contextual determinístico');
+assert.ok(schema.includes('galaxy_daily_questions')&&schema.includes('question_id text')&&schema.includes('favorite boolean'),'Galaxy Date debe estabilizar la pregunta diaria sin duplicar respuestas');
+assert.ok(app.includes('function dailyQuestionCard(')&&app.includes('function loadDateContext('),'Galaxy Date debe reemplazar la pregunta diaria aislada por contexto reutilizable');
+assert.ok(app.includes('function openDateMode(')&&app.includes('date-mode-camera')&&app.includes('date-mode-save'),'Galaxy Date debe incluir Modo Cita completo');
+assert.ok(app.includes('function openSurprise2(')&&app.includes('function openPlanRoulette(')&&app.includes('function openDatePlanner('),'Galaxy Date debe reutilizar el mismo motor para sorpresa, ruleta y planner');
+assert.ok(main.includes('MediaStore.ACTION_IMAGE_CAPTURE')&&bridge.includes('capturePhoto'),'Modo Cita debe tener cámara nativa');
+assert.ok(css.includes('.plan-roulette')&&css.includes('@media(prefers-reduced-motion:reduce)'),'La ruleta de Galaxy Date debe respetar reduced-motion');
+
+
+// Galaxy Goals Engine 3.0
+assert.ok(main.includes('"goals-engine"')&&edge.includes('action==="goals-engine"'),'Galaxy Goals debe estar permitido end-to-end');
+assert.ok(goalsEngine.includes('normalizeGoalInput')&&goalsEngine.includes('computeGoalProgress')&&goalsEngine.includes('buildGoalInsightSummary'),'Galaxy Goals necesita dominio determinístico y progreso derivado');
+assert.ok(schema.includes('galaxy_goals')&&schema.includes('galaxy_goal_steps')&&schema.includes('galaxy_goal_contributions'),'Galaxy Goals debe usar tablas relacionales');
+assert.ok(schema.includes('enable row level security')&&schema.includes('from public,anon,authenticated'),'Galaxy Goals debe quedar cerrado al acceso directo del cliente');
+assert.ok(app.includes('function goalsView(')&&app.includes('function openGoalDetail(')&&app.includes('Aportes manuales'),'Galaxy Goals debe tener experiencia móvil completa');
+assert.ok(app.includes('goal-convert-item')&&app.includes("['plan','wish'].includes(i.kind)"),'Planes y deseos deben poder convertirse sin cambiar su modelo actual');
+assert.ok(app.includes('Sin conexión bancaria')&&goalsEngine.includes('No se permiten campos bancarios'),'Galaxy Goals no puede convertirse en integración bancaria');
+assert.ok(dateEngine.includes('context.goalSuggestions')&&!dateEngine.includes('galaxy_goals'),'Date Engine solo puede recibir sugerencias genéricas de Goals');
+assert.ok(edge.includes('buildGoalInsightSummary')&&app.includes('goalsCompleted')&&app.includes('savingsAchieved'),'Insights debe mostrar actividad de objetivos sin duplicar su modelo');
+assert.ok(css.includes('/* Mega Update 3.0 · Galaxy Goals Engine */')&&css.includes('.goal-card'),'Faltan estilos de Galaxy Goals');
+
+
+// Galaxy Bond Engine 2.0
+assert.ok(bondEngine.includes('computeBondProgress')&&bondEngine.includes('gardenState')&&bondEngine.includes('recordStreak'),'Galaxy Bond Engine 2.0 necesita días acumulados, racha y récord');
+assert.ok(schema.includes('galaxy_bond_gestures')&&schema.includes('galaxy_push_tokens')&&schema.includes('galaxy_push_subscriptions'),'Galaxy Bond Engine 2.0 requiere catálogo y routing push relacional');
+assert.ok(edge.includes('bond-send-gesture')&&edge.includes('dispatchPushEvent')&&edge.includes('FCM_SERVICE_ACCOUNT_JSON'),'Galaxy Bond Engine 2.0 debe usar eventos push reutilizables');
+assert.ok(pushEngine.includes('arrived_safe')&&pushEngine.includes('nearby')&&pushEngine.includes('capsule')&&pushEngine.includes('note')&&pushEngine.includes('reminder'),'La capa push debe quedar preparada para futuros eventos');
+assert.ok(build.includes('com.google.firebase:firebase-messaging:25.1.3'),'Falta Firebase Messaging');
+assert.ok(manifest.includes('com.google.firebase.MESSAGING_EVENT')&&manifest.includes('android.permission.VIBRATE'),'Falta registrar FCM/hápticos');
+assert.ok(pushService.includes('onNewToken')&&pushService.includes('onMessageReceived')&&pushService.includes('hapticEnabled()'),'FCM debe manejar rotación y respetar opt-in háptico');
+assert.equal(pushService.includes('TrackingService.ACTION_START'),false,'Push no puede iniciar ubicación');
+assert.ok(main.includes('setBondHaptics')&&bridge.includes('setBondHaptics')&&bondStore.includes('hapticEnabled()'),'Hápticos necesitan control explícito por usuario');
+assert.ok(pushManager.includes('bond.enabled()||bond.hapticEnabled()'),'El gesto push solo se suscribe cuando notificación o háptico están habilitados');
+assert.ok(widgetPrefs.includes('photo')&&widgetPrefs.includes('distance')&&widgetPrefs.includes('eta')&&widgetPrefs.includes('garden'),'WidgetPrefs debe controlar módulos de Widget 2.0');
+assert.ok(widget.includes('getAppWidgetOptions')&&widget.includes('compact')&&widget.includes('WidgetPrefs'),'Widget 2.0 debe adaptarse a tamaño y preferencias');
+assert.ok(app.includes('Nuestro jardín')&&app.includes('currentStreak')&&app.includes('recordStreak')&&app.includes('bond-gesture-new')&&app.includes('bond-haptics'),'La UI debe exponer jardín, rachas, gestos y hápticos');
+assert.ok(css.includes('/* Mega Update 3.0 · Galaxy Bond Engine 2.0 */')&&css.includes('.bond-garden-scene'),'Faltan estilos del jardín 2.0');
+assert.ok(serverInsights.includes('current_streak')&&serverInsights.includes('record_streak')&&serverInsights.includes('gestures'),'Insights debe consumir métricas Bond 2.0');
+assert.equal(build.includes('FCM_SERVICE_ACCOUNT_JSON')||main.includes('FCM_SERVICE_ACCOUNT_JSON')||app.includes('FCM_SERVICE_ACCOUNT_JSON'),false,'La credencial privada FCM jamás puede entrar al cliente');
+
+
+// Galaxy Context Engine
+assert.ok(contextEngine.includes('contextStep')&&contextEngine.includes('SHARED_TRIP_DETECTED')&&contextEngine.includes('DESTINATION_REACHED'),'Galaxy Context Engine requiere máquina común de eventos derivados');
+assert.ok(schema.includes('galaxy_context_events')&&schema.includes('galaxy_context_sessions')&&schema.includes('galaxy_context_eta_history'),'Falta persistencia privada de Context Engine');
+assert.ok(edge.includes('async function contextTick(')&&edge.includes('await contextTick(d)'),'La ubicación debe alimentar un único Context Engine');
+const locationBlock=edge.slice(edge.indexOf('async function location('),edge.indexOf('function nextCalendarEvent'));
+assert.equal(locationBlock.includes('await smartPlaces(')||locationBlock.includes('await encounter('),false,'Location no debe ejecutar detectores GPS independientes');
+assert.ok(main.includes('context-state')&&main.includes('context-settings')&&main.includes('context-session'),'Android debe permitir las acciones de Context Engine');
+assert.ok(contextStore.includes('nearbyEnabled')&&contextStore.includes('arrivedSafeEnabled'),'ContextStore debe preservar opt-ins push');
+assert.ok(pushManager.includes('nearbyEnabled()')&&pushManager.includes('arrivedSafeEnabled()'),'FCM debe respetar preferencias Context locales');
+assert.equal(contextStore.includes('TrackingService.ACTION_START'),false,'ContextStore jamás puede encender ubicación');
+assert.ok(app.includes('Galaxy Context Engine')&&app.includes('Estamos cerca')&&app.includes('Regreso a casa')&&app.includes('Acompáñame 2.0'),'Faltan superficies Context Engine');
+assert.ok(css.includes('/* Mega Update 3.0 · Galaxy Context Engine */'),'Faltan estilos Context Engine');
+assert.ok(edge.includes('buildDateContextRecap')&&edge.includes('buildTripContextRecap'),'Faltan recaps contextuales');
+assert.ok(edge.includes('galaxy_context_suggestions')&&app.includes('¿Esto fue una cita?'),'El detector de cita debe pedir confirmación humana');
+
+
+// Galaxy Intelligence Engine
+assert.ok(schema.includes('create extension if not exists vector')&&schema.includes('extensions.vector(384)')&&schema.includes('using hnsw'),'Galaxy Intelligence Engine requiere pgvector 384d + HNSW');
+assert.ok(schema.includes('galaxy_intelligence_hybrid_search')&&schema.includes('ts_rank_cd')&&schema.includes('<=>'),'La búsqueda híbrida debe combinar exacto, FTS y similitud vectorial');
+assert.ok(intelligenceEngine.includes('buildIntelligenceDocument')&&intelligenceEngine.includes('mergeHybridRanks')&&intelligenceEngine.includes('validateNarrative'),'Galaxy Intelligence Engine necesita proyección, ranking y grounding determinísticos');
+assert.ok(intelligenceProvider.includes('gte-small')&&intelligenceProvider.includes('OPENAI_API_KEY'),'Embeddings y proveedor deben quedar solo en backend');
+assert.equal(app.includes('OPENAI_API_KEY')||main.includes('OPENAI_API_KEY'),false,'Nunca exponer claves de IA al cliente');
+assert.ok(main.includes('"intelligence-search"')&&edge.includes('action==="intelligence-search"'),'Intelligence Search debe estar permitido end-to-end');
+assert.ok(edge.includes('intelligence-ask')&&edge.includes('intelligence-connections')&&edge.includes('intelligence-narrate')&&edge.includes('intelligence-book'),'Faltan servicios de Galaxy Intelligence');
+assert.ok(search.includes('function searchUniverse(')&&app.includes('GalaxySearch.searchUniverse'),'La búsqueda clásica debe sobrevivir como fallback');
+assert.ok(app.includes('Nuestra IA 2.0')&&app.includes('IA de conexiones')&&app.includes('IA narradora')&&app.includes('Libro de Nuestra Galaxia'),'Faltan superficies de Intelligence Engine');
+assert.ok(app.includes('Transcribir')&&app.includes('Eliminar transcripción'),'Voz 2.0 debe controlar la transcripción por separado');
+assert.ok(edge.includes('syncIntelligenceItem(updated)')&&edge.includes('syncIntelligenceItem(created)')&&edge.includes('deleteIntelligenceSource("item"'),'El índice debe actualizarse incrementalmente');
+assert.ok(schema.includes('galaxy_voice_transcripts')&&edge.includes('audioPreserved:true'),'Eliminar transcripción no puede borrar el audio');
+assert.ok(css.includes('/* Mega Update 3.0 · Galaxy Intelligence Engine */'),'Faltan estilos de Galaxy Intelligence Engine');
 
 console.log('QA móvil Nuestra Galaxia: OK');

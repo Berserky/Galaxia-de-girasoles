@@ -1,5 +1,5 @@
 name: Nuestra Galaxia Android
-# Release 2.2.2
+# Release 3.0.0
 on:
   pull_request:
     branches: [main]
@@ -56,7 +56,7 @@ jobs:
           gradle -p android assembleRelease -Pandroid.injected.signing.store.file="$PWD/android/release.keystore" -Pandroid.injected.signing.store.password="$STORE_PASSWORD" -Pandroid.injected.signing.key.alias="$KEY_ALIAS" -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
           cp android/app/build/outputs/apk/release/app-release.apk NuestraGalaxia.apk
           SHA=$(sha256sum NuestraGalaxia.apk | awk '{print $1}')
-          printf '{"versionCode":21,"versionName":"2.2.2","apkUrl":"https://github.com/Berserky/Galaxia-de-girasoles/releases/download/android-stable/NuestraGalaxia.apk","sha256":"%s","notes":"Nuestra Galaxia 2.2.2 corrige la navegación horizontal de las etiquetas en Recuerdos: al elegir opciones del final, la barra conserva exactamente la posición en la que la dejaste incluso después de refrescos de la vista."}\n' "$SHA" > update.json
+          printf '{"versionCode":22,"versionName":"3.0.0","apkUrl":"https://github.com/Berserky/Galaxia-de-girasoles/releases/download/android-stable/NuestraGalaxia.apk","sha256":"%s","notes":"Nuestra Galaxia 3.0.0 incorpora Galaxy Insights, Date, Goals, Bond 2.0, Context e Intelligence, con búsqueda híbrida, nuevos widgets, sesiones de acompañamiento y mejoras de privacidad."}\n' "$SHA" > update.json
       - name: Publicar canal estable
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env: { GH_TOKEN: "${{ github.token }}" }

@@ -12,6 +12,7 @@ import android.media.MediaPlayer;
 import android.media.MediaRecorder;
 import android.os.*;
 import android.provider.DocumentsContract;
+import android.provider.MediaStore;
 import android.provider.Settings;
 import android.view.View;
 import android.webkit.*;
@@ -22,6 +23,7 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.webkit.WebViewAssetLoader;
+import androidx.core.content.FileProvider;
 import org.json.JSONObject;
 import java.util.*;
 import java.io.*;
@@ -36,12 +38,14 @@ public final class MainActivity extends ComponentActivity {
     private static final int REQ_BACKUP_EXPORT=202;
     private static final int REQ_BACKUP_IMPORT=203;
     private static final int REQ_DRIVE_FOLDER=204;
+    private static final int REQ_CAMERA=205;
     private static final Set<String> MOBILE_ACTIONS=Set.of(
         "mobile-state","item-save","item-delete","settings-save","daily-save",
-        "bond-save","bond-update","bond-guess","bond-delete","bond-widget",
-        "map-state","place-save","place-delete","status-set","transport-set","destination-save","trip",
+        "bond-save","bond-update","bond-guess","bond-delete","bond-widget","bond-send-gesture","bond-gesture-list","bond-gesture-save","bond-gesture-delete",
+        "map-state","place-save","place-delete","status-set","transport-set","destination-save","trip","context-state","context-settings","context-session","context-events","context-suggestion","context-recap",
+        "intelligence-search","intelligence-ask","intelligence-connections","intelligence-narrate","intelligence-book","intelligence-transcribe","intelligence-transcript-delete","intelligence-index",
         "media-list","media-delete","presence-set","backup-export","backup-import",
-        "pair-code-create","profile-repair","device-revoke","monthly-summary","today-history","encounter-stats","frequent-places","gps-history-export","gps-history-delete"
+        "pair-code-create","profile-repair","device-revoke","push-token-register","push-token-unregister","push-preferences","goals-engine","date-engine","insights-summary","monthly-summary","today-history","encounter-stats","frequent-places","gps-history-export","gps-history-delete"
     );
 
     private DeviceStore store;
@@ -60,6 +64,9 @@ public final class MainActivity extends ComponentActivity {
     private String pendingBackupImportRequest;
     private String pendingDriveFolderRequest;
     private String pendingPhotoPickerRequest;
+    private String pendingCameraRequest;
+    private File pendingCameraFile;
+    private Uri pendingCameraUri;
     private ActivityResultLauncher<PickVisualMediaRequest> photoPickerLauncher;
     private CloudMediaStore cloudMedia;
     private MediaRecorder voiceRecorder;
@@ -82,6 +89,7 @@ public final class MainActivity extends ComponentActivity {
         setContentView(R.layout.activity_main);
         store=new DeviceStore(this);
         cloudMedia=new CloudMediaStore(this);
+        PushManager.initialize(this);
         web=findViewById(R.id.webView);
         setupWeb();
 
@@ -153,6 +161,11 @@ public final class MainActivity extends ComponentActivity {
             state.put("name",paired?store.name():"");
             state.put("tracking",paired&&store.tracking());
             state.put("momentNotifications",new BondStore(this).enabled());
+            state.put("bondHaptics",new BondStore(this).hapticEnabled());
+            state.put("pushConfigured",PushManager.configured());
+            ContextStore contextPrefs=new ContextStore(this);
+            state.put("contextNearbyPush",contextPrefs.nearbyEnabled());
+            state.put("contextArrivedSafePush",contextPrefs.arrivedSafeEnabled());
             state.put("notificationsGranted",Build.VERSION.SDK_INT<33||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED);
             state.put("notificationsEnabled",BondWorker.notificationsAllowed(this));
             state.put("locationGranted",checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED);
@@ -186,7 +199,7 @@ public final class MainActivity extends ComponentActivity {
                 }
                 resolve(requestId,result);
             }catch(ApiClient.ApiException e){
-                if(e.status==401){store.clear();nativeChanged();}
+                if(e.status==401){PushManager.cancel(this);store.clear();new BondStore(this).clear();new ContextStore(this).clear();nativeChanged();}
                 reject(requestId,e.getMessage());
             }catch(Exception e){
                 reject(requestId,e.getMessage()==null?"No pudimos completar la acción.":e.getMessage());
@@ -201,6 +214,7 @@ public final class MainActivity extends ComponentActivity {
             try{
                 ApiClient.PairResult result=ApiClient.pair(clean,Build.MANUFACTURER+" "+Build.MODEL);
                 store.save(result.token,result.person,result.name);
+                PushManager.initialize(this);
                 refreshMomentsInternal();
                 resolve(requestId,nativeState());
                 nativeChanged();
@@ -213,8 +227,12 @@ public final class MainActivity extends ComponentActivity {
             try{
                 String previous=store.token();
                 stopService(new Intent(this,TrackingService.class));
-                store.clear();
+                if(previous!=null)try{ApiClient.pushUnregister(previous);}catch(Exception ignored){}
                 if(previous!=null)try{ApiClient.stop(previous);}catch(Exception ignored){}
+                PushManager.cancel(this);
+                store.clear();
+                new BondStore(this).clear();
+                new ContextStore(this).clear();
                 resolve(requestId,nativeState());
                 nativeChanged();
             }catch(Exception e){reject(requestId,"No pudimos desvincular este teléfono.");}
@@ -244,6 +262,28 @@ public final class MainActivity extends ComponentActivity {
             intent.setType("photo".equals(kind)?"image/*":"music".equals(kind)?"audio/mpeg":"audio/*");
             try{startActivityForResult(intent,REQ_MEDIA);}
             catch(Exception e){pendingMediaRequest=null;pendingMediaKind=null;reject(requestId,"No hay un selector compatible en este teléfono.");}
+        });
+    }
+
+    void capturePhoto(String requestId){
+        if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+        runOnUiThread(()->{
+            if(pendingCameraRequest!=null){reject(requestId,"Ya hay una cámara abierta.");return;}
+            try{
+                File dir=new File(getCacheDir(),"date-photos");
+                if(!dir.exists()&&!dir.mkdirs())throw new IOException("No se pudo preparar la cámara.");
+                File file=File.createTempFile("date-", ".jpg", dir);
+                Uri uri=FileProvider.getUriForFile(this,getPackageName()+".files",file);
+                Intent intent=new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                intent.putExtra(MediaStore.EXTRA_OUTPUT,uri);
+                intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                if(intent.resolveActivity(getPackageManager())==null){file.delete();throw new IOException("No hay una cámara compatible en este teléfono.");}
+                pendingCameraRequest=requestId;pendingCameraFile=file;pendingCameraUri=uri;
+                startActivityForResult(intent,REQ_CAMERA);
+            }catch(Exception e){
+                pendingCameraRequest=null;pendingCameraFile=null;pendingCameraUri=null;
+                reject(requestId,e.getMessage()==null?"No pudimos abrir la cámara.":e.getMessage());
+            }
         });
     }
 
@@ -378,6 +418,22 @@ public final class MainActivity extends ComponentActivity {
 
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==REQ_CAMERA){
+            String request=pendingCameraRequest;File file=pendingCameraFile;Uri uri=pendingCameraUri;
+            pendingCameraRequest=null;pendingCameraFile=null;pendingCameraUri=null;
+            if(request==null)return;
+            if(resultCode!=RESULT_OK||file==null||uri==null){if(file!=null)file.delete();reject(request,"Foto cancelada.");return;}
+            io.execute(()->{
+                try{
+                    String token=store.token();
+                    if(token==null)throw new ApiClient.ApiException(401,"El vínculo del dispositivo ya no es válido.");
+                    JSONObject uploaded=MobileApiClient.upload(this,token,uri,"photo");
+                    resolve(request,uploaded);
+                }catch(Exception e){reject(request,e.getMessage()==null?"No pudimos guardar la foto.":e.getMessage());}
+                finally{file.delete();}
+            });
+            return;
+        }
         if(requestCode==REQ_DRIVE_FOLDER){
             String request=pendingDriveFolderRequest;pendingDriveFolderRequest=null;
             if(request==null)return;
@@ -612,11 +668,32 @@ public final class MainActivity extends ComponentActivity {
     private void applyMomentNotifications(String requestId,boolean enabled){
         new BondStore(this).enabled(enabled);
         if(enabled)BondWorker.prepareNotifications(this);
+        PushManager.schedule(this);
         io.execute(()->{
             try{BondWorker.schedule(getApplicationContext());if(enabled)BondWorker.refresh(getApplicationContext());}catch(Exception ignored){}
         });
         resolve(requestId,nativeState());
         nativeChanged();
+    }
+
+    void setBondHaptics(String requestId,boolean enabled){
+        runOnUiThread(()->{
+            if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+            new BondStore(this).hapticEnabled(enabled);
+            PushManager.schedule(this);
+            resolve(requestId,nativeState());
+            nativeChanged();
+        });
+    }
+
+    void setContextPushPrefs(String requestId,boolean nearby,boolean arrivedSafe){
+        runOnUiThread(()->{
+            if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+            new ContextStore(this).pushPrefs(nearby,arrivedSafe);
+            PushManager.schedule(this);
+            resolve(requestId,nativeState());
+            nativeChanged();
+        });
     }
 
     void testMomentNotification(String requestId){
