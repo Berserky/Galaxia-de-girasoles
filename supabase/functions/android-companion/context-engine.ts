@@ -186,7 +186,7 @@ export function contextStep(previous:any,frame:any,config:any={}){
   }
 
   // Shared trip candidate: nearby, both moving, coherent headings/speed, minimum samples + duration.
-  if(coherentShared(a,b,distance)){
+  if(config.sharedTripEnabled!==false&&coherentShared(a,b,distance)){
    if(!state.shared.candidateSince){state.shared.candidateSince=iso(atMs);state.shared.samples=1;}else state.shared.samples=Number(state.shared.samples||0)+1;
    state.shared.lastGoodAt=iso(atMs);
    const minS=Math.max(300,Number(config.sharedTripHoldS)||600),minSamples=Math.max(6,Number(config.sharedTripSamples)||8);
