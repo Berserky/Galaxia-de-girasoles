@@ -815,6 +815,49 @@ async function frequentPlaces(req:Request){
   return json({suggestions,window_days:45,min_days:3,min_dwell_minutes:45});
 }
 
+const gpsExportSets:Record<string,{table:string,columns:string}>={
+  history:{table:"galaxy_location_history",columns:"id,person,latitude,longitude,accuracy,speed,heading,motion,captured_at,source_device_id,client_sample_id"},
+  trips:{table:"galaxy_trip_history",columns:"id,person,started_at,ended_at,distance_m,duration_s,max_speed,dominant_motion,created_at"},
+  tripPoints:{table:"galaxy_trip_points",columns:"id,person,latitude,longitude,created_at"},
+  placeEvents:{table:"galaxy_place_events",columns:"id,person,place_id,event,happened_at"}
+};
+async function gpsHistoryExport(req:Request,body:any){
+  const d=await device(req),person=String(d.person),dataset=String(body.dataset||""),cfg=gpsExportSets[dataset];
+  if(!cfg)return json({error:"Conjunto GPS no válido."},400);
+  const after=Math.max(0,Number(body.after||0)),requested=Math.max(1,Math.min(1000,Number(body.limit||1000)));
+  if(!Number.isFinite(after))return json({error:"Cursor GPS no válido."},400);
+  let snapshot=Math.max(0,Number(body.snapshot||0));
+  if(!snapshot){
+    const latest=(await ok(db.from(cfg.table).select("id").eq("person",person).order("id",{ascending:false}).limit(1)))?.[0];
+    snapshot=Math.max(0,Number(latest?.id||0));
+  }
+  if(!snapshot)return json({dataset,rows:[],next:null,done:true,snapshot:0});
+  let query=db.from(cfg.table).select(cfg.columns).eq("person",person).gt("id",after).lte("id",snapshot).order("id",{ascending:true}).limit(requested);
+  const rows=await ok(query),last=rows?.length?Number(rows[rows.length-1].id):after;
+  return json({dataset,rows:rows||[],next:rows?.length?last:null,done:!rows?.length||last>=snapshot||rows.length<requested,snapshot});
+}
+async function exactCount(table:string,person:string){
+  const {count,error}=await db.from(table).select("id",{count:"exact",head:true}).eq("person",person);
+  if(error)throw error;return Number(count||0);
+}
+async function gpsHistoryDelete(req:Request){
+  const d=await device(req),person=String(d.person),loc=(await ok(db.from("galaxy_locations").select("trip_active,trip_started_at").eq("person",person).limit(1)))?.[0]||{};
+  if(loc.trip_active)return json({error:"Termina el recorrido activo antes de borrar tu historial GPS."},409);
+  const [history,trips,tripPoints,placeEvents]=await Promise.all([
+    exactCount("galaxy_location_history",person),
+    exactCount("galaxy_trip_history",person),
+    exactCount("galaxy_trip_points",person),
+    exactCount("galaxy_place_events",person)
+  ]);
+  await Promise.all([
+    ok(db.from("galaxy_location_history").delete().eq("person",person)),
+    ok(db.from("galaxy_trip_history").delete().eq("person",person)),
+    ok(db.from("galaxy_trip_points").delete().eq("person",person)),
+    ok(db.from("galaxy_place_events").delete().eq("person",person))
+  ]);
+  return json({ok:true,person,deleted:{history,trips,tripPoints,placeEvents,total:history+trips+tripPoints+placeEvents},deleted_at:new Date().toISOString()});
+}
+
 async function mapState(req:Request,body:any){
   await device(req);
   const [locations,places,tripPoints,destinations]=await Promise.all([
@@ -1026,6 +1069,8 @@ Deno.serve(async req=>{
     if(action==="today-history")return await todayHistory(req,body);
     if(action==="encounter-stats")return await encounterStats(req);
     if(action==="frequent-places")return await frequentPlaces(req);
+    if(action==="gps-history-export")return await gpsHistoryExport(req,body);
+    if(action==="gps-history-delete")return await gpsHistoryDelete(req);
     if(action==="place-save")return await placeSave(req,body);
     if(action==="place-delete")return await placeDelete(req,body);
     if(action==="status-set")return await setStatus(req,body);
