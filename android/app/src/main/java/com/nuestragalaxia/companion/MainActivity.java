@@ -33,7 +33,7 @@ public final class MainActivity extends ComponentActivity {
         "bond-save","bond-update","bond-guess","bond-delete","bond-widget",
         "map-state","place-save","place-delete","status-set","transport-set","destination-save","trip",
         "media-list","media-delete","presence-set","backup-export","backup-import",
-        "pair-code-create","profile-repair","device-revoke","monthly-summary","today-history","encounter-stats","frequent-places"
+        "pair-code-create","profile-repair","device-revoke","monthly-summary","today-history","encounter-stats","frequent-places","gps-history-export","gps-history-delete"
     );
 
     private DeviceStore store;
@@ -297,6 +297,17 @@ public final class MainActivity extends ComponentActivity {
             intent.putExtra(Intent.EXTRA_TITLE,(fileName==null||fileName.trim().isEmpty())?"nuestra-galaxia-backup.json":fileName);
             try{startActivityForResult(intent,REQ_BACKUP_EXPORT);}
             catch(Exception e){pendingBackupExportRequest=null;pendingBackupJson=null;reject(requestId,"Android no pudo abrir el selector para guardar la copia.");}
+        });
+    }
+
+    void clearPendingGps(String requestId){
+        if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+        io.execute(()->{
+            try{
+                PendingPointStore pending=new PendingPointStore(getApplicationContext());
+                int cleared=pending.clear();pending.close();
+                resolve(requestId,new JSONObject().put("cleared",cleared));
+            }catch(Exception e){reject(requestId,"No pudimos limpiar la cola GPS pendiente del teléfono.");}
         });
     }
 
