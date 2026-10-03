@@ -6,11 +6,16 @@ import { buildGoalDateSuggestions, buildGoalInsightSummary, computeGoalProgress,
 import { BUILTIN_GESTURES, computeBondProgress, gestureSnapshot, normalizeCustomGesture, resolveGesture } from "./bond-engine.ts";
 import { PUSH_EVENT_TYPES, sanitizePushPayload, sendFcmData } from "./push-engine.ts";
 import { CONTEXT_EVENTS, buildDateContextRecap, buildEncounterSuggestion, buildTripContextRecap, contextStep, emptyContextState, haversineM, summarizeTrack } from "./context-engine.ts";
+import { bookSections, buildIntelligenceDocument, contentHashInput, explainConnection, normalizeSearchText, sanitizeTranscriptSegments, validateNarrative } from "./intelligence-engine.ts";
+import { aiProviderConfig, extractJsonObject, generateGroundedResponse, gteSmallEmbedding, transcribeAudioBlob } from "./intelligence-provider.ts";
 
 const url=Deno.env.get("SUPABASE_URL")!;
 // FCM HTTP v1 transport lives in push-engine.ts; credentials are server-side only.
 const FCM_HTTP_V1="https://fcm.googleapis.com/v1/projects/";
 const FCM_OAUTH_TOKEN_URL="https://oauth2.googleapis.com/token";
+// Galaxy Intelligence secrets are Edge-only. Never return these values to clients.
+const INTELLIGENCE_SECRET_NAMES=["OPENAI_API_KEY","GALAXY_AI_MODEL","GALAXY_TRANSCRIBE_MODEL"];
+const INTELLIGENCE_EMBEDDING_MODEL="gte-small";
 let service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"";
 try{
   const modern=JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")||"{}");
@@ -708,6 +713,291 @@ async function mobileState(req:Request){
     bond,locations,places,presence:safePresence,devices,nextEvent:nextCalendarEvent(safeItems.filter((i:any)=>i.kind==="event"),day),
     capabilities:{photos:true,music:true,voice:true,widget:true,backgroundLocation:true,trips:true,backup:true,presence:true,profileManagement:true}
   });
+}
+
+
+function intelligenceVisible(row:any,person:string,day=today()){
+ if(!row||row.searchable===false)return false;
+ if(row.owner_person&&String(row.owner_person)!==String(person))return false;
+ if(row.visible_after&&String(row.visible_after)>day&&String(row.owner_person)!==String(person))return false;
+ return true;
+}
+function minimalContext(rows:any[]){
+ return (rows||[]).slice(0,10).map((row:any,index:number)=>({
+  ref:"S"+(index+1),sourceType:String(row.source_type||row.sourceType||""),sourceId:String(row.source_id||row.sourceId||""),
+  title:text(row.title||"Momento",180),date:row.occurred_on||row.occurredOn||null,
+  snippet:text(row.content||"",900)
+ }));
+}
+async function intelligenceUsage(person:string,operation:"ask"|"narrate"|"transcribe",limit:number){
+ const day=today(),row=(await ok(db.from("galaxy_intelligence_usage").select("*").eq("day",day).eq("person",person).eq("operation",operation).limit(1)))?.[0];
+ const count=Number(row?.count)||0;
+ if(count>=limit)throw new Error("Límite diario de IA alcanzado. Intenta mañana.");
+ await ok(db.from("galaxy_intelligence_usage").upsert({day,person,operation,count:count+1,updated_at:new Date().toISOString()},{onConflict:"day,person,operation"}));
+ return count+1;
+}
+async function syncIntelligenceDocument(doc:any){
+ if(!doc?.sourceType||!doc?.sourceId)return {status:"ignored"};
+ if(doc.searchable===false||(!text(doc.title,500)&&!text(doc.content,20000))){
+  await ok(db.from("galaxy_intelligence_documents").delete().eq("source_type",String(doc.sourceType)).eq("source_id",String(doc.sourceId)));
+  return {status:"deleted"};
+ }
+ const hash=await sha(contentHashInput(doc));
+ const existing=(await ok(db.from("galaxy_intelligence_documents").select("id,content_hash,embedding_status").eq("source_type",String(doc.sourceType)).eq("source_id",String(doc.sourceId)).limit(1)))?.[0];
+ if(existing&&existing.content_hash===hash&&existing.embedding_status==="ready")return {status:"unchanged",id:existing.id};
+ const base={
+  source_type:String(doc.sourceType),source_id:String(doc.sourceId),source_version:text(doc.sourceVersion||"",160),
+  title:text(doc.title,500),content:text(doc.content,20000),occurred_on:doc.occurredOn||null,
+  metadata:doc.metadata&&typeof doc.metadata==="object"?doc.metadata:{},
+  owner_person:["0","1"].includes(String(doc.ownerPerson))?String(doc.ownerPerson):null,
+  visible_after:doc.visibleAfter||null,searchable:doc.searchable!==false,
+  content_hash:hash,embedding:null,embedding_model:INTELLIGENCE_EMBEDDING_MODEL,embedding_status:"pending",embedding_error:null,updated_at:new Date().toISOString()
+ };
+ const saved=await ok(db.from("galaxy_intelligence_documents").upsert(base,{onConflict:"source_type,source_id"}).select("id").single());
+ try{
+  const vector=await gteSmallEmbedding((base.title+"\n"+base.content).slice(0,12000));
+  if(!vector)throw new Error("embedding-error: contenido vacío");
+  await ok(db.from("galaxy_intelligence_documents").update({embedding:vector,embedding_status:"ready",embedding_error:null,updated_at:new Date().toISOString()}).eq("id",saved.id).eq("content_hash",hash));
+  return {status:"ready",id:saved.id};
+ }catch(error){
+  const message=text(error instanceof Error?error.message:"embedding-error",300);
+  await ok(db.from("galaxy_intelligence_documents").update({embedding:null,embedding_status:"error",embedding_error:message,updated_at:new Date().toISOString()}).eq("id",saved.id).eq("content_hash",hash));
+  return {status:"embedding-error",id:saved.id,fallback:true};
+ }
+}
+async function deleteIntelligenceSource(type:string,id:string){
+ const sourceId=String(id||"");if(!sourceId)return;
+ if(type==="item"){
+  await ok(db.from("galaxy_intelligence_documents").delete().eq("source_id",sourceId).in("source_type",["memory","song","event","plan","note","capsule","wish","journey"]));
+  return;
+ }
+ await ok(db.from("galaxy_intelligence_documents").delete().eq("source_type",type).eq("source_id",sourceId));
+}
+async function syncIntelligenceItem(row:any){if(row)await syncIntelligenceDocument(buildIntelligenceDocument("item",row,{today:today()}));}
+async function syncIntelligencePlace(row:any){if(row)await syncIntelligenceDocument(buildIntelligenceDocument("place",row,{today:today()}));}
+async function syncIntelligenceTrip(row:any){if(row)await syncIntelligenceDocument(buildIntelligenceDocument("trip",row,{today:today()}));}
+async function syncIntelligenceGoal(idOrRow:any){
+ let goal=typeof idOrRow==="object"?idOrRow:(await ok(db.from("galaxy_goals").select("*").eq("id",String(idOrRow)).limit(1)))?.[0];
+ if(!goal)return;
+ const steps=await ok(db.from("galaxy_goal_steps").select("title,completed_at,position").eq("goal_id",goal.id).order("position"));
+ goal={...goal,description:[goal.description,...(steps||[]).map((s:any)=>text(s.title,300))].filter(Boolean).join(" · ")};
+ await syncIntelligenceDocument(buildIntelligenceDocument("goal",goal,{today:today()}));
+}
+async function syncIntelligenceBond(row:any){
+ if(!row)return;
+ if(["sharednote","ritual"].includes(String(row.type)))await syncIntelligenceDocument(buildIntelligenceDocument("bond",row,{today:today()}));
+}
+async function syncIntelligenceDaily(day:string){
+ const rows=await ok(db.from("galaxy_daily").select("day,person,answer").eq("day",day).order("person"));
+ await ok(db.from("galaxy_intelligence_documents").delete().eq("source_type","answer").like("source_id",day+":%"));
+ const answered=(rows||[]).filter((x:any)=>text(x.answer,3000));
+ if(answered.length!==2)return;
+ const question=(await ok(db.from("galaxy_daily_questions").select("question_id").eq("day",day).limit(1)))?.[0];
+ for(const row of answered)await syncIntelligenceDocument(buildIntelligenceDocument("daily-answer",{...row,question_id:question?.question_id,ownerOnly:false},{today:today()}));
+}
+async function intelligenceVoicePrivacy(voice:any){
+ const data=voice?.data||{},author=String(voice?.author||""),ref=String(data.referenceId||"");
+ if(!ref)return {ownerPerson:null,visibleAfter:null};
+ const target=(await ok(db.from("galaxy_items").select("kind,data,author").eq("id",ref).limit(1)))?.[0];
+ if(!target)return {ownerPerson:null,visibleAfter:null};
+ if(target.kind==="capsule"&&target.data?.date)return {ownerPerson:author,visibleAfter:String(target.data.date)};
+ if(target.kind==="note"&&target.data?.surprise){
+  if(target.data.unlockType==="date")return {ownerPerson:author,visibleAfter:String(target.data.unlockDate||"")||null};
+  if(target.data.unlockType==="place")return {ownerPerson:author,visibleAfter:null};
+ }
+ return {ownerPerson:null,visibleAfter:null};
+}
+async function syncIntelligenceVoiceTranscript(bondId:string){
+ const [voice,transcript]=await Promise.all([
+  ok(db.from("galaxy_bond").select("*").eq("id",bondId).eq("type","voice").limit(1)),
+  ok(db.from("galaxy_voice_transcripts").select("*").eq("bond_id",bondId).limit(1))
+ ]);
+ const row=voice?.[0],tr=transcript?.[0];
+ if(!row||!tr){await deleteIntelligenceSource("voice-transcript",bondId);return;}
+ const privacy=await intelligenceVoicePrivacy(row),data=row.data||{};
+ await syncIntelligenceDocument(buildIntelligenceDocument("voice-transcript",{
+  bondId,author:row.author,title:data.title||"Mensaje de voz",text:tr.transcript,segments:tr.segments,
+  created_at:row.created,mime:data.mime,referenceId:data.referenceId,...privacy
+ },{today:today()}));
+}
+async function syncIntelligencePhotoContext(path:string){
+ const row=(await ok(db.from("galaxy_photo_context").select("*").eq("path",path).limit(1)))?.[0];
+ if(!row){await deleteIntelligenceSource("photo",path);return;}
+ await syncIntelligenceDocument(buildIntelligenceDocument("photo-context",row,{today:today()}));
+}
+async function classicIntelligenceFallback(person:string,query:string,limit=20){
+ const q=normalizeSearchText(query);if(!q)return[];
+ const rows=await ok(db.from("galaxy_intelligence_documents").select("id,source_type,source_id,title,content,occurred_on,metadata,owner_person,visible_after,searchable").limit(1000));
+ return (rows||[]).filter((r:any)=>intelligenceVisible(r,person)&&normalizeSearchText((r.title||"")+" "+(r.content||"")).includes(q))
+  .sort((a:any,b:any)=>String(b.occurred_on||"").localeCompare(String(a.occurred_on||""))).slice(0,limit)
+  .map((r:any,index:number)=>({...r,final_score:100-index,exact_rank:index+1,fulltext_rank:null,semantic_rank:null}));
+}
+async function intelligenceSearchRows(person:string,query:string,limit=20){
+ const q=text(query,500);if(!q)return {results:[],mode:"empty",embeddingStatus:"skipped"};
+ let vector:any=null,embeddingStatus="ready";
+ try{vector=await gteSmallEmbedding(q);}catch{embeddingStatus="fallback";}
+ try{
+  const rows=await ok(db.rpc("galaxy_intelligence_hybrid_search",{query_text:q,query_embedding:vector,query_person:person,match_count:Math.max(1,Math.min(50,limit))}));
+  return {results:(rows||[]).filter((r:any)=>intelligenceVisible(r,person)),mode:vector?"hybrid":"keyword-fallback",embeddingStatus};
+ }catch{
+  return {results:await classicIntelligenceFallback(person,q,limit),mode:"classic-fallback",embeddingStatus:"fallback"};
+ }
+}
+async function intelligenceSearch(req:Request,body:any){
+ const d=await device(req),query=text(body.query,500),limit=Math.max(1,Math.min(40,Number(body.limit)||20));
+ const result=await intelligenceSearchRows(String(d.person),query,limit);
+ return json({...result,query,results:result.results.map((r:any)=>({
+  id:r.id,sourceType:r.source_type,sourceId:r.source_id,title:r.title,snippet:text(r.content,500),date:r.occurred_on,
+  metadata:r.metadata||{},score:Number(r.final_score)||0,exact:!!r.exact_rank,fulltext:!!r.fulltext_rank,semantic:!!r.semantic_rank
+ }))});
+}
+function deterministicGroundedAnswer(question:string,rows:any[]){
+ const plain=normalizeSearchText(question),dated=(rows||[]).filter((x:any)=>x.occurred_on).sort((a:any,b:any)=>String(b.occurred_on).localeCompare(String(a.occurred_on)));
+ if(/ultima vez|cuando estuvimos|mas reciente/.test(plain)&&dated.length){
+  const r=dated[0];return {title:"La coincidencia más reciente",answer:(r.title||"Momento")+" · "+r.occurred_on+".",grounded:true};
+ }
+ return null;
+}
+async function intelligenceAsk(req:Request,body:any){
+ const d=await device(req),person=String(d.person),question=text(body.question,600);
+ if(!question)return json({error:"Escribe una pregunta."},400);
+ const search=await intelligenceSearchRows(person,question,10),rows=search.results||[],sources=minimalContext(rows);
+ if(!rows.length)return json({answer:"No encontré contenido de ustedes que respalde una respuesta.",sources:[],mode:"zero-results",grounded:true});
+ const deterministic=deterministicGroundedAnswer(question,rows);
+ if(deterministic)return json({...deterministic,sources,mode:search.mode});
+ const cfg=aiProviderConfig();
+ if(!cfg.configured)return json({answer:"Encontré momentos relacionados, pero la narración de IA no está configurada. Te muestro las fuentes sin inventar una respuesta.",sources,mode:"fallback",grounded:true,providerAvailable:false});
+ await intelligenceUsage(person,"ask",30);
+ try{
+  const context=JSON.stringify(sources);
+  const answer=await generateGroundedResponse(
+   "Responde en español únicamente con hechos presentes en las FUENTES. No infieras hechos nuevos. Si las fuentes no bastan, dilo. Cita las fuentes con [S1], [S2], etc. Nunca menciones coordenadas ni datos no presentes.",
+   "PREGUNTA:\n"+question+"\n\nFUENTES:\n"+context,700);
+  return json({answer,sources,mode:"ai-grounded",grounded:true,providerAvailable:true});
+ }catch{
+  return json({answer:"La IA generativa falló, así que no voy a completar huecos. Estas son las coincidencias verificables.",sources,mode:"provider-fallback",grounded:true,providerAvailable:false});
+ }
+}
+async function intelligenceConnections(req:Request,body:any){
+ const d=await device(req),person=String(d.person),sourceType=text(body.sourceType,40),sourceId=text(body.sourceId,300);
+ const source=(await ok(db.from("galaxy_intelligence_documents").select("*").eq("source_type",sourceType).eq("source_id",sourceId).limit(1)))?.[0];
+ if(!source||!intelligenceVisible(source,person))return json({error:"Fuente no disponible."},404);
+ const related=await intelligenceSearchRows(person,(source.title+" "+source.content).slice(0,800),12);
+ const rows=(related.results||[]).filter((r:any)=>String(r.id)!==String(source.id)).slice(0,8);
+ return json({source:{sourceType:source.source_type,sourceId:source.source_id,title:source.title},connections:rows.map((r:any)=>({
+  sourceType:r.source_type,sourceId:r.source_id,title:r.title,date:r.occurred_on,
+  reasons:explainConnection({sourceType:source.source_type,title:source.title,occurredOn:source.occurred_on,metadata:source.metadata},{sourceType:r.source_type,title:r.title,occurredOn:r.occurred_on,metadata:r.metadata},Number(r.semantic_score)||0)
+ }))});
+}
+async function intelligenceNarrate(req:Request,body:any){
+ const d=await device(req),person=String(d.person),requested=Array.isArray(body.sourceIds)?body.sourceIds.map(String).slice(0,10):[];
+ let query=db.from("galaxy_intelligence_documents").select("*").in("source_type",["memory","journey","trip"]).order("occurred_on",{ascending:true}).limit(10);
+ if(requested.length)query=query.in("source_id",requested);
+ const rows=(await ok(query)||[]).filter((r:any)=>intelligenceVisible(r,person)).slice(0,10);
+ if(rows.length<5)return json({error:"Se necesitan entre 5 y 10 recuerdos disponibles para narrar un capítulo."},409);
+ const cfg=aiProviderConfig(),sources=rows.map((r:any)=>({sourceId:String(r.source_id),title:text(r.title,180),date:r.occurred_on,content:text(r.content,1200)}));
+ if(!cfg.configured)return json({available:false,error:"La IA narradora no está configurada.",sources});
+ await intelligenceUsage(person,"narrate",10);
+ try{
+  const raw=await generateGroundedResponse(
+   "Escribe un capítulo en español usando EXCLUSIVAMENTE las fuentes entregadas. No inventes hechos, lugares, diálogos ni emociones. Devuelve solo JSON con {title,paragraphs:[{text,sourceIds:[...]}]}. Cada párrafo debe citar al menos una fuente por su sourceId.",
+   JSON.stringify({sources}),1400);
+  const narrative=validateNarrative(extractJsonObject(raw),sources);
+  return json({available:true,narrative,sources:sources.map(x=>({sourceId:x.sourceId,title:x.title,date:x.date}))});
+ }catch{
+  return json({available:false,error:"La narración no pudo validarse contra las fuentes. No se guardó contenido inventado.",sources:sources.map(x=>({sourceId:x.sourceId,title:x.title,date:x.date}))});
+ }
+}
+async function intelligenceTranscriptDelete(req:Request,body:any){
+ const d=await device(req),person=String(d.person),bondId=String(body.bondId||"");
+ const voice=(await ok(db.from("galaxy_bond").select("id,author,type").eq("id",bondId).eq("type","voice").limit(1)))?.[0];
+ if(!voice)return json({error:"Audio no encontrado."},404);
+ if(String(voice.author)!==person)return json({error:"Solo quien grabó el audio puede eliminar su transcripción."},403);
+ await ok(db.from("galaxy_voice_transcripts").delete().eq("bond_id",bondId));
+ await deleteIntelligenceSource("voice-transcript",bondId);
+ return json({ok:true,audioPreserved:true});
+}
+async function intelligenceTranscribe(req:Request,body:any){
+ const d=await device(req),person=String(d.person),bondId=String(body.bondId||"");
+ const voice=(await ok(db.from("galaxy_bond").select("*").eq("id",bondId).eq("type","voice").limit(1)))?.[0];
+ if(!voice)return json({error:"Audio no encontrado."},404);
+ if(String(voice.author)!==person)return json({error:"Solo quien grabó el audio puede activar su transcripción."},403);
+ const path=text(voice.data?.audioPath,200),mime=text(voice.data?.mime||"audio/mp4",80);
+ if(!path)return json({error:"El audio original no está disponible."},409);
+ await intelligenceUsage(person,"transcribe",8);
+ const {data:blob,error}=await db.storage.from("galaxy-voice").download(path);
+ if(error||!blob)return json({error:"No pude abrir el audio original."},503);
+ try{
+  const result=await transcribeAudioBlob(blob,path.split("/").pop()||"voice.m4a",mime);
+  const segments=sanitizeTranscriptSegments(result.segments);
+  const saved=await ok(db.from("galaxy_voice_transcripts").upsert({bond_id:bondId,transcript:text(result.text,30000),segments,provider:result.provider,model:result.model,status:"ready",last_error:null,updated_at:new Date().toISOString()},{onConflict:"bond_id"}).select("*").single());
+  await syncIntelligenceVoiceTranscript(bondId);
+  return json({transcript:{bondId,text:saved.transcript,segments:saved.segments,createdAt:saved.created_at,updatedAt:saved.updated_at},audioPreserved:true});
+ }catch{
+  return json({error:"La transcripción falló. El audio original se conserva intacto."},503);
+ }
+}
+async function intelligenceBook(req:Request,body:any){
+ const d=await device(req),person=String(d.person);
+ const rows=(await ok(db.from("galaxy_intelligence_documents").select("source_type,source_id,title,content,occurred_on,metadata,owner_person,visible_after,searchable").order("occurred_on",{ascending:true}).limit(1000))||[]).filter((r:any)=>intelligenceVisible(r,person));
+ const sections=bookSections().map(section=>({id:section.id,title:section.title,items:[] as any[]}));
+ const byId=Object.fromEntries(sections.map((x:any)=>[x.id,x]));
+ const push=(id:string,row:any)=>byId[id]?.items.push({sourceType:row.source_type,sourceId:row.source_id,title:row.title,date:row.occurred_on,snippet:text(row.content,360)});
+ for(const row of rows){
+  if(row.source_type==="memory"){push("beginning",row);push("firsts",row);}
+  if(["event","answer"].includes(row.source_type))push("dates",row);
+  if(["journey","trip"].includes(row.source_type))push("trips",row);
+  if(row.source_type==="place")push("places",row);
+  if(row.source_type==="song")push("music",row);
+  if(row.source_type==="photo")push("photos",row);
+  if(["answer","sharednote","voice-transcript"].includes(row.source_type))push("quotes",row);
+ }
+ for(const s of sections)s.items=s.items.slice(0,20);
+ const stats={documents:rows.length,memories:rows.filter((x:any)=>x.source_type==="memory").length,trips:rows.filter((x:any)=>["journey","trip"].includes(x.source_type)).length,places:rows.filter((x:any)=>x.source_type==="place").length,songs:rows.filter((x:any)=>x.source_type==="song").length,photos:rows.filter((x:any)=>x.source_type==="photo").length};
+ byId.stats.items=[{sourceType:"stats",sourceId:"current",title:"Estadísticas de nuestra historia",date:today(),snippet:Object.entries(stats).map(([k,v])=>k+": "+v).join(" · ")}];
+ byId.narrative.items=[];
+ return json({title:"Libro de Nuestra Galaxia",version:1,sections,stats,narratorAvailable:aiProviderConfig().configured,pdfReadyContract:true});
+}
+async function intelligenceIndexAction(req:Request,body:any){
+ const d=await device(req),operation=String(body.operation||"status");
+ if(operation==="status"){
+  const rows=await ok(db.from("galaxy_intelligence_documents").select("embedding_status"));
+  const counts:any={total:0,ready:0,pending:0,error:0};for(const r of rows||[]){counts.total++;counts[r.embedding_status]=(counts[r.embedding_status]||0)+1;}
+  return json({counts,embeddingModel:INTELLIGENCE_EMBEDDING_MODEL,providerConfigured:aiProviderConfig().configured});
+ }
+ if(operation==="photo-context-save"){
+  const path=text(body.path,300),caption=text(body.caption,3000),context=text(body.context,5000),takenOn=text(body.takenOn,10);
+  if(!path)return json({error:"Foto no válida."},400);
+  await ok(db.from("galaxy_photo_context").upsert({path,author:String(d.person),caption:caption||null,context:context||null,taken_on:validDate(takenOn)?takenOn:null,updated_at:new Date().toISOString()},{onConflict:"path"}));
+  await syncIntelligencePhotoContext(path);return json({ok:true});
+ }
+ if(operation==="photo-context-delete"){
+  const path=text(body.path,300);await ok(db.from("galaxy_photo_context").delete().eq("path",path));await deleteIntelligenceSource("photo",path);return json({ok:true});
+ }
+ if(operation!=="rebuild")return json({error:"Operación de índice no válida."},400);
+ const limit=Math.max(1,Math.min(25,Number(body.limit)||15)),offset=Math.max(0,Number(body.offset)||0);
+ const sources:any[]=[];
+ const [items,places,trips,goals,bond,photoContexts]=await Promise.all([
+  ok(db.from("galaxy_items").select("*").order("created").range(offset,offset+limit-1)),
+  offset===0?ok(db.from("galaxy_places").select("*").order("created_at").limit(limit)):Promise.resolve([]),
+  offset===0?ok(db.from("galaxy_trip_history").select("*").order("started_at").limit(limit)):Promise.resolve([]),
+  offset===0?ok(db.from("galaxy_goals").select("*").order("created_at").limit(limit)):Promise.resolve([]),
+  offset===0?ok(db.from("galaxy_bond").select("*").in("type",["sharednote","ritual"]).order("created").limit(limit)):Promise.resolve([]),
+  offset===0?ok(db.from("galaxy_photo_context").select("*").order("created_at").limit(limit)):Promise.resolve([])
+ ]);
+ for(const row of items||[])sources.push(buildIntelligenceDocument("item",row,{today:today()}));
+ for(const row of places||[])sources.push(buildIntelligenceDocument("place",row,{today:today()}));
+ for(const row of trips||[])sources.push(buildIntelligenceDocument("trip",row,{today:today()}));
+ for(const row of goals||[])sources.push(buildIntelligenceDocument("goal",row,{today:today()}));
+ for(const row of bond||[])sources.push(buildIntelligenceDocument("bond",row,{today:today()}));
+ for(const row of photoContexts||[])sources.push(buildIntelligenceDocument("photo-context",row,{today:today()}));
+ let ready=0,errors=0;for(const doc of sources){const result=await syncIntelligenceDocument(doc);if(result.status==="ready"||result.status==="unchanged")ready++;if(result.status==="embedding-error")errors++;}
+ if(offset===0){
+  const days=await ok(db.from("galaxy_daily").select("day").not("answer","is",null).order("day",{ascending:false}).limit(120));
+  for(const day of [...new Set((days||[]).map((x:any)=>String(x.day)))])await syncIntelligenceDaily(day);
+  const transcripts=await ok(db.from("galaxy_voice_transcripts").select("bond_id").limit(limit));for(const tr of transcripts||[])await syncIntelligenceVoiceTranscript(String(tr.bond_id));
+ }
+ return json({ok:true,processed:sources.length,ready,errors,nextOffset:(items||[]).length===limit?offset+limit:null});
 }
 
 function cleanItem(kind:string,data:any){
