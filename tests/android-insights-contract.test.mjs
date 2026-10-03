@@ -181,3 +181,20 @@ test('exact moods count as exact, not as merely compatible',()=>{
  assert.equal(result.connection.exact_mood_days,1);
  assert.equal(result.connection.compatible_mood_days,0);
 });
+
+
+test('legacy history keeps its Bogota day helper after the Insights extraction',()=>{
+ assert.ok(edge.includes('function bogotaDay('),'today-history and encounter stats still depend on bogotaDay');
+ assert.ok((edge.match(/bogotaDay\(/g)||[]).length>1,'bogotaDay must still serve legacy consumers');
+});
+
+test('Insights filters photo metadata before signing private URLs',()=>{
+ assert.ok(edge.includes('async function listInsightPhotoMetadata('),'Insights needs a metadata-only photo listing');
+ assert.ok(edge.includes('async function signInsightPhotos('),'Insights must sign only selected photo candidates');
+ const start=edge.indexOf('async function buildInsights(');
+ const end=edge.indexOf('async function insightsSummary(',start);
+ const block=edge.slice(start,end);
+ assert.equal(block.includes('listBucket("galaxy-photos")'),false,'Insights must not sign every photo before period filtering');
+ assert.ok(block.includes('listInsightPhotoMetadata('));
+ assert.ok(block.includes('signInsightPhotos('));
+});
