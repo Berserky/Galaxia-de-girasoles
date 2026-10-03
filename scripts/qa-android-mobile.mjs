@@ -181,7 +181,9 @@ assert.ok(css.includes('.partner-answer{background:color-mix'),'La respuesta de 
 assert.ok(css.includes('.bottom-nav')&&css.includes('background:var(--nav-glass)'),'La navegación inferior debe respetar el tema');
 assert.ok(css.includes('.universal-search-box')&&css.includes('background:var(--field)'),'El buscador debe respetar el tema');
 assert.ok(css.includes('.global-player.visible')&&css.includes('background:var(--nav-glass)'),'El reproductor flotante debe respetar el tema');
-assert.ok(css.includes('.nav-btn span{font-size:10px'),'Las etiquetas de navegación deben mantener proporción móvil');
+assert.ok(css.includes('.nav-btn span{')&&css.includes('font-size:10px'),'Las etiquetas de navegación deben mantener proporción móvil');
+assert.ok(css.includes('grid-template-columns:repeat(6,minmax(0,1fr))'),'La navegación principal debe soportar seis accesos visibles sin overflow');
+assert.ok(app.includes("['ai','IA']")&&app.includes("if(view==='ai'){app.innerHTML=header()+intelligenceHubView()"),'Galaxy Intelligence debe ser una sección visible del menú principal');
 assert.ok(app.includes('function cloudRenderFingerprint(')&&app.includes('function refreshStateIfChanged(')&&app.includes('requestAnimationFrame'),'El refresco de fondo debe evitar renders completos si no cambió el estado');
 assert.ok(app.includes("refreshStateIfChanged().catch"),'El polling debe usar refresco condicional');
 assert.ok(app.includes('function syncSystemTheme(')&&app.includes("GalaxyNative.call('setSystemTheme'"),'El tema web debe sincronizar barras nativas Android');
@@ -268,6 +270,7 @@ assert.ok(goalsEngine.includes('normalizeGoalInput')&&goalsEngine.includes('comp
 assert.ok(schema.includes('galaxy_goals')&&schema.includes('galaxy_goal_steps')&&schema.includes('galaxy_goal_contributions'),'Galaxy Goals debe usar tablas relacionales');
 assert.ok(schema.includes('enable row level security')&&schema.includes('from public,anon,authenticated'),'Galaxy Goals debe quedar cerrado al acceso directo del cliente');
 assert.ok(app.includes('function goalsView(')&&app.includes('function openGoalDetail(')&&app.includes('Aportes manuales'),'Galaxy Goals debe tener experiencia móvil completa');
+assert.ok(app.includes("if(view==='goals'){app.innerHTML=header()+goalsView()")&&app.includes("if(a==='goals-open'){go('goals');await loadGoals(true);return;}"),'Galaxy Goals debe renderizarse y cargar desde su acceso visible');
 assert.ok(app.includes('goal-convert-item')&&app.includes("['plan','wish'].includes(i.kind)"),'Planes y deseos deben poder convertirse sin cambiar su modelo actual');
 assert.ok(app.includes('Sin conexión bancaria')&&goalsEngine.includes('No se permiten campos bancarios'),'Galaxy Goals no puede convertirse en integración bancaria');
 assert.ok(dateEngine.includes('context.goalSuggestions')&&!dateEngine.includes('galaxy_goals'),'Date Engine solo puede recibir sugerencias genéricas de Goals');
@@ -306,6 +309,8 @@ assert.ok(pushManager.includes('nearbyEnabled()')&&pushManager.includes('arrived
 assert.equal(contextStore.includes('TrackingService.ACTION_START'),false,'ContextStore jamás puede encender ubicación');
 assert.ok(app.includes('Galaxy Context Engine')&&app.includes('Estamos cerca')&&app.includes('Regreso a casa')&&app.includes('Acompáñame 2.0'),'Faltan superficies Context Engine');
 assert.ok(css.includes('/* Mega Update 3.0 · Galaxy Context Engine */'),'Faltan estilos Context Engine');
+assert.ok(css.includes('.context-controls{display:grid;grid-template-columns:1fr')&&css.includes('@media(min-width:560px){.context-controls{grid-template-columns:repeat(2,minmax(0,1fr))}}'),'Context Engine debe apilar controles en móvil y usar dos columnas solo con ancho suficiente');
+assert.ok(css.includes('.context-controls .btn{width:100%;max-width:100%'),'Los botones de Context no pueden desbordar sus tarjetas');
 assert.ok(edge.includes('buildDateContextRecap')&&edge.includes('buildTripContextRecap'),'Faltan recaps contextuales');
 assert.ok(edge.includes('galaxy_context_suggestions')&&app.includes('¿Esto fue una cita?'),'El detector de cita debe pedir confirmación humana');
 
@@ -320,6 +325,7 @@ assert.ok(main.includes('"intelligence-search"')&&edge.includes('action==="intel
 assert.ok(edge.includes('intelligence-ask')&&edge.includes('intelligence-connections')&&edge.includes('intelligence-narrate')&&edge.includes('intelligence-book'),'Faltan servicios de Galaxy Intelligence');
 assert.ok(search.includes('function searchUniverse(')&&app.includes('GalaxySearch.searchUniverse'),'La búsqueda clásica debe sobrevivir como fallback');
 assert.ok(app.includes('Nuestra IA 2.0')&&app.includes('IA de conexiones')&&app.includes('IA narradora')&&app.includes('Libro de Nuestra Galaxia'),'Faltan superficies de Intelligence Engine');
+assert.ok(app.includes('function intelligenceHubView(')&&app.includes('PREGÚNTALE A SU HISTORIA'),'Galaxy Intelligence necesita un hub principal visible, no solo una tarjeta en Ajustes');
 assert.ok(app.includes('Transcribir')&&app.includes('Eliminar transcripción'),'Voz 2.0 debe controlar la transcripción por separado');
 assert.ok(edge.includes('syncIntelligenceItem(updated)')&&edge.includes('syncIntelligenceItem(created)')&&edge.includes('deleteIntelligenceSource("item"'),'El índice debe actualizarse incrementalmente');
 assert.ok(schema.includes('galaxy_voice_transcripts')&&edge.includes('audioPreserved:true'),'Eliminar transcripción no puede borrar el audio');
