@@ -42,7 +42,7 @@ const surpriseIdeas=[
  {title:'Álbum del mes',body:'Elegir juntos las mejores fotos del mes y escribir una frase para cada una.',minutes:60,budget:0,where:'casa'}
 ];
 
-let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false;
+let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
 let toastTimer,refreshing=false,updateState={text:'La app está al día.',progress:0,busy:false},pendingVoiceDraft=null,voiceReady=false,voiceRecording=false,voiceResumeMusic=false,lastSurprise=null;
 let presenceLastSignature='',voiceTimer=null,voiceSeconds=0;
 let welcomeStep=0,welcomePreview=false,welcomeGift=true,welcomeEntering=false,tourStep=-1;
@@ -235,7 +235,7 @@ function render(){
  if(!cloud){app.innerHTML=header()+loading('Cargando nuestra galaxia');refreshIcons();refreshState();return;}
  if(!media.music&&!mediaLoadedAt.music)setTimeout(()=>loadMedia('music').then(renderGlobalPlayer).catch(()=>{}),0);
  if(view==='home')app.innerHTML=header()+homeView();
- if(view==='map'){app.innerHTML=header()+mapView();setTimeout(()=>{drawMap();if(!mapData)refreshMap({detail:true});},0);}
+ if(view==='map'){app.innerHTML=header()+mapView();setTimeout(()=>{drawMap();if(!mapData)refreshMap({detail:true});if(!frequentPlacesFresh())loadFrequentPlaces().catch(()=>{});},0);}
  if(view==='moments')app.innerHTML=header()+momentsView();
  if(view==='memories'){app.innerHTML=header()+memoriesView();if((memoryTab==='album'&&!mediaFresh('photo'))||(memoryTab==='music'&&!mediaFresh('music')))setTimeout(()=>loadMedia(memoryTab==='album'?'photo':'music').catch(e=>toast(e.message)),0);}
  if(view==='more')app.innerHTML=header()+moreView();
@@ -686,8 +686,42 @@ function mapView(){
  ['','motorcycle','transit'].map(value=>'<button class="chip '+((own.transport_preference||'')===value?'active':'')+'" data-action="transport-set" data-value="'+value+'">'+ico(value==='motorcycle'?'bike':value==='transit'?'bus-front':'navigation')+(value==='motorcycle'?'Moto':value==='transit'?'Transporte público':'Automático')+'</button>').join('')+
  '</div></div></div>'+
  '<div class="section"><div class="grid">'+actionCard('route',own.trip_active?'Terminar recorrido':'Iniciar recorrido',own.trip_active?'Guardaremos el resumen al finalizar':'Registra distancia, duración y movimiento','trip-toggle')+actionCard('map-pin','Guardar este lugar','Casa, trabajo, recuerdo o aventura','place-new')+actionCard('navigation','Acompáñame','Elegir a dónde voy','destination')+'</div></div>'+
- mapHistoryView()+'</section>';
+ frequentPlacesView()+mapHistoryView()+'</section>';
 }
+function frequentPlacesFresh(){return !!frequentPlacesData&&Date.now()-frequentPlacesLoadedAt<15*60*1000;}
+async function loadFrequentPlaces(force=false){
+ if(frequentPlacesLoading)return frequentPlacesData;
+ if(frequentPlacesFresh()&&!force)return frequentPlacesData;
+ frequentPlacesLoading=true;
+ try{
+  frequentPlacesData=await api('frequent-places');frequentPlacesLoadedAt=Date.now();
+  if(view==='map'&&!editingNow())render();
+  return frequentPlacesData;
+ }finally{frequentPlacesLoading=false;}
+}
+function dwellLabel(minutes){
+ const m=Math.max(0,Number(minutes)||0);if(m<60)return Math.round(m)+' min acumulados';
+ const h=Math.floor(m/60),rest=Math.round(m%60);return h+' h'+(rest?' '+rest+' min':'')+' acumuladas';
+}
+function visibleFrequentSuggestions(){
+ return window.GalaxyFrequentPlaces?.visibleSuggestions(frequentPlacesData?.suggestions||[])||[];
+}
+function frequentPlacesView(){
+ const list=visibleFrequentSuggestions();if(!list.length)return'';
+ const own=(mapData?.locations||cloud?.locations||[]).find(l=>String(l.person)===String(cloud.person))||{};
+ return '<section class="section frequent-places"><div class="section-head"><div><p class="eyebrow">LUGARES QUE SE REPITEN</p><h2>Quizás este lugar importa</h2><p>La galaxia detectó zonas donde pasas tiempo en varios días distintos. Nada se guarda sin que tú lo decidas.</p></div></div><div class="stack">'+list.slice(0,3).map((s,n)=>{
+   const near=window.GalaxyFrequentPlaces?.isNearby(s,own),confidence=window.GalaxyFrequentPlaces?.confidenceLabel(s)||'Lugar frecuente';
+   return '<article class="card frequent-place-card '+(near?'near':'')+'"><div class="frequent-place-head"><span class="frequent-place-icon">'+ico(near?'locate-fixed':'map-pin')+'</span><div><span class="badge '+(near?'good':'')+'">'+esc(near?'Estás por aquí ahora':confidence)+'</span><h3>Zona frecuente '+(n+1)+'</h3><p>'+Number(s.days||0)+' días distintos · '+Number(s.visits||0)+' visitas · '+esc(dwellLabel(s.dwell_minutes))+'</p><small>Última visita: '+esc(fmtDateTime(s.last_visit))+'</small></div></div><div class="item-actions"><button class="btn small" data-action="frequent-place-save" data-lat="'+attr(s.latitude)+'" data-lon="'+attr(s.longitude)+'">Guardar lugar</button><button class="btn small secondary" data-action="frequent-place-focus" data-lat="'+attr(s.latitude)+'" data-lon="'+attr(s.longitude)+'">Ver zona</button><button class="btn small ghost" data-action="frequent-place-dismiss" data-lat="'+attr(s.latitude)+'" data-lon="'+attr(s.longitude)+'">Ahora no</button></div></article>';
+  }).join('')+'</div><p class="frequent-place-privacy">'+ico('shield-check')+' Solo analiza el historial de ubicación de este perfil. No guarda lugares automáticamente.</p></section>';
+}
+function frequentSuggestionFromButton(btn){
+ const lat=Number(btn.dataset.lat),lon=Number(btn.dataset.lon);
+ return (frequentPlacesData?.suggestions||[]).find(s=>Math.abs(Number(s.latitude)-lat)<0.00001&&Math.abs(Number(s.longitude)-lon)<0.00001)||{latitude:lat,longitude:lon};
+}
+function openFrequentPlaceSuggestion(s){
+ showModal('Guardar lugar frecuente','<form id="placeForm" class="stack" style="margin-top:16px"><div class="field"><label>¿Cómo llamamos este lugar?</label><input class="input" name="name" placeholder="Universidad, café, casa de…" required maxlength="80"></div><div class="field"><label>Tipo</label><select name="kind"><option value="home">Casa</option><option value="work">Trabajo</option><option value="memory" selected>Recuerdo</option><option value="adventure">Aventura</option></select></div><div class="field"><label>Nota</label><textarea name="note" placeholder="Detectado porque has estado aquí varios días">Lugar sugerido por visitas frecuentes</textarea></div><input type="hidden" name="latitude" value="'+attr(s.latitude)+'"><input type="hidden" name="longitude" value="'+attr(s.longitude)+'"><p class="muted">La app sugiere la zona; tú eliges si realmente es un lugar importante y cómo guardarlo.</p><button class="btn" type="submit">Guardar en nuestro mapa</button></form>','place');
+}
+
 function historyPlacesView(){
  const places=mapData?.places||[];
  if(!places.length)return '<section class="section"><div class="section-head"><div><h2>Mapa de nuestra historia</h2><p>Guarden lugares y relaciónenlos con recuerdos para construirlo.</p></div></div><div class="empty">Aún no hay lugares guardados.</div></section>';
@@ -763,6 +797,7 @@ function drawMap({fit=true}={}){
    const linked=(cloud?.items||[]).filter(i=>Number(i.data?.placeId)===Number(p.id));
    map.addMarker({lat:p.latitude,lon:p.longitude,icon:markerIcon,className:'place',popup:p.name+(linked.length?' · '+linked.length+' '+(linked.length===1?'historia':'historias'):'')+(p.note?' · '+p.note:'')});
  });
+ visibleFrequentSuggestions().slice(0,3).forEach(s=>map.addMarker({lat:s.latitude,lon:s.longitude,icon:'map-pin',className:'suggestion',popup:'Lugar frecuente · '+Number(s.days||0)+' días · '+Number(s.visits||0)+' visitas'}));
  const grouped={};
  (mapData.tripPoints||[]).slice().reverse().forEach(p=>(grouped[p.person]??=[]).push([Number(p.latitude),Number(p.longitude)]));
  Object.entries(grouped).forEach(([person,points])=>{if(points.length>1)map.addPolyline(points,{className:person===cloud.person?'mine':'partner',dashed:person!==cloud.person});});
@@ -922,6 +957,9 @@ document.addEventListener('click',async e=>{
   if(a==='couple-distance-map'){go('map');await refreshMap({quiet:true,detail:false});setTimeout(()=>{focusCoupleOnMap();document.querySelector('#coupleDistanceCard')?.scrollIntoView({behavior:'smooth',block:'center'});},120);return;}
   if(a==='couple-distance-focus'){focusCoupleOnMap();return;}
   if(a==='eta-focus'){focusEtaOnMap();return;}
+  if(a==='frequent-place-save'){openFrequentPlaceSuggestion(frequentSuggestionFromButton(btn));return;}
+  if(a==='frequent-place-focus'){if(map){map.setView([Number(btn.dataset.lat),Number(btn.dataset.lon)],16);document.querySelector('#map')?.scrollIntoView({behavior:'smooth',block:'center'});}return;}
+  if(a==='frequent-place-dismiss'){const s=frequentSuggestionFromButton(btn);window.GalaxyFrequentPlaces?.dismiss(s,14);render();toast('Ocultaremos esta sugerencia durante dos semanas.');return;}
   if(a==='map'){go('map');return;}
   if(a==='moments'){go('moments');return;}
   if(a==='add-memory'){if(!mapData)await refreshMap({quiet:true,detail:false});openItemForm('memory');return;}
@@ -1039,7 +1077,7 @@ document.addEventListener('submit',async e=>{
    await api('bond-save',{type:'voice',data:{...pendingVoiceDraft,audioPath:upload.path,mime:upload.mime}});
    pendingVoiceDraft=null;voiceReady=false;closeModal();await refreshState();toast('Mensaje de voz guardado.');return;
   }
-  if(e.target.id==='placeForm'){const fd=new FormData(e.target);await api('place-save',{name:fd.get('name'),kind:fd.get('kind'),note:fd.get('note'),latitude:Number(fd.get('latitude')),longitude:Number(fd.get('longitude'))});closeModal();await refreshMap();toast('Lugar guardado.');return;}
+  if(e.target.id==='placeForm'){const fd=new FormData(e.target);await api('place-save',{name:fd.get('name'),kind:fd.get('kind'),note:fd.get('note'),latitude:Number(fd.get('latitude')),longitude:Number(fd.get('longitude'))});closeModal();frequentPlacesLoadedAt=0;await refreshMap();await loadFrequentPlaces(true).catch(()=>{});toast('Lugar guardado.');return;}
   if(e.target.id==='destinationForm'){const value=String(new FormData(e.target).get('destination'));if(value==='none')await api('destination-save',{kind:'none'});else{const [kind,id]=value.split(':');await api('destination-save',kind==='person'?{kind,target_person:id,label:partnerName()}:{kind,place_id:Number(id)});}closeModal();await refreshMap({detail:false});if(view==='map')setTimeout(()=>document.querySelector('#etaCard')?.scrollIntoView({behavior:'smooth',block:'center'}),80);toast(value==='none'?'Destino desactivado.':'Destino actualizado · ETA listo.');return;}
   if(e.target.id==='settingsForm'){const fd=new FormData(e.target);await api('settings-save',{version:cloud.settings.version,data:{names:[fd.get('name0'),fd.get('name1')],startDate:fd.get('startDate'),albumUrl:fd.get('albumUrl')}});await refreshState();toast('Ajustes guardados.');return;}
  }catch(err){toast(err.message||'No pudimos guardar.');}
