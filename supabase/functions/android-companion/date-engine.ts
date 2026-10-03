@@ -223,7 +223,7 @@ export function buildCandidates(context:any={},constraintsInput:any={}){
  }
  const seenPlaces=new Set<string>();
  for(const place of [...(context.frequentPlaces||[]),...(context.places||[])]){
-  const key=String(place.id??place.name||"");if(!key||seenPlaces.has(key))continue;seenPlaces.add(key);
+  const key=String((place.id??place.name)||"");if(!key||seenPlaces.has(key))continue;seenPlaces.add(key);
   out.push(candidateFromPlace(place,out.length));
  }
  return out.filter(c=>{
