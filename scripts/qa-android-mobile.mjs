@@ -73,6 +73,7 @@ assert.ok(app.includes('function nowCard()')&&app.includes('Privacidad de “Aho
 assert.ok(app.includes('function historyPlacesView()')&&app.includes('placeId'),'Falta mapa histórico enlazado a recuerdos');
 assert.ok(app.includes('function openOurAI()')&&app.includes('function aiResult(question)'),'Falta Nuestra IA sobre la historia');
 assert.ok(edge.includes('async function backupExport')&&edge.includes('async function backupImport'),'Falta backup seguro en backend');
+assert.ok(edge.includes('delete backupSettings.presence')&&!edge.includes('merged.presence=source.presence'),'El backup no debe restaurar permisos de presencia');
 
 const nativeCalls=new Set([...app.matchAll(/GalaxyNative\.call\(['"]([^'"]+)['"]/g)].map(m=>m[1]));
 const bridgeMethods=new Set([...bridge.matchAll(/public void (\w+)\(/g)].map(m=>m[1]));
