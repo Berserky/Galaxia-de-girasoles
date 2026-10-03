@@ -15,6 +15,7 @@ const todayHistory=read('android/app/src/main/assets/mobile/today-history.js');
 const encounters=read('android/app/src/main/assets/mobile/encounters.js');
 const distance=read('android/app/src/main/assets/mobile/distance.js');
 const eta=read('android/app/src/main/assets/mobile/eta.js');
+const frequentPlaces=read('android/app/src/main/assets/mobile/frequent-places.js');
 const css=read('android/app/src/main/assets/mobile/app.css');
 const index=read('android/app/src/main/assets/mobile/index.html');
 const lucideSource=read('android/app/src/main/assets/mobile/lucide.js');
@@ -35,7 +36,7 @@ assert.equal(emoji.test(widget),false,'El widget no debe usar emojis/dingbats co
 assert.ok(existsSync(resolve(root,'android/app/src/main/assets/mobile/lucide.js')),'Falta Lucide local');
 assert.ok(existsSync(resolve(root,'android/app/src/main/assets/mobile/LICENSE-lucide')),'Falta licencia de Lucide');
 const scriptSources=[...index.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m=>m[1]);
-assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./eta.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
+assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./eta.js','./frequent-places.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
 assert.ok(index.includes("connect-src 'none'"),'La UI local no debe hacer fetch directo ni recibir credenciales');
 assert.equal(/leaflet/i.test(css+index),false,'No deben quedar estilos o assets muertos de Leaflet');
 
@@ -117,6 +118,15 @@ assert.ok(app.includes('data-action="eta-focus"')&&app.includes('ETA HACIA'),'Fa
 assert.ok(app.includes('No reemplaza navegación vial'),'La interfaz ETA debe aclarar que no es navegación vial');
 assert.ok(app.includes("current==='person:'")&&app.includes("current==='place:'"),'Acompáñame debe recordar el destino activo');
 assert.ok(css.includes('.eta-card')&&css.includes('.eta-value')&&css.includes('.eta-actions'),'Faltan estilos del ETA');
+assert.ok(frequentPlaces.includes('function suggestionKey(')&&frequentPlaces.includes('function visibleSuggestions(')&&frequentPlaces.includes('function dismiss('),'Falta módulo de sugerencias frecuentes');
+assert.ok(app.includes('function frequentPlacesView()')&&app.includes('function loadFrequentPlaces(')&&app.includes('function openFrequentPlaceSuggestion('),'Falta experiencia de lugares frecuentes');
+assert.ok(app.includes('data-action="frequent-place-save"')&&app.includes('data-action="frequent-place-dismiss"')&&app.includes('data-action="frequent-place-focus"'),'Faltan acciones de lugares frecuentes');
+assert.ok(mainActions.has('frequent-places')&&edgeActions.has('frequent-places'),'Falta detección de lugares frecuentes end-to-end');
+assert.ok(edge.includes('async function frequentPlaces(')&&edge.includes('function frequentPlaceCandidates('),'Falta detector backend de permanencias frecuentes');
+assert.ok(edge.includes('.eq("person",person)')&&edge.includes('galaxy_location_history'),'La detección debe analizar solo el historial del perfil autenticado');
+assert.ok(edge.includes('x.days>=3')&&edge.includes('x.dwell_minutes>=45')&&edge.includes('dist(cluster,p)<=180'),'El detector debe exigir repetición, permanencia y excluir lugares ya guardados');
+assert.ok(app.includes('Nada se guarda sin que tú lo decidas')&&app.includes('No guarda lugares automáticamente'),'La UI debe explicar que la detección solo sugiere');
+assert.ok(css.includes('.frequent-place-card')&&css.includes('.frequent-place-privacy'),'Faltan estilos de lugares frecuentes');
 assert.ok(edge.includes('async function backupExport')&&edge.includes('async function backupRestore'),'Falta backup seguro en backend');
 const backupSection=edge.slice(edge.indexOf('async function backupExport'),edge.indexOf('async function recordParticipation'));
 assert.ok(!backupSection.includes('galaxy_presence')&&!backupSection.includes('share_battery')&&!backupSection.includes('share_song'),'El backup no debe restaurar permisos de presencia');
