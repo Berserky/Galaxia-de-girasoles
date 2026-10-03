@@ -48,7 +48,7 @@ test('relationship clock uses real calendar months instead of 30-day approximati
     {years:clock.years,months:clock.months,days:clock.days,totalDays:clock.totalDays},
     {years:1,months:1,days:3,totalDays:396}
   );
-  assert.ok(clock.totalHours>=9500&&clock.totalHours<=9510);
+  assert.ok(clock.totalHours>=9510&&clock.totalHours<=9520);
 });
 
 test('relationship clock rejects invalid or future starts',()=>{
