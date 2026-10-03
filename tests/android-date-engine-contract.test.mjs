@@ -112,3 +112,16 @@ test('mobile QA protects Galaxy Date 3.0 contracts',()=>{
  assert.ok(qa.includes('date-engine'));
  assert.ok(qa.includes('openDateMode'));
 });
+
+
+test('favorite memory links original answers instead of copying them',()=>{
+ const start=edge.indexOf('async function favoriteQuestionMemory(');
+ const end=edge.indexOf('async function saveDateRecap(',start);
+ const block=edge.slice(start,end);
+ const dataStart=block.indexOf('const data=cleanItem("memory"');
+ const dataEnd=block.indexOf('});',dataStart);
+ const dataBlock=block.slice(dataStart,dataEnd);
+ assert.ok(dataBlock.includes('source:{type:"daily-question"'));
+ assert.equal(dataBlock.includes('answers'),false,'favorite memory must not duplicate answer payloads');
+ assert.ok(app.includes('function linkedDailyQuestionAnswers('),'UI must resolve linked answers from galaxy_daily');
+});
