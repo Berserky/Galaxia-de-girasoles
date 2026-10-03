@@ -73,7 +73,7 @@ assert.ok(app.includes('function deviceProfilesCard()'),'Falta administración v
 assert.ok(app.includes("data-action=\"pair-code-partner\"")&&app.includes("data-action=\"profile-repair\""),'Falta flujo explícito para Adri');
 assert.ok(main.includes('store.setPerson(repaired)'),'La reparación de perfil debe sincronizar la identidad local');
 assert.ok(bridge.includes('copyText')&&main.includes('ClipboardManager'),'El código de vinculación debe poder copiarse de forma nativa');
-assert.ok(edge.includes('backup-restore"||action==="backup-import'),'La API debe mantener compatibilidad con restauraciones de 2.1.0');
+assert.ok(edge.includes('action==="backup-restore"')&&edge.includes('action==="backup-import"'),'La API debe mantener compatibilidad con restauraciones de 2.1.0');
 assert.ok(app.includes('function nowCard()')&&app.includes('Privacidad de “Ahora”'),'Falta panel Ahora con privacidad');
 assert.ok(app.includes('function historyPlacesView()')&&app.includes('placeId'),'Falta mapa histórico enlazado a recuerdos');
 assert.ok(app.includes('function openOurAI()')&&app.includes('function aiResult(question)'),'Falta Nuestra IA sobre la historia');
