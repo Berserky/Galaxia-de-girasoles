@@ -1104,13 +1104,14 @@ async function buildInsights(req:Request,options:any){
   const rangeStart=previous&&previous.start<period.start?previous.start:period.start;
   const rangeStartDay=previous&&previous.startDay<period.startDay?previous.startDay:period.startDay;
   const rangeEnd=period.end,rangeEndDay=period.endDay;
-  const [items,trips,encounters,daily,bond,participation,placeEvents,places,photos]=await Promise.all([
+  const [items,trips,encounters,daily,bond,participation,allBondGestures,placeEvents,places,photos]=await Promise.all([
     ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:false}).limit(5000)),
     ok(db.from("galaxy_trip_history").select("id,person,started_at,ended_at,distance_m,duration_s,dominant_motion").order("started_at",{ascending:false}).limit(5000)),
     ok(db.from("galaxy_encounters").select("id,started_at,ended_at,distance_m").order("started_at",{ascending:false}).limit(5000)),
     ok(db.from("galaxy_daily").select("day,person,mood,answer").gte("day",rangeStartDay).lt("day",rangeEndDay).order("day",{ascending:true}).limit(5000)),
     ok(db.from("galaxy_bond").select("id,type,author,created").gte("created",rangeStart).lt("created",rangeEnd).order("created",{ascending:false}).limit(5000)),
     ok(db.from("galaxy_bond_participation").select("day,person").order("day",{ascending:true}).limit(10000)),
+    ok(db.from("galaxy_bond").select("id").eq("type","gesture").limit(10000)),
     ok(db.from("galaxy_place_events").select("id,person,place_id,event,happened_at").gte("happened_at",rangeStart).lt("happened_at",rangeEnd).order("happened_at",{ascending:true}).limit(5000)),
     ok(db.from("galaxy_places").select("id,name").limit(1000)),
     listInsightPhotoMetadata()
@@ -1123,12 +1124,16 @@ async function buildInsights(req:Request,options:any){
   current.photos=await signInsightPhotos(current.photos||[]);
   const prior=previous?aggregateInsightRows({...source,period:previous,goalInsights:priorGoalInsights}):null;
   const visibleAll=(items||[]).filter((row:any)=>isInsightVisibleItem(row,person,day));
+  const bondProgress=computeBondProgress(participation||[],new Date());
   const achievements=evaluateAchievements({
     memories:visibleAll.filter((row:any)=>row.kind==="memory").length,
     encounters:(encounters||[]).length,
     distance_m:(trips||[]).reduce((sum:number,row:any)=>sum+Math.max(0,Number(row.distance_m)||0),0),
     journeys:visibleAll.filter((row:any)=>row.kind==="journey").length,
-    joint_days:jointParticipationDays(participation||[]),
+    joint_days:bondProgress.totalDays,
+    current_streak:bondProgress.currentStreak,
+    record_streak:bondProgress.recordStreak,
+    gestures:(allBondGestures||[]).length,
     startDate,today:day
   });
   return {
