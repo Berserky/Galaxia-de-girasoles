@@ -3,8 +3,13 @@ import { createClient } from "npm:@supabase/supabase-js@2.117.2";
 import { aggregateInsightRows, evaluateAchievements, isInsightVisibleItem, periodBounds, previousPeriod } from "./insights.ts";
 import { QUESTION_DECKS, buildDateRecap, buildSequentialPlan, buildSurpriseExperience, normalizePlanCategory, questionById, roulettePendingPlans, selectQuestion } from "./date-engine.ts";
 import { buildGoalDateSuggestions, buildGoalInsightSummary, computeGoalProgress, conversionDraft, normalizeContribution, normalizeGoalInput, reorderStepIds } from "./goals-engine.ts";
+import { BUILTIN_GESTURES, computeBondProgress, gestureSnapshot, normalizeCustomGesture, resolveGesture } from "./bond-engine.ts";
+import { PUSH_EVENT_TYPES, sanitizePushPayload, sendFcmData } from "./push-engine.ts";
 
 const url=Deno.env.get("SUPABASE_URL")!;
+// FCM HTTP v1 transport lives in push-engine.ts; credentials are server-side only.
+const FCM_HTTP_V1="https://fcm.googleapis.com/v1/projects/";
+const FCM_OAUTH_TOKEN_URL="https://oauth2.googleapis.com/token";
 let service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"";
 try{
   const modern=JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")||"{}");
@@ -95,7 +100,11 @@ async function deviceRevoke(req:Request,body:any){
   if(!row||row.revoked_at)return json({ok:true});
   if(String(d.person)!=="0"&&String(row.person)!==String(d.person))return json({error:"No puedes administrar ese dispositivo."},403);
   await ok(db.from("galaxy_devices").update({revoked_at:new Date().toISOString()}).eq("id",targetId));
-  await ok(db.from("galaxy_device_place_presence").delete().eq("device_id",targetId));
+  await Promise.all([
+    ok(db.from("galaxy_device_place_presence").delete().eq("device_id",targetId)),
+    ok(db.from("galaxy_push_tokens").delete().eq("device_id",targetId)),
+    ok(db.from("galaxy_push_subscriptions").delete().eq("device_id",targetId))
+  ]);
   return json({ok:true});
 }
 
@@ -194,15 +203,137 @@ async function signed(bucket:string,path:string,seconds=900){
   return error?null:data.signedUrl;
 }
 
+
+function fcmCredentials(){
+ const raw=Deno.env.get("FCM_SERVICE_ACCOUNT_JSON")||"";
+ if(!raw)return null;
+ try{
+  const value=JSON.parse(raw);
+  return value?.project_id&&value?.client_email&&value?.private_key?value:null;
+ }catch{return null;}
+}
+function pushEventEnabledMap(value:any){
+ const source=value&&typeof value==="object"&&!Array.isArray(value)?value:{};
+ return Object.fromEntries(PUSH_EVENT_TYPES.map(type=>[type,source[type]===true]));
+}
+async function savePushPreferences(deviceId:string,value:any){
+ const enabled=pushEventEnabledMap(value),now=new Date().toISOString();
+ await ok(db.from("galaxy_push_subscriptions").upsert(
+  PUSH_EVENT_TYPES.map(event_type=>({device_id:deviceId,event_type,enabled:!!enabled[event_type],updated_at:now})),
+  {onConflict:"device_id,event_type"}
+ ));
+ return enabled;
+}
+async function pushTokenRegister(req:Request,body:any){
+ const d=await device(req),token=text(body.token,4096);
+ if(token.length<20)return json({error:"Token push no válido."},400);
+ await ok(db.from("galaxy_push_tokens").delete().eq("token",token).neq("device_id",d.id));
+ await ok(db.from("galaxy_push_tokens").upsert({device_id:d.id,token,platform:"android",updated_at:new Date().toISOString()},{onConflict:"device_id"}));
+ const subscriptions=await savePushPreferences(String(d.id),body.events||{});
+ return json({ok:true,pushConfigured:!!fcmCredentials(),subscriptions});
+}
+async function pushTokenUnregister(req:Request){
+ const d=await device(req);
+ await Promise.all([
+  ok(db.from("galaxy_push_tokens").delete().eq("device_id",d.id)),
+  ok(db.from("galaxy_push_subscriptions").delete().eq("device_id",d.id))
+ ]);
+ return json({ok:true});
+}
+async function pushPreferences(req:Request,body:any){
+ const d=await device(req),subscriptions=await savePushPreferences(String(d.id),body.events||{});
+ return json({ok:true,subscriptions,pushConfigured:!!fcmCredentials()});
+}
+async function dispatchPushEvent(sourceDevice:any,targetPerson:string,eventType:string,payload:any){
+ if(!PUSH_EVENT_TYPES.includes(eventType))throw new Error("Tipo de evento push no válido.");
+ const sanitized=sanitizePushPayload(eventType,payload);
+ const event=await ok(db.from("galaxy_push_events").insert({
+  source_device_id:sourceDevice?.id||null,source_person:String(sourceDevice?.person||"0"),target_person:targetPerson,event_type:eventType,payload:sanitized
+ }).select("id").single());
+ sanitized.eventId=String(event.id);
+ const [devices,tokens,subscriptions]=await Promise.all([
+  ok(db.from("galaxy_devices").select("id").eq("person",targetPerson).is("revoked_at",null).limit(20)),
+  ok(db.from("galaxy_push_tokens").select("device_id,token").limit(50)),
+  ok(db.from("galaxy_push_subscriptions").select("device_id,event_type,enabled").eq("event_type",eventType).eq("enabled",true).limit(50))
+ ]);
+ const allowed=new Set((subscriptions||[]).map((row:any)=>String(row.device_id)));
+ const tokenByDevice=new Map((tokens||[]).map((row:any)=>[String(row.device_id),String(row.token)]));
+ const credentials=fcmCredentials(),deliveries:any[]=[];
+ for(const target of devices||[]){
+  const deviceId=String(target.id),token=tokenByDevice.get(deviceId);
+  if(!token||!allowed.has(deviceId)){
+   deliveries.push({event_id:event.id,device_id:deviceId,status:"skipped",error_code:!token?"no-token":"disabled"});
+   continue;
+  }
+  if(!credentials){
+   deliveries.push({event_id:event.id,device_id:deviceId,status:"skipped",error_code:"fcm-not-configured"});
+   continue;
+  }
+  try{
+   await sendFcmData(credentials,token,eventType,sanitized,eventType==="gesture"?900:3600);
+   deliveries.push({event_id:event.id,device_id:deviceId,status:"sent",error_code:null});
+  }catch(error:any){
+   const code=text(error?.code||"",80),unregistered=/UNREGISTERED|NOT_FOUND/i.test(code)||/UNREGISTERED/i.test(String(error?.message||""));
+   deliveries.push({event_id:event.id,device_id:deviceId,status:unregistered?"unregistered":"failed",error_code:code||"fcm-error"});
+   if(unregistered)await ok(db.from("galaxy_push_tokens").delete().eq("device_id",deviceId));
+  }
+ }
+ if(deliveries.length)await ok(db.from("galaxy_push_deliveries").upsert(deliveries,{onConflict:"event_id,device_id"}));
+ return {eventId:event.id,sent:deliveries.filter(x=>x.status==="sent").length,configured:!!credentials};
+}
+
+async function bondGestureCatalog(req:Request){
+ await device(req);
+ const custom=await ok(db.from("galaxy_bond_gestures").select("*").eq("enabled",true).order("created_at",{ascending:true}).limit(50));
+ return json({builtins:BUILTIN_GESTURES,custom:custom||[]});
+}
+async function bondGestureSave(req:Request,body:any){
+ const d=await device(req);
+ let value;try{value=normalizeCustomGesture(body.gesture||body);}catch(e){return json({error:e instanceof Error?e.message:"Gesto no válido."},400);}
+ if(body.id){
+  const row=(await ok(db.from("galaxy_bond_gestures").select("*").eq("id",String(body.id)).limit(1)))?.[0];
+  if(!row)return json({error:"El gesto ya no existe."},404);
+  if(String(row.created_by)!==String(d.person))return json({error:"Solo quien creó este gesto puede editarlo."},403);
+  if(Number(body.version)!==Number(row.version))return json({error:"Este gesto cambió en otro dispositivo."},409);
+  const updated=await ok(db.from("galaxy_bond_gestures").update({...value}).eq("id",row.id).eq("version",row.version).select("*").single());
+  return json({gesture:updated});
+ }
+ const created=await ok(db.from("galaxy_bond_gestures").insert({...value,created_by:String(d.person)}).select("*").single());
+ return json({gesture:created},201);
+}
+async function bondGestureDelete(req:Request,body:any){
+ const d=await device(req),row=(await ok(db.from("galaxy_bond_gestures").select("*").eq("id",String(body.id||"")).limit(1)))?.[0];
+ if(!row)return json({ok:true});
+ if(String(row.created_by)!==String(d.person))return json({error:"Solo quien creó este gesto puede eliminarlo."},403);
+ if(Number(body.version)!==Number(row.version))return json({error:"Este gesto cambió en otro dispositivo."},409);
+ await ok(db.from("galaxy_bond_gestures").delete().eq("id",row.id).eq("version",row.version));
+ return json({ok:true});
+}
+async function bondSendGesture(req:Request,body:any){
+ const d=await device(req),person=String(d.person),id=String(body.gestureId||body.gesture||"");
+ const custom=await ok(db.from("galaxy_bond_gestures").select("*").eq("enabled",true).limit(50));
+ const definition=resolveGesture(id,custom||[]);
+ if(!definition)return json({error:"Gesto no válido."},400);
+ const recent=await ok(db.from("galaxy_bond").select("id").eq("author",person).eq("type","gesture").gt("created",new Date(Date.now()-60000).toISOString()).limit(20));
+ if((recent?.length||0)>=20)return json({error:"Espera un momento antes de enviar otro gesto"},429);
+ const snapshot=gestureSnapshot(definition);
+ const row=await ok(db.from("galaxy_bond").insert({type:"gesture",author:person,data:{gesture:snapshot.gestureId,...snapshot}}).select("*").single());
+ await recordParticipation(person);
+ const target=person==="0"?"1":"0";
+ const push=await dispatchPushEvent(d,target,"gesture",{
+  title:"Un gesto para ti",body:snapshot.text,icon:snapshot.icon,behavior:snapshot.behavior,gestureId:String(row.id)
+ });
+ return json({entry:row,push},201);
+}
+
 async function bondState(person:string){
-  const [entries,participation,config]=await Promise.all([
+  const [entries,participation,config,customGestures]=await Promise.all([
     ok(db.from("galaxy_bond").select("*").order("created",{ascending:false}).limit(200)),
     ok(db.from("galaxy_bond_participation").select("day,person")),
-    ok(db.from("galaxy_bond_config").select("photo_path").eq("id",1).maybeSingle())
+    ok(db.from("galaxy_bond_config").select("photo_path").eq("id",1).maybeSingle()),
+    ok(db.from("galaxy_bond_gestures").select("*").eq("enabled",true).order("created_at",{ascending:true}).limit(50))
   ]);
-  const days=new Map<string,Set<string>>();
-  for(const row of participation||[]){if(!days.has(row.day))days.set(row.day,new Set());days.get(row.day)!.add(row.person);}
-  const earned=[...days.values()].filter(s=>s.has("0")&&s.has("1")).length;
+  const progress=computeBondProgress(participation||[],new Date());
   const visible=await Promise.all((entries||[]).map(async(row:any)=>{
     const copy=structuredClone(row);
     if(copy.type==="game"&&copy.author!==person&&!Object.hasOwn(copy.data||{},"guess"))delete copy.data.answer;
@@ -226,7 +357,7 @@ async function bondState(person:string){
     }
     return copy;
   }));
-  return {entries:visible,garden:{days:earned,stage:earned>=30?4:earned>=14?3:earned>=7?2:earned>=1?1:0},widget:{photoPath:config?.photo_path||""}};
+  return {entries:visible,garden:{...progress.garden,currentStreak:progress.currentStreak,recordStreak:progress.recordStreak},currentStreak:progress.currentStreak,recordStreak:progress.recordStreak,totalDays:progress.totalDays,gestures:{builtins:BUILTIN_GESTURES,custom:customGestures||[]},widget:{photoPath:config?.photo_path||""}};
 }
 
 function maskedDaily(rows:any[],person:string){
@@ -793,7 +924,7 @@ function validateBond(type:string,data:any){
   if(!data||typeof data!=="object"||Array.isArray(data))throw new Error("Datos no válidos");
   if(type==="gesture"){
     const gesture=String(data.gesture||"");
-    if(!["hug","kiss","miss"].includes(gesture))throw new Error("Gesto no válido");
+    if(!["hug","kiss","miss","tap"].includes(gesture))throw new Error("Gesto no válido");
     return {gesture};
   }
   if(type==="game"){
@@ -889,7 +1020,7 @@ async function bondWidget(req:Request,body:any){
 }
 
 async function gesture(req:Request,body:any){
-  return bondSave(req,{type:"gesture",data:{gesture:body.gesture}});
+  return bondSendGesture(req,{gestureId:body.gesture});
 }
 
 function meters(lat1:number,lon1:number,lat2:number,lon2:number){if(![lat1,lon1,lat2,lon2].every(Number.isFinite))return Infinity;const R=6371000,p=Math.PI/180,dLat=(lat2-lat1)*p,dLon=(lon2-lon1)*p,a=Math.sin(dLat/2)**2+Math.cos(lat1*p)*Math.cos(lat2*p)*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(a));}
@@ -1463,6 +1594,9 @@ Deno.serve(async req=>{
     if(action==="pair-code-create")return await pairCodeCreate(req,body);
     if(action==="profile-repair")return await profileRepair(req,body);
     if(action==="device-revoke")return await deviceRevoke(req,body);
+    if(action==="push-token-register")return await pushTokenRegister(req,body);
+    if(action==="push-token-unregister")return await pushTokenUnregister(req);
+    if(action==="push-preferences")return await pushPreferences(req,body);
     if(action==="moments")return await moments(req);
     if(action==="gesture")return await gesture(req,body);
     if(action==="history")return await history(req,body);
@@ -1476,6 +1610,10 @@ Deno.serve(async req=>{
     if(action==="backup-export")return await backupExport(req);
     if(action==="backup-restore")return await backupRestore(req,body);
     if(action==="backup-import")return await backupRestore(req,body);
+    if(action==="bond-send-gesture")return await bondSendGesture(req,body);
+    if(action==="bond-gesture-list")return await bondGestureCatalog(req);
+    if(action==="bond-gesture-save")return await bondGestureSave(req,body);
+    if(action==="bond-gesture-delete")return await bondGestureDelete(req,body);
     if(action==="bond-save")return await bondSave(req,body);
     if(action==="bond-update")return await bondUpdate(req,body);
     if(action==="bond-guess")return await bondGuess(req,body);
