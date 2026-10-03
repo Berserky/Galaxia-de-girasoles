@@ -397,6 +397,17 @@ function insightPeriodNav(summary){
  const prev=window.GalaxyInsights?.shiftPeriod(period,-1),next=window.GalaxyInsights?.shiftPeriod(period,1);
  return '<div class="insights-nav"><button class="btn small ghost" data-action="insights-period" data-kind="'+attr(period.kind)+'" data-key="'+attr(prev?.key||'')+'" aria-label="Periodo anterior">'+ico('chevron-left')+'</button><div><p class="eyebrow">'+esc(period.kind==='year'?'GALAXIA WRAPPED':period.kind==='week'?'NUESTRA SEMANA':'NUESTRO MES')+'</p><h2>'+esc(insightPeriodTitle(period))+'</h2></div><button class="btn small ghost" data-action="insights-period" data-kind="'+attr(period.kind)+'" data-key="'+attr(next?.key||'')+'" aria-label="Periodo siguiente" '+(next?'':'disabled')+'>'+ico('chevron-right')+'</button></div>';
 }
+function insightExtras(summary){
+ const counts=summary.counts||{},bond=summary.bond||{},connection=summary.connection||{},rows=[];
+ if(Number(counts.songs||0))rows.push('<span>'+ico('music')+Number(counts.songs||0)+' canciones</span>');
+ if(Number(counts.events||0))rows.push('<span>'+ico('calendar-heart')+Number(counts.events||0)+' fechas especiales</span>');
+ if(Number(counts.journeys||0))rows.push('<span>'+ico('route')+Number(counts.journeys||0)+' viajes guardados</span>');
+ if(Number(bond.voices||0))rows.push('<span>'+ico('mic')+Number(bond.voices||0)+' mensajes de voz</span>');
+ if(Number(connection.answer_days||0))rows.push('<span>'+ico('message-circle')+Number(connection.answer_days||0)+' preguntas respondidas por ambos</span>');
+ if(Number(counts.notes||0))rows.push('<span>'+ico('file-text')+Number(counts.notes||0)+' notas</span>');
+ if(Number(counts.wishesDone||0))rows.push('<span>'+ico('star')+Number(counts.wishesDone||0)+' deseos vividos</span>');
+ return rows.length?'<div class="card insights-extra"><h3>También pasó</h3><div class="insight-extra-row">'+rows.join('')+'</div></div>':'';
+}
 function insightHighlights(summary){
  const rows=summary.highlights||[];if(!rows.length)return'';
  return '<div class="insights-highlights"><div class="section-head"><div><h3>Momentos para volver a mirar</h3><p>Recuerdos y eventos de este periodo.</p></div></div>'+rows.map(i=>'<button class="monthly-highlight" data-action="universal-search-result" data-type="item" data-id="'+attr(i.id)+'" data-kind="'+attr(i.kind)+'"><span>'+ico(kindMeta[i.kind]?.[0]||'sparkles')+'</span><span><b>'+esc(i.title||'Parte de nuestra historia')+'</b><small>'+esc(fmtDate(i.date))+'</small></span>'+ico('chevron-right')+'</button>').join('')+'</div>';
@@ -450,10 +461,15 @@ function wrappedCards(summary){
  const entries=Object.entries(summary.series||{}),score=row=>Number(row.memories||0)+Number(row.plansDone||0)+Number(row.events||0)+Number(row.songs||0)+Number(row.mood_days||0);
  const active=entries.slice().sort((a,b)=>score(b[1])-score(a[1]))[0];
  const monthName=active?window.GalaxyMonthly?.monthLabel(active[0]):'';
+ const places=(summary.places?.visits||[]).length;
  return '<div class="wrapped-deck" aria-label="Galaxia Wrapped">'+
   '<article class="wrapped-card"><p class="eyebrow">GALAXIA WRAPPED</p><h2>'+Number(summary.counts?.memories||0)+' recuerdos</h2><p>Los momentos que decidieron guardar este año.</p></article>'+
   '<article class="wrapped-card"><p class="eyebrow">CAMINOS</p><h2>'+esc(fmtDistance(Number(summary.trips?.distance_m||0)))+'</h2><p>'+Number(summary.trips?.count||0)+' recorridos registrados.</p></article>'+
   '<article class="wrapped-card"><p class="eyebrow">TIEMPO JUNTOS</p><h2>'+esc(fmtDuration(Number(summary.encounters?.together_seconds||0)))+'</h2><p>'+Number(summary.encounters?.count||0)+' encuentros detectados.</p></article>'+
+  '<article class="wrapped-card"><p class="eyebrow">NUESTRA MÚSICA</p><h2>'+Number(summary.counts?.songs||0)+' canciones</h2><p>Las canciones que quedaron guardadas en su historia.</p></article>'+
+  '<article class="wrapped-card"><p class="eyebrow">CÓMO ESTUVIMOS</p><h2>'+Number(summary.connection?.mood_days||0)+' días con mood</h2><p>'+Number(summary.questions?.answered_together_days||0)+' preguntas respondidas por ambos.</p></article>'+
+  '<article class="wrapped-card"><p class="eyebrow">PEQUEÑOS GESTOS</p><h2>'+Number(summary.bond?.gestures||0)+' gestos</h2><p>Momentos rápidos para decir “estoy aquí”.</p></article>'+
+  '<article class="wrapped-card"><p class="eyebrow">LUGARES Y VIAJES</p><h2>'+places+' lugares</h2><p>'+Number(summary.counts?.journeys||0)+' viajes guardados dentro de la galaxia.</p></article>'+
   (active?'<article class="wrapped-card"><p class="eyebrow">MES CON MÁS HISTORIA</p><h2>'+esc(monthName||active[0])+'</h2><p>El mes con más actividad guardada dentro de Nuestra Galaxia.</p></article>':'')+
  '</div>';
 }
@@ -477,7 +493,7 @@ function insightsSummaryMarkup(summary){
  insightMetric('heart-handshake',encounters.count||0,'encuentros',fmtDuration(Number(encounters.together_seconds||0))+' juntos')+
  insightMetric('smile',connection.mood_days||0,'días con mood de ambos',Number(connection.answer_days||0)+' preguntas de ambos')+
  insightMetric('hand-heart',bond.gestures||0,'gestos')+
- '</div>'+comparisonMarkup(summary)+insightPlaces(summary)+emotionalHeatmap(summary)+emotionalTrends(summary)+insightPhotos(summary)+insightHighlights(summary)+achievementGrid(summary)
+ '</div>'+insightExtras(summary)+comparisonMarkup(summary)+insightPlaces(summary)+emotionalHeatmap(summary)+emotionalTrends(summary)+insightPhotos(summary)+insightHighlights(summary)+achievementGrid(summary)
  :'<div class="universal-search-empty">'+ico('moon-star')+'<h3>Este periodo todavía está escribiéndose</h3><p>Cuando existan recuerdos, recorridos, encuentros o gestos, aparecerán aquí.</p></div>'+achievementGrid(summary))+
  '</div>';
 }
