@@ -1054,7 +1054,7 @@ create table if not exists public.galaxy_context_settings (
  arrived_safe_enabled boolean not null default false,
  date_suggestions boolean not null default true,
  memory_suggestions boolean not null default true,
- shared_trip_detection boolean not null default true,
+ shared_trip_detection boolean not null default false,
  updated_at timestamptz not null default now()
 );
 insert into public.galaxy_context_settings(person) values('0'),('1')
