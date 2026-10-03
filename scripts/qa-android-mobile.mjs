@@ -34,6 +34,7 @@ const widgetPrefs=read('android/app/src/main/java/com/nuestragalaxia/companion/W
 const trackingService=read('android/app/src/main/java/com/nuestragalaxia/companion/TrackingService.java');
 const updater=read('android/app/src/main/java/com/nuestragalaxia/companion/UpdateManager.java');
 const edge=read('supabase/functions/android-companion/index.ts');
+const serverInsights=read('supabase/functions/android-companion/insights.ts');
 const dateEngine=read('supabase/functions/android-companion/date-engine.ts');
 const goalsEngine=read('supabase/functions/android-companion/goals-engine.ts');
 const bondEngine=read('supabase/functions/android-companion/bond-engine.ts');
@@ -285,7 +286,7 @@ assert.ok(widgetPrefs.includes('photo')&&widgetPrefs.includes('distance')&&widge
 assert.ok(widget.includes('getAppWidgetOptions')&&widget.includes('compact')&&widget.includes('WidgetPrefs'),'Widget 2.0 debe adaptarse a tamaño y preferencias');
 assert.ok(app.includes('Nuestro jardín')&&app.includes('currentStreak')&&app.includes('recordStreak')&&app.includes('bond-gesture-new')&&app.includes('bond-haptics'),'La UI debe exponer jardín, rachas, gestos y hápticos');
 assert.ok(css.includes('/* Mega Update 3.0 · Galaxy Bond Engine 2.0 */')&&css.includes('.bond-garden-scene'),'Faltan estilos del jardín 2.0');
-assert.ok(insights.includes('current_streak')&&insights.includes('record_streak')&&insights.includes('gestures'),'Insights debe consumir métricas Bond 2.0');
+assert.ok(serverInsights.includes('current_streak')&&serverInsights.includes('record_streak')&&serverInsights.includes('gestures'),'Insights debe consumir métricas Bond 2.0');
 assert.equal(build.includes('FCM_SERVICE_ACCOUNT_JSON')||main.includes('FCM_SERVICE_ACCOUNT_JSON')||app.includes('FCM_SERVICE_ACCOUNT_JSON'),false,'La credencial privada FCM jamás puede entrar al cliente');
 
 console.log('QA móvil Nuestra Galaxia: OK');
