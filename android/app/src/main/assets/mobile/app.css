@@ -663,3 +663,15 @@ html:not([data-theme="daylight"]) .gmap-marker.place button{background:var(--sur
 .theme-local-note .ui-icon{width:14px;height:14px;flex:0 0 auto;color:var(--accent)}
 @media(max-width:360px){.theme-grid{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){html,body,.card,.modal,.bottom-nav,.global-player,.input,textarea,select{transition:none}}
+
+/* Super Update · Google Photos Picker + shared Drive */
+.cloud-album-card{margin-top:12px;border-color:color-mix(in srgb,var(--accent) 18%,var(--border));background:linear-gradient(135deg,var(--surface),color-mix(in srgb,var(--accent) 5%,var(--surface)))}
+.cloud-album-card.connected{border-color:color-mix(in srgb,var(--good) 34%,var(--border))}
+.cloud-album-card>.row>svg{width:24px;height:24px;color:var(--accent);flex:0 0 auto}
+.cloud-album-card.connected>.row>svg{color:var(--good)}
+.album-source-grid{margin-top:16px}
+.cloud-source-note{display:flex;align-items:flex-start;gap:7px;margin:14px 2px 0!important;font-size:10px!important;line-height:1.5;color:var(--muted)}
+.cloud-source-note .ui-icon{width:15px;height:15px;flex:0 0 auto;color:var(--accent)}
+.cloud-sync-progress{text-align:center;padding:20px 6px}
+.cloud-sync-progress .skeleton{margin-bottom:16px}
+.cloud-sync-progress h3,.cloud-sync-progress p{margin:5px 0}
