@@ -8,6 +8,8 @@ import vm from 'node:vm';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const source=readFileSync(resolve(root,'android/app/src/main/assets/mobile/insights.js'),'utf8');
 const html=readFileSync(resolve(root,'android/app/src/main/assets/mobile/index.html'),'utf8');
+const appSource=readFileSync(resolve(root,'android/app/src/main/assets/mobile/app.js'),'utf8');
+const css=readFileSync(resolve(root,'android/app/src/main/assets/mobile/app.css'),'utf8');
 const context={module:{exports:{}},exports:{},globalThis:{},Intl,Date,Math};
 vm.runInNewContext(source,context);
 const {periodFor,shiftPeriod,anniversaryDay,relationshipClock,compareMetrics,compatibleMood}=context.module.exports;
@@ -78,4 +80,50 @@ test('Android loads the insights domain before the main application',()=>{
   const app=html.indexOf('src="./app.js"');
   assert.ok(insights>=0,'insights.js must be loaded by the WebView');
   assert.ok(app>insights,'insights.js must load before app.js');
+});
+
+
+test('home exposes week month and year through one reusable insights experience',()=>{
+ assert.ok(appSource.includes('function insightsTeaser()'));
+ assert.ok(appSource.includes('function openInsights('));
+ assert.ok(appSource.includes('function insightsSummaryMarkup('));
+ for(const action of ['insights-week-open','insights-month-open','insights-year-open','insights-period'])
+  assert.ok(appSource.includes('data-action="'+action+'"')||appSource.includes("a==='"+action+"'"),action+' must be wired');
+ assert.ok(appSource.includes("api('insights-summary'"),'UI must consume the generic insights endpoint');
+ assert.equal(appSource.includes("api('monthly-summary'"),false,'month UI must not use the legacy monthly endpoint');
+});
+
+test('relationship clock and anniversary experience use configured start date without persistence',()=>{
+ assert.ok(appSource.includes('function relationshipClockCard()'));
+ assert.ok(appSource.includes('GalaxyInsights?.relationshipClock'));
+ assert.ok(appSource.includes('function anniversaryInsightsBanner()'));
+ assert.ok(appSource.includes("openInsights('anniversary'"));
+ const anniversaryBlock=appSource.slice(appSource.indexOf('function anniversaryInsightsBanner()'),appSource.indexOf('function livingMomentCard()'));
+ assert.equal(/item-save|insert|saveItem/.test(anniversaryBlock),false,'anniversary experience must stay derived');
+});
+
+test('Wrapped is rendered from annual series in capture-friendly cards and respects reduced motion',()=>{
+ assert.ok(appSource.includes('function wrappedCards('));
+ assert.ok(appSource.includes('summary.series'));
+ assert.ok(css.includes('.wrapped-card'));
+ assert.ok(css.includes('@media(prefers-reduced-motion:reduce)'));
+ const reduced=css.slice(css.lastIndexOf('@media(prefers-reduced-motion:reduce)'));
+ assert.ok(reduced.includes('.wrapped-card'),'Wrapped animation must be disabled for reduced motion');
+});
+
+test('emotional calendar is accessible and trends stay descriptive',()=>{
+ assert.ok(appSource.includes('function emotionalHeatmap('));
+ assert.ok(appSource.includes('aria-label='));
+ assert.ok(appSource.includes('function emotionalTrends('));
+ const start=appSource.indexOf('function emotionalTrends('),end=appSource.indexOf('function achievementGrid(',start);
+ const trends=appSource.slice(start,end).toLowerCase();
+ for(const clinical of ['diagnóstico','trastorno','depresión','ansiedad clínica','salud mental'])
+  assert.equal(trends.includes(clinical),false,'emotional trends must not diagnose: '+clinical);
+});
+
+test('achievements render from backend-derived catalog without creating a parallel store',()=>{
+ assert.ok(appSource.includes('function achievementGrid('));
+ assert.ok(appSource.includes('summary.achievements'));
+ assert.ok(css.includes('.achievement-card'));
+ assert.equal(appSource.includes('achievement-save'),false);
 });
