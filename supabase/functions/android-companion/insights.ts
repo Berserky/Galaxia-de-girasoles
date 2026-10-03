@@ -135,6 +135,11 @@ const ACHIEVEMENTS=[
   ["distance-1000","1.000 km juntos","Mil kilómetros en la misma galaxia.","route","distance_m",1000000],
   ["journey-first","Primer viaje","El primer viaje guardado en Nuestra Galaxia.","map","journeys",1],
   ["participation-30","30 días juntos","Treinta días con participación de ambos.","sprout","joint_days",30],
+  ["garden-100","Jardín en flor","Cien días acumulados alimentando su jardín.","flower-2","joint_days",100],
+  ["streak-7","Una semana seguida","Siete días consecutivos participando los dos.","sparkles","current_streak",7],
+  ["streak-record-30","Racha memorable","Un récord histórico de treinta días consecutivos.","award","record_streak",30],
+  ["gestures-25","25 veces pensé en ti","Veinticinco gestos enviados dentro de la galaxia.","hand-heart","gestures",25],
+  ["gestures-100","100 gestos","Cien pequeñas señales para decir aquí estoy.","hand-heart","gestures",100],
   ["anniversary-1","Primer mes","El primer mes de esta historia.","calendar-heart","months",1],
   ["anniversary-6","Seis meses","Medio año construyendo recuerdos.","calendar-heart","months",6],
   ["anniversary-12","Un año","Doce meses de historia compartida.","calendar-heart","months",12],
@@ -148,6 +153,9 @@ export function evaluateAchievements(input:any){
     distance_m:Math.max(0,Number(input?.distance_m)||0),
     journeys:Math.max(0,Number(input?.journeys)||0),
     joint_days:Math.max(0,Number(input?.joint_days)||0),
+    current_streak:Math.max(0,Number(input?.current_streak)||0),
+    record_streak:Math.max(0,Number(input?.record_streak)||0),
+    gestures:Math.max(0,Number(input?.gestures)||0),
     months:elapsedMonths(String(input?.startDate||""),String(input?.today||""))
   } as Record<string,number>;
   return ACHIEVEMENTS.map(([id,title,description,icon,metric,threshold])=>{
