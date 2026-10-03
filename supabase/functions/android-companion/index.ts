@@ -668,14 +668,19 @@ async function presenceSet(req:Request,body:any){
 
 async function backupExport(req:Request){
   await device(req);
-  const [settings,items,daily,bond,places]=await Promise.all([
+  const [settings,items,daily,bond,places,goals,goalParticipants,goalSteps,goalLinks,goalContributions]=await Promise.all([
     ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
     ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:true}).limit(2000)),
     ok(db.from("galaxy_daily").select("day,person,mood,answer").order("day",{ascending:true}).limit(1000)),
     ok(db.from("galaxy_bond").select("id,type,author,data,created").order("created",{ascending:true}).limit(2000)),
-    ok(db.from("galaxy_places").select("id,owner,name,kind,latitude,longitude,note,created_at").order("created_at",{ascending:true}).limit(500))
+    ok(db.from("galaxy_places").select("id,owner,name,kind,latitude,longitude,note,created_at").order("created_at",{ascending:true}).limit(500)),
+    ok(db.from("galaxy_goals").select("*").order("created_at",{ascending:true}).limit(1000)),
+    ok(db.from("galaxy_goal_participants").select("*").limit(2000)),
+    ok(db.from("galaxy_goal_steps").select("*").order("position",{ascending:true}).limit(5000)),
+    ok(db.from("galaxy_goal_links").select("*").order("created_at",{ascending:true}).limit(5000)),
+    ok(db.from("galaxy_goal_contributions").select("*").order("contribution_date",{ascending:true}).limit(10000))
   ]);
-  return json({format:"nuestra-galaxia-backup",version:1,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:items||[],daily:daily||[],bond:bond||[],places:places||[]});
+  return json({format:"nuestra-galaxia-backup",version:2,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:items||[],daily:daily||[],bond:bond||[],places:places||[],goals:goals||[],goalParticipants:goalParticipants||[],goalSteps:goalSteps||[],goalLinks:goalLinks||[],goalContributions:goalContributions||[]});
 }
 
 function uuidish(v:unknown){return /^[0-9a-f-]{36}$/i.test(String(v||""));}
@@ -683,12 +688,17 @@ function uuidish(v:unknown){return /^[0-9a-f-]{36}$/i.test(String(v||""));}
 async function backupRestore(req:Request,body:any){
   await device(req);
   const backup=body?.backup;
-  if(!backup||backup.format!=="nuestra-galaxia-backup"||Number(backup.version)!==1)return json({error:"La copia no pertenece a Nuestra Galaxia."},400);
+  if(!backup||backup.format!=="nuestra-galaxia-backup"||![1,2].includes(Number(backup.version)))return json({error:"La copia no pertenece a Nuestra Galaxia."},400);
   const items=Array.isArray(backup.items)?backup.items.slice(0,2000):[];
   const daily=Array.isArray(backup.daily)?backup.daily.slice(0,1000):[];
   const bond=Array.isArray(backup.bond)?backup.bond.slice(0,2000):[];
   const places=Array.isArray(backup.places)?backup.places.slice(0,500):[];
-  let restoredItems=0,restoredDaily=0,restoredBond=0,restoredPlaces=0;
+  const goals=Array.isArray(backup.goals)?backup.goals.slice(0,1000):[];
+  const goalParticipants=Array.isArray(backup.goalParticipants)?backup.goalParticipants.slice(0,2000):[];
+  const goalSteps=Array.isArray(backup.goalSteps)?backup.goalSteps.slice(0,5000):[];
+  const goalLinks=Array.isArray(backup.goalLinks)?backup.goalLinks.slice(0,5000):[];
+  const goalContributions=Array.isArray(backup.goalContributions)?backup.goalContributions.slice(0,10000):[];
+  let restoredItems=0,restoredDaily=0,restoredBond=0,restoredPlaces=0,restoredGoals=0,restoredGoalParticipants=0,restoredGoalSteps=0,restoredGoalLinks=0,restoredGoalContributions=0;
 
   if(backup.settings&&typeof backup.settings==="object"&&!Array.isArray(backup.settings)){
     const current=await ok(db.from("galaxy_settings").select("data").eq("id",1).single());
@@ -713,6 +723,49 @@ async function backupRestore(req:Request,body:any){
     restoredItems++;
   }
 
+  for(const row of goals){
+    const id=String(row?.id||""),createdBy=String(row?.created_by||"");
+    if(!uuidish(id)||!["0","1"].includes(createdBy))continue;
+    let normalized;try{normalized=normalizeGoalInput({...row,targetAmount:row.target_amount,targetDate:row.target_date,participants:["0"]});}catch{continue;}
+    await ok(db.from("galaxy_goals").upsert({
+      id,kind:normalized.kind,title:normalized.title,description:normalized.description,category:normalized.category,
+      target_date:normalized.target_date,status:normalized.status,target_amount:normalized.target_amount,created_by:createdBy,
+      completed_at:row.completed_at||null,created_at:row.created_at||new Date().toISOString(),updated_at:row.updated_at||row.created_at||new Date().toISOString()
+    },{onConflict:"id",ignoreDuplicates:true}));
+    restoredGoals++;
+  }
+
+  for(const row of goalParticipants){
+    const goalId=String(row?.goal_id||""),person=String(row?.person||"");
+    if(!uuidish(goalId)||!["0","1"].includes(person))continue;
+    await ok(db.from("galaxy_goal_participants").upsert({goal_id:goalId,person},{onConflict:"goal_id,person",ignoreDuplicates:true}));
+    restoredGoalParticipants++;
+  }
+
+  for(const row of goalSteps){
+    const id=String(row?.id||""),goalId=String(row?.goal_id||""),title=text(row?.title,300),position=Number(row?.position);
+    if(!uuidish(id)||!uuidish(goalId)||!title||!Number.isInteger(position)||position<0)continue;
+    const completedBy=row.completed_by==null?null:String(row.completed_by);
+    if(completedBy!==null&&!["0","1"].includes(completedBy))continue;
+    await ok(db.from("galaxy_goal_steps").upsert({id,goal_id:goalId,title,position,completed_at:row.completed_at||null,completed_by:completedBy,created_at:row.created_at||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
+    restoredGoalSteps++;
+  }
+
+  for(const row of goalContributions){
+    const id=String(row?.id||""),goalId=String(row?.goal_id||""),contributor=String(row?.contributor||"");
+    if(!uuidish(id)||!uuidish(goalId)||!["0","1"].includes(contributor))continue;
+    let value;try{value=normalizeContribution({amount:row.amount,date:row.contribution_date,note:row.note},contributor);}catch{continue;}
+    await ok(db.from("galaxy_goal_contributions").upsert({id,goal_id:goalId,...value,created_at:row.created_at||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
+    restoredGoalContributions++;
+  }
+
+  for(const row of goalLinks){
+    const id=String(row?.id||""),goalId=String(row?.goal_id||""),itemId=String(row?.item_id||""),relation=String(row?.relation||"");
+    if(!uuidish(id)||!uuidish(goalId)||!uuidish(itemId)||!["note","memory","plan","source-plan","source-wish"].includes(relation))continue;
+    await ok(db.from("galaxy_goal_links").upsert({id,goal_id:goalId,item_id:itemId,relation,created_at:row.created_at||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
+    restoredGoalLinks++;
+  }
+
   for(const row of daily){
     const day=String(row?.day||""),person=String(row?.person||""),mood=text(row?.mood,30),answer=text(row?.answer,3000);
     if(!validDate(day)||!["0","1"].includes(person))continue;
@@ -729,7 +782,7 @@ async function backupRestore(req:Request,body:any){
     await ok(db.from("galaxy_bond").upsert({id,type,author,data,created:row.created||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
     restoredBond++;
   }
-  return json({ok:true,restored:{items:restoredItems,daily:restoredDaily,bond:restoredBond,places:restoredPlaces}});
+  return json({ok:true,restored:{items:restoredItems,daily:restoredDaily,bond:restoredBond,places:restoredPlaces,goals:restoredGoals,goalParticipants:restoredGoalParticipants,goalSteps:restoredGoalSteps,goalLinks:restoredGoalLinks,goalContributions:restoredGoalContributions},restoredGoals});
 }
 
 async function recordParticipation(person:string){
