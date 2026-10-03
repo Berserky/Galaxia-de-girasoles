@@ -97,13 +97,15 @@ assert.ok(app.includes('function openUniversalSearch()')&&app.includes('function
 assert.ok(app.includes('data-action="universal-search-open"')&&app.includes('data-action="universal-search-result"'),'Faltan accesos del buscador universal');
 assert.ok(css.includes('.universal-search-result')&&css.includes('.search-hit'),'Faltan estilos del buscador universal');
 assert.ok(monthly.includes('function shiftMonth(')&&monthly.includes('function summaryHasActivity('),'Falta módulo mensual independiente');
-assert.ok(app.includes('function monthlySummaryTeaser()')&&app.includes('function openMonthlySummary('),'Falta experiencia mensual Android');
-assert.ok(app.includes('data-action="monthly-summary-open"')&&app.includes("api('monthly-summary'"),'Falta acceso al resumen mensual');
+assert.ok(app.includes('function monthlySummaryTeaser()')&&app.includes('function openMonthlySummary('),'Falta compatibilidad de experiencia mensual Android');
+assert.ok(app.includes('data-action="insights-month-open"')&&app.includes("api('insights-summary'"),'El mes 3.0 debe consumir Galaxy Insights');
 assert.ok(mainActions.has('insights-summary')&&edgeActions.has('insights-summary'),'Falta Galaxy Insights end-to-end');
 assert.ok(insights.includes('function periodFor(')&&insights.includes('function relationshipClock('),'Falta motor temporal reutilizable de Insights');
 assert.ok(mainActions.has('monthly-summary')&&edgeActions.has('monthly-summary'),'Falta resumen mensual end-to-end');
 assert.ok(edge.includes('async function monthlySummary(')&&edge.includes('together_seconds')&&edge.includes('mood_days'),'El backend mensual debe incluir recorridos, encuentros y conexión');
-assert.ok(css.includes('.monthly-metrics')&&css.includes('.monthly-highlight'),'Faltan estilos del resumen mensual');
+assert.ok(css.includes('.insights-metrics')&&css.includes('.monthly-highlight'),'Faltan estilos del resumen común de Insights');
+assert.ok(app.includes('function insightsTeaser()')&&app.includes('function wrappedCards(')&&app.includes('function emotionalHeatmap(')&&app.includes('function achievementGrid('),'Faltan superficies Galaxy Insights 3.0');
+assert.ok(css.includes('.wrapped-card')&&css.includes('.emotion-heatmap')&&css.includes('.achievement-card'),'Faltan estilos Galaxy Insights 3.0');
 assert.ok(todayHistory.includes('sameMonthDay')&&todayHistory.includes('function anniversaryLabel(')&&todayHistory.includes('function groupHasActivity('),'Falta módulo independiente de Un día como hoy');
 assert.ok(app.includes('function todayHistoryTeaser()')&&app.includes('function openTodayHistory(')&&app.includes('function openTodayHistoryItem('),'Falta experiencia completa de Un día como hoy');
 assert.ok(app.includes('data-action="today-history-open"')&&app.includes("api('today-history'"),'Falta acceso a Un día como hoy');
