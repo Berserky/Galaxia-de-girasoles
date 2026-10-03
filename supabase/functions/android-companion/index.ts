@@ -526,6 +526,73 @@ async function gesture(req:Request,body:any){
 
 function meters(lat1:number,lon1:number,lat2:number,lon2:number){if(![lat1,lon1,lat2,lon2].every(Number.isFinite))return Infinity;const R=6371000,p=Math.PI/180,dLat=(lat2-lat1)*p,dLon=(lon2-lon1)*p,a=Math.sin(dLat/2)**2+Math.cos(lat1*p)*Math.cos(lat2*p)*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(a));}
 
+function monthBounds(month:string){
+  const [year,number]=month.split("-").map(Number);
+  const start=new Date(`${month}-01T00:00:00-05:00`);
+  const nextYear=number===12?year+1:year,nextMonth=number===12?1:number+1;
+  const nextKey=nextYear+"-"+String(nextMonth).padStart(2,"0");
+  const end=new Date(`${nextKey}-01T00:00:00-05:00`);
+  return {start:start.toISOString(),end:end.toISOString(),startDay:month+"-01",endDay:nextKey+"-01"};
+}
+function bogotaDay(value:unknown){
+  const date=new Date(String(value||""));
+  if(!Number.isFinite(date.getTime()))return"";
+  return new Intl.DateTimeFormat("en-CA",{timeZone:"America/Bogota",year:"numeric",month:"2-digit",day:"2-digit"}).format(date);
+}
+async function monthlySummary(req:Request,body:any){
+  await device(req);
+  const currentMonth=today().slice(0,7),month=String(body.month||currentMonth);
+  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)||month>currentMonth)return json({error:"Mes no válido."},400);
+  const bounds=monthBounds(month),now=Date.now();
+  const [items,trips,encounters,daily,bond]=await Promise.all([
+    ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:false}).limit(2000)),
+    ok(db.from("galaxy_trip_history").select("person,started_at,ended_at,distance_m,duration_s").gte("started_at",bounds.start).lt("started_at",bounds.end).order("started_at",{ascending:false}).limit(1000)),
+    ok(db.from("galaxy_encounters").select("id,started_at,ended_at,distance_m").gte("started_at",bounds.start).lt("started_at",bounds.end).order("started_at",{ascending:false}).limit(1000)),
+    ok(db.from("galaxy_daily").select("day,person,mood,answer").gte("day",bounds.startDay).lt("day",bounds.endDay).order("day",{ascending:true}).limit(1000)),
+    ok(db.from("galaxy_bond").select("id,type,author,created").gte("created",bounds.start).lt("created",bounds.end).order("created",{ascending:false}).limit(1000))
+  ]);
+  const monthItems=(items||[]).filter((row:any)=>{
+    const explicit=String(row?.data?.date||row?.data?.unlockDate||"");
+    const effective=explicit&&/^\d{4}-\d{2}-\d{2}$/.test(explicit)?explicit:bogotaDay(row?.created);
+    return effective.startsWith(month);
+  });
+  const counts={
+    saved:monthItems.length,
+    memories:monthItems.filter((x:any)=>x.kind==="memory").length,
+    plansDone:monthItems.filter((x:any)=>x.kind==="plan"&&x.data?.done===true).length,
+    events:monthItems.filter((x:any)=>x.kind==="event").length,
+    songs:monthItems.filter((x:any)=>x.kind==="song").length,
+    notes:monthItems.filter((x:any)=>x.kind==="note").length,
+    journeys:monthItems.filter((x:any)=>x.kind==="journey").length,
+    wishesDone:monthItems.filter((x:any)=>x.kind==="wish"&&x.data?.done===true).length
+  };
+  const tripRows=trips||[],distanceM=tripRows.reduce((sum:number,row:any)=>sum+Math.max(0,Number(row.distance_m||0)),0);
+  const byPerson:Record<string,number>={};
+  for(const row of tripRows){const p=String(row.person);byPerson[p]=(byPerson[p]||0)+Math.max(0,Number(row.distance_m||0));}
+  let togetherSeconds=0;
+  for(const row of encounters||[]){
+    const start=Math.max(Date.parse(row.started_at),Date.parse(bounds.start));
+    const end=Math.min(row.ended_at?Date.parse(row.ended_at):now,Date.parse(bounds.end),now);
+    if(Number.isFinite(start)&&Number.isFinite(end)&&end>start)togetherSeconds+=(end-start)/1000;
+  }
+  const dailyByDay=new Map<string,any[]>();
+  for(const row of daily||[]){const list=dailyByDay.get(row.day)||[];list.push(row);dailyByDay.set(row.day,list);}
+  let moodDays=0,answerDays=0;
+  for(const rows of dailyByDay.values()){
+    const people=new Set(rows.filter((x:any)=>x.mood).map((x:any)=>String(x.person)));if(people.has("0")&&people.has("1"))moodDays++;
+    const answered=new Set(rows.filter((x:any)=>x.answer).map((x:any)=>String(x.person)));if(answered.has("0")&&answered.has("1"))answerDays++;
+  }
+  const highlights=monthItems.filter((x:any)=>["memory","plan","event","journey"].includes(x.kind)&&!(x.kind==="plan"&&!x.data?.done)).sort((a:any,b:any)=>String(b.data?.date||b.created).localeCompare(String(a.data?.date||a.created))).slice(0,6).map((x:any)=>({id:x.id,kind:x.kind,title:text(x.data?.title||"",160),date:String(x.data?.date||bogotaDay(x.created))}));
+  return json({
+    month,counts,
+    trips:{count:tripRows.length,distance_m:Math.round(distanceM),by_person_m:Object.fromEntries(Object.entries(byPerson).map(([k,v])=>[k,Math.round(v)]))},
+    encounters:{count:(encounters||[]).length,together_seconds:Math.round(togetherSeconds)},
+    connection:{mood_days:moodDays,answer_days:answerDays},
+    bond:{gestures:(bond||[]).filter((x:any)=>x.type==="gesture").length,voices:(bond||[]).filter((x:any)=>x.type==="voice").length},
+    highlights
+  });
+}
+
 async function mapState(req:Request,body:any){
   await device(req);
   const [locations,places,tripPoints,destinations]=await Promise.all([
@@ -733,6 +800,7 @@ Deno.serve(async req=>{
     if(action==="bond-delete")return await bondDelete(req,body);
     if(action==="bond-widget")return await bondWidget(req,body);
     if(action==="map-state")return await mapState(req,body);
+    if(action==="monthly-summary")return await monthlySummary(req,body);
     if(action==="place-save")return await placeSave(req,body);
     if(action==="place-delete")return await placeDelete(req,body);
     if(action==="status-set")return await setStatus(req,body);
