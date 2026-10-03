@@ -90,7 +90,7 @@ test('plan editor adds canonical categories while old free-text category remains
  assert.ok(app.includes('name="planCategory"'));
  for(const value of ['this-week','when-possible','someday','travel','home'])assert.ok(app.includes('value="'+value+'"'),value);
  assert.ok(app.includes("category:fd.get('category')")||app.includes("category:String(fd.get('category')"));
- assert.ok(app.includes("planCategory:fd.get('planCategory')")||app.includes("planCategory:String(fd.get('planCategory')"));
+ assert.ok(app.includes("planCategory:fd.get('planCategory')")||app.includes("planCategory:String(fd.get('planCategory')")||app.includes("data.planCategory=fd.get('planCategory')"));
 });
 
 test('Android exposes a native camera path for Date Mode photos',()=>{
