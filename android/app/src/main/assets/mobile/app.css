@@ -856,3 +856,26 @@ html:not([data-theme="daylight"]) .gmap-attrib{backdrop-filter:blur(6px)}
 .toggle-row{display:grid;grid-template-columns:22px 1fr;gap:10px;align-items:start;padding:10px;border:1px solid var(--border);border-radius:14px;background:var(--surface2)}.toggle-row input{margin-top:3px}.toggle-row b,.toggle-row small{display:block}.toggle-row small{color:var(--muted);margin-top:2px}
 @media(min-width:700px){.context-recap-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.context-suggestion{grid-template-columns:42px minmax(0,1fr) auto}.context-suggestion .item-actions{grid-column:auto}}
 @media(prefers-reduced-motion:reduce){.context-progress i,.goal-progress i,.goal-card,.goal-step,.question-deck,.date-mode-tool,.plan-roulette,.plan-roulette.result,.wrapped-card{transition:none!important;animation:none!important}.wrapped-deck{scroll-behavior:auto}}
+
+
+/* Mega Update 3.0 · Galaxy Intelligence Engine */
+.intelligence-intro{display:grid;gap:10px}.intelligence-intro p{margin:0}
+.intelligence-tools{display:grid;gap:8px;margin-top:14px}.intelligence-tool{display:grid;grid-template-columns:42px 1fr;gap:10px;text-align:left;align-items:center;color:var(--text)}
+.intelligence-tool>span,.intelligence-feature-head>span,.intelligence-book-head>span{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 10%,var(--surface2));color:var(--accent)}
+.intelligence-tool b,.intelligence-tool small{display:block}.intelligence-tool small{color:var(--muted);font-size:9px;margin-top:2px}
+.intelligence-search-divider{display:grid;grid-template-columns:30px minmax(0,1fr);gap:4px 8px;align-items:center;margin:14px 0 8px;padding-top:12px;border-top:1px solid var(--border)}
+.intelligence-search-divider>span{grid-row:1/3;color:var(--accent)}.intelligence-search-divider b{font-size:11px}.intelligence-search-divider small{font-size:9px;color:var(--muted)}
+.universal-search-result .badge.mini{justify-self:end;font-size:7px}
+.intelligence-feature-head,.intelligence-book-head{display:grid;grid-template-columns:48px minmax(0,1fr);gap:10px;align-items:start;margin-bottom:14px}
+.intelligence-feature-head h3,.intelligence-feature-head p,.intelligence-book-head h2,.intelligence-book-head p{margin:0}.intelligence-feature-head p,.intelligence-book-head p{color:var(--muted);margin-top:3px}
+.intelligence-source-picker{max-height:58vh;overflow:auto}.intelligence-source-choice{display:grid;grid-template-columns:32px minmax(0,1fr) 20px;align-items:center;gap:8px;text-align:left;color:var(--text)}
+.intelligence-source-choice>span{color:var(--accent)}.intelligence-connection ul{margin:8px 0 0;padding-left:18px}.intelligence-connection li{margin:4px 0;color:var(--muted)}
+.intelligence-memory-picker{display:grid;gap:7px;max-height:52vh;overflow:auto}.intelligence-narrative{display:grid;gap:12px;padding:4px 0}.intelligence-narrative h2,.intelligence-narrative p{margin:0}.intelligence-narrative p{line-height:1.65}.intelligence-narrative small{color:var(--muted);font-size:8px}
+.intelligence-fallback{padding:22px}
+.intelligence-book-head{margin-top:4px}.intelligence-book-sections{display:grid;gap:8px}.intelligence-book-section{padding:0;overflow:hidden}
+.intelligence-book-section summary{cursor:pointer;display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:8px;align-items:center;padding:13px;list-style:none}.intelligence-book-section summary::-webkit-details-marker{display:none}.intelligence-book-section summary>span{color:var(--accent)}.intelligence-book-section summary small{color:var(--muted)}
+.intelligence-book-section[open] summary{border-bottom:1px solid var(--border)}.intelligence-book-section>div{padding:10px 13px 13px}
+.ai-sources .ai-match{display:grid;grid-template-columns:38px minmax(0,1fr);gap:7px;align-items:start}.ai-sources .ai-match .badge{grid-row:1/3}.ai-sources .ai-match b,.ai-sources .ai-match small{display:block}.ai-sources .ai-match small{color:var(--muted)}
+.voice-transcript{margin-top:11px;padding:11px;border:1px solid var(--border);border-radius:14px;background:var(--surface2);display:grid;gap:8px}.voice-transcript p{margin:0;white-space:pre-wrap}.voice-transcript details summary{cursor:pointer;color:var(--accent);font-size:10px}.voice-transcript-segments{display:grid;gap:5px;margin-top:7px}.voice-transcript-segments span{font-size:10px;color:var(--muted)}.voice-transcript-segments b{color:var(--text);margin-right:5px}.voice-ai-note{font-size:9px;margin-top:8px}
+@media(min-width:700px){.intelligence-tools{grid-template-columns:repeat(3,minmax(0,1fr))}.intelligence-book-sections{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(prefers-reduced-motion:reduce){.context-progress i,.goal-progress i,.goal-card,.goal-step,.question-deck,.date-mode-tool,.plan-roulette,.plan-roulette.result,.wrapped-card,.intelligence-tool,.intelligence-book-section{transition:none!important;animation:none!important}.wrapped-deck{scroll-behavior:auto}.garden-flower,.garden-glow,.bond-garden-scene{animation:none!important}}
