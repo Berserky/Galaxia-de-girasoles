@@ -31,7 +31,7 @@ test('Android universal search combines items and places and requires every toke
    {id:10,name:'Casa',note:'Películas',kind:'home',latitude:4.6,longitude:-74.1}
   ]
  },'parque picnic');
- assert.deepEqual(rows.map(x=>x.type),['item','place']);
+ assert.deepEqual(Array.from(rows,x=>x.type),['item','place']);
  assert.equal(rows.some(x=>x.id==='10'),false);
 });
 
