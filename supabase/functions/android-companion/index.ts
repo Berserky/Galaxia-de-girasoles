@@ -745,6 +745,76 @@ async function encounterStats(req:Request){
   });
 }
 
+function frequentPlaceCandidates(rows:any[],places:any[],now=Date.now()){
+  const samples=(rows||[]).map((r:any)=>({...r,_t:Date.parse(r.captured_at||"")})).filter((r:any)=>
+    Number.isFinite(r._t)&&Number.isFinite(Number(r.latitude))&&Number.isFinite(Number(r.longitude))&&
+    (r.accuracy==null||Number(r.accuracy)<=120)&&
+    (r.motion==="still"||Math.max(0,Number(r.speed||0))<=0.8)
+  ).sort((a:any,b:any)=>a._t-b._t);
+  const stays:any[]=[];
+  let current:any=null;
+  const close=()=>{
+    if(!current)return;
+    const duration=Math.max(0,current.last-current.start);
+    if(current.count>=4&&duration>=8*60*1000)stays.push({
+      latitude:current.lat/current.count,longitude:current.lon/current.count,
+      started_at:new Date(current.start).toISOString(),ended_at:new Date(current.last).toISOString(),
+      duration_ms:duration,day:bogotaDay(new Date(current.start).toISOString())
+    });
+    current=null;
+  };
+  for(const row of samples){
+    if(!current){current={start:row._t,last:row._t,lat:Number(row.latitude),lon:Number(row.longitude),count:1};continue;}
+    const center={latitude:current.lat/current.count,longitude:current.lon/current.count};
+    const gap=row._t-current.last,metersAway=dist(center,row);
+    if(gap>20*60*1000||metersAway>120){close();current={start:row._t,last:row._t,lat:Number(row.latitude),lon:Number(row.longitude),count:1};continue;}
+    current.last=row._t;current.lat+=Number(row.latitude);current.lon+=Number(row.longitude);current.count++;
+  }
+  close();
+  const clusters:any[]=[];
+  for(const stay of stays){
+    let best:any=null,bestMeters=Infinity;
+    for(const cluster of clusters){
+      const metersAway=dist(stay,cluster);
+      if(metersAway<=160&&metersAway<bestMeters){best=cluster;bestMeters=metersAway;}
+    }
+    if(!best){
+      best={latitude:stay.latitude,longitude:stay.longitude,weight:stay.duration_ms,visits:0,days:new Set<string>(),dwell_ms:0,first_visit:stay.started_at,last_visit:stay.ended_at};
+      clusters.push(best);
+    }
+    const weight=Math.max(1,stay.duration_ms),sum=best.weight+weight;
+    best.latitude=(best.latitude*best.weight+stay.latitude*weight)/sum;
+    best.longitude=(best.longitude*best.weight+stay.longitude*weight)/sum;
+    best.weight=sum;best.visits++;best.days.add(stay.day);best.dwell_ms+=stay.duration_ms;
+    if(stay.started_at<best.first_visit)best.first_visit=stay.started_at;
+    if(stay.ended_at>best.last_visit)best.last_visit=stay.ended_at;
+  }
+  const ownPlaces=places||[];
+  return clusters.map((cluster:any)=>{
+    const days=cluster.days.size,dwellMinutes=Math.round(cluster.dwell_ms/60000),lastMs=Date.parse(cluster.last_visit);
+    const nearSaved=ownPlaces.some((p:any)=>dist(cluster,p)<=180);
+    const recentDays=Number.isFinite(lastMs)?Math.max(0,(now-lastMs)/86400000):999;
+    const score=days*12+cluster.visits*3+Math.min(20,dwellMinutes/30)+Math.max(0,12-recentDays);
+    return {
+      latitude:Number(cluster.latitude.toFixed(6)),longitude:Number(cluster.longitude.toFixed(6)),
+      days,visits:cluster.visits,dwell_minutes:dwellMinutes,
+      first_visit:cluster.first_visit,last_visit:cluster.last_visit,
+      score:Number(score.toFixed(2)),near_saved:nearSaved
+    };
+  }).filter((x:any)=>!x.near_saved&&x.days>=3&&x.visits>=3&&x.dwell_minutes>=45&&Date.parse(x.last_visit)>=now-21*86400000)
+    .sort((a:any,b:any)=>b.score-a.score||Date.parse(b.last_visit)-Date.parse(a.last_visit)).slice(0,5)
+    .map(({near_saved,...x}:any)=>x);
+}
+async function frequentPlaces(req:Request){
+  const d=await device(req),person=String(d.person),since=new Date(Date.now()-45*86400000).toISOString();
+  const [rows,places]=await Promise.all([
+    ok(db.from("galaxy_location_history").select("latitude,longitude,accuracy,speed,motion,captured_at").eq("person",person).gte("captured_at",since).order("captured_at",{ascending:false}).limit(12000)),
+    ok(db.from("galaxy_places").select("id,latitude,longitude").eq("owner",person).limit(500))
+  ]);
+  const suggestions=frequentPlaceCandidates((rows||[]).slice().reverse(),places||[]);
+  return json({suggestions,window_days:45,min_days:3,min_dwell_minutes:45});
+}
+
 async function mapState(req:Request,body:any){
   await device(req);
   const [locations,places,tripPoints,destinations]=await Promise.all([
@@ -955,6 +1025,7 @@ Deno.serve(async req=>{
     if(action==="monthly-summary")return await monthlySummary(req,body);
     if(action==="today-history")return await todayHistory(req,body);
     if(action==="encounter-stats")return await encounterStats(req);
+    if(action==="frequent-places")return await frequentPlaces(req);
     if(action==="place-save")return await placeSave(req,body);
     if(action==="place-delete")return await placeDelete(req,body);
     if(action==="status-set")return await setStatus(req,body);
