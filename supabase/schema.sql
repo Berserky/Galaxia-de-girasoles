@@ -512,3 +512,18 @@ drop policy if exists galaxy_voice_delete on storage.objects;
 create policy galaxy_voice_delete on storage.objects for delete to authenticated using(bucket_id='galaxy-voice' and public.galaxy_person() is not null and split_part(name,'/',1)=public.galaxy_person());
 
 commit;
+
+
+-- Galaxy Date Engine 3.0: stable daily-question assignment metadata.
+-- Answers remain exclusively in galaxy_daily and keep the existing reveal rules.
+create table if not exists public.galaxy_daily_questions (
+ day date primary key,
+ question_id text not null check(length(question_id) between 1 and 80),
+ deck text not null check(length(deck) between 1 and 40),
+ context_kind text not null default 'daily' check(length(context_kind) between 1 and 40),
+ favorite boolean not null default false,
+ memory_id uuid references public.galaxy_items(id) on delete set null,
+ created_at timestamptz not null default now()
+);
+create index if not exists galaxy_daily_questions_created_idx on public.galaxy_daily_questions(created_at desc);
+alter table public.galaxy_daily_questions enable row level security;
