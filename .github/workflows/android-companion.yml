@@ -1,4 +1,5 @@
 name: Nuestra Galaxia Android
+# Release 2.0.0
 on:
   pull_request:
     branches: [main]
