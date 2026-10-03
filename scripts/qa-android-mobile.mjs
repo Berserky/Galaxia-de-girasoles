@@ -32,6 +32,7 @@ const trackingService=read('android/app/src/main/java/com/nuestragalaxia/compani
 const updater=read('android/app/src/main/java/com/nuestragalaxia/companion/UpdateManager.java');
 const edge=read('supabase/functions/android-companion/index.ts');
 const dateEngine=read('supabase/functions/android-companion/date-engine.ts');
+const goalsEngine=read('supabase/functions/android-companion/goals-engine.ts');
 const schema=read('supabase/schema.sql');
 const build=read('android/app/build.gradle.kts');
 const workflow=read('.github/workflows/android-companion.yml');
@@ -248,5 +249,18 @@ assert.ok(app.includes('function openDateMode(')&&app.includes('date-mode-camera
 assert.ok(app.includes('function openSurprise2(')&&app.includes('function openPlanRoulette(')&&app.includes('function openDatePlanner('),'Galaxy Date debe reutilizar el mismo motor para sorpresa, ruleta y planner');
 assert.ok(main.includes('MediaStore.ACTION_IMAGE_CAPTURE')&&bridge.includes('capturePhoto'),'Modo Cita debe tener cámara nativa');
 assert.ok(css.includes('.plan-roulette')&&css.includes('@media(prefers-reduced-motion:reduce)'),'La ruleta de Galaxy Date debe respetar reduced-motion');
+
+
+// Galaxy Goals Engine 3.0
+assert.ok(main.includes('"goals-engine"')&&edge.includes('action==="goals-engine"'),'Galaxy Goals debe estar permitido end-to-end');
+assert.ok(goalsEngine.includes('normalizeGoalInput')&&goalsEngine.includes('computeGoalProgress')&&goalsEngine.includes('buildGoalInsightSummary'),'Galaxy Goals necesita dominio determinístico y progreso derivado');
+assert.ok(schema.includes('galaxy_goals')&&schema.includes('galaxy_goal_steps')&&schema.includes('galaxy_goal_contributions'),'Galaxy Goals debe usar tablas relacionales');
+assert.ok(schema.includes('enable row level security')&&schema.includes('from public,anon,authenticated'),'Galaxy Goals debe quedar cerrado al acceso directo del cliente');
+assert.ok(app.includes('function goalsView(')&&app.includes('function openGoalDetail(')&&app.includes('Aportes manuales'),'Galaxy Goals debe tener experiencia móvil completa');
+assert.ok(app.includes('goal-convert-item')&&app.includes("['plan','wish'].includes(i.kind)"),'Planes y deseos deben poder convertirse sin cambiar su modelo actual');
+assert.ok(app.includes('Sin conexión bancaria')&&goalsEngine.includes('No se permiten campos bancarios'),'Galaxy Goals no puede convertirse en integración bancaria');
+assert.ok(dateEngine.includes('context.goalSuggestions')&&!dateEngine.includes('galaxy_goals'),'Date Engine solo puede recibir sugerencias genéricas de Goals');
+assert.ok(insights.includes('goalsCompleted')&&insights.includes('savingsAchieved'),'Insights debe mostrar actividad de objetivos sin duplicar su modelo');
+assert.ok(css.includes('/* Mega Update 3.0 · Galaxy Goals Engine */')&&css.includes('.goal-card'),'Faltan estilos de Galaxy Goals');
 
 console.log('QA móvil Nuestra Galaxia: OK');
