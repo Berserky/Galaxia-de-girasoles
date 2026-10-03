@@ -72,6 +72,11 @@ public final class DeviceStore {
 
     public String person(){ return prefs.getString("person",""); }
     public String name(){ return prefs.getString("name","Android"); }
+    public void setPerson(String person){
+        if(!"0".equals(person)&&!"1".equals(person))throw new IllegalArgumentException("Perfil no válido");
+        prefs.edit().putString("person",person).apply();
+        new BondStore(context).clear();
+    }
     public boolean paired(){ return token()!=null; }
     public void setTracking(boolean value){ prefs.edit().putBoolean("tracking",value).apply(); }
     public boolean tracking(){ return prefs.getBoolean("tracking",false); }
