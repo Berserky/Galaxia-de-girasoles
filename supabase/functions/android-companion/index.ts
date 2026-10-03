@@ -902,6 +902,14 @@ async function signInsightPhotos(rows:any[]){
   return signedRows;
 }
 
+async function goalInsightRows(){
+ const [goals,steps,contributions]=await Promise.all([
+  ok(db.from("galaxy_goals").select("*").limit(2000)),
+  ok(db.from("galaxy_goal_steps").select("*").limit(10000)),
+  ok(db.from("galaxy_goal_contributions").select("*").limit(20000))
+ ]);
+ return {goals:goals||[],steps:steps||[],contributions:contributions||[]};
+}
 async function buildInsights(req:Request,options:any){
   const d=await device(req),person=String(d.person),day=today();
   const settings=await ok(db.from("galaxy_settings").select("data").eq("id",1).single());
@@ -923,10 +931,13 @@ async function buildInsights(req:Request,options:any){
     ok(db.from("galaxy_places").select("id,name").limit(1000)),
     listInsightPhotoMetadata()
   ]);
+  const goalRows=await goalInsightRows();
+  const currentGoalInsights=buildGoalInsightSummary(goalRows.goals,goalRows.steps,goalRows.contributions,period);
+  const priorGoalInsights=previous?buildGoalInsightSummary(goalRows.goals,goalRows.steps,goalRows.contributions,previous):null;
   const nowMs=Date.now(),source={items:items||[],trips:trips||[],encounters:encounters||[],daily:daily||[],bond:bond||[],participation:participation||[],placeEvents:placeEvents||[],places:places||[],photos:photos||[],person,nowMs};
-  const current=aggregateInsightRows({...source,period});
+  const current=aggregateInsightRows({...source,period,goalInsights:currentGoalInsights});
   current.photos=await signInsightPhotos(current.photos||[]);
-  const prior=previous?aggregateInsightRows({...source,period:previous}):null;
+  const prior=previous?aggregateInsightRows({...source,period:previous,goalInsights:priorGoalInsights}):null;
   const visibleAll=(items||[]).filter((row:any)=>isInsightVisibleItem(row,person,day));
   const achievements=evaluateAchievements({
     memories:visibleAll.filter((row:any)=>row.kind==="memory").length,
