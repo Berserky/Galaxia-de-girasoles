@@ -17,7 +17,7 @@ import androidx.activity.OnBackPressedCallback;
 import androidx.webkit.WebViewAssetLoader;
 import org.json.JSONObject;
 import java.util.Set;
-import java.io.File;
+import java.io.*;
 import java.util.concurrent.*;
 
 public final class MainActivity extends ComponentActivity {
@@ -26,11 +26,13 @@ public final class MainActivity extends ComponentActivity {
     private static final int REQ_BOND_NOTIFICATIONS=102;
     private static final int REQ_MEDIA=200;
     private static final int REQ_MICROPHONE=201;
+    private static final int REQ_BACKUP_EXPORT=202;
+    private static final int REQ_BACKUP_IMPORT=203;
     private static final Set<String> MOBILE_ACTIONS=Set.of(
         "mobile-state","item-save","item-delete","settings-save","daily-save",
         "bond-save","bond-update","bond-guess","bond-delete","bond-widget",
         "map-state","place-save","place-delete","status-set","transport-set","destination-save","trip",
-        "media-list","media-delete"
+        "media-list","media-delete","presence-set","backup-export","backup-import"
     );
 
     private DeviceStore store;
@@ -44,6 +46,9 @@ public final class MainActivity extends ComponentActivity {
     private String pendingMediaRequest;
     private String pendingMediaKind;
     private String pendingVoiceStartRequest;
+    private String pendingBackupExportRequest;
+    private String pendingBackupJson;
+    private String pendingBackupImportRequest;
     private MediaRecorder voiceRecorder;
     private MediaPlayer voicePlayer;
     private File voiceFile;
@@ -137,6 +142,9 @@ public final class MainActivity extends ComponentActivity {
             state.put("locationGranted",checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED);
             state.put("backgroundLocationGranted",Build.VERSION.SDK_INT<29||checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION)==PackageManager.PERMISSION_GRANTED);
             state.put("canPinWidget",Build.VERSION.SDK_INT>=26&&getSystemService(AppWidgetManager.class).isRequestPinAppWidgetSupported());
+            BatteryManager battery=getSystemService(BatteryManager.class);
+            int batteryPct=battery==null?-1:battery.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
+            state.put("battery",batteryPct>=0&&batteryPct<=100?batteryPct:JSONObject.NULL);
         }catch(Exception ignored){}
         return state;
     }
@@ -204,19 +212,84 @@ public final class MainActivity extends ComponentActivity {
 
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
-        if(requestCode!=REQ_MEDIA)return;
-        String request=pendingMediaRequest,kind=pendingMediaKind;
-        pendingMediaRequest=null;pendingMediaKind=null;
-        if(request==null)return;
-        if(resultCode!=RESULT_OK||data==null||data.getData()==null){reject(request,"Selección cancelada.");return;}
-        Uri uri=data.getData();
-        try{getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}
-        io.execute(()->{
-            try{
-                String token=store.token();
-                if(token==null)throw new ApiClient.ApiException(401,"El vínculo del dispositivo ya no es válido.");
-                resolve(request,MobileApiClient.upload(this,token,uri,kind));
-            }catch(Exception e){reject(request,e.getMessage()==null?"No pudimos subir el archivo.":e.getMessage());}
+        if(requestCode==REQ_MEDIA){
+            String request=pendingMediaRequest,kind=pendingMediaKind;
+            pendingMediaRequest=null;pendingMediaKind=null;
+            if(request==null)return;
+            if(resultCode!=RESULT_OK||data==null||data.getData()==null){reject(request,"Selección cancelada.");return;}
+            Uri uri=data.getData();
+            try{getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}
+            io.execute(()->{
+                try{
+                    String token=store.token();
+                    if(token==null)throw new ApiClient.ApiException(401,"El vínculo del dispositivo ya no es válido.");
+                    resolve(request,MobileApiClient.upload(this,token,uri,kind));
+                }catch(Exception e){reject(request,e.getMessage()==null?"No pudimos subir el archivo.":e.getMessage());}
+            });
+            return;
+        }
+        if(requestCode==REQ_BACKUP_EXPORT){
+            String request=pendingBackupExportRequest,json=pendingBackupJson;
+            pendingBackupExportRequest=null;pendingBackupJson=null;
+            if(request==null)return;
+            if(resultCode!=RESULT_OK||data==null||data.getData()==null){reject(request,"Exportación cancelada.");return;}
+            Uri uri=data.getData();
+            io.execute(()->{
+                try(OutputStream out=getContentResolver().openOutputStream(uri,"w")){
+                    if(out==null)throw new IOException("No se pudo abrir el archivo.");
+                    byte[] bytes=(json==null?"{}":json).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    if(bytes.length>2*1024*1024)throw new IOException("La copia supera el tamaño permitido.");
+                    out.write(bytes);
+                    resolve(request,new JSONObject().put("saved",true));
+                }catch(Exception e){reject(request,e.getMessage()==null?"No pudimos guardar la copia.":e.getMessage());}
+            });
+            return;
+        }
+        if(requestCode==REQ_BACKUP_IMPORT){
+            String request=pendingBackupImportRequest;pendingBackupImportRequest=null;
+            if(request==null)return;
+            if(resultCode!=RESULT_OK||data==null||data.getData()==null){reject(request,"Importación cancelada.");return;}
+            Uri uri=data.getData();
+            io.execute(()->{
+                try(InputStream in=getContentResolver().openInputStream(uri);ByteArrayOutputStream out=new ByteArrayOutputStream()){
+                    if(in==null)throw new IOException("No se pudo abrir el archivo.");
+                    byte[] buffer=new byte[8192];int read,total=0;
+                    while((read=in.read(buffer))!=-1){
+                        total+=read;if(total>2*1024*1024)throw new IOException("La copia supera el tamaño permitido.");
+                        out.write(buffer,0,read);
+                    }
+                    String json=out.toString(java.nio.charset.StandardCharsets.UTF_8.name());
+                    new JSONObject(json);
+                    resolve(request,new JSONObject().put("json",json));
+                }catch(Exception e){reject(request,"El archivo no es una copia válida de Nuestra Galaxia.");}
+            });
+        }
+    }
+
+    void exportJson(String requestId,String fileName,String json){
+        if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+        runOnUiThread(()->{
+            if(pendingBackupExportRequest!=null){reject(requestId,"Ya hay una exportación abierta.");return;}
+            pendingBackupExportRequest=requestId;pendingBackupJson=json==null?"{}":json;
+            Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType("application/json");
+            intent.putExtra(Intent.EXTRA_TITLE,(fileName==null||fileName.trim().isEmpty())?"nuestra-galaxia-backup.json":fileName);
+            try{startActivityForResult(intent,REQ_BACKUP_EXPORT);}
+            catch(Exception e){pendingBackupExportRequest=null;pendingBackupJson=null;reject(requestId,"Android no pudo abrir el selector para guardar la copia.");}
+        });
+    }
+
+    void importJson(String requestId){
+        if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+        runOnUiThread(()->{
+            if(pendingBackupImportRequest!=null){reject(requestId,"Ya hay una importación abierta.");return;}
+            pendingBackupImportRequest=requestId;
+            Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType("application/json");
+            try{startActivityForResult(intent,REQ_BACKUP_IMPORT);}
+            catch(Exception e){pendingBackupImportRequest=null;reject(requestId,"Android no pudo abrir el selector de copias.");}
         });
     }
 
@@ -231,7 +304,7 @@ public final class MainActivity extends ComponentActivity {
     }
 
     private void beginVoiceRecording(String requestId){
-        cleanupVoice(false);
+        cleanupVoice(true);
         try{
             voiceFile=new File(getCacheDir(),"voice-"+System.currentTimeMillis()+".m4a");
             voiceRecorder=android.os.Build.VERSION.SDK_INT>=31?new MediaRecorder(this):new MediaRecorder();
@@ -263,7 +336,9 @@ public final class MainActivity extends ComponentActivity {
             if(voiceFile==null||!voiceFile.exists()){reject(requestId,"Primero graba un audio.");return;}
             try{
                 if(voicePlayer!=null){voicePlayer.release();voicePlayer=null;}
-                voicePlayer=new MediaPlayer();voicePlayer.setDataSource(voiceFile.getAbsolutePath());voicePlayer.prepare();voicePlayer.start();
+                voicePlayer=new MediaPlayer();voicePlayer.setDataSource(voiceFile.getAbsolutePath());voicePlayer.prepare();
+                voicePlayer.setOnCompletionListener(player->{try{player.release();}catch(Exception ignored){}voicePlayer=null;event("voice-preview-ended",new JSONObject());});
+                voicePlayer.start();
                 resolve(requestId,new JSONObject().put("playing",true));
             }catch(Exception e){reject(requestId,"No pudimos reproducir la grabación.");}
         });
@@ -458,6 +533,11 @@ public final class MainActivity extends ComponentActivity {
         super.onResume();
         if(updater!=null)updater.resumePendingInstall();
         if(pageReady){nativeChanged();refreshMomentsInternal();}
+    }
+
+    @Override protected void onPause(){
+        super.onPause();
+        if(voiceRecorder!=null)stopVoiceRecording(null);
     }
 
     @Override protected void onDestroy(){
