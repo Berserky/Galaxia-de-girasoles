@@ -130,8 +130,13 @@ const partnerName=()=>names()[Number(cloud?.person||0)===0?1:0]||'Mi persona';
 const todayRows=()=>cloud?.daily?.filter(r=>r.day===cloud.today)||[];
 const ownDaily=()=>todayRows().find(r=>r.person===cloud?.person)||{};
 const partnerDaily=()=>todayRows().find(r=>r.person!==cloud?.person)||{};
-const ownPresence=()=>cloud?.settings?.data?.presence?.[String(cloud?.person)]||{};
-const partnerPresence=()=>cloud?.settings?.data?.presence?.[String(cloud?.person)==='0'?'1':'0']||{};
+const normalizedPresence=person=>{
+ const row=(cloud?.presence||[]).find(x=>String(x.person)===String(person));
+ if(row)return {shareBattery:row.share_battery===true,shareListening:row.share_song===true,battery:row.battery,listening:row.song_title||'',updatedAt:row.updated_at||null};
+ return cloud?.settings?.data?.presence?.[String(person)]||{};
+};
+const ownPresence=()=>normalizedPresence(String(cloud?.person));
+const partnerPresence=()=>normalizedPresence(String(cloud?.person)==='0'?'1':'0');
 const currentTrackTitle=()=>{rebuildMusicQueue();return musicPlaying&&musicQueue[musicIndex]?String(musicQueue[musicIndex].title||''):'';};
 async function syncPresence(force=false){
  if(!native.paired||!cloud)return;
