@@ -5,6 +5,9 @@ import vm from 'node:vm';
 import {stripTypeScriptTypes} from 'node:module';
 
 const source=readFileSync(new URL('../supabase/functions/android-companion/insights.ts',import.meta.url),'utf8');
+const edge=readFileSync(new URL('../supabase/functions/android-companion/index.ts',import.meta.url),'utf8');
+const main=readFileSync(new URL('../android/app/src/main/java/com/nuestragalaxia/companion/MainActivity.java',import.meta.url),'utf8');
+const qa=readFileSync(new URL('../scripts/qa-android-mobile.mjs',import.meta.url),'utf8');
 const code=stripTypeScriptTypes(source.replace(/\bexport\s+/g,''));
 const context={module:{exports:{}},exports:{},Intl,Date,Math,Set,Map,Object,Number,String};
 vm.runInNewContext(code+`
@@ -109,4 +112,22 @@ test('achievements are declarative and unlock at thresholds without persistence'
  assert.equal(byId('participation-30').unlocked,true);
  assert.equal(byId('anniversary-12').unlocked,true);
  assert.equal(byId('memories-50').unlocked,false);
+});
+
+
+test('insights summary is wired end-to-end and monthly stays a compatibility adapter',()=>{
+ assert.ok(edge.includes('from "./insights.ts"'),'Edge Function must consume the shared insights core');
+ assert.ok(edge.includes('async function buildInsights('),'Edge Function needs one reusable backend aggregator');
+ assert.ok(edge.includes('async function insightsSummary('),'Generic insights action is missing');
+ assert.ok(edge.includes('if(action==="insights-summary")return await insightsSummary(req,body);'),'Dispatcher must expose insights-summary');
+ assert.ok(edge.includes('async function monthlySummary(req:Request,body:any)')&&edge.includes('buildInsights(req,{kind:"month"'),'monthly-summary must delegate to the common engine');
+ assert.ok(main.includes('"insights-summary"'),'Android bridge must allow insights-summary');
+ assert.ok(qa.includes("mainActions.has('insights-summary')")&&qa.includes("edgeActions.has('insights-summary')"),'QA contract must protect the new action');
+});
+
+test('annual insights are aggregated server-side in one request',()=>{
+ const block=edge.slice(edge.indexOf('async function insightsSummary('),edge.indexOf('function sameHistoryDay('));
+ assert.ok(block.includes('kind'), 'insights-summary must accept period kind');
+ assert.equal((block.match(/monthlySummary\(/g)||[]).length,0,'year summary must not call monthly summary twelve times');
+ assert.ok(source.includes('period.kind==="year"')&&source.includes('series'),'pure core must emit annual monthly series');
 });
