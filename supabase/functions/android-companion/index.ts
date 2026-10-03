@@ -431,14 +431,11 @@ async function favoriteQuestionMemory(req:Request,body:any){
  if(answers.length!==2)return json({error:"El recuerdo puede crearse cuando ambos hayan respondido."},409);
  const question=questionById(assignment.question_id);
  if(!question)return json({error:"La pregunta ya no está disponible."},409);
- const settings=await ok(db.from("galaxy_settings").select("data").eq("id",1).single());
- const names=Array.isArray(settings?.data?.names)?settings.data.names:["Persona 1","Persona 2"];
  const data=cleanItem("memory",{
-  title:"Pregunta favorita · "+day,
-  body:question.text+"\n\n"+answers.map((entry:any)=>text(names[Number(entry.person)]||("Persona "+entry.person),40)+": "+entry.answer).join("\n"),
+  title:question.text,
+  body:"",
   category:"Pregunta favorita",date:day,
-  source:{type:"daily-question",day,questionId:question.id,deck:question.deck},
-  answers
+  source:{type:"daily-question",day,questionId:question.id,deck:question.deck}
  });
  const item=await ok(db.from("galaxy_items").insert({kind:"memory",data,author:String(d.person)}).select("*").single());
  await ok(db.from("galaxy_daily_questions").update({favorite:true,memory_id:item.id}).eq("day",day));
