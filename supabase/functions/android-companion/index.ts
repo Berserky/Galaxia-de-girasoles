@@ -624,12 +624,14 @@ async function bondSendGesture(req:Request,body:any){
 }
 
 async function bondState(person:string){
-  const [entries,participation,config,customGestures]=await Promise.all([
+  const [entries,participation,config,customGestures,transcripts]=await Promise.all([
     ok(db.from("galaxy_bond").select("*").order("created",{ascending:false}).limit(200)),
     ok(db.from("galaxy_bond_participation").select("day,person")),
     ok(db.from("galaxy_bond_config").select("photo_path").eq("id",1).maybeSingle()),
-    ok(db.from("galaxy_bond_gestures").select("*").eq("enabled",true).order("created_at",{ascending:true}).limit(50))
+    ok(db.from("galaxy_bond_gestures").select("*").eq("enabled",true).order("created_at",{ascending:true}).limit(50)),
+    ok(db.from("galaxy_voice_transcripts").select("bond_id,transcript,segments,created_at,updated_at").limit(200))
   ]);
+  const transcriptMap=new Map((transcripts||[]).map((row:any)=>[String(row.bond_id),row]));
   const progress=computeBondProgress(participation||[],new Date());
   const visible=await Promise.all((entries||[]).map(async(row:any)=>{
     const copy=structuredClone(row);
@@ -650,7 +652,11 @@ async function bondState(person:string){
           }
         }
       }
-      if(reveal)copy.data.audioUrl=await signed("galaxy-voice",copy.data.audioPath,900);else{delete copy.data.audioPath;copy.data.locked=true;}
+      if(reveal){
+        copy.data.audioUrl=await signed("galaxy-voice",copy.data.audioPath,900);
+        const transcript:any=transcriptMap.get(String(copy.id));
+        if(transcript)copy.data.transcript={text:transcript.transcript,segments:transcript.segments||[],createdAt:transcript.created_at,updatedAt:transcript.updated_at};
+      }else{delete copy.data.audioPath;delete copy.data.transcript;copy.data.locked=true;}
     }
     return copy;
   }));
@@ -711,7 +717,7 @@ async function mobileState(req:Request){
   return json({
     person,device:{id:d.id,name:d.name},today:day,settings,items:safeItems,daily:maskedDaily(daily||[],person),
     bond,locations,places,presence:safePresence,devices,nextEvent:nextCalendarEvent(safeItems.filter((i:any)=>i.kind==="event"),day),
-    capabilities:{photos:true,music:true,voice:true,widget:true,backgroundLocation:true,trips:true,backup:true,presence:true,profileManagement:true}
+    capabilities:{photos:true,music:true,voice:true,widget:true,backgroundLocation:true,trips:true,backup:true,presence:true,profileManagement:true,intelligence:true,transcription:true,book:true}
   });
 }
 
@@ -2293,6 +2299,14 @@ Deno.serve(async req=>{
     if(action==="context-events")return await contextEventsFeed(req,body);
     if(action==="context-suggestion")return await contextSuggestionAction(req,body);
     if(action==="context-recap")return await contextRecapAction(req,body);
+    if(action==="intelligence-search")return await intelligenceSearch(req,body);
+    if(action==="intelligence-ask")return await intelligenceAsk(req,body);
+    if(action==="intelligence-connections")return await intelligenceConnections(req,body);
+    if(action==="intelligence-narrate")return await intelligenceNarrate(req,body);
+    if(action==="intelligence-book")return await intelligenceBook(req,body);
+    if(action==="intelligence-transcribe")return await intelligenceTranscribe(req,body);
+    if(action==="intelligence-transcript-delete")return await intelligenceTranscriptDelete(req,body);
+    if(action==="intelligence-index")return await intelligenceIndexAction(req,body);
     if(action==="goals-engine")return await goalsEngine(req,body);
     if(action==="date-engine")return await dateEngine(req,body);
     if(action==="insights-summary")return await insightsSummary(req,body);
