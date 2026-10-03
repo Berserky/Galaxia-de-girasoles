@@ -260,7 +260,7 @@ assert.ok(app.includes('function goalsView(')&&app.includes('function openGoalDe
 assert.ok(app.includes('goal-convert-item')&&app.includes("['plan','wish'].includes(i.kind)"),'Planes y deseos deben poder convertirse sin cambiar su modelo actual');
 assert.ok(app.includes('Sin conexión bancaria')&&goalsEngine.includes('No se permiten campos bancarios'),'Galaxy Goals no puede convertirse en integración bancaria');
 assert.ok(dateEngine.includes('context.goalSuggestions')&&!dateEngine.includes('galaxy_goals'),'Date Engine solo puede recibir sugerencias genéricas de Goals');
-assert.ok(insights.includes('goalsCompleted')&&insights.includes('savingsAchieved'),'Insights debe mostrar actividad de objetivos sin duplicar su modelo');
+assert.ok(edge.includes('buildGoalInsightSummary')&&app.includes('goalsCompleted')&&app.includes('savingsAchieved'),'Insights debe mostrar actividad de objetivos sin duplicar su modelo');
 assert.ok(css.includes('/* Mega Update 3.0 · Galaxy Goals Engine */')&&css.includes('.goal-card'),'Faltan estilos de Galaxy Goals');
 
 console.log('QA móvil Nuestra Galaxia: OK');
