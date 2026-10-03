@@ -189,12 +189,34 @@ function surpriseNotes(){return items('note').filter(x=>x.data?.surprise);}
 function surpriseUnlocked(i){const d=i.data||{};if(d.unlockType==='date')return !d.unlockDate||d.unlockDate<=cloud.today;if(d.unlockType==='place'){const own=(cloud.locations||[]).find(l=>l.person===cloud.person&&l.sharing);if(!own)return false;const km=(a,b,c,e)=>{const R=6371,p=Math.PI/180,da=(c-a)*p,dl=(e-b)*p,q=Math.sin(da/2)**2+Math.cos(a*p)*Math.cos(c*p)*Math.sin(dl/2)**2;return 2*R*Math.asin(Math.sqrt(q));};return km(Number(own.latitude),Number(own.longitude),Number(d.latitude),Number(d.longitude))*1000<=Number(d.radius||150);}return true;}
 function surpriseNotesView(){const list=surpriseNotes();return '<section class="section"><div class="section-head"><div><h2>Notas sorpresa</h2><p>Mensajes que aparecen en el momento o lugar elegido.</p></div><button class="btn small" data-action="surprise-note-new">+ Sorpresa</button></div><div class="stack">'+(list.length?list.map(i=>{const open=surpriseUnlocked(i),d=i.data||{};return '<div class="card"><span class="badge">'+(open?'Desbloqueada':'Guardada')+'</span><h3 style="margin-top:9px">'+esc(open?d.title:'Hay algo esperando para ti')+'</h3><p>'+esc(open?(d.body||''):(d.unlockType==='date'?'Se abrirá '+fmtDate(d.unlockDate):'Se abrirá al llegar al lugar elegido.'))+'</p>'+(open&&linkedVoices(i.id).length?linkedVoices(i.id).map(voiceCard).join(''):'')+(i.author===cloud.person?'<div class="item-actions"><button class="btn small secondary" data-action="voice-for-item" data-id="'+i.id+'">'+ico('mic')+' Añadir voz</button><button class="btn small ghost" data-action="item-delete" data-id="'+i.id+'">Eliminar</button></div>':'')+'</div>';}).join(''):'<div class="empty">Dejen una nota para una fecha o un lugar especial.</div>')+'</div></section>';}
 
+function cloudRenderFingerprint(data=cloud){
+ if(!data)return '';
+ const compactItems=(data.items||[]).map(i=>[i.id,i.version,i.kind]).join('|');
+ const compactBond=(data.bond?.entries||[]).map(i=>[i.id,i.version,i.type]).join('|');
+ const compactDevices=(data.devices||[]).map(i=>[i.id,i.person,i.revoked_at||'',i.last_seen||'']).join('|');
+ return JSON.stringify({
+   today:data.today,person:data.person,settings:data.settings?.version||0,nextEvent:data.nextEvent||null,
+   items:compactItems,daily:data.daily||[],locations:data.locations||[],presence:data.presence||[],
+   garden:data.bond?.garden||null,bond:compactBond,devices:compactDevices
+ });
+}
+let renderQueued=false;
+function scheduleRender(){
+ if(renderQueued)return;
+ renderQueued=true;
+ requestAnimationFrame(()=>{renderQueued=false;if(!editingNow())render();});
+}
 async function refreshState({quiet=false}={}){
  if(!native.paired||refreshing)return;
  refreshing=true;
  try{cloud=await api('mobile-state');native=nativeState();if(!quiet)render();}
  catch(e){if(!quiet)toast(e.message);}
  finally{refreshing=false;}
+}
+async function refreshStateIfChanged(){
+ const before=cloudRenderFingerprint();
+ await refreshState({quiet:true});
+ if(before!==cloudRenderFingerprint()&&view!=='map'&&!editingNow())scheduleRender();
 }
 async function refreshMap({quiet=false,detail=false}={}){
  if(!native.paired)return;
@@ -577,7 +599,7 @@ function dailyAnswerMarkup(own,partner){
  let html='';
  if(!own.answer)html='<form id="dailyForm" class="stack" style="margin-top:14px"><textarea name="answer" placeholder="Tu respuesta…" required></textarea><button class="btn" type="submit">Guardar respuesta</button></form>';
  else html='<div class="card" style="margin-top:12px;background:var(--surface2)"><span class="badge">'+esc(myName())+'</span><p style="margin-top:7px">'+esc(own.answer)+'</p></div>';
- if(partner.answer)html+='<div class="card" style="margin-top:10px;background:#fff7f8"><span class="badge">'+esc(partnerName())+'</span><p style="margin-top:7px">'+esc(partner.answer)+'</p></div>';
+ if(partner.answer)html+='<div class="card partner-answer" style="margin-top:10px"><span class="badge">'+esc(partnerName())+'</span><p style="margin-top:7px">'+esc(partner.answer)+'</p></div>';
  else if(own.answer)html+='<p class="muted" style="font-size:12px;margin-top:10px">La respuesta de '+esc(partnerName())+' aparecerá cuando ambos hayan respondido.</p>';
  return html;
 }
@@ -871,7 +893,7 @@ function moreView(){
  '<div class="card"><div class="row between"><div><h3>Nuestra IA</h3><p>Pregunta por recuerdos, planes, lugares, viajes y momentos guardados. Responde usando únicamente su propia historia.</p></div>'+ico('sparkles')+'</div><button class="btn small" style="margin-top:14px" data-action="our-ai">Preguntar a nuestra historia</button></div>'+
  '<div class="card"><div class="row between"><div><h3>Copia de nuestra galaxia</h3><p>Exporta los datos a un archivo JSON o restaura una copia. Fotos, música y audios permanecen en su almacenamiento privado y se conservan por referencia.</p></div>'+ico('archive')+'</div><div class="row wrap" style="margin-top:14px"><button class="btn small secondary" data-action="backup-export">'+ico('download')+' Exportar</button><button class="btn small ghost" data-action="backup-import">'+ico('upload')+' Restaurar</button></div></div>'+
  '<div class="card"><div class="row between"><div><h3>Widget “Nuestra Galaxia”</h3><p>Foto, próxima fecha y un abrazo desde el escritorio.</p></div><span class="badge '+(native.canPinWidget?'good':'')+'">'+(native.canPinWidget?'Disponible':'Manual')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small" data-action="widget-add">Añadir widget</button><button class="btn small secondary" data-action="widget-photo">Elegir foto</button><button class="btn small ghost" data-action="widget-photo-clear">Quitar foto</button></div></div>'+
- '<div class="card"><div class="row between"><div><h3>Notificaciones de momentos</h3><p>Gestos y fechas especiales, sin depender del GPS.</p></div><span class="badge '+(native.momentNotifications?'good':'')+'">'+(native.momentNotifications?'Activas':'Pausadas')+'</span></div><button class="btn small secondary" style="margin-top:14px" data-action="moment-notifications">'+(native.momentNotifications?'Desactivar':'Activar')+'</button></div>'+
+ '<div class="card"><div class="row between"><div><h3>Notificaciones de momentos</h3><p>Gestos y fechas especiales. Android revisa en segundo plano y también al abrir la app.</p></div><span class="badge '+(native.momentNotifications&&native.notificationsGranted&&native.notificationsEnabled?'good':'')+'">'+(native.momentNotifications?(native.notificationsGranted&&native.notificationsEnabled?'Listas':'Requieren ajuste'):'Pausadas')+'</span></div><div class="notification-health"><span class="'+(native.notificationsGranted?'good':'')+'">'+ico(native.notificationsGranted?'check':'circle-alert')+' Permiso '+(native.notificationsGranted?'concedido':'pendiente')+'</span><span class="'+(native.notificationsEnabled?'good':'')+'">'+ico(native.notificationsEnabled?'bell-ring':'bell-off')+' Sistema '+(native.notificationsEnabled?'habilitado':'bloqueado')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small secondary" data-action="moment-notifications">'+(native.momentNotifications?'Desactivar':'Activar')+'</button>'+(native.momentNotifications?'<button class="btn small ghost" data-action="moment-notification-test">'+ico('bell-ring')+' Probar ahora</button>':'')+(!native.notificationsEnabled?'<button class="btn small ghost" data-action="app-settings">'+ico('settings')+' Ajustes</button>':'')+'</div></div>'+
  '<div class="card"><h3>Nuestros datos</h3><form id="settingsForm" class="stack" style="margin-top:12px"><div class="grid"><div class="field"><label>Nombre 1</label><input class="input" name="name0" value="'+attr(data.names?.[0]||'')+'" required></div><div class="field"><label>Nombre 2</label><input class="input" name="name1" value="'+attr(data.names?.[1]||'')+'" required></div></div><div class="field"><label>Inicio de nuestra historia</label><input class="input" type="date" name="startDate" value="'+attr(data.startDate||'')+'"></div><div class="field"><label>Álbum de Google Fotos (opcional)</label><input class="input" name="albumUrl" value="'+attr(data.albumUrl||'')+'" placeholder="https://photos.app.goo.gl/…"></div><button class="btn" type="submit">Guardar ajustes</button></form></div>'+
  (Number(cloud?.person)===0?'<div class="card"><div class="row between"><div><h3>Previsualización de Adri</h3><p>Solo tú puedes ver este control. Abre la bienvenida exactamente como la verá Adri, sin marcarla como completada.</p></div>'+ico('sparkles')+'</div><button class="btn small secondary" style="margin-top:14px" data-action="welcome-replay">Previsualizar bienvenida</button></div>':'')+
  deviceProfilesCard()+'<div class="card"><h3>Permisos de Android</h3><p>Ubicación: '+(native.locationGranted?'concedida':'pendiente')+' · Segundo plano: '+(native.backgroundLocationGranted?'concedido':'opcional')+' · Notificaciones: '+(native.notificationsGranted?'concedidas':'pendientes')+'</p><button class="btn small secondary" style="margin-top:14px" data-action="app-settings">Abrir ajustes del sistema</button></div>'+
@@ -1155,7 +1177,8 @@ document.addEventListener('click',async e=>{
   if(a==='widget-photo'){await chooseWidgetPhoto();return;}
   if(a==='widget-photo-select'){await api('bond-widget',{photoPath:btn.dataset.path});closeModal();await GalaxyNative.call('refreshMoments');await refreshState();toast('Foto del widget actualizada.');return;}
   if(a==='widget-photo-clear'){await api('bond-widget',{photoPath:''});await GalaxyNative.call('refreshMoments');await refreshState();toast('Foto del widget retirada.');return;}
-  if(a==='moment-notifications'){await GalaxyNative.call('setMomentNotifications',!native.momentNotifications);native=nativeState();render();toast(native.momentNotifications?'Notificaciones activadas.':'Notificaciones pausadas.');return;}
+  if(a==='moment-notifications'){await GalaxyNative.call('setMomentNotifications',!native.momentNotifications);native=nativeState();render();toast(native.momentNotifications?'Notificaciones activadas. Usa “Probar ahora” para verificar Android.':'Notificaciones pausadas.');return;}
+  if(a==='moment-notification-test'){await GalaxyNative.call('testMomentNotification');native=nativeState();toast('Notificación de prueba enviada. Revisa la bandeja de Android.');return;}
   if(a==='update-check'){await GalaxyNative.call('checkUpdate');return;}
   if(a==='unpair'){if(confirm('¿Desvincular este teléfono de Nuestra Galaxia?')){await GalaxyNative.call('unpair');native=nativeState();cloud=null;render();}return;}
  }catch(err){toast(err.message||'No pudimos completar la acción.');}
@@ -1209,18 +1232,20 @@ function editingNow(){
 }
 setInterval(()=>{
  if(!native.paired||document.visibilityState!=='visible')return;
- refreshState({quiet:true}).then(()=>{if(view!=='map'&&!editingNow())render();}).catch(()=>{});
+ refreshStateIfChanged().catch(()=>{});
 },45000);
 setInterval(()=>{
  if(native.paired&&view==='map'&&document.visibilityState==='visible')refreshMap({quiet:true,detail:false}).catch(()=>{});
 },12000);
 document.addEventListener('visibilitychange',()=>{
  if(document.visibilityState==='visible'&&native.paired){
-   refreshState({quiet:true}).then(()=>{if(view!=='map'&&!editingNow())render();}).catch(()=>{});
+   refreshStateIfChanged().catch(()=>{});
    if(view==='map')refreshMap({quiet:true,detail:false}).catch(()=>{});
+   if(native.momentNotifications)GalaxyNative.call('refreshMoments').catch(()=>{});
  }
 });
 
 render();
 if(native.paired)refreshState().then(()=>syncPresence()).catch(()=>{});
 setInterval(()=>{if(native.paired&&cloud&&document.visibilityState==='visible')syncPresence().catch(()=>{});},300000);
+setInterval(()=>{if(native.paired&&native.momentNotifications&&document.visibilityState==='visible')GalaxyNative.call('refreshMoments').catch(()=>{});},120000);
