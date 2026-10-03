@@ -341,14 +341,14 @@ async function presenceSet(req:Request,body:any){
   const d=await device(req),person=String(d.person),current=(await ok(db.from("galaxy_presence").select("*").eq("person",person).limit(1)))?.[0]||{};
   const patch:any={person,updated_at:new Date().toISOString()};
   if(Object.hasOwn(body,"shareBattery"))patch.share_battery=!!body.shareBattery;
-  if(Object.hasOwn(body,"shareSong"))patch.share_song=!!body.shareSong;
+  if(Object.hasOwn(body,"shareSong")||Object.hasOwn(body,"shareListening"))patch.share_song=!!(Object.hasOwn(body,"shareSong")?body.shareSong:body.shareListening);
   if(Object.hasOwn(body,"battery")){
     const battery=Number(body.battery);
     if(Number.isFinite(battery))patch.battery=Math.max(0,Math.min(100,Math.round(battery)));
   }
-  if(Object.hasOwn(body,"songTitle"))patch.song_title=text(body.songTitle,160)||null;
-  await ok(db.from("galaxy_presence").upsert({...current,...patch},{onConflict:"person"}));
-  return json({ok:true});
+  if(Object.hasOwn(body,"songTitle")||Object.hasOwn(body,"listening"))patch.song_title=text(Object.hasOwn(body,"songTitle")?body.songTitle:body.listening,160)||null;
+  const saved=await ok(db.from("galaxy_presence").upsert({...current,...patch},{onConflict:"person"}).select("*").single());
+  return json({ok:true,presence:saved});
 }
 
 async function backupExport(req:Request){
@@ -698,8 +698,10 @@ async function moments(req:Request){
   ]);
   const names=(Array.isArray(settings?.data?.names)?settings.data.names:["Nosotros","Dos"]).slice(0,2).map((name:unknown)=>text(name,40));
   let photoUrl=null;if(config?.photo_path)photoUrl=await signed("galaxy-photos",config.photo_path,300);
-  const partner=String(d.person)==="0"?"1":"0",mood=(daily||[]).find((x:any)=>String(x.person)===partner)?.mood||null,loc=(locations||[]).find((x:any)=>String(x.person)===partner),p=(presence||[]).find((x:any)=>String(x.person)===partner);
-  const now={mood,motion:loc?.sharing?loc?.motion:null,status:loc?.sharing?loc?.status:null,battery:p?.share_battery?p?.battery:null,songTitle:p?.share_song?p?.song_title:null,latestSong:songs?.[0]?.data?.title||null};
+  const partner=String(d.person)==="0"?"1":"0",mood=(daily||[]).find((x:any)=>String(x.person)===partner)?.mood||null,loc=(locations||[]).find((x:any)=>String(x.person)===partner),p=(presence||[]).find((x:any)=>String(x.person)===partner),legacy=settings?.data?.presence?.[partner]||{};
+  const battery=p?(p.share_battery?p.battery:null):(legacy.shareBattery===true?legacy.battery:null);
+  const listening=p?(p.share_song?text(p.song_title,160):""):(legacy.shareListening===true?text(legacy.listening,160):"");
+  const now={mood,sharing:!!loc?.sharing,motion:loc?.sharing?loc?.motion:null,status:loc?.sharing?loc?.status:null,battery,listening,updatedAt:p?.updated_at||loc?.updated_at||legacy.updatedAt||null,latestSong:songs?.[0]?.data?.title||null};
   return json({names,nextEvent:nextCalendarEvent(events||[],today()),photoUrl,now,gestures:(gestures||[]).filter((g:any)=>["hug","kiss","miss"].includes(g.data?.gesture)).map((g:any)=>({id:g.id,gesture:g.data.gesture,created:g.created,author:g.author}))});
 }
 
