@@ -5,6 +5,7 @@ import {existsSync,readFileSync} from 'node:fs';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const schema=read('supabase/schema.sql');
 const edge=read('supabase/functions/android-companion/index.ts');
+const pushEngine=read('supabase/functions/android-companion/push-engine.ts');
 const insights=read('supabase/functions/android-companion/insights.ts');
 const app=read('android/app/src/main/assets/mobile/app.js');
 const css=read('android/app/src/main/assets/mobile/app.css');
