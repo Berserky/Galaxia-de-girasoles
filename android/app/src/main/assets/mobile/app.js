@@ -219,7 +219,7 @@ async function loadMedia(kind,force=false){
 }
 
 function header(){
- return '<header class="header"><div class="brand"><div class="brand-mark">'+ico('sparkles')+'</div><div><strong>Nuestra Galaxia</strong><small>'+esc(native.paired?(myName()+' & '+partnerName()):'Un espacio para dos')+'</small></div></div><div class="avatar">'+esc((native.paired?myName():'N').slice(0,1).toUpperCase())+'</div></header>';
+ return '<header class="header"><div class="brand"><div class="brand-mark">'+ico('sparkles')+'</div><div><strong>Nuestra Galaxia</strong><small>'+esc(native.paired?(myName()+' & '+partnerName()):'Un espacio para dos')+'</small></div></div><div class="header-actions"><button class="header-search" data-action="universal-search-open" aria-label="Buscar en nuestra galaxia">'+ico('search')+'</button><div class="avatar">'+esc((native.paired?myName():'N').slice(0,1).toUpperCase())+'</div></div></header>';
 }
 function renderNav(){
  navEl.style.display=native.paired&&!shouldShowAdriWelcome()?'grid':'none';
@@ -312,6 +312,48 @@ function homeView(){
  '<section class="section"><div class="section-head"><div><h2>Cerca, aunque estemos lejos</h2><p>Estado actual del mapa compartido.</p></div></div><div class="stack">'+locs.map(personCard).join('')+'</div></section>';
 }
 function actionCard(iconName,title,copy,action){return '<button class="action-card" data-action="'+action+'"><span class="icon">'+ico(iconName)+'</span><b>'+esc(title)+'</b><small>'+esc(copy)+'</small></button>';}
+function universalSearchData(){return {items:cloud?.items||[],places:cloud?.places||mapData?.places||[]};}
+function universalSearchRows(query){
+ if(!window.GalaxySearch?.searchUniverse)return[];
+ return window.GalaxySearch.searchUniverse(universalSearchData(),query,40);
+}
+function universalSearchResultsMarkup(query){
+ const q=String(query||'').trim();
+ if(!q)return '<div class="universal-search-empty">'+ico('search')+'<h3>Todo lo nuestro, en una búsqueda</h3><p>Busca recuerdos, planes, notas, canciones, cápsulas, deseos, viajes, fechas o lugares.</p></div>';
+ const rows=universalSearchRows(q);
+ if(!rows.length)return '<div class="universal-search-empty">'+ico('search-x')+'<h3>No encontramos nada</h3><p>Prueba con otra palabra, un lugar, una fecha o el nombre de un recuerdo.</p></div>';
+ return '<div class="universal-search-list">'+rows.map(r=>{
+  const iconName=r.type==='place'?'map-pin':(kindMeta[r.kind]?.[0]||'file-text');
+  return '<button class="universal-search-result" data-action="universal-search-result" data-type="'+attr(r.type)+'" data-id="'+attr(r.id)+'" data-kind="'+attr(r.kind||'')+'"><span class="search-result-icon">'+ico(iconName)+'</span><span class="search-result-copy"><b>'+esc(r.title)+'</b><small>'+esc(r.subtitle||'')+'</small></span>'+ico('chevron-right')+'</button>';
+ }).join('')+'</div><p class="universal-search-count">'+rows.length+' resultado'+(rows.length===1?'':'s')+'</p>';
+}
+function renderUniversalSearchResults(query){
+ const el=document.querySelector('#universalSearchResults');if(!el)return;
+ el.innerHTML=universalSearchResultsMarkup(query);refreshIcons();
+}
+function openUniversalSearch(){
+ showModal('Buscar en nuestra galaxia','<div class="universal-search"><label class="universal-search-box">'+ico('search')+'<input id="universalSearchInput" class="input" autocomplete="off" autocapitalize="sentences" placeholder="Un recuerdo, lugar, canción, plan…" aria-label="Buscar en nuestra galaxia"></label><div id="universalSearchResults" aria-live="polite"></div></div>');
+ renderUniversalSearchResults('');
+ setTimeout(()=>document.querySelector('#universalSearchInput')?.focus(),80);
+}
+async function openUniversalSearchResult(btn){
+ const type=String(btn.dataset.type||''),id=String(btn.dataset.id||'');
+ if(type==='place'){
+  const known=(cloud?.places||mapData?.places||[]).find(p=>String(p.id)===id);
+  closeModal();go('map');
+  if(!mapData)await refreshMap({detail:true});
+  const place=(mapData?.places||cloud?.places||[]).find(p=>String(p.id)===id)||known;
+  setTimeout(()=>{if(place&&map){map.setView([Number(place.latitude),Number(place.longitude)],16);document.querySelector('#map')?.scrollIntoView({behavior:'smooth',block:'center'});}},180);
+  return;
+ }
+ const item=cloud?.items?.find(i=>String(i.id)===id);if(!item)return;
+ closeModal();memoryTab=item.kind==='song'?'music':item.kind;go('memories');
+ setTimeout(()=>{
+  const target=[...document.querySelectorAll('[data-item-id]')].find(el=>String(el.dataset.itemId)===id);
+  if(target){target.classList.add('search-hit');target.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>target.classList.remove('search-hit'),1800);}
+ },100);
+}
+
 function dailyAnswerMarkup(own,partner){
  let html='';
  if(!own.answer)html='<form id="dailyForm" class="stack" style="margin-top:14px"><textarea name="answer" placeholder="Tu respuesta…" required></textarea><button class="btn" type="submit">Guardar respuesta</button></form>';
@@ -352,8 +394,8 @@ function constellationView(){
 }
 function itemCard(i){
  const d=i.data||{},meta=kindMeta[i.kind]||['sparkles',i.kind],date=d.date?fmtDate(d.date):fmtDateTime(i.created),done=d.done?' · Hecho':'',locked=i.kind==='capsule'&&String(d.date||d.unlockDate||'')>String(cloud.today||''),voices=locked?[]:linkedVoices(i.id);
- if(locked)return '<div class="card item"><div class="item-icon">'+ico('lock')+'</div><div class="item-main"><div class="meta">Se abre '+esc(date)+'</div><h3>'+esc(d.title||'Cápsula')+'</h3><p class="muted">Este contenido seguirá guardado hasta la fecha elegida.</p></div></div>';
- return '<div class="card item"><div class="item-icon">'+ico(meta[0])+'</div><div class="item-main"><div class="meta">'+esc(date)+esc(done)+'</div><h3>'+esc(d.title||meta[1])+'</h3>'+(d.body?'<p>'+esc(d.body)+'</p>':'')+(voices.length?'<div class="stack" style="margin-top:10px">'+voices.map(voiceCard).join('')+'</div>':'')+'<div class="item-actions">'+(['memory','capsule','journey'].includes(i.kind)?'<button class="btn small secondary" data-action="voice-for-item" data-id="'+i.id+'">'+ico('mic')+' Añadir voz</button>':'')+'<button class="btn small secondary" data-action="item-edit" data-id="'+i.id+'">Editar</button><button class="btn small ghost" data-action="item-delete" data-id="'+i.id+'">Eliminar</button></div></div></div>';
+ if(locked)return '<div class="card item" data-item-id="'+attr(i.id)+'"><div class="item-icon">'+ico('lock')+'</div><div class="item-main"><div class="meta">Se abre '+esc(date)+'</div><h3>'+esc(d.title||'Cápsula')+'</h3><p class="muted">Este contenido seguirá guardado hasta la fecha elegida.</p></div></div>';
+ return '<div class="card item" data-item-id="'+attr(i.id)+'"><div class="item-icon">'+ico(meta[0])+'</div><div class="item-main"><div class="meta">'+esc(date)+esc(done)+'</div><h3>'+esc(d.title||meta[1])+'</h3>'+(d.body?'<p>'+esc(d.body)+'</p>':'')+(voices.length?'<div class="stack" style="margin-top:10px">'+voices.map(voiceCard).join('')+'</div>':'')+'<div class="item-actions">'+(['memory','capsule','journey'].includes(i.kind)?'<button class="btn small secondary" data-action="voice-for-item" data-id="'+i.id+'">'+ico('mic')+' Añadir voz</button>':'')+'<button class="btn small secondary" data-action="item-edit" data-id="'+i.id+'">Editar</button><button class="btn small ghost" data-action="item-delete" data-id="'+i.id+'">Eliminar</button></div></div></div>';
 }
 function storyTimeline(){
  const entries=(cloud?.items||[]).filter(x=>['memory','journey','event','capsule','song'].includes(x.kind)).filter(x=>x.kind!=='capsule'||String(x.data?.date||'')<=String(cloud.today||'')).slice().sort((a,b)=>String(b.data?.date||b.created).localeCompare(String(a.data?.date||a.created))).slice(0,12);
@@ -648,6 +690,8 @@ document.addEventListener('click',async e=>{
   if(a==='welcome-skip'){finishAdriWelcome();return;}
   if(a==='welcome-replay'){welcomePreview=true;welcomeStep=0;welcomeGift=true;welcomeEntering=false;tourStep=-1;render();window.scrollTo(0,0);return;}
   if(a==='modal-close'){closeModal();return;}
+  if(a==='universal-search-open'){openUniversalSearch();return;}
+  if(a==='universal-search-result'){await openUniversalSearchResult(btn);return;}
   if(a==='map'){go('map');return;}
   if(a==='moments'){go('moments');return;}
   if(a==='add-memory'){if(!mapData)await refreshMap({quiet:true,detail:false});openItemForm('memory');return;}
@@ -729,6 +773,10 @@ document.addEventListener('click',async e=>{
   if(a==='update-check'){await GalaxyNative.call('checkUpdate');return;}
   if(a==='unpair'){if(confirm('¿Desvincular este teléfono de Nuestra Galaxia?')){await GalaxyNative.call('unpair');native=nativeState();cloud=null;render();}return;}
  }catch(err){toast(err.message||'No pudimos completar la acción.');}
+});
+
+document.addEventListener('input',e=>{
+ if(e.target.id==='universalSearchInput')renderUniversalSearchResults(e.target.value);
 });
 
 document.addEventListener('change',e=>{
