@@ -31,7 +31,7 @@ const dailyQuestions=[
  '¿Qué aprendiste de mí recientemente?','¿Cómo sería un domingo perfecto juntos?','¿Qué te gustaría que nunca dejáramos de hacer?',
  '¿Qué plan harías conmigo con cero presupuesto?','¿Qué quieres agradecerme hoy?','¿Qué quieres que vivamos antes de terminar este año?'
 ];
-const surpriseIdeas=[
+const legacySurpriseIdeas=[
  {title:'Café y caminata',body:'Elegir un café nuevo y caminar sin afán por el barrio.',minutes:90,budget:45000,where:'salir'},
  {title:'Noche de película',body:'Cada uno propone una película, se sortea una y preparan algo rico.',minutes:150,budget:25000,where:'casa'},
  {title:'Cocinar juntos',body:'Comprar ingredientes para una receta que ninguno haya hecho.',minutes:120,budget:55000,where:'casa'},
@@ -44,6 +44,7 @@ const surpriseIdeas=[
 
 let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',memoriesTabsScroll=0,media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),insightsCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
 let toastTimer,refreshing=false,updateState={text:'La app está al día.',progress:0,busy:false},pendingVoiceDraft=null,voiceReady=false,voiceRecording=false,voiceResumeMusic=false,lastSurprise=null;
+let dateContext=null,dateContextLoadedAt=0,dateQuestionNonce=0,dateMode=null,dateModeTimer=null,dateLastExperience=null;
 let presenceLastSignature='',voiceTimer=null,voiceSeconds=0;
 let welcomeStep=0,welcomePreview=false,welcomeGift=true,welcomeEntering=false,tourStep=-1;
 const welcomeMusic=new Audio('../musica.mp3');welcomeMusic.loop=true;welcomeMusic.volume=.32;
@@ -171,7 +172,7 @@ function nowCard(){
  const me=String(cloud.person),other=me==='0'?'1':'0';
  return '<section class="section now-section"><div class="section-head"><div><p class="eyebrow">AHORA</p><h2>Cómo estamos</h2><p>Solo se comparte lo que cada uno decide activar.</p></div><button class="btn small ghost" data-action="now-settings">'+ico('sliders-horizontal')+' Privacidad</button></div><div class="now-grid">'+nowPersonCard(me,true)+nowPersonCard(other,false)+'</div></section>';
 }
-const dailyQuestion=()=>{const d=cloud?.today||new Date().toISOString().slice(0,10);let n=0;for(const c of d)n+=c.charCodeAt(0);return dailyQuestions[n%dailyQuestions.length];};
+const dailyQuestion=()=>{if(dateContext?.question?.text)return dateContext.question.text;const d=cloud?.today||new Date().toISOString().slice(0,10);let n=0;for(const ch of d)n+=ch.charCodeAt(0);return dailyQuestions[n%dailyQuestions.length];};
 const currentMonday=()=>{const d=new Date((cloud?.today||new Date().toISOString().slice(0,10))+'T12:00:00');const day=d.getDay()||7;d.setDate(d.getDate()-day+1);return d.toISOString().slice(0,10);};
 const coupleDays=()=>{const s=cloud?.settings?.data?.startDate;if(!s)return 0;return Math.max(0,Math.floor((Date.parse((cloud?.today||s)+'T12:00:00Z')-Date.parse(s+'T12:00:00Z'))/86400000));};
 const dateDistance=d=>Math.round((Date.parse(d+'T12:00:00Z')-Date.parse((cloud?.today||d)+'T12:00:00Z'))/86400000);
@@ -232,7 +233,7 @@ function scheduleRender(){
 async function refreshState({quiet=false}={}){
  if(!native.paired||refreshing)return;
  refreshing=true;
- try{cloud=await api('mobile-state');native=nativeState();if(!quiet)render();}
+ try{cloud=await api('mobile-state');native=nativeState();await loadDateContext(false).catch(()=>{});if(!quiet)render();}
  catch(e){if(!quiet)toast(e.message);}
  finally{refreshing=false;}
 }
@@ -356,7 +357,7 @@ function homeView(){
  const locs=cloud.locations||[];
  return anniversaryInsightsBanner()+'<section class="hero"><p class="eyebrow">NUESTRO UNIVERSO</p><h1>'+esc(myName())+' & '+esc(partnerName())+'</h1><p>Un lugar para acompañarnos, guardar lo vivido y seguir construyendo lo que viene.</p><div class="hero-stats"><div class="hero-stat"><b>'+coupleDays()+'</b><small>días juntos</small></div><div class="hero-stat"><b>'+items('memory').length+'</b><small>recuerdos</small></div><div class="hero-stat"><b>'+garden.days+'</b><small>días del girasol</small></div></div></section>'+monthlySummaryTeaser()+todayHistoryTeaser()+coupleDistanceCard()+encounterStatsTeaser()+nowCard()+
  '<section class="section"><div class="section-head"><div><h2>¿Cómo estás hoy?</h2><p>Tu estado se comparte solo con tu persona.</p></div></div><div class="mood-grid">'+Object.entries(moods).map(([id,m])=>'<button class="mood '+(own.mood===id?'active':'')+'" data-action="mood" data-value="'+id+'"><span>'+ico(m[0])+'</span>'+m[1]+'</button>').join('')+'</div>'+(partner.mood?'<div class="card" style="margin-top:10px"><span class="badge">'+esc(partnerName())+'</span> <b>'+esc(moods[partner.mood]?.[1]||partner.mood)+'</b></div>':'')+'</section>'+
- '<section class="section"><div class="card"><p class="eyebrow">PREGUNTA DEL DÍA</p><h3>'+esc(dailyQuestion())+'</h3>'+dailyAnswerMarkup(own,partner)+'</div></section>'+
+ dailyQuestionCard(own,partner)+
  '<section class="section"><div class="grid">'+
  actionCard('map-pin','Nuestro mapa','Ver dónde estamos y nuestros recorridos','map')+
  actionCard('heart','Enviar un gesto','Abrazo, beso o “te extraño”','moments')+
@@ -736,6 +737,12 @@ function dailyAnswerMarkup(own,partner){
  else if(own.answer)html+='<p class="muted" style="font-size:12px;margin-top:10px">La respuesta de '+esc(partnerName())+' aparecerá cuando ambos hayan respondido.</p>';
  return html;
 }
+function dailyQuestionCard(own,partner){
+ const q=dateContext?.question||{},both=!!own?.answer&&!!partner?.answer;
+ const deckLabels={funny:'Divertidas',memories:'Recuerdos',future:'Futuro',intimate:'Íntimas y emocionales',absurd:'Absurdas',travel:'Viajes','would-you-rather':'¿Qué prefieres?'};
+ return '<section class="section"><div class="card date-question-card"><div class="row between"><div><p class="eyebrow">PREGUNTA DEL DÍA 2.0</p><small class="muted">'+esc(deckLabels[q.deck]||'Una pregunta para hoy')+'</small></div><button class="icon-btn '+(q.favorite?'active':'')+'" data-action="date-question-favorite" aria-label="'+(q.favorite?'Quitar de favoritas':'Marcar como favorita')+'">'+ico('star')+'</button></div><h3>'+esc(dailyQuestion())+'</h3>'+dailyAnswerMarkup(own,partner)+'<div class="row wrap date-question-actions"><button class="btn small secondary" data-action="date-question-decks">'+ico('layers-3')+' Barajas</button><button class="btn small ghost" data-action="date-question-memory" '+(both?'':'disabled')+'>'+ico('bookmark-plus')+' '+(q.memoryId?'Ver recuerdo':'Guardar como recuerdo')+'</button></div>'+(both?'':'<p class="muted date-question-privacy">'+ico('lock')+' Las dos respuestas se unen a un recuerdo solo cuando ambos hayan contestado.</p>')+'</div></section>';
+}
+
 function personCard(l){
  const name=names()[Number(l.person)]||'Nosotros',live=!!l.sharing,motion=transportLabel(l),kmh=Math.max(0,Number(l.speed||0)*3.6);
  return '<div class="card person-card"><div class="bubble">'+esc(name.slice(0,1))+'</div><div><b><span class="status-dot '+(live?'live':'')+'"></span>'+esc(name)+'</b><p>'+(live?esc(motion)+(l.status?' · '+esc(l.status):''):'Ubicación pausada')+'</p></div><div class="speed">'+(live?kmh.toFixed(kmh<10?1:0):'—')+'<small>km/h</small></div></div>';
@@ -835,7 +842,7 @@ function momentsView(){
  '<button class="gesture" data-action="gesture" data-gesture="hug"><span>'+ico('hand-heart')+'</span>Abrazo</button>'+
  '<button class="gesture" data-action="gesture" data-gesture="kiss"><span>'+ico('heart')+'</span>Beso</button>'+
  '<button class="gesture" data-action="gesture" data-gesture="miss"><span>'+ico('message-circle')+'</span>Te extraño</button></div></div>'+
- '<div class="section"><div class="grid">'+actionCard('dice-5','Cita sorpresa','Una idea según el momento','surprise')+actionCard('gamepad-2','Juego de nosotros','Adivinar lo que elegiría el otro','new-game')+actionCard('notebook-pen','Ritual semanal','Agradecer, pedir y planear','new-ritual')+actionCard('mic','Mensaje de voz','Dejar una voz para el otro','new-voice')+'</div></div>'+
+ '<div class="section"><div class="grid">'+actionCard('sparkles','Cita sorpresa 2.0','Tiempo, presupuesto y contexto real','surprise')+actionCard('timer','Modo Cita','Música, preguntas, fotos y recap','date-mode-open')+actionCard('dices','Ruleta de planes','Elegir entre planes pendientes','plan-roulette-open')+actionCard('list-ordered','Planificar una cita','Armar una secuencia con tiempo y presupuesto','date-planner-open')+actionCard('layers-3','Barajas de preguntas','Elegir un tema para conversar','date-question-decks')+actionCard('gamepad-2','Juego de nosotros','Adivinar lo que elegiría el otro','new-game')+actionCard('notebook-pen','Ritual semanal','Agradecer, pedir y planear','new-ritual')+actionCard('mic','Mensaje de voz','Dejar una voz para el otro','new-voice')+'</div></div>'+
  surpriseNotesView()+
  momentSection('Juego de nosotros',games,gameCard,'No hay preguntas pendientes todavía.')+
  momentSection('Ritual semanal',rituals,ritualCard,'El primer ritual puede empezar esta semana.')+
@@ -1075,7 +1082,7 @@ function showModal(title,body,formId=''){
  refreshIcons();
 }
 async function resetVoiceDraft(){stopVoiceTimer();if(voiceRecording||voiceReady){try{await GalaxyNative.call('discardVoiceRecording');}catch{}}voiceRecording=false;voiceReady=false;if(voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}}
-function closeModal(){if(modal.dataset.form==='voice'&&pendingVoiceDraft!==null)resetVoiceDraft();if(modal.open)modal.close();delete modal.dataset.editId;delete modal.dataset.version;delete modal.dataset.kind;delete modal.dataset.form;}
+function closeModal(){if(modal.dataset.form==='voice'&&pendingVoiceDraft!==null)resetVoiceDraft();if(dateModeTimer){clearInterval(dateModeTimer);dateModeTimer=null;}if(modal.open)modal.close();delete modal.dataset.editId;delete modal.dataset.version;delete modal.dataset.kind;delete modal.dataset.form;}
 function openItemForm(kind,item){
  const d=item?.data||{},meta=kindMeta[kind]||['sparkles','Contenido'],editing=!!item?.id,places=mapData?.places||[];
  modal.dataset.editId=item?.id||'';modal.dataset.version=item?.version||'';modal.dataset.kind=kind;
@@ -1084,6 +1091,7 @@ function openItemForm(kind,item){
  const body='<form id="itemForm" class="stack" style="margin-top:16px"><div class="field"><label>Título</label><input class="input" name="title" value="'+attr(d.title||'')+'" required maxlength="160"></div><div class="field"><label>Texto</label><textarea name="body" placeholder="Escribe aquí…">'+esc(d.body||'')+'</textarea></div>'+
  (needsDate?'<div class="field"><label>Fecha</label><input class="input" type="date" name="date" value="'+attr(d.date||'')+'"></div>':'')+
  '<div class="field"><label>Categoría</label><input class="input" name="category" value="'+attr(d.category||'')+'" placeholder="'+attr(meta[1])+'"></div>'+placeField+
+ (kind==='plan'?'<div class="date-plan-fields"><div class="field"><label>Cuándo</label><select name="planCategory"><option value="this-week" '+(d.planCategory==='this-week'?'selected':'')+'>Esta semana</option><option value="when-possible" '+(!d.planCategory||d.planCategory==='when-possible'?'selected':'')+'>Cuando podamos</option><option value="someday" '+(d.planCategory==='someday'?'selected':'')+'>Algún día</option><option value="travel" '+(d.planCategory==='travel'?'selected':'')+'>Viaje</option><option value="home" '+(d.planCategory==='home'?'selected':'')+'>En casa</option></select></div><div class="date-plan-grid"><div class="field"><label>Presupuesto estimado</label><input class="input" type="number" min="0" step="1000" name="budget" value="'+attr(d.budget??'')+'" placeholder="0"></div><div class="field"><label>Duración (min)</label><input class="input" type="number" min="15" step="15" name="minutes" value="'+attr(d.minutes??'')+'" placeholder="120"></div></div><div class="field"><label>Entorno</label><select name="where"><option value="salir" '+(d.where!=='casa'?'selected':'')+'>Salir</option><option value="casa" '+(d.where==='casa'?'selected':'')+'>En casa</option></select></div></div>':'')+
  (kind==='event'?'<label class="row"><input type="checkbox" name="annual" '+(d.annual?'checked':'')+'> Se repite cada año</label>':'')+
  (kind==='plan'||kind==='wish'?'<label class="row"><input type="checkbox" name="done" '+(d.done?'checked':'')+'> Ya lo hicimos</label>':'')+
  '<div class="form-actions"><button class="btn secondary" type="button" data-action="modal-close">Cancelar</button><button class="btn" type="submit">Guardar</button></div></form>';
@@ -1116,10 +1124,100 @@ function openSurpriseNote(){
  const placeOptions=(own?'<option value="current">Donde estoy ahora</option>':'')+places.map(p=>'<option value="saved:'+p.id+'">'+esc(p.name)+'</option>').join('');
  showModal('Nueva nota sorpresa','<form id="surpriseNoteForm" class="stack" style="margin-top:16px"><div class="field"><label>Título</label><input class="input" name="title" required maxlength="160"></div><div class="field"><label>Mensaje</label><textarea name="body" required></textarea></div><div class="field"><label>Desbloquear</label><select name="unlockType" data-role="surprise-unlock"><option value="date">En una fecha</option>'+(hasPlace?'<option value="place">Al llegar a un lugar</option>':'')+'</select></div><div class="field" data-role="surprise-date"><label>Fecha</label><input class="input" type="date" name="unlockDate" value="'+attr(cloud.today)+'"></div>'+(hasPlace?'<div class="field" data-role="surprise-place" hidden><label>Lugar</label><select name="placeChoice">'+placeOptions+'</select><small>La sorpresa se abrirá dentro de un radio aproximado de 150 m.</small></div>':'')+'<button class="btn" type="submit">Guardar sorpresa</button></form>','surprise-note');
 }
-function openSurprise(){
- const idea=surpriseIdeas[Math.floor(Math.random()*surpriseIdeas.length)];lastSurprise=idea;
- showModal('Cita sorpresa','<div class="card" style="margin-top:16px"><span class="badge">'+idea.minutes+' min · '+(idea.budget?('$ '+idea.budget.toLocaleString('es-CO')):'$ 0')+' · '+esc(idea.where)+'</span><h3 style="margin-top:10px">'+esc(idea.title)+'</h3><p>'+esc(idea.body)+'</p></div><div class="form-actions"><button class="btn secondary" data-action="surprise-again">Otra idea</button><button class="btn" data-action="surprise-save">Guardar como plan</button></div>');
+async function loadDateContext(force=false){
+ if(!native.paired||!cloud)return dateContext;
+ if(!force&&dateContext&&Date.now()-dateContextLoadedAt<5*60*1000)return dateContext;
+ const next=await api('date-engine',{operation:'context'});
+ dateContext=next;dateContextLoadedAt=Date.now();
+ return next;
 }
+function dateDeckLabel(id){
+ return ({funny:'Divertidas',memories:'Recuerdos',future:'Futuro',intimate:'Íntimas / emocionales',absurd:'Absurdas',travel:'Viajes','would-you-rather':'¿Qué prefieres?'})[id]||id;
+}
+async function openQuestionDecks(){
+ await loadDateContext();
+ const decks=dateContext?.decks||[];
+ showModal('Barajas de preguntas','<div class="question-decks">'+decks.map(deck=>'<button class="card question-deck" data-action="date-deck-question" data-deck="'+attr(deck.id)+'"><span>'+ico(deck.id==='travel'?'plane':deck.id==='memories'?'history':deck.id==='future'?'telescope':deck.id==='intimate'?'heart-handshake':deck.id==='absurd'?'wand-sparkles':deck.id==='would-you-rather'?'split':'laugh')+'</span><div><b>'+esc(dateDeckLabel(deck.id))+'</b><small>'+Number(deck.count||0)+' preguntas</small></div>'+ico('chevron-right')+'</button>').join('')+'</div>');
+}
+async function openDeckQuestion(deck){
+ const result=await api('date-engine',{operation:'question',deck,seed:(cloud.today||'')+'|'+deck+'|'+(++dateQuestionNonce)});
+ const q=result.question||{};
+ showModal(dateDeckLabel(deck),'<div class="card deck-question-result"><p class="eyebrow">PARA CONVERSAR</p><h3>'+esc(q.text||'Pregunta')+'</h3><div class="row wrap"><button class="btn small secondary" data-action="date-deck-question" data-deck="'+attr(deck)+'">'+ico('refresh-cw')+' Otra</button><button class="btn small" data-action="date-mode-with-question" data-question-id="'+attr(q.id||'')+'" data-question-text="'+attr(q.text||'')+'">'+ico('timer')+' Llevar a Modo Cita</button></div></div>');
+}
+function dateConstraintsForm(id,title,submitLabel,defaults={}){
+ const minutes=Number(defaults.minutes||120),budget=Number(defaults.budget??50000),where=defaults.where||'cualquiera';
+ return '<form id="'+id+'" class="stack date-constraints" style="margin-top:16px"><div class="date-plan-grid"><div class="field"><label>Tiempo disponible</label><select name="minutes"><option value="30" '+(minutes===30?'selected':'')+'>30 min</option><option value="60" '+(minutes===60?'selected':'')+'>1 hora</option><option value="120" '+(minutes===120?'selected':'')+'>2 horas</option><option value="180" '+(minutes===180?'selected':'')+'>3 horas</option><option value="240" '+(minutes===240?'selected':'')+'>4 horas</option><option value="360" '+(minutes===360?'selected':'')+'>6 horas</option></select></div><div class="field"><label>Presupuesto total</label><input class="input" type="number" min="0" step="5000" name="budget" value="'+attr(budget)+'"></div></div><div class="field"><label>¿Dónde?</label><select name="where"><option value="cualquiera" '+(where==='cualquiera'?'selected':'')+'>Donde encaje mejor</option><option value="casa" '+(where==='casa'?'selected':'')+'>En casa</option><option value="salir" '+(where==='salir'?'selected':'')+'>Salir</option></select></div><div class="field"><label>Distancia máxima (opcional)</label><select name="maxDistanceM"><option value="">Sin límite</option><option value="3000">3 km</option><option value="7000">7 km</option><option value="15000">15 km</option></select></div><button class="btn" type="submit">'+esc(submitLabel)+'</button></form>';
+}
+async function openSurprise2(){
+ await loadDateContext();
+ showModal('Cita sorpresa 2.0',dateConstraintsForm('dateSuggestionForm','Cita sorpresa','Sorpréndenos',{minutes:120,budget:50000,where:'cualquiera'}),'date-suggestion');
+}
+function dateCandidateMarkup(experience){
+ const candidate=experience?.candidate;if(!candidate)return '<div class="empty">No encontré un plan compatible. Prueba con más tiempo, presupuesto o sin limitar el lugar.</div>';
+ dateLastExperience=experience;
+ return '<div class="date-experience card"><p class="eyebrow">PROPUESTA DE GALAXY DATE</p><span class="badge">'+Number(candidate.minutes||0)+' min · $ '+Number(candidate.budget||0).toLocaleString('es-CO')+' · '+esc(candidate.where||'')+'</span><h3>'+esc(candidate.title||'Una cita')+'</h3><p>'+esc(candidate.body||'')+'</p>'+(experience.reasons?.length?'<ul class="date-reasons">'+experience.reasons.map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul>':'')+'<div class="row wrap"><button class="btn secondary" data-action="date-experience-save">'+ico('bookmark-plus')+' Guardar plan</button><button class="btn" data-action="date-mode-start-experience">'+ico('timer')+' Empezar Modo Cita</button></div></div>';
+}
+async function openPlanRoulette(){
+ await loadDateContext();
+ const categories=[['','Todos'],['this-week','Esta semana'],['when-possible','Cuando podamos'],['someday','Algún día'],['travel','Viaje'],['home','En casa']];
+ showModal('Ruleta de planes','<form id="dateRouletteForm" class="stack"><div class="plan-roulette" aria-live="polite">'+ico('dices')+'<b>Que decida la galaxia</b><small>Solo usa planes pendientes reales.</small></div><div class="field"><label>Categoría</label><select name="category">'+categories.map(([id,label])=>'<option value="'+id+'">'+esc(label)+'</option>').join('')+'</select></div><button class="btn" type="submit">Girar ruleta</button></form>','date-roulette');
+}
+function rouletteResult(plan){
+ if(!plan)return '<div class="empty">No hay planes pendientes en esa categoría.</div>';
+ const d=plan.data||plan;
+ return '<div class="card plan-roulette result"><p class="eyebrow">LA GALAXIA ELIGIÓ</p><h3>'+esc(d.title||'Plan pendiente')+'</h3><p>'+esc(d.body||'')+'</p><div class="row wrap"><button class="btn" data-action="date-mode-start-plan" data-plan-id="'+attr(plan.id||'')+'">'+ico('timer')+' Empezar Modo Cita</button></div></div>';
+}
+async function openDatePlanner(){
+ await loadDateContext();
+ showModal('Planificador de cita',dateConstraintsForm('datePlannerForm','Planificador','Armar nuestra cita',{minutes:180,budget:100000,where:'cualquiera'}),'date-planner');
+}
+function plannerMarkup(experience){
+ const steps=experience?.steps||[];
+ if(!steps.length)return '<div class="empty">No pude armar una secuencia con esos límites. Prueba ampliando tiempo o presupuesto.</div>';
+ dateLastExperience={candidate:steps[0],planner:experience};
+ return '<div class="date-planner-result"><div class="row between"><div><p class="eyebrow">PLAN SECUENCIAL</p><h3>'+Number(experience.totalMinutes||0)+' min · $ '+Number(experience.totalBudget||0).toLocaleString('es-CO')+'</h3></div>'+ico('list-ordered')+'</div><ol>'+steps.map((step,index)=>'<li><span>'+Number(index+1)+'</span><div><b>'+esc(step.title)+'</b><small>'+Number(step.minutes||0)+' min · $ '+Number(step.budget||0).toLocaleString('es-CO')+'</small><p>'+esc(step.body||'')+'</p></div></li>').join('')+'</ol><div class="row wrap"><button class="btn secondary" data-action="date-planner-save">'+ico('bookmark-plus')+' Guardar como plan</button><button class="btn" data-action="date-mode-start-experience">'+ico('timer')+' Empezar Modo Cita</button></div></div>';
+}
+function newDateModeSession(planId=''){
+ return {sessionId:(crypto.randomUUID?.()||(Date.now().toString(36)+'-'+Math.random().toString(36).slice(2))),startedAt:new Date().toISOString(),planId:String(planId||''),songId:'',photos:[],photoPaths:[],questionIds:[],locationEnabled:false,placeId:null,question:null};
+}
+function dateModeElapsed(session=dateMode){
+ if(!session?.startedAt)return 0;
+ return Math.max(0,Math.floor((Date.now()-Date.parse(session.startedAt))/1000));
+}
+function dateModePlan(){
+ return (cloud?.items||[]).find(item=>item.kind==='plan'&&String(item.id)===String(dateMode?.planId||''))||null;
+}
+function dateModeSong(){
+ rebuildMusicQueue();return musicQueue[musicIndex]||null;
+}
+function updateDateModeTimer(){
+ if(dateModeTimer){clearInterval(dateModeTimer);dateModeTimer=null;}
+ dateModeTimer=setInterval(()=>{const el=modal.querySelector('[data-role="date-elapsed"]');if(el&&dateMode)el.textContent=fmtDuration(dateModeElapsed());},1000);
+}
+function dateModeMarkup(){
+ const plan=dateModePlan(),song=dateModeSong(),photos=dateMode?.photos||[],q=dateMode?.question;
+ const locationLabel=dateMode?.locationEnabled?(dateMode.placeId?'Lugar guardado vinculado':'Ubicación contextual activa'):'Sin ubicación';
+ return '<div class="date-mode"><div class="date-mode-hero"><p class="eyebrow">MODO CITA</p><h2 data-role="date-elapsed">'+fmtDuration(dateModeElapsed())+'</h2><p>Una pantalla temporal para acompañar este momento.</p></div><div class="date-mode-grid"><button class="card date-mode-tool" data-action="date-mode-music">'+ico('music')+'<b>Música</b><small>'+esc(song?.title||'Elegir nuestra música')+'</small></button><button class="card date-mode-tool" data-action="date-mode-question">'+ico('message-circle-question')+'<b>Pregunta</b><small>'+esc(q?.text||'Sacar una pregunta')+'</small></button><button class="card date-mode-tool" data-action="date-mode-camera">'+ico('camera')+'<b>Cámara / fotos</b><small>'+photos.length+' foto'+(photos.length===1?'':'s')+' en esta cita</small></button><button class="card date-mode-tool" data-action="date-mode-plan">'+ico('circle-check-big')+'<b>Plan actual</b><small>'+esc(plan?.data?.title||'Elegir un plan pendiente')+'</small></button><button class="card date-mode-tool" data-action="date-mode-location">'+ico('map-pin')+'<b>Ubicación</b><small>'+esc(locationLabel)+'</small></button></div>'+(q?'<div class="card date-mode-question"><p class="eyebrow">PREGUNTA PARA AHORA</p><h3>'+esc(q.text)+'</h3></div>':'')+(photos.length?'<div class="date-mode-photos">'+photos.slice(-4).map(photo=>photo.url?'<img src="'+attr(photo.url)+'" alt="Foto tomada durante la cita">':'<span>'+ico('image')+'</span>').join('')+'</div>':'')+'<button class="btn date-mode-save" data-action="date-mode-save">'+ico('heart')+' Guardar esta noche</button></div>';
+}
+function openDateMode(planId=''){
+ if(!dateMode)dateMode=newDateModeSession(planId);
+ else if(planId)dateMode.planId=String(planId);
+ showModal('Modo Cita',dateModeMarkup(),'date-mode');
+ updateDateModeTimer();
+}
+function openDateModePlanPicker(){
+ const plans=(dateContext?.pendingPlans||[]).slice();
+ showModal('Plan actual','<div class="stack">'+(plans.length?plans.map(plan=>'<button class="card plan-pick" data-action="date-mode-plan-select" data-plan-id="'+attr(plan.id)+'"><b>'+esc(plan.title||'Plan')+'</b><small>'+esc(dateDeckLabel(plan.planCategory)||'Pendiente')+'</small></button>').join(''):'<div class="empty">No hay planes pendientes. Puedes seguir en Modo Cita sin uno.</div>')+'<button class="btn ghost" data-action="date-mode-open">Volver al modo cita</button></div>');
+}
+async function openDateModeLocation(){
+ await loadDateContext();
+ if(!dateContext?.locationAvailable){
+  dateMode.locationEnabled=false;dateMode.placeId=null;toast('No hay GPS compartido activo. El Modo Cita funciona igual sin ubicación.');openDateMode();return;
+ }
+ const places=dateContext.places||[];
+ showModal('Contexto de ubicación','<div class="stack"><button class="card plan-pick" data-action="date-mode-location-select" data-place-id=""><b>Usar solo ubicación contextual</b><small>No guarda coordenadas en el recap.</small></button>'+places.slice(0,12).map(place=>'<button class="card plan-pick" data-action="date-mode-location-select" data-place-id="'+attr(place.id)+'"><b>'+esc(place.name)+'</b><small>'+(place.distanceM==null?'Lugar guardado':esc(fmtDistance(place.distanceM)))+'</small></button>').join('')+'<button class="btn ghost" data-action="date-mode-location-off">No usar ubicación</button></div>');
+}
+
 function openPlace(){
  const own=(mapData?.locations||cloud.locations||[]).find(l=>l.person===cloud.person&&l.sharing);
  if(!own){toast('Activa tu ubicación para guardar el lugar actual.');return;}
@@ -1174,6 +1272,7 @@ async function submitItem(form){
  if(fd.has('date'))data.date=fd.get('date');
  if(kind==='event')data.annual=fd.get('annual')==='on';
  if(kind==='plan'||kind==='wish')data.done=fd.get('done')==='on';
+ if(kind==='plan'){data.planCategory=fd.get('planCategory');data.budget=Math.max(0,Number(fd.get('budget')||0));data.minutes=Math.max(15,Number(fd.get('minutes')||120));data.where=fd.get('where')==='casa'?'casa':'salir';}
  if(fd.has('placeId')&&String(fd.get('placeId')||''))data.placeId=Number(fd.get('placeId'));
  await api('item-save',{...(id?{id,version}:{}),kind,data});closeModal();await refreshState();toast('Guardado en nuestra galaxia.');
 }
@@ -1252,10 +1351,29 @@ document.addEventListener('click',async e=>{
   if(a==='voice-file'){const form=modal.querySelector('#voiceForm'),fd=new FormData(form);pendingVoiceDraft={title:String(fd.get('title')||''),body:String(fd.get('body')||''),referenceId:String(fd.get('referenceId')||'')};if(!pendingVoiceDraft.title.trim()){toast('Ponle un título al mensaje.');return;}const upload=await GalaxyNative.call('pickMedia','voice');await api('bond-save',{type:'voice',data:{...pendingVoiceDraft,audioPath:upload.path,mime:upload.mime}});pendingVoiceDraft=null;closeModal();await refreshState();toast('Mensaje de voz guardado.');return;}
   if(a==='bond-delete'){await busy(()=>bondDelete(btn.dataset.id));return;}
   if(a==='game-guess'){await busy(async()=>{await api('bond-guess',{id:btn.dataset.id,guess:btn.dataset.guess});await refreshState();},'Respuesta enviada.');return;}
-  if(a==='surprise'){openSurprise();return;}
+  if(a==='surprise'){await openSurprise2();return;}
   if(a==='surprise-note-new'){if(!mapData)await refreshMap({quiet:true,detail:false});openSurpriseNote();return;}
-  if(a==='surprise-again'){openSurprise();return;}
-  if(a==='surprise-save'&&lastSurprise){await busy(async()=>{await api('item-save',{kind:'plan',data:{title:lastSurprise.title,body:lastSurprise.body,category:'Cita sorpresa',done:false}});closeModal();await refreshState();},'Cita guardada en Planes.');return;}
+  if(a==='date-question-decks'){await openQuestionDecks();return;}
+  if(a==='date-deck-question'){await openDeckQuestion(btn.dataset.deck);return;}
+  if(a==='date-question-favorite'){const result=await api('date-engine',{operation:'favorite',favorite:!dateContext?.question?.favorite});if(dateContext)dateContext.question=result.question;render();toast(result.question?.favorite?'Pregunta guardada en favoritas.':'Pregunta quitada de favoritas.');return;}
+  if(a==='date-question-memory'){const result=await api('date-engine',{operation:'favorite-memory',day:cloud.today});await refreshState({quiet:true});await loadDateContext(true);render();toast(result.existing?'Ese recuerdo ya estaba guardado.':'Pregunta y respuestas guardadas como un recuerdo.');return;}
+  if(a==='plan-roulette-open'){await openPlanRoulette();return;}
+  if(a==='date-planner-open'){await openDatePlanner();return;}
+  if(a==='date-mode-open'){await loadDateContext();openDateMode();return;}
+  if(a==='date-mode-with-question'){dateMode=dateMode||newDateModeSession();dateMode.question={id:btn.dataset.questionId,text:btn.dataset.questionText};if(btn.dataset.questionId&&!dateMode.questionIds.includes(btn.dataset.questionId))dateMode.questionIds.push(btn.dataset.questionId);openDateMode();return;}
+  if(a==='date-mode-question'){const result=await api('date-engine',{operation:'question',seed:(cloud.today||'')+'|date-mode|'+(++dateQuestionNonce)});dateMode.question=result.question;if(result.question?.id&&!dateMode.questionIds.includes(result.question.id))dateMode.questionIds.push(result.question.id);openDateMode();return;}
+  if(a==='date-mode-camera'){const photo=await GalaxyNative.call('capturePhoto');dateMode.photos.push(photo);if(photo.path&&!dateMode.photoPaths.includes(photo.path))dateMode.photoPaths.push(photo.path);media.photo=null;mediaLoadedAt.photo=0;openDateMode();toast('Foto añadida a esta cita y al álbum privado.');return;}
+  if(a==='date-mode-music'){rebuildMusicQueue();if(!musicQueue.length){closeModal();memoryTab='music';go('memories');toast('Añade una canción y vuelve a Modo Cita.');return;}if(musicIndex<0)playMusicAt(0);else toggleMusic();dateMode.songId=musicQueue[musicIndex]?.id||'';openDateMode();return;}
+  if(a==='date-mode-plan'){await loadDateContext();openDateModePlanPicker();return;}
+  if(a==='date-mode-plan-select'){dateMode.planId=String(btn.dataset.planId||'');openDateMode();return;}
+  if(a==='date-mode-location'){await openDateModeLocation();return;}
+  if(a==='date-mode-location-select'){dateMode.locationEnabled=true;dateMode.placeId=btn.dataset.placeId?Number(btn.dataset.placeId):null;openDateMode();return;}
+  if(a==='date-mode-location-off'){dateMode.locationEnabled=false;dateMode.placeId=null;openDateMode();return;}
+  if(a==='date-mode-save'){const endedAt=new Date().toISOString(),session={...dateMode,endedAt,elapsedSeconds:dateModeElapsed(),photoPaths:dateMode.photoPaths||[],questionIds:dateMode.questionIds||[]};const result=await api('date-engine',{operation:'date-recap-save',session});dateMode=null;if(dateModeTimer){clearInterval(dateModeTimer);dateModeTimer=null;}closeModal();await refreshState();toast(result.existing?'Esta cita ya estaba guardada.':'Esta noche quedó guardada como recuerdo.');return;}
+  if(a==='date-experience-save'&&dateLastExperience?.candidate){const x=dateLastExperience.candidate;await api('item-save',{kind:'plan',data:{title:x.title,body:x.body,category:'Galaxy Date',planCategory:x.planCategory||'when-possible',budget:Number(x.budget||0),minutes:Number(x.minutes||120),where:x.where||'salir',done:false,source:{type:'date-engine',candidateId:x.id}}});await refreshState({quiet:true});await loadDateContext(true);toast('Plan guardado.');return;}
+  if(a==='date-planner-save'&&dateLastExperience?.planner){const p=dateLastExperience.planner;await api('item-save',{kind:'plan',data:{title:'Cita planificada · '+cloud.today,body:p.steps.map((x,n)=>(n+1)+'. '+x.title).join('\n'),category:'Galaxy Date',planCategory:'when-possible',budget:Number(p.totalBudget||0),minutes:Number(p.totalMinutes||0),where:p.constraints?.where==='casa'?'casa':'salir',done:false,source:{type:'date-engine-planner',stepIds:p.steps.map(x=>x.id)}}});await refreshState({quiet:true});await loadDateContext(true);toast('Cita planificada guardada.');return;}
+  if(a==='date-mode-start-experience'&&dateLastExperience){const id=dateLastExperience.candidate?.source==='pending'?dateLastExperience.candidate.id:'';dateMode=newDateModeSession(id);openDateMode(id);return;}
+  if(a==='date-mode-start-plan'){dateMode=newDateModeSession(btn.dataset.planId);openDateMode(btn.dataset.planId);return;}
   if(a==='album-add'){openAlbumAdd();return;}
   if(a==='photos-picker'){await importPhotosPicker();return;}
   if(a==='photo-file'){closeModal();await GalaxyNative.call('pickMedia','photo');await refreshPhotoAlbum();toast('Foto añadida desde el teléfono.');return;}
@@ -1342,6 +1460,9 @@ document.addEventListener('submit',async e=>{
    const code=new FormData(e.target).get('code');await GalaxyNative.call('pair',String(code));native=nativeState();await refreshState();toast('Teléfono vinculado como '+myName()+'.');return;
   }
   if(e.target.id==='musicUrlForm'){const fd=new FormData(e.target),url=String(fd.get('url')||'').trim(),title=String(fd.get('title')||'').trim(),platform=detectMusicPlatform(url);if(!/^https:\/\//i.test(url))throw new Error('Usa un enlace https válido.');await api('item-save',{kind:'song',data:{title,url,platform}});closeModal();await refreshState();rebuildMusicQueue();renderGlobalPlayer();toast('Canción añadida a Nuestra música.');return;}
+  if(e.target.id==='dateSuggestionForm'){const fd=new FormData(e.target),constraints={minutes:Number(fd.get('minutes')),budget:Number(fd.get('budget')),where:String(fd.get('where')),maxDistanceM:fd.get('maxDistanceM')?Number(fd.get('maxDistanceM')):null};const result=await api('date-engine',{operation:'surprise',constraints,seed:cloud.today+'|surprise|'+(++dateQuestionNonce)});showModal('Cita sorpresa 2.0',dateCandidateMarkup(result.experience));return;}
+  if(e.target.id==='dateRouletteForm'){const fd=new FormData(e.target),result=await api('date-engine',{operation:'roulette',category:String(fd.get('category')||''),seed:cloud.today+'|roulette|'+(++dateQuestionNonce)});showModal('Ruleta de planes',rouletteResult(result.plan));return;}
+  if(e.target.id==='datePlannerForm'){const fd=new FormData(e.target),constraints={minutes:Number(fd.get('minutes')),budget:Number(fd.get('budget')),where:String(fd.get('where')),maxDistanceM:fd.get('maxDistanceM')?Number(fd.get('maxDistanceM')):null};const result=await api('date-engine',{operation:'planner',constraints,seed:cloud.today+'|planner|'+(++dateQuestionNonce)});showModal('Nuestra cita',plannerMarkup(result.experience));return;}
   if(e.target.id==='dailyForm'){await saveDaily('answer',new FormData(e.target).get('answer'));toast('Respuesta guardada.');return;}
   if(e.target.id==='itemForm'){await submitItem(e.target);return;}
   if(e.target.id==='gameForm'){const fd=new FormData(e.target);await api('bond-save',{type:'game',data:{questionId:fd.get('questionId'),answer:fd.get('answer')}});closeModal();await refreshState();toast('Pregunta guardada.');return;}
