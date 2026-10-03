@@ -9,7 +9,7 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const source=readFileSync(resolve(root,'android/app/src/main/assets/mobile/theme.js'),'utf8');
 const context={module:{exports:{}},exports:{},globalThis:{},Date};
 vm.runInNewContext(source,context);
-const {seasonal,resolve,normalize,options,activeLabel}=context.module.exports;
+const {seasonal,resolve:themeResolve,normalize,options,activeLabel}=context.module.exports;
 const local=(iso)=>new Date(iso+'T12:00:00');
 
 test('seasonal theme windows match the existing web experience',()=>{
@@ -26,8 +26,8 @@ test('seasonal theme windows match the existing web experience',()=>{
 });
 
 test('manual theme overrides seasonal automatic selection',()=>{
- assert.deepEqual({...resolve('cosmic',local('2026-12-24'))},{selected:'cosmic',active:'cosmic'});
- assert.deepEqual({...resolve('auto',local('2026-12-24'))},{selected:'auto',active:'christmas'});
+ assert.deepEqual({...themeResolve('cosmic',local('2026-12-24'))},{selected:'cosmic',active:'cosmic'});
+ assert.deepEqual({...themeResolve('auto',local('2026-12-24'))},{selected:'auto',active:'christmas'});
  assert.equal(normalize('unknown'),'auto');
 });
 
