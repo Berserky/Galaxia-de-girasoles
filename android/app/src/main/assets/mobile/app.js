@@ -439,6 +439,18 @@ function mapHistoryView(){
  '</div></section>';
 }
 
+function deviceProfilesCard(){
+ const me=String(cloud?.person??native.person??''),currentId=String(cloud?.device?.id||''),list=cloud?.devices||[],labels=names(),partner=labels[1]||'Adri',mine=labels[Number(me)]||myName();
+ const rows=list.map(d=>{
+   const current=String(d.id)===currentId,profile=labels[Number(d.person)]||('Perfil '+d.person),last=d.last_seen_at?fmtDateTime(d.last_seen_at):'sin actividad reciente';
+   return '<div class="row between" style="gap:10px;padding:10px 0"><span class="row" style="min-width:0">'+ico('smartphone')+'<span style="min-width:0"><b>'+esc(d.name||'Android')+'</b><small class="muted">Perfil '+esc(profile)+' · '+esc(last)+(current?' · este teléfono':'')+'</small></span></span>'+(current?'<span class="badge good">Actual</span>':'<button class="btn small ghost" data-action="device-revoke" data-id="'+attr(d.id)+'">Revocar</button>')+'</div>';
+ }).join('');
+ const ownerControls=me==='0'
+   ?'<div class="stack" style="margin-top:14px"><button class="btn" data-action="pair-code-partner">'+ico('key')+' Generar código para '+esc(partner)+'</button><button class="btn secondary" data-action="pair-code-self">Código para otro teléfono de '+esc(mine)+'</button><button class="btn danger" data-action="profile-repair">Este teléfono es de '+esc(partner)+'</button><p class="muted">Usa la última opción solo en el teléfono de '+esc(partner)+' si por error aparece vinculado como '+esc(mine)+'.</p></div>'
+   :'<div class="stack" style="margin-top:14px"><button class="btn secondary" data-action="pair-code-self">'+ico('key')+' Código para otro teléfono de '+esc(mine)+'</button></div>';
+ return '<div class="card"><div class="row between"><div><h3>Perfiles y teléfonos</h3><p>Este teléfono está entrando como <b>'+esc(mine)+'</b>. Cada código nuevo queda ligado al perfil que elijas.</p></div>'+ico('smartphone')+'</div><div class="stack" style="margin-top:10px">'+(rows||'<p class="muted">No hay otros teléfonos activos.</p>')+'</div>'+ownerControls+'</div>';
+}
+
 function moreView(){
  const settings=cloud.settings||{data:{},version:1},data=settings.data||{},presence=ownPresence();
  return '<section><div class="section-head"><div><p class="eyebrow">NUESTRA APP</p><h2>Más</h2><p>Privacidad, respaldo, nuestra historia inteligente y ajustes.</p></div></div>'+
@@ -449,7 +461,7 @@ function moreView(){
  '<div class="card"><div class="row between"><div><h3>Notificaciones de momentos</h3><p>Gestos y fechas especiales, sin depender del GPS.</p></div><span class="badge '+(native.momentNotifications?'good':'')+'">'+(native.momentNotifications?'Activas':'Pausadas')+'</span></div><button class="btn small secondary" style="margin-top:14px" data-action="moment-notifications">'+(native.momentNotifications?'Desactivar':'Activar')+'</button></div>'+
  '<div class="card"><h3>Nuestros datos</h3><form id="settingsForm" class="stack" style="margin-top:12px"><div class="grid"><div class="field"><label>Nombre 1</label><input class="input" name="name0" value="'+attr(data.names?.[0]||'')+'" required></div><div class="field"><label>Nombre 2</label><input class="input" name="name1" value="'+attr(data.names?.[1]||'')+'" required></div></div><div class="field"><label>Inicio de nuestra historia</label><input class="input" type="date" name="startDate" value="'+attr(data.startDate||'')+'"></div><div class="field"><label>Álbum de Google Fotos (opcional)</label><input class="input" name="albumUrl" value="'+attr(data.albumUrl||'')+'" placeholder="https://photos.app.goo.gl/…"></div><button class="btn" type="submit">Guardar ajustes</button></form></div>'+
  (Number(cloud?.person)===0?'<div class="card"><div class="row between"><div><h3>Previsualización de Adri</h3><p>Solo tú puedes ver este control. Abre la bienvenida exactamente como la verá Adri, sin marcarla como completada.</p></div>'+ico('sparkles')+'</div><button class="btn small secondary" style="margin-top:14px" data-action="welcome-replay">Previsualizar bienvenida</button></div>':'')+
- '<div class="card"><h3>Permisos de Android</h3><p>Ubicación: '+(native.locationGranted?'concedida':'pendiente')+' · Segundo plano: '+(native.backgroundLocationGranted?'concedido':'opcional')+' · Notificaciones: '+(native.notificationsGranted?'concedidas':'pendientes')+'</p><button class="btn small secondary" style="margin-top:14px" data-action="app-settings">Abrir ajustes del sistema</button></div>'+
+ deviceProfilesCard()+'<div class="card"><h3>Permisos de Android</h3><p>Ubicación: '+(native.locationGranted?'concedida':'pendiente')+' · Segundo plano: '+(native.backgroundLocationGranted?'concedido':'opcional')+' · Notificaciones: '+(native.notificationsGranted?'concedidas':'pendientes')+'</p><button class="btn small secondary" style="margin-top:14px" data-action="app-settings">Abrir ajustes del sistema</button></div>'+
  '<div class="card" id="updateCard">'+updateMarkup()+'</div>'+
  '<div class="card"><h3>Este teléfono</h3><p>'+esc(native.name||'Android')+' · Perfil '+esc(myName())+' · v'+esc(native.version)+'</p><button class="btn small danger" style="margin-top:14px" data-action="unpair">Desvincular teléfono</button></div>'+
  '</section>';
@@ -682,6 +694,25 @@ document.addEventListener('click',async e=>{
   if(a==='now-settings'){go('more');setTimeout(()=>document.querySelector('.privacy-grid')?.scrollIntoView({behavior:'smooth',block:'center'}),80);return;}
   if(a==='presence-battery'){await busy(()=>togglePresence('battery'),'Privacidad de batería actualizada.');return;}
   if(a==='presence-listening'){await busy(()=>togglePresence('listening'),'Privacidad de música actualizada.');return;}
+  if(a==='pair-code-partner'||a==='pair-code-self'){
+    const target=a==='pair-code-partner'?'1':String(cloud.person),profile=names()[Number(target)]||('Perfil '+target);
+    const r=await api('pair-code-create',{target_person:target,device_name:'Android de '+profile});
+    showModal('Código para '+profile,'<div class="stack" style="margin-top:16px"><p>Este código vinculará el próximo teléfono como <b>'+esc(profile)+'</b>. Dura 10 minutos y sirve una sola vez.</p><input class="input" readonly value="'+attr(r.code)+'" aria-label="Código de vinculación"><button class="btn" data-action="pair-code-copy" data-code="'+attr(r.code)+'">'+ico('key')+' Copiar código</button><p class="muted">Antes de compartirlo, verifica que arriba diga el nombre correcto.</p></div>');
+    return;
+  }
+  if(a==='pair-code-copy'){await GalaxyNative.call('copyText','Código de Nuestra Galaxia',String(btn.dataset.code||''));toast('Código copiado.');return;}
+  if(a==='profile-repair'){
+    const partner=names()[1]||'Adri',mine=names()[0]||'Sebas';
+    if(!confirm('Esto cambiará ESTE teléfono de '+mine+' a '+partner+'. Úsalo solo en el teléfono de '+partner+'. ¿Continuar?'))return;
+    await api('profile-repair',{target_person:'1'});
+    try{localStorage.removeItem(WELCOME_KEY);}catch{}
+    native=nativeState();welcomePreview=false;welcomeStep=0;welcomeGift=true;welcomeEntering=false;tourStep=-1;
+    await refreshState({quiet:true});render();toast('Perfil corregido: este teléfono ahora es '+partner+'.');return;
+  }
+  if(a==='device-revoke'){
+    if(!confirm('¿Revocar este teléfono? Dejará de poder entrar hasta vincularlo otra vez.'))return;
+    await api('device-revoke',{id:btn.dataset.id});await refreshState({quiet:true});render();toast('Teléfono revocado.');return;
+  }
   if(a==='app-settings'){await GalaxyNative.call('openAppSettings');return;}
   if(a==='widget-add'){await GalaxyNative.call('addWidget');toast('Android abrió la solicitud del widget.');return;}
   if(a==='widget-photo'){await chooseWidgetPhoto();return;}
@@ -706,7 +737,7 @@ document.addEventListener('submit',async e=>{
  try{
   if(e.target.id==='ourAiForm'){const q=String(new FormData(e.target).get('question')||'');showAiAnswer(q);return;}
   if(e.target.id==='pairForm'){
-   const code=new FormData(e.target).get('code');await GalaxyNative.call('pair',String(code));native=nativeState();await refreshState();toast('Teléfono vinculado.');return;
+   const code=new FormData(e.target).get('code');await GalaxyNative.call('pair',String(code));native=nativeState();await refreshState();toast('Teléfono vinculado como '+myName()+'.');return;
   }
   if(e.target.id==='musicUrlForm'){const fd=new FormData(e.target),url=String(fd.get('url')||'').trim(),title=String(fd.get('title')||'').trim(),platform=detectMusicPlatform(url);if(!/^https:\/\//i.test(url))throw new Error('Usa un enlace https válido.');await api('item-save',{kind:'song',data:{title,url,platform}});closeModal();await refreshState();rebuildMusicQueue();renderGlobalPlayer();toast('Canción añadida a Nuestra música.');return;}
   if(e.target.id==='dailyForm'){await saveDaily('answer',new FormData(e.target).get('answer'));toast('Respuesta guardada.');return;}
