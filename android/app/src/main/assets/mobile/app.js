@@ -46,7 +46,7 @@ let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryT
 let toastTimer,refreshing=false,updateState={text:'La app está al día.',progress:0,busy:false},pendingVoiceDraft=null,voiceReady=false,voiceRecording=false,voiceResumeMusic=false,lastSurprise=null;
 let dateContext=null,dateContextLoadedAt=0,dateQuestionNonce=0,dateMode=null,dateModeTimer=null,dateLastExperience=null;
 let goalsState=null,goalsLoadedAt=0,goalsFilter='active';
-let presenceLastSignature='',voiceTimer=null,voiceSeconds=0;
+let presenceLastSignature='',voiceTimer=null,voiceSeconds=0,intelligenceSearchNonce=0;
 let welcomeStep=0,welcomePreview=false,welcomeGift=true,welcomeEntering=false,tourStep=-1;
 const welcomeMusic=new Audio('../musica.mp3');welcomeMusic.loop=true;welcomeMusic.volume=.32;
 const globalPlayer=document.getElementById('globalPlayer'),providerPlayer=document.getElementById('providerPlayer');
@@ -724,9 +724,28 @@ function universalSearchResultsMarkup(query){
   return '<button class="universal-search-result" data-action="universal-search-result" data-type="'+attr(r.type)+'" data-id="'+attr(r.id)+'" data-kind="'+attr(r.kind||'')+'"><span class="search-result-icon">'+ico(iconName)+'</span><span class="search-result-copy"><b>'+esc(r.title)+'</b><small>'+esc(r.subtitle||'')+'</small></span>'+ico('chevron-right')+'</button>';
  }).join('')+'</div><p class="universal-search-count">'+rows.length+' resultado'+(rows.length===1?'':'s')+'</p>';
 }
+function intelligenceSearchExtraMarkup(result,classicRows=[]){
+ const classicKeys=new Set((classicRows||[]).map(r=>(r.type==='place'?'place':r.kind)+':'+String(r.id)));
+ const rows=(result?.results||[]).filter(r=>!classicKeys.has(String(r.sourceType)+':'+String(r.sourceId))).slice(0,12);
+ const mode=result?.mode||'fallback';
+ if(!rows.length)return '<p class="universal-search-count intelligence-search-status">Búsqueda clásica activa'+(mode.includes('fallback')?' · fallback':'')+'.</p>';
+ return '<div class="intelligence-search-divider"><span>'+ico('sparkles')+'</span><b>Relacionados por Galaxy Intelligence</b><small>Exactos y texto completo tienen prioridad sobre similitud semántica.</small></div><div class="universal-search-list">'+rows.map(r=>'<button class="universal-search-result" data-action="intelligence-search-result" data-source-type="'+attr(r.sourceType||'')+'" data-source-id="'+attr(r.sourceId||'')+'" data-title="'+attr(r.title||'Momento')+'" data-snippet="'+attr(r.snippet||'')+'"><span class="search-result-icon">'+ico(r.sourceType==='place'?'map-pin':r.sourceType==='song'?'music':r.sourceType==='trip'?'route':r.sourceType==='goal'?'target':r.sourceType==='voice-transcript'?'audio-lines':'sparkles')+'</span><span class="search-result-copy"><b>'+esc(r.title||'Momento')+'</b><small>'+esc(r.snippet||r.date||'')+'</small></span><span class="badge mini">'+(r.exact?'Exacta':r.fulltext?'Texto':r.semantic?'Semántica':'Relacionada')+'</span></button>').join('')+'</div><p class="universal-search-count">'+rows.length+' resultado'+(rows.length===1?'':'s')+' adicional'+(rows.length===1?'':'es')+'.</p>';
+}
 function renderUniversalSearchResults(query){
  const el=document.querySelector('#universalSearchResults');if(!el)return;
- el.innerHTML=universalSearchResultsMarkup(query);refreshIcons();
+ const q=String(query||'').trim(),classic=universalSearchRows(q);
+ el.innerHTML=universalSearchResultsMarkup(q);refreshIcons();
+ if(q.length<2||!native.paired)return;
+ const nonce=++intelligenceSearchNonce;
+ api('intelligence-search',{query:q,limit:24}).then(result=>{
+  if(nonce!==intelligenceSearchNonce||!document.querySelector('#universalSearchResults'))return;
+  const target=document.querySelector('#universalSearchResults');
+  if(target){target.innerHTML=universalSearchResultsMarkup(q)+intelligenceSearchExtraMarkup(result,classic);refreshIcons();}
+ }).catch(()=>{
+  if(nonce!==intelligenceSearchNonce)return;
+  const target=document.querySelector('#universalSearchResults');
+  if(target&&!target.querySelector('.intelligence-search-status'))target.insertAdjacentHTML('beforeend','<p class="universal-search-count intelligence-search-status">Galaxy Intelligence no respondió · fallback clásico activo.</p>');
+ });
 }
 function openUniversalSearch(){
  showModal('Buscar en nuestra galaxia','<div class="universal-search"><label class="universal-search-box">'+ico('search')+'<input id="universalSearchInput" class="input" autocomplete="off" autocapitalize="sentences" placeholder="Un recuerdo, lugar, canción, plan…" aria-label="Buscar en nuestra galaxia"></label><div id="universalSearchResults" aria-live="polite"></div></div>');
@@ -1396,15 +1415,64 @@ function aiResult(question){
  return docs.length?{title:'Esto encontré en su historia',body:'Relacioné tu pregunta con '+docs.length+' momentos guardados.',matches:docs.slice(0,6)}:{title:'Todavía no encuentro algo relacionado',body:'Prueba con nombres de lugares, palabras de un recuerdo, “planes pendientes”, “viajes”, “canciones” o “cuántos días juntos”.',matches:[]};
 }
 function aiResultMarkup(result){
- return '<div class="ai-answer"><span class="badge">Nuestra historia</span><h3>'+esc(result.title)+'</h3><p>'+esc(result.body)+'</p>'+(result.matches?.length?'<div class="stack compact">'+result.matches.map(m=>'<div class="ai-match"><b>'+esc(m.title||'Momento')+'</b><small>'+esc(m.body||m.date||'')+'</small></div>').join('')+'</div>':'')+'</div>';
+ const title=result?.title||'Nuestra historia',body=result?.answer||result?.body||'',sources=result?.sources||result?.matches||[],mode=result?.mode||'classic';
+ return '<div class="ai-answer"><div class="row between"><span class="badge">Nuestra historia</span><small class="muted">'+esc(mode.includes('fallback')?'fallback seguro':mode==='ai-grounded'?'IA con fuentes':'búsqueda verificada')+'</small></div><h3>'+esc(title)+'</h3><p>'+esc(body)+'</p>'+(sources.length?'<div class="stack compact ai-sources">'+sources.slice(0,10).map((m,i)=>'<div class="ai-match"><span class="badge mini">'+esc(m.ref||('S'+(i+1)))+'</span><div><b>'+esc(m.title||'Momento')+'</b><small>'+esc(m.snippet||m.body||m.date||'')+'</small></div></div>').join('')+'</div>':'')+'</div>';
 }
 function openOurAI(){
- showModal('Nuestra IA','<div class="ai-intro"><p>Busca dentro de lo que ustedes han guardado. Nada de esta función sale a un servicio de IA externo.</p><div class="chips"><button class="chip" data-action="ai-question" data-question="¿Cuántos días llevamos juntos?">Días juntos</button><button class="chip" data-action="ai-question" data-question="¿Qué planes tenemos pendientes?">Planes</button><button class="chip" data-action="ai-question" data-question="¿Qué lugares hemos guardado?">Lugares</button><button class="chip" data-action="ai-question" data-question="Muéstrame nuestros viajes">Viajes</button></div></div><form id="ourAiForm" class="stack" style="margin-top:14px"><div class="field"><label>Pregunta</label><input class="input" name="question" placeholder="Ej. ¿qué recuerdos tenemos de Útica?" required></div><button class="btn" type="submit">'+ico('sparkles')+' Buscar en nuestra historia</button></form><div data-role="ai-result" style="margin-top:14px">'+aiResultMarkup(aiResult(''))+'</div>','our-ai');
+ showModal('Nuestra IA 2.0','<div class="ai-intro intelligence-intro"><p><b>Galaxy Intelligence</b> combina coincidencia exacta, texto completo y búsqueda semántica dentro de Supabase/PostgreSQL. La búsqueda clásica sigue disponible como fallback.</p><p class="muted">'+ico('shield-check')+' Solo una selección mínima de fuentes puede enviarse al proveedor generativo cuando esa función está configurada. Coordenadas exactas no forman parte del índice semántico.</p><div class="chips"><button class="chip" data-action="ai-question" data-question="¿Cuándo estuvimos por última vez en Útica?">Última vez en Útica</button><button class="chip" data-action="ai-question" data-question="¿Qué recuerdo tenemos relacionado con pesca?">Pesca</button><button class="chip" data-action="ai-question" data-question="Busca la noche donde escuchamos nuestra canción">Música y noches</button></div></div><form id="ourAiForm" class="stack" style="margin-top:14px"><div class="field"><label>Pregunta sobre nuestra historia</label><input class="input" name="question" maxlength="600" placeholder="Ej. ¿qué recuerdos tenemos de Útica?" required></div><button class="btn" type="submit">'+ico('sparkles')+' Preguntar a Nuestra IA 2.0</button></form><div class="intelligence-tools"><button class="card intelligence-tool" type="button" data-action="intelligence-connections-open"><span>'+ico('git-branch')+'</span><div><b>IA de conexiones</b><small>Descubre relaciones y explica por qué existen.</small></div></button><button class="card intelligence-tool" type="button" data-action="intelligence-narrator-open"><span>'+ico('book-open-text')+'</span><div><b>IA narradora</b><small>Un capítulo basado únicamente en 5–10 recuerdos reales.</small></div></button><button class="card intelligence-tool" type="button" data-action="intelligence-book-open"><span>'+ico('book-heart')+'</span><div><b>Libro de Nuestra Galaxia</b><small>Historia organizada por capítulos, lista para evolucionar.</small></div></button></div><div data-role="ai-result" style="margin-top:14px">'+aiResultMarkup(aiResult(''))+'</div>','our-ai');
 }
-function showAiAnswer(question){
- const result=aiResult(question),box=modal.querySelector('[data-role="ai-result"]');if(box)box.innerHTML=aiResultMarkup(result);refreshIcons();
+async function showAiAnswer(question){
+ const q=String(question||'').trim(),box=modal.querySelector('[data-role="ai-result"]');if(!q||!box)return;
+ box.innerHTML='<div class="monthly-loading">'+loading('Buscando en nuestra historia')+'<p>Combinando exactos, texto completo y semántica…</p></div>';
+ try{
+  const result=await api('intelligence-ask',{question:q});
+  if(box.isConnected)box.innerHTML=aiResultMarkup({title:'Esto encontré',...result});
+ }catch(error){
+  const fallback=aiResult(q);
+  if(box.isConnected)box.innerHTML=aiResultMarkup({...fallback,answer:fallback.body,mode:'classic-fallback'});
+ }
+ refreshIcons();
 }
-
+function intelligenceSourceOptions(){
+ const rows=[];
+ for(const item of cloud?.items||[])if(['memory','song','plan','note','journey'].includes(item.kind))rows.push({type:item.kind,id:item.id,title:item.data?.title||item.kind});
+ for(const p of cloud?.places||mapData?.places||[])rows.push({type:'place',id:p.id,title:p.name});
+ return rows.slice(0,80);
+}
+function openIntelligenceConnectionsPicker(){
+ const rows=intelligenceSourceOptions();
+ showModal('IA de conexiones','<div class="intelligence-feature-head"><span>'+ico('git-branch')+'</span><div><h3>Conexiones explicables</h3><p>Elige una pieza de su historia. Cada relación mostrará sus razones: lugar, época, viaje o similitud semántica.</p></div></div><div class="stack intelligence-source-picker">'+(rows.length?rows.map(r=>'<button class="card compact intelligence-source-choice" data-action="intelligence-connections-run" data-source-type="'+attr(r.type)+'" data-source-id="'+attr(r.id)+'"><span>'+ico(r.type==='song'?'music':r.type==='place'?'map-pin':r.type==='journey'?'route':'heart')+'</span><b>'+esc(r.title)+'</b>'+ico('chevron-right')+'</button>').join(''):'<div class="empty">Guarden primero recuerdos, canciones, lugares o planes.</div>')+'</div>','intelligence-connections');
+}
+async function openIntelligenceConnections(sourceType,sourceId){
+ showModal('IA de conexiones','<div class="monthly-loading">'+loading('Buscando conexiones')+'<p>Comparando contexto y relaciones verificables…</p></div>','intelligence-connections');
+ try{
+  const result=await api('intelligence-connections',{sourceType,sourceId}),rows=result.connections||[];
+  showModal('IA de conexiones','<div class="intelligence-feature-head"><span>'+ico('git-branch')+'</span><div><p class="eyebrow">FUENTE</p><h3>'+esc(result.source?.title||'Momento')+'</h3></div></div><div class="stack">'+(rows.length?rows.map(r=>'<article class="card intelligence-connection"><h3>'+esc(r.title||'Conexión')+'</h3><p class="muted">'+esc(r.date||'')+'</p><ul>'+((r.reasons||[]).map(reason=>'<li>'+esc(reason)+'</li>').join(''))+'</ul></article>').join(''):'<div class="empty">Todavía no encontré una conexión suficientemente útil.</div>')+'</div>','intelligence-connections');
+ }catch(error){showModal('IA de conexiones','<div class="empty">'+ico('circle-alert')+' No pudimos calcular conexiones ahora.</div>');}
+}
+function openIntelligenceNarrator(){
+ const memories=items('memory').slice(0,20);
+ showModal('IA narradora','<form id="intelligenceNarratorForm" class="stack"><div class="intelligence-feature-head"><span>'+ico('book-open-text')+'</span><div><h3>Un capítulo, sin inventar</h3><p>Selecciona entre 5 y 10 recuerdos. Cada párrafo deberá apuntar a fuentes reales.</p></div></div><div class="intelligence-memory-picker">'+memories.map((m,i)=>'<label class="toggle-row"><input type="checkbox" name="sourceId" value="'+attr(m.id)+'" '+(i<5?'checked':'')+'><span><b>'+esc(m.data?.title||'Recuerdo')+'</b><small>'+esc(fmtDate(m.data?.date||String(m.created||'').slice(0,10)))+'</small></span></label>').join('')+'</div><button class="btn" type="submit">'+ico('sparkles')+' Crear capítulo</button></form><div data-role="narrative-result"></div>','intelligence-narrator');
+}
+function narrativeMarkup(result){
+ if(!result?.available)return '<div class="empty intelligence-fallback">'+ico('shield-check')+'<h3>No se generó un capítulo</h3><p>'+esc(result?.error||'La IA narradora no está disponible. Los recuerdos originales siguen intactos.')+'</p></div>';
+ const n=result.narrative||{};
+ return '<article class="intelligence-narrative"><p class="eyebrow">CAPÍTULO BASADO EN FUENTES</p><h2>'+esc(n.title||'Nuestro capítulo')+'</h2>'+((n.paragraphs||[]).map(p=>'<p>'+esc(p.text)+' <small>['+(p.sourceIds||[]).map(esc).join(', ')+']</small></p>').join(''))+'</article>';
+}
+async function openIntelligenceBook(){
+ showModal('Libro de Nuestra Galaxia','<div class="monthly-loading">'+loading('Ordenando nuestra historia')+'<p>Preparando capítulos internos…</p></div>','intelligence-book');
+ try{
+  const book=await api('intelligence-book'),chapterIcons={beginning:'sparkles',firsts:'footprints',dates:'calendar-heart',trips:'route',places:'map-pin',music:'music',photos:'images',quotes:'quote',stats:'chart-no-axes-column-increasing',narrative:'book-open-text'};
+  const labels={beginning:'Inicio',firsts:'Primeras veces',dates:'Citas',trips:'Viajes',places:'Lugares',music:'Música',photos:'Fotos',quotes:'Frases',stats:'Estadísticas',narrative:'Capítulos narrativos'};
+  showModal('Libro de Nuestra Galaxia','<div class="intelligence-book-head"><span>'+ico('book-heart')+'</span><div><p class="eyebrow">VERSIÓN INTERNA 1</p><h2>Libro de Nuestra Galaxia</h2><p>Organizado para una futura exportación, sin hacer del PDF un requisito de este Galaxy.</p></div></div><div class="intelligence-book-sections">'+(book.sections||[]).map(section=>'<details class="card intelligence-book-section"><summary><span>'+ico(chapterIcons[section.id]||'book-open')+'</span><b>'+esc(labels[section.id]||section.title)+'</b><small>'+Number(section.items?.length||0)+'</small></summary><div class="stack compact">'+((section.items||[]).length?section.items.map(item=>'<div class="ai-match"><b>'+esc(item.title||'Momento')+'</b><small>'+esc(item.date||'')+(item.snippet?' · '+esc(item.snippet):'')+'</small></div>').join(''):'<p class="muted">Este capítulo crecerá con su historia.</p>')+'</div></details>').join('')+'</div>','intelligence-book');
+ }catch(error){showModal('Libro de Nuestra Galaxia','<div class="empty">'+ico('circle-alert')+' No pudimos organizar el libro ahora.</div>');}
+}
+async function openIntelligenceSearchResult(btn){
+ const type=String(btn.dataset.sourceType||''),id=String(btn.dataset.sourceId||'');
+ if(type==='place'){const fake={dataset:{type:'place',id}};await openUniversalSearchResult(fake);return;}
+ if(kindMeta[type]){const fake={dataset:{type:'item',id,kind:type}};await openUniversalSearchResult(fake);return;}
+ showModal(btn.dataset.title||'Resultado','<div class="ai-answer"><span class="badge">'+esc(type||'Historia')+'</span><h3>'+esc(btn.dataset.title||'Momento')+'</h3><p>'+esc(btn.dataset.snippet||'Contenido relacionado dentro de su historia.')+'</p></div>');
+}
 async function busy(task,success){
  try{await task();if(success)toast(success);}
  catch(e){toast(e.message);}
