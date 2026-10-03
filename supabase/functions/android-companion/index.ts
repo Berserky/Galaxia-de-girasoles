@@ -306,10 +306,12 @@ async function backupExport(req:Request){
     ok(db.from("galaxy_bond").select("type,author,data,created").order("created",{ascending:true}).limit(1000)),
     ok(db.from("galaxy_places").select("owner,name,kind,latitude,longitude,note,created_at").order("created_at",{ascending:true}).limit(500))
   ]);
+  const backupSettings=structuredClone(settings?.data||{});
+  delete backupSettings.presence;
   return json({
     schema:1,
     exportedAt:new Date().toISOString(),
-    settings:settings?.data||{},
+    settings:backupSettings,
     items:(items||[]).map((x:any)=>({kind:x.kind,data:x.data||{},author:String(x.author),created:x.created})),
     daily:daily||[],
     bond:(bond||[]).map((x:any)=>({type:x.type,author:String(x.author),data:backupBondData(x),created:x.created})),
@@ -334,7 +336,6 @@ async function backupImport(req:Request,body:any){
     if(names?.length===2&&names.every((x:string)=>!!x))merged.names=names;
     if(!source.startDate||validDate(source.startDate))merged.startDate=text(source.startDate,10);
     if("albumUrl" in source)merged.albumUrl=text(source.albumUrl,500);
-    if(source.presence&&typeof source.presence==="object")merged.presence=source.presence;
     await ok(db.from("galaxy_settings").update({data:merged}).eq("id",1));
   }
 
