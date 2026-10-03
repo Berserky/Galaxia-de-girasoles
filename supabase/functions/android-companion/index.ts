@@ -593,6 +593,99 @@ async function monthlySummary(req:Request,body:any){
   });
 }
 
+function sameHistoryDay(value:string,day:string){
+  return validDate(value)&&value<day&&value.slice(5)===day.slice(5);
+}
+async function todayHistory(req:Request,body:any){
+  const d=await device(req),person=String(d.person),day=String(body.day||today()),current=today();
+  if(!validDate(day)||day>current)return json({error:"Fecha no válida."},400);
+  const [items,trips,encounters,bond,daily,placeEvents,places,locations]=await Promise.all([
+    ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:false}).limit(5000)),
+    ok(db.from("galaxy_trip_history").select("id,person,started_at,ended_at,distance_m,duration_s,dominant_motion").order("started_at",{ascending:false}).limit(5000)),
+    ok(db.from("galaxy_encounters").select("id,started_at,ended_at,distance_m").order("started_at",{ascending:false}).limit(5000)),
+    ok(db.from("galaxy_bond").select("id,type,author,data,created").order("created",{ascending:false}).limit(5000)),
+    ok(db.from("galaxy_daily").select("day,person,mood,answer").order("day",{ascending:false}).limit(5000)),
+    ok(db.from("galaxy_place_events").select("id,person,place_id,event,happened_at").order("happened_at",{ascending:false}).limit(5000)),
+    ok(db.from("galaxy_places").select("id,name").limit(1000)),
+    ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude"))
+  ]);
+  const buckets=new Map<string,any>();
+  const bucket=(year:string)=>{
+    if(!buckets.has(year))buckets.set(year,{
+      year,items:[],places:new Set<string>(),
+      stats:{trips:0,distance_m:0,encounters:0,together_seconds:0,gestures:0,voices:0,shared_notes:0,rituals:0,arrivals:0,mood_together:false,answer_together:false}
+    });
+    return buckets.get(year);
+  };
+  const placeNames=new Map((places||[]).map((p:any)=>[String(p.id),text(p.name,80)]));
+  const own=(locations||[]).find((x:any)=>String(x.person)===person&&x.sharing);
+  for(const row of items||[]){
+    const data=row.data||{},explicit=validDate(data.date)?String(data.date):(validDate(data.unlockDate)?String(data.unlockDate):"");
+    const eventDay=explicit||bogotaDay(row.created);
+    if(!sameHistoryDay(eventDay,day))continue;
+    if(row.kind==="note"&&data.surprise&&String(row.author)!==person){
+      let unlocked=data.unlockType==="date"&&(!data.unlockDate||String(data.unlockDate)<=day);
+      if(data.unlockType==="place"&&own)unlocked=meters(Number(own.latitude),Number(own.longitude),Number(data.latitude),Number(data.longitude))<=Number(data.radius||150);
+      if(!unlocked)continue;
+    }
+    const b=bucket(eventDay.slice(0,4)),kind=String(row.kind||"memory");
+    b.items.push({
+      id:String(row.id),kind,author:String(row.author),date:eventDay,origin:explicit?"dated":"saved",
+      title:text(data.title||({memory:"Recuerdo",plan:"Plan",event:"Fecha",journey:"Viaje",song:"Canción",note:"Nota",capsule:"Cápsula",wish:"Deseo"} as any)[kind]||"Historia",160),
+      body:text(data.body||"",1200),category:text(data.category||"",80),placeName:text(data.placeName||"",100),done:data.done===true
+    });
+  }
+  for(const row of trips||[]){
+    const eventDay=bogotaDay(row.started_at);if(!sameHistoryDay(eventDay,day))continue;
+    const b=bucket(eventDay.slice(0,4));b.stats.trips++;b.stats.distance_m+=Math.max(0,Number(row.distance_m||0));
+  }
+  for(const row of encounters||[]){
+    const eventDay=bogotaDay(row.started_at);if(!sameHistoryDay(eventDay,day))continue;
+    const b=bucket(eventDay.slice(0,4));b.stats.encounters++;
+    const start=Date.parse(row.started_at),end=row.ended_at?Date.parse(row.ended_at):start;
+    if(Number.isFinite(start)&&Number.isFinite(end)&&end>start)b.stats.together_seconds+=(end-start)/1000;
+  }
+  for(const row of bond||[]){
+    const eventDay=bogotaDay(row.created);if(!sameHistoryDay(eventDay,day))continue;
+    const b=bucket(eventDay.slice(0,4));
+    if(row.type==="gesture")b.stats.gestures++;
+    if(row.type==="voice")b.stats.voices++;
+    if(row.type==="sharednote")b.stats.shared_notes++;
+    if(row.type==="ritual")b.stats.rituals++;
+  }
+  const dailyDays=new Map<string,any[]>();
+  for(const row of daily||[]){if(!sameHistoryDay(String(row.day||""),day))continue;const rows=dailyDays.get(row.day)||[];rows.push(row);dailyDays.set(row.day,rows);}
+  for(const [historyDay,rows] of dailyDays){
+    const b=bucket(historyDay.slice(0,4));
+    const moods=new Set(rows.filter((x:any)=>x.mood).map((x:any)=>String(x.person)));
+    const answers=new Set(rows.filter((x:any)=>x.answer).map((x:any)=>String(x.person)));
+    b.stats.mood_together=moods.has("0")&&moods.has("1");
+    b.stats.answer_together=answers.has("0")&&answers.has("1");
+  }
+  for(const row of placeEvents||[]){
+    if(row.event!=="arrived")continue;
+    const eventDay=bogotaDay(row.happened_at);if(!sameHistoryDay(eventDay,day))continue;
+    const b=bucket(eventDay.slice(0,4));b.stats.arrivals++;
+    const name=placeNames.get(String(row.place_id));if(name)b.places.add(name);
+  }
+  const groups=[...buckets.values()].map((b:any)=>({
+    year:b.year,
+    items:b.items.sort((a:any,b:any)=>String(b.date).localeCompare(String(a.date))).slice(0,50),
+    places:[...b.places].slice(0,6),
+    stats:{...b.stats,distance_m:Math.round(b.stats.distance_m),together_seconds:Math.round(b.stats.together_seconds)}
+  })).sort((a:any,b:any)=>String(b.year).localeCompare(String(a.year)));
+  return json({
+    day,
+    groups,
+    totals:{
+      years:groups.length,
+      items:groups.reduce((n:number,g:any)=>n+g.items.length,0),
+      trips:groups.reduce((n:number,g:any)=>n+g.stats.trips,0),
+      encounters:groups.reduce((n:number,g:any)=>n+g.stats.encounters,0)
+    }
+  });
+}
+
 async function mapState(req:Request,body:any){
   await device(req);
   const [locations,places,tripPoints,destinations]=await Promise.all([
@@ -801,6 +894,7 @@ Deno.serve(async req=>{
     if(action==="bond-widget")return await bondWidget(req,body);
     if(action==="map-state")return await mapState(req,body);
     if(action==="monthly-summary")return await monthlySummary(req,body);
+    if(action==="today-history")return await todayHistory(req,body);
     if(action==="place-save")return await placeSave(req,body);
     if(action==="place-delete")return await placeDelete(req,body);
     if(action==="status-set")return await setStatus(req,body);
