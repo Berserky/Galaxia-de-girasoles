@@ -1400,7 +1400,7 @@ async function presenceSet(req:Request,body:any){
 
 async function backupExport(req:Request){
   await device(req);
-  const [settings,items,daily,bond,bondGestures,places,goals,goalParticipants,goalSteps,goalLinks,goalContributions]=await Promise.all([
+  const [settings,items,daily,bond,bondGestures,places,goals,goalParticipants,goalSteps,goalLinks,goalContributions,voiceTranscripts,photoContext]=await Promise.all([
     ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
     ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:true}).limit(2000)),
     ok(db.from("galaxy_daily").select("day,person,mood,answer").order("day",{ascending:true}).limit(1000)),
@@ -1411,9 +1411,11 @@ async function backupExport(req:Request){
     ok(db.from("galaxy_goal_participants").select("*").limit(2000)),
     ok(db.from("galaxy_goal_steps").select("*").order("position",{ascending:true}).limit(5000)),
     ok(db.from("galaxy_goal_links").select("*").order("created_at",{ascending:true}).limit(5000)),
-    ok(db.from("galaxy_goal_contributions").select("*").order("contribution_date",{ascending:true}).limit(10000))
+    ok(db.from("galaxy_goal_contributions").select("*").order("contribution_date",{ascending:true}).limit(10000)),
+    ok(db.from("galaxy_voice_transcripts").select("*").order("created_at",{ascending:true}).limit(500)),
+    ok(db.from("galaxy_photo_context").select("*").order("created_at",{ascending:true}).limit(500))
   ]);
-  return json({format:"nuestra-galaxia-backup",version:2,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:items||[],daily:daily||[],bond:bond||[],bondGestures:bondGestures||[],places:places||[],goals:goals||[],goalParticipants:goalParticipants||[],goalSteps:goalSteps||[],goalLinks:goalLinks||[],goalContributions:goalContributions||[]});
+  return json({format:"nuestra-galaxia-backup",version:2,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:items||[],daily:daily||[],bond:bond||[],bondGestures:bondGestures||[],places:places||[],goals:goals||[],goalParticipants:goalParticipants||[],goalSteps:goalSteps||[],goalLinks:goalLinks||[],goalContributions:goalContributions||[],voiceTranscripts:voiceTranscripts||[],photoContext:photoContext||[]});
 }
 
 function uuidish(v:unknown){return /^[0-9a-f-]{36}$/i.test(String(v||""));}
@@ -1432,7 +1434,9 @@ async function backupRestore(req:Request,body:any){
   const goalSteps=Array.isArray(backup.goalSteps)?backup.goalSteps.slice(0,5000):[];
   const goalLinks=Array.isArray(backup.goalLinks)?backup.goalLinks.slice(0,5000):[];
   const goalContributions=Array.isArray(backup.goalContributions)?backup.goalContributions.slice(0,10000):[];
-  let restoredItems=0,restoredDaily=0,restoredBond=0,restoredBondGestures=0,restoredPlaces=0,restoredGoals=0,restoredGoalParticipants=0,restoredGoalSteps=0,restoredGoalLinks=0,restoredGoalContributions=0;
+  const voiceTranscripts=Array.isArray(backup.voiceTranscripts)?backup.voiceTranscripts.slice(0,500):[];
+  const photoContext=Array.isArray(backup.photoContext)?backup.photoContext.slice(0,500):[];
+  let restoredItems=0,restoredDaily=0,restoredBond=0,restoredBondGestures=0,restoredPlaces=0,restoredGoals=0,restoredGoalParticipants=0,restoredGoalSteps=0,restoredGoalLinks=0,restoredGoalContributions=0,restoredVoiceTranscripts=0,restoredPhotoContext=0;
 
   if(backup.settings&&typeof backup.settings==="object"&&!Array.isArray(backup.settings)){
     const current=await ok(db.from("galaxy_settings").select("data").eq("id",1).single());
@@ -1527,7 +1531,29 @@ async function backupRestore(req:Request,body:any){
     await ok(db.from("galaxy_bond").upsert({id,type,author,data,created:row.created||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
     restoredBond++;
   }
-  return json({ok:true,restored:{items:restoredItems,daily:restoredDaily,bond:restoredBond,bondGestures:restoredBondGestures,places:restoredPlaces,goals:restoredGoals,goalParticipants:restoredGoalParticipants,goalSteps:restoredGoalSteps,goalLinks:restoredGoalLinks,goalContributions:restoredGoalContributions},restoredGoals});
+  for(const row of voiceTranscripts){
+    const bondId=String(row?.bond_id||""),transcript=text(row?.transcript,30000);
+    if(!uuidish(bondId)||!transcript)continue;
+    const voice=(await ok(db.from("galaxy_bond").select("id").eq("id",bondId).eq("type","voice").limit(1)))?.[0];
+    if(!voice)continue;
+    await ok(db.from("galaxy_voice_transcripts").upsert({
+      bond_id:bondId,transcript,segments:sanitizeTranscriptSegments(row?.segments||[]),
+      provider:text(row?.provider||"backup",40)||"backup",model:text(row?.model||"restored",120)||"restored",
+      status:"ready",last_error:null,created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()
+    },{onConflict:"bond_id"}));
+    restoredVoiceTranscripts++;
+  }
+  for(const row of photoContext){
+    const path=text(row?.path,300),author=String(row?.author||"");
+    if(!path||!["0","1"].includes(author))continue;
+    await ok(db.from("galaxy_photo_context").upsert({
+      path,author,caption:text(row?.caption,3000)||null,context:text(row?.context,5000)||null,
+      taken_on:validDate(row?.taken_on)?String(row.taken_on):null,
+      created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()
+    },{onConflict:"path"}));
+    restoredPhotoContext++;
+  }
+  return json({ok:true,restored:{items:restoredItems,daily:restoredDaily,bond:restoredBond,bondGestures:restoredBondGestures,places:restoredPlaces,goals:restoredGoals,goalParticipants:restoredGoalParticipants,goalSteps:restoredGoalSteps,goalLinks:restoredGoalLinks,goalContributions:restoredGoalContributions,voiceTranscripts:restoredVoiceTranscripts,photoContext:restoredPhotoContext},restoredGoals});
 }
 
 async function recordParticipation(person:string){
