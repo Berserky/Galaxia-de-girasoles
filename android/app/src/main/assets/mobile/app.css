@@ -583,3 +583,83 @@ textarea{min-height:110px;resize:vertical}
 .gps-preserved b{width:100%;font-size:11px}
 .gps-preserved span{padding:7px 9px;border-radius:999px;background:#eaf6ef;color:var(--good);font-size:10px;font-weight:600}
 .gps-delete-form .btn.danger{width:100%}
+
+/* Super Update · Seasonal themes */
+:root{
+ --ambient-a:rgba(114,84,199,.055);--ambient-b:rgba(185,84,104,.045);
+ --hero-a:#2f2942;--hero-b:#5e477a;--hero-c:#965369;
+ --brand-a:#7254c7;--brand-b:#b95468;
+}
+html[data-theme="daylight"]{color-scheme:light}
+html[data-theme="cosmic"]{
+ color-scheme:dark;--bg:#10101d;--surface:#17172a;--surface2:#22213a;--text:#f4f1ff;--muted:#aaa5c0;
+ --border:#302e4a;--accent:#a78bfa;--accent2:#f472b6;--good:#65c18c;--warn:#e5ad62;
+ --shadow:0 16px 44px rgba(0,0,0,.28);--ambient-a:rgba(139,92,246,.15);--ambient-b:rgba(244,114,182,.08);
+ --hero-a:#19152e;--hero-b:#332761;--hero-c:#6b315d;--brand-a:#7c5ce3;--brand-b:#c85f9b;
+}
+html[data-theme="halloween"]{
+ color-scheme:dark;--bg:#100913;--surface:#1b1020;--surface2:#281631;--text:#fff0de;--muted:#c3a7b4;
+ --border:#3b223f;--accent:#f28c28;--accent2:#9f67d8;--good:#79b86f;--warn:#f1b04f;
+ --shadow:0 16px 44px rgba(0,0,0,.32);--ambient-a:rgba(242,140,40,.14);--ambient-b:rgba(159,103,216,.11);
+ --hero-a:#24102a;--hero-b:#572145;--hero-c:#a84f22;--brand-a:#f28c28;--brand-b:#7d4bb0;
+}
+html[data-theme="christmas"]{
+ color-scheme:dark;--bg:#071510;--surface:#0c2119;--surface2:#123226;--text:#f2fff6;--muted:#a7c4b4;
+ --border:#1d4735;--accent:#d65360;--accent2:#4eb879;--good:#67c68c;--warn:#e5b45d;
+ --shadow:0 16px 44px rgba(0,0,0,.3);--ambient-a:rgba(78,184,121,.12);--ambient-b:rgba(214,83,96,.1);
+ --hero-a:#0a3020;--hero-b:#15543c;--hero-c:#8b2f3a;--brand-a:#3ca56c;--brand-b:#d65360;
+}
+html[data-theme="valentine"]{
+ color-scheme:dark;--bg:#180810;--surface:#28101b;--surface2:#3a1827;--text:#fff4f7;--muted:#d3a9b6;
+ --border:#4c2032;--accent:#f06f91;--accent2:#c58cff;--good:#6fc39a;--warn:#efb25f;
+ --shadow:0 16px 44px rgba(0,0,0,.3);--ambient-a:rgba(240,111,145,.14);--ambient-b:rgba(197,140,255,.09);
+ --hero-a:#38101f;--hero-b:#732445;--hero-c:#9f4d73;--brand-a:#e95c83;--brand-b:#ab66db;
+}
+html[data-theme="friendship"]{
+ color-scheme:dark;--bg:#120b22;--surface:#1c1433;--surface2:#2a1e47;--text:#fff8eb;--muted:#c3b6d9;
+ --border:#3b2b59;--accent:#f1b84b;--accent2:#a981ff;--good:#74c59c;--warn:#f1b84b;
+ --shadow:0 16px 44px rgba(0,0,0,.3);--ambient-a:rgba(241,184,75,.1);--ambient-b:rgba(169,129,255,.13);
+ --hero-a:#24153f;--hero-b:#50336d;--hero-c:#91612f;--brand-a:#a981ff;--brand-b:#e8ad44;
+}
+html[data-theme="easter"]{
+ color-scheme:dark;--bg:#11162c;--surface:#19213d;--surface2:#252f50;--text:#f7f5ff;--muted:#b8bfd6;
+ --border:#354064;--accent:#b29cff;--accent2:#f2a9c6;--good:#7ec8a3;--warn:#e5b969;
+ --shadow:0 16px 44px rgba(0,0,0,.27);--ambient-a:rgba(178,156,255,.13);--ambient-b:rgba(242,169,198,.1);
+ --hero-a:#20284c;--hero-b:#4c4678;--hero-c:#875b78;--brand-a:#9d87eb;--brand-b:#e59bb9;
+}
+html,body{
+ background-color:var(--bg);
+ background-image:radial-gradient(circle at 92% 2%,var(--ambient-a),transparent 29%),radial-gradient(circle at 5% 38%,var(--ambient-b),transparent 28%);
+ background-attachment:fixed;
+ transition:background-color .25s ease,color .25s ease;
+}
+.card,.modal,.bottom-nav,.global-player,.input,textarea,select{transition:background-color .22s ease,border-color .22s ease,color .22s ease}
+.hero{background:linear-gradient(145deg,var(--hero-a),var(--hero-b) 55%,var(--hero-c))}
+.brand-mark{background:linear-gradient(145deg,var(--brand-a),var(--brand-b))}
+html:not([data-theme="daylight"]) .mood.active{background:color-mix(in srgb,var(--accent) 14%,var(--surface));color:var(--accent)}
+html:not([data-theme="daylight"]) .input:focus,
+html:not([data-theme="daylight"]) textarea:focus,
+html:not([data-theme="daylight"]) select:focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 14%,transparent)}
+html:not([data-theme="daylight"]) .gmap-marker.place button{background:var(--surface);border-color:var(--accent)}
+.theme-settings-card>.row>svg{color:var(--accent);flex:0 0 auto}
+.theme-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:14px}
+.theme-option{width:100%;min-height:66px;border:1px solid var(--border);border-radius:17px;background:var(--surface);color:var(--text);padding:9px;display:grid;grid-template-columns:36px minmax(0,1fr) 16px;gap:9px;align-items:center;text-align:left}
+.theme-option.active{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 13%,transparent)}
+.theme-option>span:nth-child(2){display:grid;gap:2px;min-width:0}
+.theme-option b{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.theme-option small{font-size:9px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.theme-option>.ui-icon{width:15px;height:15px;color:var(--accent)}
+.theme-preview{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;color:white;border:1px solid rgba(255,255,255,.18);box-shadow:inset 0 0 0 1px rgba(0,0,0,.05)}
+.theme-preview .ui-icon{width:16px;height:16px}
+.theme-preview[data-preview="auto"]{background:conic-gradient(from 35deg,#7254c7,#b95468,#4eb879,#f28c28,#7254c7)}
+.theme-preview[data-preview="daylight"]{background:linear-gradient(145deg,#7254c7,#b95468)}
+.theme-preview[data-preview="cosmic"]{background:linear-gradient(145deg,#241b4b,#934b88)}
+.theme-preview[data-preview="halloween"]{background:linear-gradient(145deg,#f28c28,#6b367f)}
+.theme-preview[data-preview="christmas"]{background:linear-gradient(145deg,#2f9a61,#c84654)}
+.theme-preview[data-preview="valentine"]{background:linear-gradient(145deg,#ef6489,#9d5fc7)}
+.theme-preview[data-preview="friendship"]{background:linear-gradient(145deg,#9a76e8,#e4aa3f)}
+.theme-preview[data-preview="easter"]{background:linear-gradient(145deg,#9f8be9,#e29ab7)}
+.theme-local-note{display:flex;align-items:flex-start;gap:7px;margin:11px 2px 0!important;font-size:9px!important;line-height:1.45;color:var(--muted)}
+.theme-local-note .ui-icon{width:14px;height:14px;flex:0 0 auto;color:var(--accent)}
+@media(max-width:360px){.theme-grid{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){html,body,.card,.modal,.bottom-nav,.global-player,.input,textarea,select{transition:none}}
