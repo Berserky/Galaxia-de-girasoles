@@ -77,8 +77,9 @@ assert.ok(edge.includes('backup-restore"||action==="backup-import'),'La API debe
 assert.ok(app.includes('function nowCard()')&&app.includes('Privacidad de “Ahora”'),'Falta panel Ahora con privacidad');
 assert.ok(app.includes('function historyPlacesView()')&&app.includes('placeId'),'Falta mapa histórico enlazado a recuerdos');
 assert.ok(app.includes('function openOurAI()')&&app.includes('function aiResult(question)'),'Falta Nuestra IA sobre la historia');
-assert.ok(edge.includes('async function backupExport')&&edge.includes('async function backupImport'),'Falta backup seguro en backend');
-assert.ok(edge.includes('delete backupSettings.presence')&&!edge.includes('merged.presence=source.presence'),'El backup no debe restaurar permisos de presencia');
+assert.ok(edge.includes('async function backupExport')&&edge.includes('async function backupRestore'),'Falta backup seguro en backend');
+const backupSection=edge.slice(edge.indexOf('async function backupExport'),edge.indexOf('async function recordParticipation'));
+assert.ok(!backupSection.includes('galaxy_presence')&&!backupSection.includes('share_battery')&&!backupSection.includes('share_song'),'El backup no debe restaurar permisos de presencia');
 
 const nativeCalls=new Set([...app.matchAll(/GalaxyNative\.call\(['"]([^'"]+)['"]/g)].map(m=>m[1]));
 const bridgeMethods=new Set([...bridge.matchAll(/public void (\w+)\(/g)].map(m=>m[1]));
@@ -101,7 +102,8 @@ assert.ok(updater.includes('version<=BuildConfig.VERSION_CODE'),'El updater debe
 assert.ok(updater.includes('resumePendingInstall'),'El updater debe retomar la instalación tras conceder permisos');
 assert.ok(updater.includes('MAX_APK_BYTES'),'El updater debe limitar el tamaño de descarga');
 assert.ok(widget.includes('widgetNow')&&widget.includes('nowText'),'El widget debe mostrar el estado Ahora');
-assert.ok(edge.includes('pPresence.shareBattery')&&edge.includes('pPresence.shareListening'),'El widget no debe exponer batería o música sin opt-in');
+assert.ok(edge.includes('p.share_battery?p.battery:null')&&edge.includes('p.share_song?text(p.song_title,160):""'),'El widget no debe exponer batería o música sin opt-in');
+assert.ok(edge.includes('sharing:!!loc?.sharing')&&edge.includes('listening'),'El widget debe conservar el contrato sharing/listening');
 
 assert.ok(edge.includes('body.detail!==true'),'El mapa debe tener refresco ligero');
 assert.ok(app.includes("refreshMap({quiet:true,detail:false})"),'El polling del mapa debe usar refresco ligero');
