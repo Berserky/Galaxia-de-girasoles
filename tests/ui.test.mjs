@@ -34,6 +34,6 @@ test('mobile Create lives in the dock so it cannot cover page actions',async()=>
 test('in-app Android download points to the current stable channel',async()=>{
  const {readFile}=await import('node:fs/promises');
  const source=await readFile(new URL('../app/public/app.js',import.meta.url),'utf8');
- assert.ok(source.includes('releases/download/android-stable/NuestraGalaxia-Companion.apk'));
+ assert.ok(source.includes('releases/download/android-stable/NuestraGalaxia.apk'));
  assert.ok(!source.includes('releases/download/android-v1.0.0/'));
 });
