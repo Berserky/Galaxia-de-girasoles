@@ -63,6 +63,10 @@ public final class GalaxyBridge {
         activity.testMomentNotification(requestId);
     }
 
+    @JavascriptInterface public void setBondHaptics(String requestId,boolean enabled){
+        activity.setBondHaptics(requestId,enabled);
+    }
+
     @JavascriptInterface public void addWidget(String requestId){
         activity.addWidget(requestId);
     }
