@@ -314,3 +314,15 @@ textarea{min-height:110px;resize:vertical}
 @keyframes eqBar{from{height:25%}to{height:100%}}
 @media(max-width:360px){.global-player.visible{left:8px;right:8px}.music-source-grid{grid-template-columns:1fr}.music-row{grid-template-columns:42px minmax(0,1fr)}.music-row>.btn{grid-column:2}}
 @media(prefers-reduced-motion:reduce){.player-eq.playing i{animation:none}}
+
+/* Story 2.0 */
+.living-moment{width:100%;display:flex;gap:14px;align-items:center;text-align:left;border:1px solid rgba(151,101,245,.18);background:linear-gradient(135deg,var(--card),rgba(151,101,245,.08))}
+.living-moment .item-icon{flex:0 0 auto}.living-moment h3,.living-moment p{margin:3px 0}
+.constellation{position:relative;min-height:390px;overflow:hidden;border:1px solid rgba(181,139,255,.16);border-radius:26px;background:radial-gradient(circle at 30% 20%,rgba(126,78,214,.16),transparent 28%),radial-gradient(circle at 72% 64%,rgba(255,155,193,.09),transparent 30%),#100d17}
+.constellation:before{content:"";position:absolute;inset:0;background-image:radial-gradient(circle,rgba(255,255,255,.5) 0 1px,transparent 1.5px);background-size:31px 37px;opacity:.25}
+.constellation-star{position:absolute;left:var(--x);top:var(--y);z-index:1;width:32px;height:32px;transform:translate(-50%,-50%);border:0;background:transparent;color:#fff}
+.constellation-star i{position:absolute;left:50%;top:50%;width:var(--s);height:var(--s);transform:translate(-50%,-50%);border-radius:50%;background:#fff;box-shadow:0 0 8px #fff,0 0 18px rgba(181,139,255,.8)}
+.constellation-star span{position:absolute;left:50%;top:27px;max-width:100px;transform:translateX(-50%);font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:0;transition:.2s}
+.constellation-star:focus span,.constellation-star:active span{opacity:1}
+@media(prefers-reduced-motion:no-preference){.constellation-star i{animation:starPulse 2.8s ease-in-out infinite alternate}.constellation-star:nth-child(3n) i{animation-delay:.8s}.constellation-star:nth-child(4n) i{animation-delay:1.4s}}
+@keyframes starPulse{from{opacity:.58;transform:translate(-50%,-50%) scale(.82)}to{opacity:1;transform:translate(-50%,-50%) scale(1.18)}}
