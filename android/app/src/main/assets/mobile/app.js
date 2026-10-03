@@ -756,10 +756,74 @@ function deviceProfilesCard(){
  return '<div class="card"><div class="row between"><div><h3>Perfiles y teléfonos</h3><p>Este teléfono está entrando como <b>'+esc(mine)+'</b>. Cada código nuevo queda ligado al perfil que elijas.</p></div>'+ico('smartphone')+'</div><div class="stack" style="margin-top:10px">'+(rows||'<p class="muted">No hay otros teléfonos activos.</p>')+'</div>'+ownerControls+'</div>';
 }
 
+function gpsHistoryPrivacyCard(){
+ return '<div class="card gps-history-card"><div class="row between"><div><p class="eyebrow">DATOS DE MOVILIDAD</p><h3>Historial GPS de '+esc(myName())+'</h3><p>Exporta o borra únicamente los datos de movilidad de este perfil. Lugares guardados, recuerdos, encuentros y datos de '+esc(partnerName())+' no se eliminan.</p></div>'+ico('route')+'</div><div class="gps-history-scope"><span>'+ico('user-round')+' Solo '+esc(myName())+'</span><span>'+ico('shield-check')+' Control individual</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small secondary" data-action="gps-history-export">'+ico('download')+' Exportar GPS</button><button class="btn small danger" data-action="gps-history-delete-open">'+ico('trash-2')+' Borrar historial GPS</button></div></div>';
+}
+function gpsExportProgress(dataset,total){
+ const labels={history:'Puntos GPS',trips:'Recorridos',tripPoints:'Puntos de rutas',placeEvents:'Llegadas y salidas'};
+ const label=labels[dataset]||'Historial GPS',status=modal.querySelector('#gpsExportStatus'),count=modal.querySelector('#gpsExportCount');
+ if(status)status.textContent='Exportando '+label.toLowerCase()+'…';
+ if(count)count.textContent=total+' registros preparados';
+}
+async function exportGpsHistory(){
+ const helper=window.GalaxyGpsHistory;if(!helper)return;
+ showModal('Exportar historial GPS','<div class="gps-export-progress">'+loading('Preparando historial GPS')+'<h3 id="gpsExportStatus">Preparando exportación…</h3><p id="gpsExportCount">0 registros preparados</p><p class="muted">El archivo contendrá solo los datos de movilidad de '+esc(myName())+'.</p></div>');
+ const bundle=helper.emptyBundle(String(cloud.person),myName());
+ try{
+  for(const dataset of helper.DATASETS){
+   let after=0,snapshot=0,done=false,pages=0;
+   while(!done){
+    if(++pages>1000)throw new Error('El historial es demasiado grande para exportarlo en una sola operación.');
+    const page=await api('gps-history-export',{dataset,after,snapshot,limit:1000});
+    if(!snapshot)snapshot=Number(page.snapshot||0);
+    helper.appendPage(bundle,dataset,page.rows||[]);
+    gpsExportProgress(dataset,helper.totalRows(bundle));
+    done=!!page.done;
+    if(!done){
+      const next=Number(page.next||0);if(!Number.isFinite(next)||next<=after)throw new Error('La exportación GPS perdió el cursor.');
+      after=next;
+    }
+   }
+  }
+  bundle.exportedAt=new Date().toISOString();
+  const fileName=helper.exportFileName(cloud.today,myName());
+  await GalaxyNative.call('exportJson',fileName,JSON.stringify(bundle));
+  closeModal();toast('Historial GPS exportado: '+helper.totalRows(bundle)+' registros.');
+ }catch(error){if(modal.open)closeModal();throw error;}
+}
+function openGpsHistoryDelete(){
+ const own=(cloud?.locations||[]).find(l=>String(l.person)===String(cloud.person))||{};
+ if(own.trip_active){showModal('Primero termina el recorrido','<div class="gps-delete-warning">'+ico('route')+'<div><h3>Hay un recorrido activo</h3><p>Termínalo antes de borrar el historial GPS para no dejar una ruta incompleta.</p><button class="btn small secondary" data-action="gps-history-map">Ir al mapa</button></div></div>');return;}
+ showModal('Borrar historial GPS de '+myName(),'<form id="gpsHistoryDeleteForm" class="stack gps-delete-form" style="margin-top:16px"><div class="gps-delete-warning danger">'+ico('triangle-alert')+'<div><h3>Esta acción no se puede deshacer</h3><p>Se borrarán solo los puntos GPS, recorridos, puntos temporales de rutas y llegadas/salidas de '+esc(myName())+'.</p></div></div><div class="gps-preserved"><b>Se conserva:</b><span>Lugares guardados</span><span>Recuerdos y archivos</span><span>Encuentros compartidos</span><span>Datos de '+esc(partnerName())+'</span></div><div class="field"><label>Escribe BORRAR para confirmar</label><input class="input" name="confirmation" autocomplete="off" autocapitalize="characters" placeholder="BORRAR" required></div><p class="muted">'+(native.tracking?'La ubicación se pausará unos segundos, se limpiará la cola pendiente y volverá a activarse al terminar.':'La ubicación está pausada y seguirá así después del borrado.')+'</p><button class="btn danger" type="submit">'+ico('trash-2')+' Borrar únicamente mi historial GPS</button></form>','gps-delete');
+}
+async function deleteGpsHistory(){
+ const helper=window.GalaxyGpsHistory,wasTracking=!!native.tracking;
+ let stopped=false,serverDeleted=false,result=null;
+ if(wasTracking){await GalaxyNative.call('stopLocation');stopped=true;native=nativeState();await new Promise(resolve=>setTimeout(resolve,700));}
+ try{
+  result=await api('gps-history-delete');serverDeleted=true;
+  await GalaxyNative.call('clearPendingGps');
+ }catch(error){
+  if(stopped&&!serverDeleted){try{await GalaxyNative.call('startLocation');native=nativeState();}catch{}}
+  if(serverDeleted)throw new Error('El historial del servidor se borró, pero Android no pudo limpiar la cola GPS pendiente. La ubicación quedó pausada para evitar que reaparezcan puntos antiguos.');
+  throw error;
+ }
+ let restarted=false;
+ if(wasTracking){
+  try{await GalaxyNative.call('startLocation');native=nativeState();restarted=true;}
+  catch{}
+ }
+ frequentPlacesData=null;frequentPlacesLoadedAt=0;mapData=null;
+ await refreshState({quiet:true});
+ closeModal();render();
+ const total=Number(result?.deleted?.total||0);
+ toast('Borrados '+total+' registros GPS de '+myName()+'.'+(wasTracking&&!restarted?' Ubicación quedó pausada.':''));
+}
+
 function moreView(){
  const settings=cloud.settings||{data:{},version:1},data=settings.data||{},presence=ownPresence();
  return '<section><div class="section-head"><div><p class="eyebrow">NUESTRA APP</p><h2>Más</h2><p>Privacidad, respaldo, nuestra historia inteligente y ajustes.</p></div></div>'+
- '<div class="card"><div class="row between"><div><h3>Privacidad de “Ahora”</h3><p>Tu ubicación sigue teniendo su propio interruptor. Aquí decides si compartes batería y la canción que estás escuchando.</p></div>'+ico('shield-check')+'</div><div class="privacy-grid"><button class="privacy-toggle '+(presence.shareBattery?'active':'')+'" data-action="presence-battery">'+ico('battery-charging')+'<span><b>Batería</b><small>'+(presence.shareBattery?'Compartida':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(presence.shareListening?'active':'')+'" data-action="presence-listening">'+ico('music')+'<span><b>Escuchando</b><small>'+(presence.shareListening?'Compartido':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(native.tracking?'active':'')+'" data-action="map">'+ico('map-pin')+'<span><b>Ubicación</b><small>'+(native.tracking?'Compartiendo':'Pausada')+'</small></span></button></div></div>'+
+ '<div class="card"><div class="row between"><div><h3>Privacidad de “Ahora”</h3><p>Tu ubicación sigue teniendo su propio interruptor. Aquí decides si compartes batería y la canción que estás escuchando.</p></div>'+ico('shield-check')+'</div><div class="privacy-grid"><button class="privacy-toggle '+(presence.shareBattery?'active':'')+'" data-action="presence-battery">'+ico('battery-charging')+'<span><b>Batería</b><small>'+(presence.shareBattery?'Compartida':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(presence.shareListening?'active':'')+'" data-action="presence-listening">'+ico('music')+'<span><b>Escuchando</b><small>'+(presence.shareListening?'Compartido':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(native.tracking?'active':'')+'" data-action="map">'+ico('map-pin')+'<span><b>Ubicación</b><small>'+(native.tracking?'Compartiendo':'Pausada')+'</small></span></button></div></div>'+gpsHistoryPrivacyCard()+
  '<div class="card"><div class="row between"><div><h3>Nuestra IA</h3><p>Pregunta por recuerdos, planes, lugares, viajes y momentos guardados. Responde usando únicamente su propia historia.</p></div>'+ico('sparkles')+'</div><button class="btn small" style="margin-top:14px" data-action="our-ai">Preguntar a nuestra historia</button></div>'+
  '<div class="card"><div class="row between"><div><h3>Copia de nuestra galaxia</h3><p>Exporta los datos a un archivo JSON o restaura una copia. Fotos, música y audios permanecen en su almacenamiento privado y se conservan por referencia.</p></div>'+ico('archive')+'</div><div class="row wrap" style="margin-top:14px"><button class="btn small secondary" data-action="backup-export">'+ico('download')+' Exportar</button><button class="btn small ghost" data-action="backup-import">'+ico('upload')+' Restaurar</button></div></div>'+
  '<div class="card"><div class="row between"><div><h3>Widget “Nuestra Galaxia”</h3><p>Foto, próxima fecha y un abrazo desde el escritorio.</p></div><span class="badge '+(native.canPinWidget?'good':'')+'">'+(native.canPinWidget?'Disponible':'Manual')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small" data-action="widget-add">Añadir widget</button><button class="btn small secondary" data-action="widget-photo">Elegir foto</button><button class="btn small ghost" data-action="widget-photo-clear">Quitar foto</button></div></div>'+
@@ -1003,6 +1067,9 @@ document.addEventListener('click',async e=>{
   if(a==='our-ai'){if(!mapData)await refreshMap({quiet:true,detail:true});openOurAI();return;}
   if(a==='ai-question'){const q=btn.dataset.question||'';const input=modal.querySelector('#ourAiForm [name="question"]');if(input)input.value=q;showAiAnswer(q);return;}
   if(a==='backup-export'){const backup=await api('backup-export');await GalaxyNative.call('exportJson','nuestra-galaxia-backup-'+(cloud.today||'copia')+'.json',JSON.stringify(backup));toast('Copia guardada en el teléfono.');return;}
+  if(a==='gps-history-export'){await exportGpsHistory();return;}
+  if(a==='gps-history-delete-open'){openGpsHistoryDelete();return;}
+  if(a==='gps-history-map'){closeModal();go('map');return;}
   if(a==='backup-import'){if(!confirm('Restaurar una copia añadirá lo que falte sin borrar lo que ya existe. ¿Continuar?'))return;const file=await GalaxyNative.call('importJson'),backup=JSON.parse(file.json||'{}'),result=await api('backup-import',{backup});await refreshState({quiet:true});await refreshMap({quiet:true,detail:true});render();const r=result.restored||{};toast('Copia restaurada: '+Number(r.items||0)+' contenidos, '+Number(r.places||0)+' lugares y '+Number(r.bond||0)+' momentos.');return;}
   if(a==='map-refresh'){await refreshMap({detail:true});return;}
   if(a==='status-menu'){$('#statusMenu')?.classList.toggle('open');return;}
@@ -1059,6 +1126,7 @@ document.addEventListener('submit',async e=>{
  e.preventDefault();
  try{
   if(e.target.id==='ourAiForm'){const q=String(new FormData(e.target).get('question')||'');showAiAnswer(q);return;}
+  if(e.target.id==='gpsHistoryDeleteForm'){const value=new FormData(e.target).get('confirmation');if(!window.GalaxyGpsHistory?.validDeleteConfirmation(value))throw new Error('Escribe BORRAR exactamente para confirmar.');const submit=e.target.querySelector('button[type="submit"]');if(submit)submit.disabled=true;await deleteGpsHistory();return;}
   if(e.target.id==='pairForm'){
    const code=new FormData(e.target).get('code');await GalaxyNative.call('pair',String(code));native=nativeState();await refreshState();toast('Teléfono vinculado como '+myName()+'.');return;
   }
