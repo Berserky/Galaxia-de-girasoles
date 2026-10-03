@@ -25,6 +25,6 @@ test('GPS export bundle appends paginated datasets',()=>{
  const b=emptyBundle('0','Sebas');
  appendPage(b,'history',[{id:1},{id:2}]);
  appendPage(b,'trips',[{id:3}]);
- assert.deepEqual(counts(b),{history:2,trips:1,tripPoints:0,placeEvents:0});
+ assert.deepEqual({...counts(b)},{history:2,trips:1,tripPoints:0,placeEvents:0});
  assert.equal(totalRows(b),3);
 });
