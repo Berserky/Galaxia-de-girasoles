@@ -164,3 +164,58 @@ test('transport preference is restricted and bound to device identity',async()=>
  assert.equal(upsert.args[0].person,'1');
  assert.equal(upsert.args[0].transport_preference,'transit');
 });
+
+
+test('presence sharing is explicit and bound to the paired device person',async()=>{
+ const server=endpoint({
+  galaxy_devices:[{id:'device',person:'1',name:'Android'}],
+  galaxy_presence:[{person:'1',share_battery:false,share_song:false,battery:null,song_title:null}]
+ });
+ const response=await server.request({action:'presence-set',person:'0',shareBattery:true,battery:64,shareSong:true,songTitle:'Nuestra canción'},'e'.repeat(64));
+ assert.equal(response.status,200);
+ const upsert=server.calls.findLast(x=>x.table==='galaxy_presence'&&x.key==='upsert');
+ assert.ok(upsert);
+ assert.equal(upsert.args[0].person,'1');
+ assert.equal(upsert.args[0].share_battery,true);
+ assert.equal(upsert.args[0].share_song,true);
+ assert.equal(upsert.args[0].battery,64);
+ assert.equal(upsert.args[0].song_title,'Nuestra canción');
+});
+
+test('backup export contains relationship data but excludes device tokens and location history',async()=>{
+ const server=endpoint({
+  galaxy_devices:[{id:'device',person:'0',name:'Android',token_hash:'must-not-leak'}],
+  galaxy_settings:{data:{names:['Uno','Dos'],startDate:'2026-05-01'}},
+  galaxy_items:[{id:'11111111-1111-4111-8111-111111111111',kind:'memory',data:{title:'Hola'},author:'0',created:'2026-10-01'}],
+  galaxy_daily:[],galaxy_bond:[],galaxy_places:[]
+ });
+ const response=await server.request({action:'backup-export'},'f'.repeat(64));
+ assert.equal(response.status,200);
+ const output=await response.json();
+ assert.equal(output.format,'nuestra-galaxia-backup');
+ assert.equal(output.version,1);
+ assert.equal(JSON.stringify(output).includes('must-not-leak'),false);
+ assert.equal(Object.hasOwn(output,'locations'),false);
+ assert.equal(Object.hasOwn(output,'devices'),false);
+});
+
+test('backup restore rejects foreign files and merges valid structured content',async()=>{
+ const server=endpoint({
+  galaxy_devices:[{id:'device',person:'0',name:'Android'}],
+  galaxy_settings:{data:{names:['Actual','Pareja'],startDate:'2026-05-01'}},
+  galaxy_items:[],galaxy_daily:[],galaxy_bond:[],galaxy_places:[]
+ });
+ const token='1'.repeat(64);
+ assert.equal((await server.request({action:'backup-restore',backup:{format:'otro',version:1}},token)).status,400);
+ const backup={
+  format:'nuestra-galaxia-backup',version:1,
+  settings:{names:['Uno','Dos'],startDate:'2026-05-01'},
+  items:[{id:'11111111-1111-4111-8111-111111111111',kind:'memory',author:'0',created:'2026-10-01T12:00:00Z',data:{title:'Recuerdo restaurado',body:'Texto'}}],
+  daily:[],bond:[],places:[]
+ };
+ const response=await server.request({action:'backup-restore',backup},token);
+ assert.equal(response.status,200);
+ const upsert=server.calls.findLast(x=>x.table==='galaxy_items'&&x.key==='upsert');
+ assert.ok(upsert);
+ assert.equal(upsert.args[0].data.title,'Recuerdo restaurado');
+});
