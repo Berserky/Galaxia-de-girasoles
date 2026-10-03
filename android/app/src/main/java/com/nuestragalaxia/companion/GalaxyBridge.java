@@ -34,6 +34,9 @@ public final class GalaxyBridge {
     @JavascriptInterface public void discardVoiceRecording(String requestId){ activity.discardVoiceRecording(requestId); }
     @JavascriptInterface public void saveVoiceRecording(String requestId){ activity.saveVoiceRecording(requestId); }
 
+    @JavascriptInterface public void saveBackup(String requestId,String content){ activity.saveBackup(requestId,content); }
+    @JavascriptInterface public void pickBackup(String requestId){ activity.pickBackup(requestId); }
+
     @JavascriptInterface public void startLocation(String requestId){
         activity.startLocation(requestId);
     }
