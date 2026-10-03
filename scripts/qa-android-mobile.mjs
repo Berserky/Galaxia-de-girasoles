@@ -14,6 +14,7 @@ const monthly=read('android/app/src/main/assets/mobile/monthly.js');
 const todayHistory=read('android/app/src/main/assets/mobile/today-history.js');
 const encounters=read('android/app/src/main/assets/mobile/encounters.js');
 const distance=read('android/app/src/main/assets/mobile/distance.js');
+const eta=read('android/app/src/main/assets/mobile/eta.js');
 const css=read('android/app/src/main/assets/mobile/app.css');
 const index=read('android/app/src/main/assets/mobile/index.html');
 const lucideSource=read('android/app/src/main/assets/mobile/lucide.js');
@@ -34,7 +35,7 @@ assert.equal(emoji.test(widget),false,'El widget no debe usar emojis/dingbats co
 assert.ok(existsSync(resolve(root,'android/app/src/main/assets/mobile/lucide.js')),'Falta Lucide local');
 assert.ok(existsSync(resolve(root,'android/app/src/main/assets/mobile/LICENSE-lucide')),'Falta licencia de Lucide');
 const scriptSources=[...index.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m=>m[1]);
-assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
+assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./eta.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
 assert.ok(index.includes("connect-src 'none'"),'La UI local no debe hacer fetch directo ni recibir credenciales');
 assert.equal(/leaflet/i.test(css+index),false,'No deben quedar estilos o assets muertos de Leaflet');
 
@@ -110,6 +111,12 @@ assert.ok(app.includes('function coupleDistanceCard(')&&app.includes('function f
 assert.ok(app.includes('data-action="couple-distance-map"')&&app.includes('data-action="couple-distance-focus"'),'Faltan acciones de distancia de pareja');
 assert.ok(app.includes('distancia en línea recta'),'La UI debe aclarar que la distancia no es una ruta vial');
 assert.ok(css.includes('.couple-distance')&&css.includes('.couple-distance-value'),'Faltan estilos de distancia de pareja');
+assert.ok(eta.includes('function movementMode(')&&eta.includes('function resolveDestination(')&&eta.includes('function eta(')&&eta.includes('function etaLabel('),'Falta motor independiente de ETA');
+assert.ok(app.includes('function etaCard()')&&app.includes('function focusEtaOnMap()')&&app.includes('function etaState()'),'Falta experiencia ETA en Android');
+assert.ok(app.includes('data-action="eta-focus"')&&app.includes('ETA HACIA'),'Falta navegación y tarjeta ETA');
+assert.ok(app.includes('No reemplaza navegación vial'),'La interfaz ETA debe aclarar que no es navegación vial');
+assert.ok(app.includes("current==='person:'")&&app.includes("current==='place:'"),'Acompáñame debe recordar el destino activo');
+assert.ok(css.includes('.eta-card')&&css.includes('.eta-value')&&css.includes('.eta-actions'),'Faltan estilos del ETA');
 assert.ok(edge.includes('async function backupExport')&&edge.includes('async function backupRestore'),'Falta backup seguro en backend');
 const backupSection=edge.slice(edge.indexOf('async function backupExport'),edge.indexOf('async function recordParticipation'));
 assert.ok(!backupSection.includes('galaxy_presence')&&!backupSection.includes('share_battery')&&!backupSection.includes('share_song'),'El backup no debe restaurar permisos de presencia');
