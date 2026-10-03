@@ -31,6 +31,8 @@ const bondStore=read('android/app/src/main/java/com/nuestragalaxia/companion/Bon
 const trackingService=read('android/app/src/main/java/com/nuestragalaxia/companion/TrackingService.java');
 const updater=read('android/app/src/main/java/com/nuestragalaxia/companion/UpdateManager.java');
 const edge=read('supabase/functions/android-companion/index.ts');
+const dateEngine=read('supabase/functions/android-companion/date-engine.ts');
+const schema=read('supabase/schema.sql');
 const build=read('android/app/build.gradle.kts');
 const workflow=read('.github/workflows/android-companion.yml');
 const widget=read('android/app/src/main/res/layout/widget_bond.xml')+read('android/app/src/main/java/com/nuestragalaxia/companion/BondWidget.java');
@@ -235,5 +237,16 @@ assert.ok(app.includes("data-action=\"welcome-replay\""),'Falta opción para vol
 assert.ok(css.includes('@media(prefers-reduced-motion:reduce)'),'La bienvenida debe respetar reducir movimiento');
 assert.equal(motionTest.includes('placeholderKeepsUnitTestTaskActive'),false,'La prueba de movimiento no puede ser placeholder');
 assert.ok(motionTest.includes('medianIgnoresSingleGpsSpeedSpike'),'Falta prueba de ruido GPS');
+
+
+// Galaxy Date Engine 3.0
+assert.ok(main.includes('"date-engine"')&&edge.includes('action==="date-engine"'),'Galaxy Date debe estar permitido end-to-end');
+assert.ok(dateEngine.includes('selectQuestion')&&dateEngine.includes('buildSurpriseExperience')&&dateEngine.includes('buildSequentialPlan'),'Galaxy Date necesita un motor contextual determinístico');
+assert.ok(schema.includes('galaxy_daily_questions')&&schema.includes('question_id text')&&schema.includes('favorite boolean'),'Galaxy Date debe estabilizar la pregunta diaria sin duplicar respuestas');
+assert.ok(app.includes('function dailyQuestionCard(')&&app.includes('function loadDateContext('),'Galaxy Date debe reemplazar la pregunta diaria aislada por contexto reutilizable');
+assert.ok(app.includes('function openDateMode(')&&app.includes('date-mode-camera')&&app.includes('date-mode-save'),'Galaxy Date debe incluir Modo Cita completo');
+assert.ok(app.includes('function openSurprise2(')&&app.includes('function openPlanRoulette(')&&app.includes('function openDatePlanner('),'Galaxy Date debe reutilizar el mismo motor para sorpresa, ruleta y planner');
+assert.ok(main.includes('MediaStore.ACTION_IMAGE_CAPTURE')&&bridge.includes('capturePhoto'),'Modo Cita debe tener cámara nativa');
+assert.ok(css.includes('.plan-roulette')&&css.includes('@media(prefers-reduced-motion:reduce)'),'La ruleta de Galaxy Date debe respetar reduced-motion');
 
 console.log('QA móvil Nuestra Galaxia: OK');
