@@ -32,7 +32,8 @@ public final class MainActivity extends ComponentActivity {
         "mobile-state","item-save","item-delete","settings-save","daily-save",
         "bond-save","bond-update","bond-guess","bond-delete","bond-widget",
         "map-state","place-save","place-delete","status-set","transport-set","destination-save","trip",
-        "media-list","media-delete","presence-set","backup-export","backup-import"
+        "media-list","media-delete","presence-set","backup-export","backup-import",
+        "pair-code-create","profile-repair","device-revoke"
     );
 
     private DeviceStore store;
@@ -159,6 +160,13 @@ public final class MainActivity extends ComponentActivity {
                 String token=store.token();
                 if(token==null){store.clear();throw new ApiClient.ApiException(401,"El vínculo del dispositivo ya no es válido.");}
                 JSONObject result=MobileApiClient.post(token,body);
+                if("profile-repair".equals(action)){
+                    String repaired=result.optString("person","");
+                    if(!"0".equals(repaired)&&!"1".equals(repaired))throw new IllegalStateException("El servidor devolvió un perfil no válido.");
+                    store.setPerson(repaired);
+                    refreshMomentsInternal();
+                    nativeChanged();
+                }
                 resolve(requestId,result);
             }catch(ApiClient.ApiException e){
                 if(e.status==401){store.clear();nativeChanged();}
@@ -193,6 +201,18 @@ public final class MainActivity extends ComponentActivity {
                 resolve(requestId,nativeState());
                 nativeChanged();
             }catch(Exception e){reject(requestId,"No pudimos desvincular este teléfono.");}
+        });
+    }
+
+    void copyText(String requestId,String label,String value){
+        runOnUiThread(()->{
+            try{
+                ClipboardManager manager=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+                manager.setPrimaryClip(ClipData.newPlainText(label==null?"Nuestra Galaxia":label,value==null?"":value));
+                resolve(requestId,new JSONObject().put("ok",true));
+            }catch(Exception e){
+                reject(requestId,"No pudimos copiar el código.");
+            }
         });
     }
 
