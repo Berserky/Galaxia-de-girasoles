@@ -1563,28 +1563,64 @@ async function upload(req:Request){
   return json({path,mime,url:signedUrl,name:originalName,size:bytes.length},201);
 }
 
+function nextPendingPlan(items:any[],day:string){
+ const rows=(items||[]).filter((item:any)=>item?.data?.done!==true).map((item:any)=>({
+  title:text(item?.data?.title||"Próximo plan",120),
+  date:validDate(item?.data?.date)?String(item.data.date):null,
+  created:String(item?.created||"")
+ })).filter((row:any)=>!row.date||row.date>=day);
+ rows.sort((a:any,b:any)=>{
+  if(a.date&&b.date)return a.date.localeCompare(b.date);
+  if(a.date)return-1;if(b.date)return 1;
+  return a.created.localeCompare(b.created);
+ });
+ return rows[0]||null;
+}
+function widgetEtaMinutes(distanceM:number,transport:string,speed:number|null){
+ if(!Number.isFinite(distanceM)||distanceM<0)return null;
+ const fallbacks:Record<string,number>={walking:1.35,motorcycle:8.3,transit:5,vehicle:7.5,auto:6};
+ const observed=Number(speed),metersPerSecond=Number.isFinite(observed)&&observed>0.8?observed:(fallbacks[transport]||fallbacks.auto);
+ return Math.max(1,Math.round((distanceM*1.15)/metersPerSecond/60));
+}
 async function moments(req:Request){
   const d=await device(req);
   if(!["0","1"].includes(String(d.person)))return json({error:"Dispositivo no válido"},401);
-  const [settings,events,config,gestures,daily,locations,presence,songs]=await Promise.all([
+  const [settings,events,plans,config,gestures,daily,locations,presence,participation]=await Promise.all([
     ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
     ok(db.from("galaxy_items").select("id,data").eq("kind","event")),
+    ok(db.from("galaxy_items").select("id,data,created").eq("kind","plan").order("created",{ascending:false}).limit(100)),
     ok(db.from("galaxy_bond_config").select("photo_path").eq("id",1).maybeSingle()),
     ok(db.from("galaxy_bond").select("id,author,created,data").eq("type","gesture").neq("author",d.person).gte("created",new Date(Date.now()-7*86400000).toISOString()).order("created",{ascending:false}).limit(30)),
     ok(db.from("galaxy_daily").select("person,mood").eq("day",today())),
-    ok(db.from("galaxy_locations").select("person,sharing,motion,status").order("person")),
+    ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude,motion,status,speed,transport_preference,updated_at").order("person")),
     ok(db.from("galaxy_presence").select("*").order("person")),
-    ok(db.from("galaxy_items").select("data,created").eq("kind","song").order("created",{ascending:false}).limit(1))
+    ok(db.from("galaxy_bond_participation").select("day,person"))
   ]);
   const names=(Array.isArray(settings?.data?.names)?settings.data.names:["Nosotros","Dos"]).slice(0,2).map((name:unknown)=>text(name,40));
   let photoUrl=null;if(config?.photo_path)photoUrl=await signed("galaxy-photos",config.photo_path,300);
-  const partner=String(d.person)==="0"?"1":"0",mood=(daily||[]).find((x:any)=>String(x.person)===partner)?.mood||null,loc=(locations||[]).find((x:any)=>String(x.person)===partner),p=(presence||[]).find((x:any)=>String(x.person)===partner),legacy=settings?.data?.presence?.[partner]||{};
+  const person=String(d.person),partner=person==="0"?"1":"0";
+  const mood=(daily||[]).find((x:any)=>String(x.person)===partner)?.mood||null;
+  const loc=(locations||[]).find((x:any)=>String(x.person)===partner),own=(locations||[]).find((x:any)=>String(x.person)===person);
+  const p=(presence||[]).find((x:any)=>String(x.person)===partner),legacy=settings?.data?.presence?.[partner]||{};
   const battery=p?(p.share_battery?p.battery:null):(legacy.shareBattery===true?legacy.battery:null);
   const listening=p?(p.share_song?text(p.song_title,160):""):(legacy.shareListening===true?text(legacy.listening,160):"");
-  const now={mood,sharing:!!loc?.sharing,motion:loc?.sharing?loc?.motion:null,status:loc?.sharing?loc?.status:null,battery,listening,updatedAt:p?.updated_at||loc?.updated_at||legacy.updatedAt||null,latestSong:songs?.[0]?.data?.title||null};
-  return json({names,nextEvent:nextCalendarEvent(events||[],today()),photoUrl,now,gestures:(gestures||[]).filter((g:any)=>["hug","kiss","miss"].includes(g.data?.gesture)).map((g:any)=>({id:g.id,gesture:g.data.gesture,created:g.created,author:g.author}))});
+  const nowMs=Date.now(),fresh=(row:any)=>!!row?.updated_at&&nowMs-Date.parse(row.updated_at)<=15*60*1000;
+  const bothSharing=!!own?.sharing&&!!loc?.sharing&&fresh(own)&&fresh(loc)&&[own?.latitude,own?.longitude,loc?.latitude,loc?.longitude].every((v:any)=>Number.isFinite(Number(v)));
+  const distanceM=bothSharing?Math.round(dist(own,loc)):null;
+  const transport=text(own?.transport_preference||"auto",24)||"auto";
+  const etaMinutes=distanceM==null?null:widgetEtaMinutes(distanceM,transport,Number.isFinite(Number(own?.speed))?Number(own.speed):null);
+  const progress=computeBondProgress(participation||[],new Date());
+  const garden={...progress.garden,currentStreak:progress.currentStreak,recordStreak:progress.recordStreak};
+  const now={mood,sharing:!!loc?.sharing,motion:loc?.sharing?loc?.motion:null,status:loc?.sharing?loc?.status:null,battery,listening,updatedAt:p?.updated_at||loc?.updated_at||legacy.updatedAt||null};
+  const visibleGestures=(gestures||[]).map((g:any)=>({
+    id:g.id,gesture:g.data?.gesture||g.data?.gestureId||"hug",created:g.created,author:g.author,
+    name:text(g.data?.name||"",40),icon:text(g.data?.icon||"",40),text:text(g.data?.text||"",180),behavior:text(g.data?.behavior||"message",30)
+  }));
+  return json({
+    names,nextEvent:nextCalendarEvent(events||[],today()),nextPlan:nextPendingPlan(plans||[],today()),
+    photoUrl,now,distanceM,etaMinutes,garden,gestures:visibleGestures
+  });
 }
-
 Deno.serve(async req=>{
   if(req.method!=="POST")return json({error:"Método no permitido"},405);
   try{
