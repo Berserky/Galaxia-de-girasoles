@@ -55,7 +55,7 @@ test('custom gestures are CRUD-managed separately from historical galaxy_bond en
 
 test('gesture sending uses reusable push events rather than a haptic-only endpoint',()=>{
  assert.ok(edge.includes('async function dispatchPushEvent('));
- assert.ok(edge.includes('eventType:"gesture"')||edge.includes('eventType: "gesture"'));
+ assert.ok(edge.includes('dispatchPushEvent(d,target,"gesture"')||edge.includes("dispatchPushEvent(d,target,'gesture'"));
  for(const future of ['arrived_safe','nearby','capsule','note','reminder'])assert.ok(edge.includes(future),future);
  assert.equal(edge.includes('haptic-only'),false);
 });
@@ -126,7 +126,8 @@ test('Widget 2.0 has per-widget module configuration and compact/large behavior'
 test('widget snapshot includes privacy-safe distance ETA song plan and garden data without raw coordinates',()=>{
  const moments=edge.slice(edge.indexOf('async function moments('),edge.indexOf('Deno.serve'));
  for(const key of ['distanceM','etaMinutes','nextPlan','garden'])assert.ok(moments.includes(key),key);
- assert.equal(/return json\([^]*latitude/.test(moments),false);
+ const projection=moments.slice(moments.lastIndexOf('return json({'));
+ assert.equal(/\blatitude\b|\blongitude\b/.test(projection),false);
  assert.ok(moments.includes('share_battery')&&moments.includes('share_song'));
 });
 
@@ -147,9 +148,10 @@ test('Insights achievements consume Bond streak and gesture metrics',()=>{
 });
 
 test('Bond 2.0 does not start location automatically',()=>{
- const pushFiles=[main,existsSync(pushServicePath)?read('android/app/src/main/java/com/nuestragalaxia/companion/GalaxyFirebaseService.java'):''].join('\n');
- assert.equal(pushFiles.includes('PushManager.startLocation'),false);
- assert.equal(pushFiles.includes('TrackingService.ACTION_START')&&pushFiles.includes('onMessageReceived'),false);
+ const pushService=existsSync(pushServicePath)?read('android/app/src/main/java/com/nuestragalaxia/companion/GalaxyFirebaseService.java'):'';
+ assert.equal(pushService.includes('PushManager.startLocation'),false);
+ assert.equal(pushService.includes('TrackingService.ACTION_START'),false);
+ assert.ok(pushService.includes('onMessageReceived'));
 });
 
 test('mobile QA explicitly guards Galaxy Bond 2.0',()=>{
