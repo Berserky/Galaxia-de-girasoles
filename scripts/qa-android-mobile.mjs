@@ -17,6 +17,7 @@ const distance=read('android/app/src/main/assets/mobile/distance.js');
 const eta=read('android/app/src/main/assets/mobile/eta.js');
 const frequentPlaces=read('android/app/src/main/assets/mobile/frequent-places.js');
 const gpsHistory=read('android/app/src/main/assets/mobile/gps-history.js');
+const theme=read('android/app/src/main/assets/mobile/theme.js');
 const css=read('android/app/src/main/assets/mobile/app.css');
 const index=read('android/app/src/main/assets/mobile/index.html');
 const lucideSource=read('android/app/src/main/assets/mobile/lucide.js');
@@ -38,7 +39,7 @@ assert.equal(emoji.test(widget),false,'El widget no debe usar emojis/dingbats co
 assert.ok(existsSync(resolve(root,'android/app/src/main/assets/mobile/lucide.js')),'Falta Lucide local');
 assert.ok(existsSync(resolve(root,'android/app/src/main/assets/mobile/LICENSE-lucide')),'Falta licencia de Lucide');
 const scriptSources=[...index.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m=>m[1]);
-assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./eta.js','./frequent-places.js','./gps-history.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
+assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./eta.js','./frequent-places.js','./gps-history.js','./theme.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
 assert.ok(index.includes("connect-src 'none'"),'La UI local no debe hacer fetch directo ni recibir credenciales');
 assert.equal(/leaflet/i.test(css+index),false,'No deben quedar estilos o assets muertos de Leaflet');
 
@@ -144,6 +145,13 @@ assert.ok(bridge.includes('clearPendingGps')&&main.includes('clearPendingGps')&&
 assert.ok(app.includes("validDeleteConfirmation(value)")&&app.includes('Escribe BORRAR exactamente'),'El borrado GPS requiere confirmación escrita');
 assert.ok(app.includes("GalaxyNative.call('stopLocation')")&&app.includes("GalaxyNative.call('clearPendingGps')"),'El borrado GPS debe pausar tracking y limpiar puntos pendientes');
 assert.ok(css.includes('.gps-history-card')&&css.includes('.gps-delete-warning')&&css.includes('.gps-preserved'),'Faltan estilos de privacidad GPS individual');
+assert.ok(theme.includes("THEMES=['auto','daylight','cosmic','halloween','christmas','valentine','friendship','easter']")&&theme.includes('function seasonal(')&&theme.includes('function applyTheme('),'Falta motor Android de temas estacionales');
+for(const seasonalName of ['halloween','christmas','valentine','friendship','easter'])assert.ok(theme.includes("return'"+seasonalName+"'"),'Falta ventana automática de '+seasonalName);
+assert.ok(app.includes('function themeSettingsCard()')&&app.includes('data-action="theme-set"'),'Falta selector Android de temas');
+assert.ok(app.includes('GalaxyTheme?.applyTheme')&&app.includes('GalaxyTheme.getChoice()'),'Android debe reaplicar el tema elegido al renderizar');
+assert.ok(css.includes('html[data-theme="cosmic"]')&&css.includes('html[data-theme="halloween"]')&&css.includes('html[data-theme="christmas"]')&&css.includes('html[data-theme="valentine"]')&&css.includes('html[data-theme="friendship"]')&&css.includes('html[data-theme="easter"]'),'Faltan paletas estacionales completas');
+assert.ok(css.includes('.theme-grid')&&css.includes('.theme-preview[data-preview="auto"]'),'Faltan controles visuales de temas');
+assert.ok(app.includes('La apariencia se guarda en este teléfono'),'El selector debe aclarar que el tema es local por teléfono');
 assert.ok(edge.includes('async function backupExport')&&edge.includes('async function backupRestore'),'Falta backup seguro en backend');
 const backupSection=edge.slice(edge.indexOf('async function backupExport'),edge.indexOf('async function recordParticipation'));
 assert.ok(!backupSection.includes('galaxy_presence')&&!backupSection.includes('share_battery')&&!backupSection.includes('share_song'),'El backup no debe restaurar permisos de presencia');
