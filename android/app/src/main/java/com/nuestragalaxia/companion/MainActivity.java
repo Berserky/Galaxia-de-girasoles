@@ -6,6 +6,8 @@ import android.appwidget.AppWidgetManager;
 import android.content.*;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.media.MediaPlayer;
+import android.media.MediaRecorder;
 import android.os.*;
 import android.provider.Settings;
 import android.webkit.*;
@@ -15,6 +17,7 @@ import androidx.activity.OnBackPressedCallback;
 import androidx.webkit.WebViewAssetLoader;
 import org.json.JSONObject;
 import java.util.Set;
+import java.io.File;
 import java.util.concurrent.*;
 
 public final class MainActivity extends ComponentActivity {
@@ -22,6 +25,7 @@ public final class MainActivity extends ComponentActivity {
     private static final int REQ_TRACKING_NOTIFICATIONS=101;
     private static final int REQ_BOND_NOTIFICATIONS=102;
     private static final int REQ_MEDIA=200;
+    private static final int REQ_MICROPHONE=201;
     private static final Set<String> MOBILE_ACTIONS=Set.of(
         "mobile-state","item-save","item-delete","settings-save","daily-save",
         "bond-save","bond-update","bond-guess","bond-delete","bond-widget",
@@ -39,6 +43,11 @@ public final class MainActivity extends ComponentActivity {
     private String pendingBondRequest;
     private String pendingMediaRequest;
     private String pendingMediaKind;
+    private String pendingVoiceStartRequest;
+    private MediaRecorder voiceRecorder;
+    private MediaPlayer voicePlayer;
+    private File voiceFile;
+    private long voiceStartedAt;
 
     @Override protected void onCreate(Bundle savedInstanceState){
         super.onCreate(savedInstanceState);
@@ -211,6 +220,78 @@ public final class MainActivity extends ComponentActivity {
         });
     }
 
+    void startVoiceRecording(String requestId){
+        if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+        runOnUiThread(()->{
+            if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
+                pendingVoiceStartRequest=requestId;requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_MICROPHONE);return;
+            }
+            beginVoiceRecording(requestId);
+        });
+    }
+
+    private void beginVoiceRecording(String requestId){
+        cleanupVoice(false);
+        try{
+            voiceFile=new File(getCacheDir(),"voice-"+System.currentTimeMillis()+".m4a");
+            voiceRecorder=android.os.Build.VERSION.SDK_INT>=31?new MediaRecorder(this):new MediaRecorder();
+            voiceRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+            voiceRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+            voiceRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+            voiceRecorder.setAudioEncodingBitRate(96000);voiceRecorder.setAudioSamplingRate(44100);
+            voiceRecorder.setMaxDuration(60000);voiceRecorder.setMaxFileSize(5L*1024L*1024L);
+            voiceRecorder.setOutputFile(voiceFile.getAbsolutePath());
+            voiceRecorder.setOnInfoListener((r,what,extra)->{if(what==MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED||what==MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED)stopVoiceRecording(null);});
+            voiceRecorder.prepare();voiceRecorder.start();voiceStartedAt=System.currentTimeMillis();
+            resolve(requestId,new JSONObject().put("recording",true));
+        }catch(Exception e){cleanupVoice(true);reject(requestId,"No pudimos iniciar el micrófono.");}
+    }
+
+    void stopVoiceRecording(String requestId){
+        runOnUiThread(()->{
+            if(voiceRecorder==null){if(requestId!=null)reject(requestId,"No hay una grabación activa.");return;}
+            try{voiceRecorder.stop();}catch(Exception e){cleanupVoice(true);if(requestId!=null)reject(requestId,"La grabación fue demasiado corta.");return;}
+            try{voiceRecorder.release();}catch(Exception ignored){} voiceRecorder=null;
+            long duration=Math.max(0,System.currentTimeMillis()-voiceStartedAt);
+            if(voiceFile==null||!voiceFile.exists()||voiceFile.length()<512){cleanupVoice(true);if(requestId!=null)reject(requestId,"No se recibió audio. Inténtalo otra vez.");return;}
+            try{JSONObject out=new JSONObject().put("ready",true).put("durationMs",duration).put("size",voiceFile.length());if(requestId!=null)resolve(requestId,out);else event("voice",out);}catch(Exception ignored){}
+        });
+    }
+
+    void playVoiceRecording(String requestId){
+        runOnUiThread(()->{
+            if(voiceFile==null||!voiceFile.exists()){reject(requestId,"Primero graba un audio.");return;}
+            try{
+                if(voicePlayer!=null){voicePlayer.release();voicePlayer=null;}
+                voicePlayer=new MediaPlayer();voicePlayer.setDataSource(voiceFile.getAbsolutePath());voicePlayer.prepare();voicePlayer.start();
+                resolve(requestId,new JSONObject().put("playing",true));
+            }catch(Exception e){reject(requestId,"No pudimos reproducir la grabación.");}
+        });
+    }
+
+    void discardVoiceRecording(String requestId){
+        runOnUiThread(()->{cleanupVoice(true);try{resolve(requestId,new JSONObject().put("ready",false));}catch(Exception e){reject(requestId,"No pudimos descartar la grabación.");}});
+    }
+
+    void saveVoiceRecording(String requestId){
+        if(voiceRecorder!=null){reject(requestId,"Detén la grabación antes de guardarla.");return;}
+        File file=voiceFile;
+        if(file==null||!file.exists()){reject(requestId,"Primero graba un audio.");return;}
+        io.execute(()->{
+            try{
+                String token=store.token();if(token==null)throw new ApiClient.ApiException(401,"El vínculo del dispositivo ya no es válido.");
+                JSONObject uploaded=MobileApiClient.uploadVoiceFile(this,token,file);
+                if(file.delete())voiceFile=null;resolve(requestId,uploaded);
+            }catch(Exception e){reject(requestId,e.getMessage()==null?"No pudimos subir la grabación.":e.getMessage());}
+        });
+    }
+
+    private void cleanupVoice(boolean delete){
+        if(voicePlayer!=null){try{voicePlayer.stop();}catch(Exception ignored){}try{voicePlayer.release();}catch(Exception ignored){}voicePlayer=null;}
+        if(voiceRecorder!=null){try{voiceRecorder.stop();}catch(Exception ignored){}try{voiceRecorder.release();}catch(Exception ignored){}voiceRecorder=null;}
+        if(delete&&voiceFile!=null){try{voiceFile.delete();}catch(Exception ignored){}voiceFile=null;}
+    }
+
     void startLocation(String requestId){
         if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
         runOnUiThread(()->{
@@ -317,7 +398,11 @@ public final class MainActivity extends ComponentActivity {
 
     @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] results){
         super.onRequestPermissionsResult(requestCode,permissions,results);
-        if(requestCode==REQ_LOCATION){
+        if(requestCode==REQ_MICROPHONE){
+            String request=pendingVoiceStartRequest;pendingVoiceStartRequest=null;
+            boolean granted=results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED;
+            if(request!=null){if(granted)beginVoiceRecording(request);else reject(request,"Activa el permiso de micrófono para grabar desde la aplicación.");}
+        }else if(requestCode==REQ_LOCATION){
             boolean granted=results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED;
             if(granted)continueStartLocation();
             else{
@@ -376,6 +461,7 @@ public final class MainActivity extends ComponentActivity {
     }
 
     @Override protected void onDestroy(){
+        cleanupVoice(true);
         if(updater!=null)updater.close();
         io.shutdownNow();
         if(web!=null){web.removeJavascriptInterface("GalaxyAndroid");web.destroy();}

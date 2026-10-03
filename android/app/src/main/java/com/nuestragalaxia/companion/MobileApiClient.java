@@ -71,6 +71,20 @@ public final class MobileApiClient {
         try{return response(c);}finally{c.disconnect();}
     }
 
+    public static JSONObject uploadVoiceFile(Context context,String token,File file) throws Exception {
+        String mime="audio/mp4",name=file.getName();
+        HttpURLConnection c=(HttpURLConnection)new URL(BuildConfig.EDGE_URL).openConnection();
+        c.setRequestMethod("POST");c.setConnectTimeout(20000);c.setReadTimeout(45000);c.setDoOutput(true);
+        c.setRequestProperty("Content-Type",mime);c.setRequestProperty("apikey",BuildConfig.SUPABASE_PUBLISHABLE_KEY);
+        c.setRequestProperty("x-device-token",token);c.setRequestProperty("x-mobile-action","upload");
+        c.setRequestProperty("x-media-kind","voice");c.setRequestProperty("x-file-name",URLEncoder.encode(name,"UTF-8"));
+        c.setFixedLengthStreamingMode(file.length());
+        try(InputStream in=new FileInputStream(file);OutputStream out=c.getOutputStream()){
+            byte[] buffer=new byte[8192];int read;while((read=in.read(buffer))!=-1)out.write(buffer,0,read);
+        }
+        try{return response(c);}finally{c.disconnect();}
+    }
+
     private static String fileName(Context context,Uri uri){
         try(Cursor cursor=context.getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){
             if(cursor!=null&&cursor.moveToFirst()){

@@ -28,6 +28,12 @@ public final class GalaxyBridge {
         activity.pickMedia(requestId,kind);
     }
 
+    @JavascriptInterface public void startVoiceRecording(String requestId){ activity.startVoiceRecording(requestId); }
+    @JavascriptInterface public void stopVoiceRecording(String requestId){ activity.stopVoiceRecording(requestId); }
+    @JavascriptInterface public void playVoiceRecording(String requestId){ activity.playVoiceRecording(requestId); }
+    @JavascriptInterface public void discardVoiceRecording(String requestId){ activity.discardVoiceRecording(requestId); }
+    @JavascriptInterface public void saveVoiceRecording(String requestId){ activity.saveVoiceRecording(requestId); }
+
     @JavascriptInterface public void startLocation(String requestId){
         activity.startLocation(requestId);
     }

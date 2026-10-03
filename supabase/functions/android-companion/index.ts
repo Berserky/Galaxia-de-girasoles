@@ -153,7 +153,24 @@ async function bondState(person:string){
   const visible=await Promise.all((entries||[]).map(async(row:any)=>{
     const copy=structuredClone(row);
     if(copy.type==="game"&&copy.author!==person&&!Object.hasOwn(copy.data||{},"guess"))delete copy.data.answer;
-    if(copy.type==="voice"&&copy.data?.audioPath)copy.data.audioUrl=await signed("galaxy-voice",copy.data.audioPath,900);
+    if(copy.type==="voice"&&copy.data?.audioPath){
+      let reveal=true;
+      const ref=copy.data?.referenceId;
+      if(ref){
+        const target=(await ok(db.from("galaxy_items").select("kind,data,author").eq("id",String(ref)).limit(1)))?.[0];
+        if(target&&String(target.author)!==person){
+          if(target.kind==="capsule"&&target.data?.date&&target.data.date>today())reveal=false;
+          if(target.kind==="note"&&target.data?.surprise){
+            if(target.data.unlockType==="date"&&target.data.unlockDate>today())reveal=false;
+            if(target.data.unlockType==="place"){
+              const loc=(await ok(db.from("galaxy_locations").select("*").eq("person",person).limit(1)))?.[0];
+              reveal=!!loc?.sharing&&meters(Number(loc.latitude),Number(loc.longitude),Number(target.data.latitude),Number(target.data.longitude))<=Number(target.data.radius||150);
+            }
+          }
+        }
+      }
+      if(reveal)copy.data.audioUrl=await signed("galaxy-voice",copy.data.audioPath,900);else{delete copy.data.audioPath;copy.data.locked=true;}
+    }
     return copy;
   }));
   return {entries:visible,garden:{days:earned,stage:earned>=30?4:earned>=14?3:earned>=7?2:earned>=1?1:0},widget:{photoPath:config?.photo_path||""}};
@@ -185,9 +202,22 @@ async function mobileState(req:Request){
     bondState(String(d.person))
   ]);
   const day=today();
+  const safeItems=(items||[]).map((row:any)=>{
+    const copy=structuredClone(row),data=copy.data||{};
+    if(copy.kind==="capsule"&&data.date&&data.date>day&&String(copy.author)!==String(d.person))copy.data={title:"Cápsula cerrada",date:data.date,locked:true};
+    if(copy.kind==="note"&&data.surprise&&String(copy.author)!==String(d.person)){
+      let unlocked=data.unlockType!=="date"||!data.unlockDate||data.unlockDate<=day;
+      if(data.unlockType==="place"){
+        const own=(locations||[]).find((x:any)=>String(x.person)===String(d.person)&&x.sharing);
+        unlocked=!!own&&meters(Number(own.latitude),Number(own.longitude),Number(data.latitude),Number(data.longitude))<=Number(data.radius||150);
+      }
+      if(!unlocked)copy.data={title:"Sorpresa guardada",surprise:true,unlockType:data.unlockType,unlockDate:data.unlockType==="date"?data.unlockDate:"",locked:true};
+    }
+    return copy;
+  });
   return json({
-    person:String(d.person),device:{id:d.id,name:d.name},today:day,settings,items,daily:maskedDaily(daily||[],String(d.person)),
-    bond,locations,nextEvent:nextCalendarEvent((items||[]).filter((i:any)=>i.kind==="event"),day),
+    person:String(d.person),device:{id:d.id,name:d.name},today:day,settings,items:safeItems,daily:maskedDaily(daily||[],String(d.person)),
+    bond,locations,nextEvent:nextCalendarEvent(safeItems.filter((i:any)=>i.kind==="event"),day),
     capabilities:{photos:true,music:true,voice:true,widget:true,backgroundLocation:true,trips:true}
   });
 }
@@ -360,6 +390,8 @@ async function bondWidget(req:Request,body:any){
 async function gesture(req:Request,body:any){
   return bondSave(req,{type:"gesture",data:{gesture:body.gesture}});
 }
+
+function meters(lat1:number,lon1:number,lat2:number,lon2:number){if(![lat1,lon1,lat2,lon2].every(Number.isFinite))return Infinity;const R=6371000,p=Math.PI/180,dLat=(lat2-lat1)*p,dLon=(lon2-lon1)*p,a=Math.sin(dLat/2)**2+Math.cos(lat1*p)*Math.cos(lat2*p)*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(a));}
 
 async function mapState(req:Request,body:any){
   await device(req);
