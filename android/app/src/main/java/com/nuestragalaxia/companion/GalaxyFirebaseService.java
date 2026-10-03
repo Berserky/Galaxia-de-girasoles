@@ -23,9 +23,11 @@ public final class GalaxyFirebaseService extends FirebaseMessagingService {
         BondStore bond=new BondStore(this);
         String behavior=data.getOrDefault("behavior","message");
         String gestureHistoryId=data.getOrDefault("gestureId","");
+        boolean duplicate="gesture".equals(eventType)&&!gestureHistoryId.isEmpty()&&bond.hasSeen(gestureHistoryId);
         if("gesture".equals(eventType)&&!gestureHistoryId.isEmpty())bond.markSeen(gestureHistoryId);
+        if(duplicate){BondWidget.updateAll(this);return;}
 
-        if(("haptic".equals(behavior)||"message_haptic".equals(behavior))&&bond.hapticEnabled())vibrate(this);
+        if(("haptic".equals(behavior)||"message_haptic".equals(behavior))&&bond.hapticEnabled())performHaptic(this);
 
         boolean messageAllowed=!"haptic".equals(behavior);
         if(messageAllowed&&bond.enabled()&&BondWorker.notificationsAllowed(this)){
@@ -37,7 +39,7 @@ public final class GalaxyFirebaseService extends FirebaseMessagingService {
         BondWidget.updateAll(this);
     }
 
-    private static void vibrate(Context context){
+    public static void performHaptic(Context context){
         try{
             VibrationEffect effect=VibrationEffect.createOneShot(90,VibrationEffect.DEFAULT_AMPLITUDE);
             if(Build.VERSION.SDK_INT>=31){
