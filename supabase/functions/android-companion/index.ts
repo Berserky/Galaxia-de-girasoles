@@ -271,6 +271,127 @@ async function settingsSave(req:Request,body:any){
   return json({settings:updated});
 }
 
+
+async function presenceSet(req:Request,body:any){
+  const d=await device(req),person=String(d.person),row=await ok(db.from("galaxy_settings").select("*").eq("id",1).single());
+  const old=row.data||{},presence={...(old.presence||{})},prev=presence[person]||{};
+  const shareBattery=body.shareBattery===true,shareListening=body.shareListening===true;
+  const rawBattery=body.battery,battery=rawBattery===null||rawBattery===undefined||rawBattery===""?NaN:Number(rawBattery),listening=text(body.listening,180);
+  presence[person]={
+    ...prev,
+    shareBattery,
+    shareListening,
+    battery:shareBattery&&Number.isFinite(battery)?Math.max(0,Math.min(100,Math.round(battery))):null,
+    listening:shareListening?listening:"",
+    updatedAt:new Date().toISOString()
+  };
+  const data={...old,presence};
+  const updated=await ok(db.from("galaxy_settings").update({data}).eq("id",1).select("id,data,version").single());
+  return json({presence:updated.data?.presence?.[person]||{}});
+}
+
+function backupBondData(row:any){
+  const data=structuredClone(row.data||{});
+  delete data.audioUrl;
+  delete data.locked;
+  return data;
+}
+
+async function backupExport(req:Request){
+  await device(req);
+  const [settings,items,daily,bond,places]=await Promise.all([
+    ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
+    ok(db.from("galaxy_items").select("kind,data,author,created").order("created",{ascending:true}).limit(1000)),
+    ok(db.from("galaxy_daily").select("day,person,mood,answer").order("day",{ascending:true}).limit(1000)),
+    ok(db.from("galaxy_bond").select("type,author,data,created").order("created",{ascending:true}).limit(1000)),
+    ok(db.from("galaxy_places").select("owner,name,kind,latitude,longitude,note,created_at").order("created_at",{ascending:true}).limit(500))
+  ]);
+  const backupSettings=structuredClone(settings?.data||{});
+  delete backupSettings.presence;
+  return json({
+    schema:1,
+    exportedAt:new Date().toISOString(),
+    settings:backupSettings,
+    items:(items||[]).map((x:any)=>({kind:x.kind,data:x.data||{},author:String(x.author),created:x.created})),
+    daily:daily||[],
+    bond:(bond||[]).map((x:any)=>({type:x.type,author:String(x.author),data:backupBondData(x),created:x.created})),
+    places:places||[]
+  });
+}
+
+async function backupImport(req:Request,body:any){
+  await device(req);
+  const backup=body?.backup;
+  if(!backup||typeof backup!=="object"||Array.isArray(backup)||Number(backup.schema)!==1||JSON.stringify(backup).length>2_000_000)return json({error:"Copia de seguridad no válida."},400);
+  const itemsIn=Array.isArray(backup.items)?backup.items.slice(0,1000):[];
+  const dailyIn=Array.isArray(backup.daily)?backup.daily.slice(0,1000):[];
+  const bondIn=Array.isArray(backup.bond)?backup.bond.slice(0,1000):[];
+  const placesIn=Array.isArray(backup.places)?backup.places.slice(0,500):[];
+  let itemsAdded=0,dailyAdded=0,bondAdded=0,placesAdded=0;
+
+  if(backup.settings&&typeof backup.settings==="object"&&!Array.isArray(backup.settings)){
+    const row=await ok(db.from("galaxy_settings").select("*").eq("id",1).single());
+    const source=backup.settings||{},names=Array.isArray(source.names)?source.names.map((x:any)=>text(x,40)).slice(0,2):null;
+    const merged={...row.data};
+    if(names?.length===2&&names.every((x:string)=>!!x))merged.names=names;
+    if(!source.startDate||validDate(source.startDate))merged.startDate=text(source.startDate,10);
+    if("albumUrl" in source)merged.albumUrl=text(source.albumUrl,500);
+    await ok(db.from("galaxy_settings").update({data:merged}).eq("id",1));
+  }
+
+  const existingItems=await ok(db.from("galaxy_items").select("kind,data,author").limit(2000));
+  const itemKeys=new Set((existingItems||[]).map((x:any)=>x.kind+"|"+String(x.author)+"|"+JSON.stringify(x.data||{})));
+  for(const row of itemsIn){
+    try{
+      const kind=String(row?.kind||""),author=["0","1"].includes(String(row?.author))?String(row.author):"0",data=cleanItem(kind,row?.data);
+      const key=kind+"|"+author+"|"+JSON.stringify(data);
+      if(itemKeys.has(key))continue;
+      await ok(db.from("galaxy_items").insert({kind,data,author}));
+      itemKeys.add(key);itemsAdded++;
+    }catch{}
+  }
+
+  for(const row of dailyIn){
+    try{
+      const day=String(row?.day||""),person=String(row?.person||""),mood=String(row?.mood||""),answer=text(row?.answer,3000);
+      if(!validDate(day)||!["0","1"].includes(person))continue;
+      const payload:any={day,person};
+      if(["feliz","tranquilo","cansado","sensible","abrazo"].includes(mood))payload.mood=mood;
+      if(answer)payload.answer=answer;
+      await ok(db.from("galaxy_daily").upsert(payload,{onConflict:"day,person"}));dailyAdded++;
+    }catch{}
+  }
+
+  const existingBond=await ok(db.from("galaxy_bond").select("type,author,data").limit(2000));
+  const bondKeys=new Set((existingBond||[]).map((x:any)=>x.type+"|"+String(x.author)+"|"+JSON.stringify(x.data||{})));
+  for(const row of bondIn){
+    try{
+      const type=String(row?.type||""),author=["0","1"].includes(String(row?.author))?String(row.author):"0",data=validateBond(type,row?.data);
+      if(type==="voice"){
+        const test=await signed("galaxy-voice",data.audioPath,30);if(!test)continue;
+      }
+      const key=type+"|"+author+"|"+JSON.stringify(data);
+      if(bondKeys.has(key))continue;
+      await ok(db.from("galaxy_bond").insert({type,author,data}));
+      bondKeys.add(key);bondAdded++;
+    }catch{}
+  }
+
+  const existingPlaces=await ok(db.from("galaxy_places").select("owner,name,kind,latitude,longitude").limit(1000));
+  const placeKeys=new Set((existingPlaces||[]).map((x:any)=>String(x.owner)+"|"+x.name+"|"+Number(x.latitude).toFixed(5)+"|"+Number(x.longitude).toFixed(5)));
+  for(const row of placesIn){
+    try{
+      const owner=["0","1"].includes(String(row?.owner))?String(row.owner):"0",name=text(row?.name,80),kind=String(row?.kind||"memory"),lat=Number(row?.latitude),lon=Number(row?.longitude),note=text(row?.note,300);
+      if(!name||!["home","work","memory","adventure"].includes(kind)||!Number.isFinite(lat)||!Number.isFinite(lon)||lat<-90||lat>90||lon<-180||lon>180)continue;
+      const key=owner+"|"+name+"|"+lat.toFixed(5)+"|"+lon.toFixed(5);
+      if(placeKeys.has(key))continue;
+      await ok(db.from("galaxy_places").insert({owner,name,kind,latitude:lat,longitude:lon,note:note||null}));
+      placeKeys.add(key);placesAdded++;
+    }catch{}
+  }
+  return json({ok:true,restored:{items:itemsAdded,daily:dailyAdded,bond:bondAdded,places:placesAdded}});
+}
+
 async function dailySave(req:Request,body:any){
   const d=await device(req),field=String(body.field||""),value=text(body.value,3000),day=today();
   if(field==="mood"){
@@ -553,15 +674,29 @@ async function upload(req:Request){
 async function moments(req:Request){
   const d=await device(req);
   if(!["0","1"].includes(String(d.person)))return json({error:"Dispositivo no válido"},401);
-  const [settings,events,config,gestures]=await Promise.all([
+  const partner=String(d.person)==="0"?"1":"0";
+  const [settings,events,config,gestures,daily,locations]=await Promise.all([
     ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
     ok(db.from("galaxy_items").select("id,data").eq("kind","event")),
     ok(db.from("galaxy_bond_config").select("photo_path").eq("id",1).maybeSingle()),
-    ok(db.from("galaxy_bond").select("id,author,created,data").eq("type","gesture").neq("author",d.person).gte("created",new Date(Date.now()-7*86400000).toISOString()).order("created",{ascending:false}).limit(30))
+    ok(db.from("galaxy_bond").select("id,author,created,data").eq("type","gesture").neq("author",d.person).gte("created",new Date(Date.now()-7*86400000).toISOString()).order("created",{ascending:false}).limit(30)),
+    ok(db.from("galaxy_daily").select("person,mood").eq("day",today())),
+    ok(db.from("galaxy_locations").select("person,sharing,motion,speed,status,updated_at"))
   ]);
   const names=(Array.isArray(settings?.data?.names)?settings.data.names:["Nosotros","Dos"]).slice(0,2).map((name:unknown)=>text(name,40));
   let photoUrl=null;if(config?.photo_path)photoUrl=await signed("galaxy-photos",config.photo_path,300);
-  return json({names,nextEvent:nextCalendarEvent(events||[],today()),photoUrl,gestures:(gestures||[]).filter((g:any)=>["hug","kiss","miss"].includes(g.data?.gesture)).map((g:any)=>({id:g.id,gesture:g.data.gesture,created:g.created,author:g.author}))});
+  const pDaily=(daily||[]).find((x:any)=>String(x.person)===partner)||{},pLoc=(locations||[]).find((x:any)=>String(x.person)===partner)||{},pPresence=settings?.data?.presence?.[partner]||{};
+  const now={
+    mood:pDaily.mood||null,
+    sharing:!!pLoc.sharing,
+    motion:pLoc.sharing?pLoc.motion||null:null,
+    speed:pLoc.sharing?Number(pLoc.speed||0):null,
+    status:pLoc.sharing?text(pLoc.status,80):"",
+    battery:pPresence.shareBattery===true&&pPresence.battery!==null&&pPresence.battery!==undefined&&Number.isFinite(Number(pPresence.battery))?Number(pPresence.battery):null,
+    listening:pPresence.shareListening===true?text(pPresence.listening,180):"",
+    updatedAt:pPresence.updatedAt||pLoc.updated_at||null
+  };
+  return json({names,nextEvent:nextCalendarEvent(events||[],today()),photoUrl,now,gestures:(gestures||[]).filter((g:any)=>["hug","kiss","miss"].includes(g.data?.gesture)).map((g:any)=>({id:g.id,gesture:g.data.gesture,created:g.created,author:g.author}))});
 }
 
 Deno.serve(async req=>{
@@ -579,6 +714,9 @@ Deno.serve(async req=>{
     if(action==="item-delete")return await itemDelete(req,body);
     if(action==="settings-save")return await settingsSave(req,body);
     if(action==="daily-save")return await dailySave(req,body);
+    if(action==="presence-set")return await presenceSet(req,body);
+    if(action==="backup-export")return await backupExport(req);
+    if(action==="backup-import")return await backupImport(req,body);
     if(action==="bond-save")return await bondSave(req,body);
     if(action==="bond-update")return await bondUpdate(req,body);
     if(action==="bond-guess")return await bondGuess(req,body);

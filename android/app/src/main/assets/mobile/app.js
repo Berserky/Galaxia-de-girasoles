@@ -44,6 +44,7 @@ const surpriseIdeas=[
 
 let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null;
 let toastTimer,refreshing=false,updateState={text:'La app está al día.',progress:0,busy:false},pendingVoiceDraft=null,voiceReady=false,voiceRecording=false,voiceResumeMusic=false,lastSurprise=null;
+let presenceLastSignature='',voiceTimer=null,voiceSeconds=0;
 let welcomeStep=0,welcomePreview=false,welcomeGift=true,welcomeEntering=false,tourStep=-1;
 const welcomeMusic=new Audio('../musica.mp3');welcomeMusic.loop=true;welcomeMusic.volume=.32;
 const globalPlayer=document.getElementById('globalPlayer'),providerPlayer=document.getElementById('providerPlayer');
@@ -61,7 +62,7 @@ function renderGlobalPlayer(){
  globalPlayer.innerHTML='<button class="player-main" data-action="player-toggle" aria-label="'+(musicPlaying?'Pausar':'Reproducir')+'">'+ico(playerIcon())+'</button><button class="player-info" data-action="player-expand"><span class="player-eq '+(musicPlaying?'playing':'')+'"><i></i><i></i><i></i></span><span><b>'+esc(t.title)+'</b><small>'+esc(t.platform==='youtube'?'YouTube / YouTube Music':t.platform==='spotify'?'Spotify':t.platform==='mp3'?'MP3':'Audio')+'</small></span></button><button class="player-skip" data-action="player-next" aria-label="Siguiente">'+ico('skip-forward')+'</button>';
  refreshIcons();
 }
-function setMusicPlaying(v){musicPlaying=!!v;renderGlobalPlayer();}
+function setMusicPlaying(v){musicPlaying=!!v;renderGlobalPlayer();if(cloud)setTimeout(()=>syncPresence(),0);}
 function playMusicAt(index){
  rebuildMusicQueue();if(!musicQueue.length)return;musicIndex=(index+musicQueue.length)%musicQueue.length;const t=musicQueue[musicIndex];
  musicAudio.pause();if(ytPlayer?.pauseVideo)try{ytPlayer.pauseVideo();}catch{}if(spotifyController?.pause)try{spotifyController.pause();}catch{}
@@ -100,7 +101,8 @@ window.GalaxyNative={
    let data={};try{data=JSON.parse(json||'{}');}catch{}
    if(name==='native'){native=data;render();}
    if(name==='update'){updateState=data;renderUpdateOnly();}
-   if(name==='voice'&&data.ready&&modal.open){voiceRecording=false;voiceReady=true;const status=modal.querySelector('[data-role="voice-status"]');if(status)status.textContent='Grabación lista. Escúchala antes de guardar.';modal.querySelector('[data-action="voice-record-stop"]')?.setAttribute('hidden','');modal.querySelector('[data-action="voice-preview"]')?.removeAttribute('hidden');modal.querySelector('[data-action="voice-discard"]')?.removeAttribute('hidden');modal.querySelector('[data-action="voice-record-start"]')?.removeAttribute('hidden');}
+   if(name==='voice'&&data.ready&&modal.open){stopVoiceTimer();voiceRecording=false;voiceReady=true;const status=modal.querySelector('[data-role="voice-status"]');if(status)status.textContent='Grabación lista. Escúchala antes de guardar.';modal.querySelector('[data-action="voice-record-stop"]')?.setAttribute('hidden','');modal.querySelector('[data-action="voice-preview"]')?.removeAttribute('hidden');modal.querySelector('[data-action="voice-discard"]')?.removeAttribute('hidden');modal.querySelector('[data-action="voice-record-start"]')?.removeAttribute('hidden');if(voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}}
+   if(name==='voice-preview-ended'&&voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}
  },
  back(){
    if(modal.open){closeModal();return;}
@@ -128,6 +130,42 @@ const partnerName=()=>names()[Number(cloud?.person||0)===0?1:0]||'Mi persona';
 const todayRows=()=>cloud?.daily?.filter(r=>r.day===cloud.today)||[];
 const ownDaily=()=>todayRows().find(r=>r.person===cloud?.person)||{};
 const partnerDaily=()=>todayRows().find(r=>r.person!==cloud?.person)||{};
+const ownPresence=()=>cloud?.settings?.data?.presence?.[String(cloud?.person)]||{};
+const partnerPresence=()=>cloud?.settings?.data?.presence?.[String(cloud?.person)==='0'?'1':'0']||{};
+const currentTrackTitle=()=>{rebuildMusicQueue();return musicPlaying&&musicQueue[musicIndex]?String(musicQueue[musicIndex].title||''):'';};
+async function syncPresence(force=false){
+ if(!native.paired||!cloud)return;
+ const p=ownPresence(),payload={shareBattery:p.shareBattery===true,shareListening:p.shareListening===true,battery:native.battery==null?null:Number(native.battery),listening:currentTrackTitle()};
+ const signature=JSON.stringify(payload);
+ if(!force&&signature===presenceLastSignature)return;
+ presenceLastSignature=signature;
+ try{await api('presence-set',payload);await refreshState({quiet:true});try{await GalaxyNative.call('refreshMoments');}catch{}}
+ catch(e){presenceLastSignature='';if(force)throw e;}
+}
+async function togglePresence(kind){
+ const p=ownPresence(),payload={shareBattery:p.shareBattery===true,shareListening:p.shareListening===true,battery:native.battery==null?null:Number(native.battery),listening:currentTrackTitle()};
+ if(kind==='battery')payload.shareBattery=!payload.shareBattery;
+ if(kind==='listening')payload.shareListening=!payload.shareListening;
+ await api('presence-set',payload);presenceLastSignature='';await refreshState({quiet:true});render();try{await GalaxyNative.call('refreshMoments');}catch{}
+}
+function nowPersonCard(person,isOwn){
+ const loc=(cloud.locations||[]).find(l=>String(l.person)===String(person))||{},daily=todayRows().find(r=>String(r.person)===String(person))||{};
+ const p=cloud?.settings?.data?.presence?.[String(person)]||{},name=names()[Number(person)]||(isOwn?'Yo':'Mi persona');
+ const mood=daily.mood?(moods[daily.mood]?.[1]||daily.mood):'Sin estado';
+ const movement=loc.sharing?transportLabel(loc):'Ubicación pausada';
+ const battery=isOwn?(native.battery==null?NaN:Number(native.battery)):(p.shareBattery===true&&p.battery!=null?Number(p.battery):NaN);
+ const listening=isOwn?currentTrackTitle():(p.shareListening===true?String(p.listening||''):'');
+ const kmh=loc.sharing?Math.max(0,Number(loc.speed||0)*3.6):null;
+ return '<div class="now-person card"><div class="row between"><div><span class="badge">'+esc(isOwn?'Tú':'Ahora')+'</span><h3>'+esc(name)+'</h3></div><span class="now-mood">'+esc(mood)+'</span></div>'+
+ '<div class="now-facts"><span>'+ico('navigation')+esc(movement)+(kmh!==null?' · '+kmh.toFixed(kmh<10?1:0)+' km/h':'')+'</span>'+
+ (loc.status?'<span>'+ico('message-circle')+esc(loc.status)+'</span>':'')+
+ (listening?'<span>'+ico('music')+esc(listening)+'</span>':'')+
+ (Number.isFinite(battery)?'<span>'+ico('battery-charging')+Math.round(battery)+'%</span>':'')+'</div></div>';
+}
+function nowCard(){
+ const me=String(cloud.person),other=me==='0'?'1':'0';
+ return '<section class="section now-section"><div class="section-head"><div><p class="eyebrow">AHORA</p><h2>Cómo estamos</h2><p>Solo se comparte lo que cada uno decide activar.</p></div><button class="btn small ghost" data-action="now-settings">'+ico('sliders-horizontal')+' Privacidad</button></div><div class="now-grid">'+nowPersonCard(me,true)+nowPersonCard(other,false)+'</div></section>';
+}
 const dailyQuestion=()=>{const d=cloud?.today||new Date().toISOString().slice(0,10);let n=0;for(const c of d)n+=c.charCodeAt(0);return dailyQuestions[n%dailyQuestions.length];};
 const currentMonday=()=>{const d=new Date((cloud?.today||new Date().toISOString().slice(0,10))+'T12:00:00');const day=d.getDay()||7;d.setDate(d.getDate()-day+1);return d.toISOString().slice(0,10);};
 const coupleDays=()=>{const s=cloud?.settings?.data?.startDate;if(!s)return 0;return Math.max(0,Math.floor((Date.parse((cloud?.today||s)+'T12:00:00Z')-Date.parse(s+'T12:00:00Z'))/86400000));};
@@ -256,7 +294,7 @@ function renderTourOverlay(){
 function homeView(){
  const own=ownDaily(),partner=partnerDaily(),next=cloud.nextEvent,garden=cloud.bond?.garden||{days:0,stage:0};
  const locs=cloud.locations||[];
- return anniversaryBanner()+'<section class="hero"><p class="eyebrow">NUESTRO UNIVERSO</p><h1>'+esc(myName())+' & '+esc(partnerName())+'</h1><p>Un lugar para acompañarnos, guardar lo vivido y seguir construyendo lo que viene.</p><div class="hero-stats"><div class="hero-stat"><b>'+coupleDays()+'</b><small>días juntos</small></div><div class="hero-stat"><b>'+items('memory').length+'</b><small>recuerdos</small></div><div class="hero-stat"><b>'+garden.days+'</b><small>días del girasol</small></div></div></section>'+
+ return anniversaryBanner()+'<section class="hero"><p class="eyebrow">NUESTRO UNIVERSO</p><h1>'+esc(myName())+' & '+esc(partnerName())+'</h1><p>Un lugar para acompañarnos, guardar lo vivido y seguir construyendo lo que viene.</p><div class="hero-stats"><div class="hero-stat"><b>'+coupleDays()+'</b><small>días juntos</small></div><div class="hero-stat"><b>'+items('memory').length+'</b><small>recuerdos</small></div><div class="hero-stat"><b>'+garden.days+'</b><small>días del girasol</small></div></div></section>'+nowCard()+
  '<section class="section"><div class="section-head"><div><h2>¿Cómo estás hoy?</h2><p>Tu estado se comparte solo con tu persona.</p></div></div><div class="mood-grid">'+Object.entries(moods).map(([id,m])=>'<button class="mood '+(own.mood===id?'active':'')+'" data-action="mood" data-value="'+id+'"><span>'+ico(m[0])+'</span>'+m[1]+'</button>').join('')+'</div>'+(partner.mood?'<div class="card" style="margin-top:10px"><span class="badge">'+esc(partnerName())+'</span> <b>'+esc(moods[partner.mood]?.[1]||partner.mood)+'</b></div>':'')+'</section>'+
  '<section class="section"><div class="card"><p class="eyebrow">PREGUNTA DEL DÍA</p><h3>'+esc(dailyQuestion())+'</h3>'+dailyAnswerMarkup(own,partner)+'</div></section>'+
  '<section class="section"><div class="grid">'+
@@ -385,10 +423,15 @@ function mapView(){
  '<div class="section"><div class="grid">'+actionCard('route',own.trip_active?'Terminar recorrido':'Iniciar recorrido',own.trip_active?'Guardaremos el resumen al finalizar':'Registra distancia, duración y movimiento','trip-toggle')+actionCard('map-pin','Guardar este lugar','Casa, trabajo, recuerdo o aventura','place-new')+actionCard('navigation','Acompáñame','Elegir a dónde voy','destination')+'</div></div>'+
  mapHistoryView()+'</section>';
 }
+function historyPlacesView(){
+ const places=mapData?.places||[];
+ if(!places.length)return '<section class="section"><div class="section-head"><div><h2>Mapa de nuestra historia</h2><p>Guarden lugares y relaciónenlos con recuerdos para construirlo.</p></div></div><div class="empty">Aún no hay lugares guardados.</div></section>';
+ return '<section class="section"><div class="section-head"><div><h2>Mapa de nuestra historia</h2><p>Lugares importantes conectados con lo que vivieron allí.</p></div></div><div class="history-places">'+places.map(p=>{const linked=(cloud.items||[]).filter(i=>Number(i.data?.placeId)===Number(p.id));return '<article class="card history-place"><button class="history-place-head" data-action="history-place" data-lat="'+attr(p.latitude)+'" data-lon="'+attr(p.longitude)+'"><span class="item-icon">'+ico(p.kind==='home'?'house':p.kind==='work'?'briefcase':p.kind==='adventure'?'compass':'heart')+'</span><span><b>'+esc(p.name)+'</b><small>'+esc(p.note||'Lugar guardado')+'</small></span></button><div class="history-links">'+(linked.length?linked.slice(0,5).map(i=>'<button class="history-memory" data-action="constellation-item" data-id="'+i.id+'">'+ico(kindMeta[i.kind]?.[0]||'sparkles')+' '+esc(i.data?.title||'Historia')+'</button>').join(''):'<button class="history-memory add" data-action="memory-at-place" data-id="'+p.id+'">'+ico('plus')+' Añadir recuerdo aquí</button>')+'</div></article>';}).join('')+'</div></section>';
+}
 function mapHistoryView(){
  if(!mapData)return '<div class="section">'+loading('Cargando recorridos')+'</div>';
  const trips=mapData.trips||[],events=mapData.events||[],encounters=mapData.encounters||[];
- return '<section class="section"><div class="section-head"><div><h2>Actividad reciente</h2><p>Recorridos, llegadas y encuentros.</p></div></div><div class="stack">'+
+ return historyPlacesView()+'<section class="section"><div class="section-head"><div><h2>Actividad reciente</h2><p>Recorridos, llegadas y encuentros.</p></div></div><div class="stack">'+
  (trips.slice(0,4).map(t=>'<div class="card"><span class="badge">'+(names()[Number(t.person)]||'Nosotros')+'</span><h3 style="margin-top:8px">'+fmtDistance(t.distance_m)+' · '+fmtDuration(t.duration_s)+'</h3><p>'+esc(fmtDateTime(t.started_at))+(t.max_speed?' · máx. '+(Number(t.max_speed)*3.6).toFixed(0)+' km/h':'')+'</p></div>').join('')||
  events.slice(0,4).map(e=>'<div class="card"><h3>'+(e.event==='arrived'?'Llegada':'Salida')+'</h3><p>'+esc(fmtDateTime(e.happened_at))+'</p></div>').join('')||
  encounters.slice(0,3).map(e=>'<div class="card"><h3 class="icon-title">'+ico('heart')+'Nos encontramos</h3><p>'+esc(fmtDateTime(e.started_at))+'</p></div>').join('')||
@@ -397,8 +440,11 @@ function mapHistoryView(){
 }
 
 function moreView(){
- const settings=cloud.settings||{data:{},version:1},data=settings.data||{};
- return '<section><div class="section-head"><div><p class="eyebrow">NUESTRA APP</p><h2>Más</h2><p>Widget, ajustes, permisos y actualización.</p></div></div>'+
+ const settings=cloud.settings||{data:{},version:1},data=settings.data||{},presence=ownPresence();
+ return '<section><div class="section-head"><div><p class="eyebrow">NUESTRA APP</p><h2>Más</h2><p>Privacidad, respaldo, nuestra historia inteligente y ajustes.</p></div></div>'+
+ '<div class="card"><div class="row between"><div><h3>Privacidad de “Ahora”</h3><p>Tu ubicación sigue teniendo su propio interruptor. Aquí decides si compartes batería y la canción que estás escuchando.</p></div>'+ico('shield-check')+'</div><div class="privacy-grid"><button class="privacy-toggle '+(presence.shareBattery?'active':'')+'" data-action="presence-battery">'+ico('battery-charging')+'<span><b>Batería</b><small>'+(presence.shareBattery?'Compartida':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(presence.shareListening?'active':'')+'" data-action="presence-listening">'+ico('music')+'<span><b>Escuchando</b><small>'+(presence.shareListening?'Compartido':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(native.tracking?'active':'')+'" data-action="map">'+ico('map-pin')+'<span><b>Ubicación</b><small>'+(native.tracking?'Compartiendo':'Pausada')+'</small></span></button></div></div>'+
+ '<div class="card"><div class="row between"><div><h3>Nuestra IA</h3><p>Pregunta por recuerdos, planes, lugares, viajes y momentos guardados. Responde usando únicamente su propia historia.</p></div>'+ico('sparkles')+'</div><button class="btn small" style="margin-top:14px" data-action="our-ai">Preguntar a nuestra historia</button></div>'+
+ '<div class="card"><div class="row between"><div><h3>Copia de nuestra galaxia</h3><p>Exporta los datos a un archivo JSON o restaura una copia. Fotos, música y audios permanecen en su almacenamiento privado y se conservan por referencia.</p></div>'+ico('archive')+'</div><div class="row wrap" style="margin-top:14px"><button class="btn small secondary" data-action="backup-export">'+ico('download')+' Exportar</button><button class="btn small ghost" data-action="backup-import">'+ico('upload')+' Restaurar</button></div></div>'+
  '<div class="card"><div class="row between"><div><h3>Widget “Nuestra Galaxia”</h3><p>Foto, próxima fecha y un abrazo desde el escritorio.</p></div><span class="badge '+(native.canPinWidget?'good':'')+'">'+(native.canPinWidget?'Disponible':'Manual')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small" data-action="widget-add">Añadir widget</button><button class="btn small secondary" data-action="widget-photo">Elegir foto</button><button class="btn small ghost" data-action="widget-photo-clear">Quitar foto</button></div></div>'+
  '<div class="card"><div class="row between"><div><h3>Notificaciones de momentos</h3><p>Gestos y fechas especiales, sin depender del GPS.</p></div><span class="badge '+(native.momentNotifications?'good':'')+'">'+(native.momentNotifications?'Activas':'Pausadas')+'</span></div><button class="btn small secondary" style="margin-top:14px" data-action="moment-notifications">'+(native.momentNotifications?'Desactivar':'Activar')+'</button></div>'+
  '<div class="card"><h3>Nuestros datos</h3><form id="settingsForm" class="stack" style="margin-top:12px"><div class="grid"><div class="field"><label>Nombre 1</label><input class="input" name="name0" value="'+attr(data.names?.[0]||'')+'" required></div><div class="field"><label>Nombre 2</label><input class="input" name="name1" value="'+attr(data.names?.[1]||'')+'" required></div></div><div class="field"><label>Inicio de nuestra historia</label><input class="input" type="date" name="startDate" value="'+attr(data.startDate||'')+'"></div><div class="field"><label>Álbum de Google Fotos (opcional)</label><input class="input" name="albumUrl" value="'+attr(data.albumUrl||'')+'" placeholder="https://photos.app.goo.gl/…"></div><button class="btn" type="submit">Guardar ajustes</button></form></div>'+
@@ -431,7 +477,8 @@ function drawMap({fit=true}={}){
  });
  (mapData.places||[]).forEach(p=>{
    const markerIcon=p.kind==='home'?'house':p.kind==='work'?'briefcase':p.kind==='adventure'?'compass':'heart';
-   map.addMarker({lat:p.latitude,lon:p.longitude,icon:markerIcon,className:'place',popup:p.name+(p.note?' · '+p.note:'')});
+   const linked=(cloud?.items||[]).filter(i=>Number(i.data?.placeId)===Number(p.id));
+   map.addMarker({lat:p.latitude,lon:p.longitude,icon:markerIcon,className:'place',popup:p.name+(linked.length?' · '+linked.length+' '+(linked.length===1?'historia':'historias'):'')+(p.note?' · '+p.note:'')});
  });
  const grouped={};
  (mapData.tripPoints||[]).slice().reverse().forEach(p=>(grouped[p.person]??=[]).push([Number(p.latitude),Number(p.longitude)]));
@@ -446,19 +493,20 @@ function showModal(title,body,formId=''){
  modal.showModal();
  refreshIcons();
 }
-async function resetVoiceDraft(){if(voiceRecording||voiceReady){try{await GalaxyNative.call('discardVoiceRecording');}catch{}}voiceRecording=false;voiceReady=false;if(voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}}
+async function resetVoiceDraft(){stopVoiceTimer();if(voiceRecording||voiceReady){try{await GalaxyNative.call('discardVoiceRecording');}catch{}}voiceRecording=false;voiceReady=false;if(voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}}
 function closeModal(){if(modal.dataset.form==='voice'&&pendingVoiceDraft!==null)resetVoiceDraft();if(modal.open)modal.close();delete modal.dataset.editId;delete modal.dataset.version;delete modal.dataset.kind;delete modal.dataset.form;}
 function openItemForm(kind,item){
- const d=item?.data||{},meta=kindMeta[kind]||['sparkles','Contenido'];
+ const d=item?.data||{},meta=kindMeta[kind]||['sparkles','Contenido'],editing=!!item?.id,places=mapData?.places||[];
  modal.dataset.editId=item?.id||'';modal.dataset.version=item?.version||'';modal.dataset.kind=kind;
- const needsDate=['memory','event','capsule','journey'].includes(kind);
+ const needsDate=['memory','event','capsule','journey'].includes(kind),canPlace=['memory','journey','event'].includes(kind);
+ const placeField=canPlace?(places.length?'<div class="field"><label>Lugar de nuestra historia (opcional)</label><select name="placeId"><option value="">Sin lugar</option>'+places.map(p=>'<option value="'+p.id+'" '+(Number(d.placeId)===Number(p.id)?'selected':'')+'>'+esc(p.name)+'</option>').join('')+'</select></div>':(d.placeId?'<input type="hidden" name="placeId" value="'+attr(d.placeId)+'">':'')):'';
  const body='<form id="itemForm" class="stack" style="margin-top:16px"><div class="field"><label>Título</label><input class="input" name="title" value="'+attr(d.title||'')+'" required maxlength="160"></div><div class="field"><label>Texto</label><textarea name="body" placeholder="Escribe aquí…">'+esc(d.body||'')+'</textarea></div>'+
  (needsDate?'<div class="field"><label>Fecha</label><input class="input" type="date" name="date" value="'+attr(d.date||'')+'"></div>':'')+
- '<div class="field"><label>Categoría</label><input class="input" name="category" value="'+attr(d.category||'')+'" placeholder="'+attr(meta[1])+'"></div>'+
+ '<div class="field"><label>Categoría</label><input class="input" name="category" value="'+attr(d.category||'')+'" placeholder="'+attr(meta[1])+'"></div>'+placeField+
  (kind==='event'?'<label class="row"><input type="checkbox" name="annual" '+(d.annual?'checked':'')+'> Se repite cada año</label>':'')+
  (kind==='plan'||kind==='wish'?'<label class="row"><input type="checkbox" name="done" '+(d.done?'checked':'')+'> Ya lo hicimos</label>':'')+
  '<div class="form-actions"><button class="btn secondary" type="button" data-action="modal-close">Cancelar</button><button class="btn" type="submit">Guardar</button></div></form>';
- showModal((item?'Editar ':'Nuevo ')+meta[1].toLowerCase(),body,'item');
+ showModal((editing?'Editar ':'Nuevo ')+meta[1].toLowerCase(),body,'item');
 }
 function openGame(){
  const first=Object.keys(gameQuestions)[0];
@@ -472,14 +520,20 @@ function openSharedNote(entry){
  const d=entry?.data||{};modal.dataset.editId=entry?.id||'';modal.dataset.version=entry?.version||'';
  showModal(entry?'Editar nota':'Nueva nota compartida','<form id="sharedNoteForm" class="stack" style="margin-top:16px"><div class="field"><label>Título</label><input class="input" name="title" value="'+attr(d.title||'')+'" required></div><div class="field"><label>Nota</label><textarea name="body">'+esc(d.body||'')+'</textarea></div><button class="btn" type="submit">Guardar nota</button></form>','sharednote');
 }
+function startVoiceTimer(){
+ stopVoiceTimer();voiceSeconds=0;
+ voiceTimer=setInterval(()=>{voiceSeconds++;const status=modal.querySelector('[data-role="voice-status"]');if(status&&voiceRecording)status.textContent='Grabando… '+voiceSeconds+' s / 60 s';if(voiceSeconds>=60)stopVoiceTimer();},1000);
+}
+function stopVoiceTimer(){if(voiceTimer){clearInterval(voiceTimer);voiceTimer=null;}}
 function openVoice(referenceId=''){
  pendingVoiceDraft={};voiceReady=false;voiceRecording=false;
  const refs=(cloud.items||[]).filter(i=>['memory','song','capsule'].includes(i.kind)&&!(i.kind==='capsule'&&String(i.data?.date||'')>cloud.today));
  showModal('Mensaje de voz','<form id="voiceForm" class="stack" style="margin-top:16px"><div class="field"><label>Título</label><input class="input" name="title" placeholder="Te pienso…" required></div><div class="field"><label>Dedicatoria</label><textarea name="body" placeholder="Unas palabras antes del audio…"></textarea></div><div class="field"><label>Relacionar con un recuerdo (opcional)</label><select name="referenceId"><option value="">Sin referencia</option>'+refs.map(i=>'<option value="'+i.id+'" '+(String(i.id)===String(referenceId)?'selected':'')+'>'+esc(i.data?.title||'Recuerdo')+'</option>').join('')+'</select></div><div class="card compact" data-role="voice-recorder"><b>Grábalo aquí</b><small class="muted" data-role="voice-status">Toca el micrófono cuando estés listo.</small><div class="row wrap" style="margin-top:10px"><button class="btn" type="button" data-action="voice-record-start">'+ico('mic')+' Grabar</button><button class="btn secondary" type="button" data-action="voice-record-stop" hidden>'+ico('square')+' Detener</button><button class="btn secondary" type="button" data-action="voice-preview" hidden>'+ico('play')+' Escuchar</button><button class="btn secondary" type="button" data-action="voice-discard" hidden>'+ico('rotate-ccw')+' Repetir</button></div></div><button class="btn secondary" type="button" data-action="voice-file">'+ico('folder-open')+' Elegir audio del teléfono</button><button class="btn" type="submit">Guardar mensaje de voz</button></form>','voice');
 }
 function openSurpriseNote(){
- const own=(cloud.locations||[]).find(l=>l.person===cloud.person&&l.sharing);
- showModal('Nueva nota sorpresa','<form id="surpriseNoteForm" class="stack" style="margin-top:16px"><div class="field"><label>Título</label><input class="input" name="title" required maxlength="160"></div><div class="field"><label>Mensaje</label><textarea name="body" required></textarea></div><div class="field"><label>Desbloquear</label><select name="unlockType" data-role="surprise-unlock"><option value="date">En una fecha</option>'+(own?'<option value="place">Al llegar a este lugar</option>':'')+'</select></div><div class="field" data-role="surprise-date"><label>Fecha</label><input class="input" type="date" name="unlockDate" value="'+attr(cloud.today)+'"></div><input type="hidden" name="latitude" value="'+attr(own?.latitude||'')+'"><input type="hidden" name="longitude" value="'+attr(own?.longitude||'')+'"><button class="btn" type="submit">Guardar sorpresa</button></form>','surprise-note');
+ const own=(cloud.locations||[]).find(l=>l.person===cloud.person&&l.sharing),places=mapData?.places||[],hasPlace=!!own||places.length>0;
+ const placeOptions=(own?'<option value="current">Donde estoy ahora</option>':'')+places.map(p=>'<option value="saved:'+p.id+'">'+esc(p.name)+'</option>').join('');
+ showModal('Nueva nota sorpresa','<form id="surpriseNoteForm" class="stack" style="margin-top:16px"><div class="field"><label>Título</label><input class="input" name="title" required maxlength="160"></div><div class="field"><label>Mensaje</label><textarea name="body" required></textarea></div><div class="field"><label>Desbloquear</label><select name="unlockType" data-role="surprise-unlock"><option value="date">En una fecha</option>'+(hasPlace?'<option value="place">Al llegar a un lugar</option>':'')+'</select></div><div class="field" data-role="surprise-date"><label>Fecha</label><input class="input" type="date" name="unlockDate" value="'+attr(cloud.today)+'"></div>'+(hasPlace?'<div class="field" data-role="surprise-place" hidden><label>Lugar</label><select name="placeChoice">'+placeOptions+'</select><small>La sorpresa se abrirá dentro de un radio aproximado de 150 m.</small></div>':'')+'<button class="btn" type="submit">Guardar sorpresa</button></form>','surprise-note');
 }
 function openSurprise(){
  const idea=surpriseIdeas[Math.floor(Math.random()*surpriseIdeas.length)];lastSurprise=idea;
@@ -495,6 +549,39 @@ function openDestination(){
  showModal('Acompáñame','<form id="destinationForm" class="stack" style="margin-top:16px"><div class="field"><label>Voy hacia</label><select name="destination"><option value="person:'+partner+'">'+esc(partnerName())+'</option>'+places.map(p=>'<option value="place:'+p.id+'">'+esc(p.name)+'</option>').join('')+'<option value="none">Ningún destino</option></select></div><button class="btn" type="submit">Guardar destino</button></form>','destination');
 }
 
+function storyDocuments(){
+ const docs=[];
+ for(const i of cloud?.items||[])docs.push({kind:i.kind,title:i.data?.title||kindMeta[i.kind]?.[1]||'Historia',body:[i.data?.body,i.data?.category,i.data?.date].filter(Boolean).join(' · '),date:i.data?.date||i.created});
+ for(const p of mapData?.places||[])docs.push({kind:'place',title:p.name,body:p.note||'Lugar de nuestra historia',date:p.created_at});
+ for(const t of mapData?.trips||[])docs.push({kind:'trip',title:'Recorrido de '+(names()[Number(t.person)]||'Nosotros'),body:fmtDistance(t.distance_m)+' · '+fmtDuration(t.duration_s)+' · '+(t.dominant_motion||''),date:t.started_at});
+ for(const d of cloud?.daily||[])if(d.answer)docs.push({kind:'daily',title:'Respuesta de '+(names()[Number(d.person)]||'Nosotros'),body:d.answer,date:d.day});
+ for(const b of cloud?.bond?.entries||[])if(['sharednote','voice','ritual'].includes(b.type)){const x=b.data||{};docs.push({kind:b.type,title:x.title||('ritual'===b.type?'Ritual semanal':'Momento'),body:[x.body,x.gratitude,x.need,x.plan].filter(Boolean).join(' · '),date:b.created});}
+ return docs;
+}
+const aiWords=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9ñ ]/g,' ').split(/\s+/).filter(w=>w.length>2&&!['que','como','con','para','por','una','uno','los','las','del','nos','nuestro','nuestra','cuando','donde'].includes(w));
+function aiResult(question){
+ const q=String(question||'').trim(),plain=q.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+ if(!q)return {title:'Pregúntame algo de ustedes',body:'Puedo buscar entre recuerdos, planes, canciones, lugares, recorridos, notas y respuestas guardadas.',matches:[]};
+ if(/cuantos? dias|dias juntos|tiempo juntos/.test(plain))return {title:'Su historia hasta hoy',body:'Llevan '+coupleDays()+' días juntos según la fecha configurada en la app.',matches:[]};
+ if(/cuantos? recuerdos|recuerdos tenemos/.test(plain))return {title:'Recuerdos guardados',body:'Hay '+items('memory').length+' recuerdos guardados en Nuestra Galaxia.',matches:items('memory').slice(0,5).map(i=>({title:i.data?.title||'Recuerdo',body:fmtDate(i.data?.date)}))};
+ if(/planes? pendientes|que planes|planes tenemos/.test(plain)){const list=items('plan').filter(i=>!i.data?.done);return {title:'Planes pendientes',body:list.length?'Tienen '+list.length+' planes todavía por vivir.':'No hay planes pendientes guardados.',matches:list.slice(0,6).map(i=>({title:i.data?.title||'Plan',body:i.data?.body||''}))};}
+ if(/lugares?|sitios?/.test(plain)){const list=mapData?.places||[];return {title:'Lugares de ustedes',body:list.length?'Encontré '+list.length+' lugares guardados.':'Todavía no han guardado lugares.',matches:list.slice(0,6).map(p=>({title:p.name,body:p.note||p.kind}))};}
+ if(/viajes?|recorridos?|rutas?/.test(plain)){const list=mapData?.trips||[];return {title:'Recorridos guardados',body:list.length?'Hay '+list.length+' recorridos recientes en el mapa.':'Todavía no hay recorridos guardados.',matches:list.slice(0,6).map(t=>({title:fmtDistance(t.distance_m)+' · '+fmtDuration(t.duration_s),body:fmtDateTime(t.started_at)}))};}
+ if(/cancion|musica|escuch/.test(plain)){const list=items('song');return {title:'Música de su historia',body:list.length?'Hay '+list.length+' canciones enlazadas a ustedes.':'Aún no hay canciones guardadas por enlace.',matches:list.slice(0,6).map(i=>({title:i.data?.title||'Canción',body:i.data?.platform||''}))};}
+ if(/voz|audio|mensaje/.test(plain)){const list=(cloud?.bond?.entries||[]).filter(x=>x.type==='voice');return {title:'Mensajes de voz',body:list.length?'Han guardado '+list.length+' mensajes de voz.':'Todavía no hay mensajes de voz guardados.',matches:list.slice(0,6).map(x=>({title:x.data?.title||'Voz',body:x.data?.body||''}))};}
+ const words=aiWords(q),docs=storyDocuments().map(d=>{const hay=aiWords((d.title||'')+' '+(d.body||'')+' '+(d.date||''));let score=0;for(const w of words)for(const h of hay)if(h===w||h.includes(w)||w.includes(h))score+=h===w?3:1;return {...d,score};}).filter(d=>d.score>0).sort((a,b)=>b.score-a.score);
+ return docs.length?{title:'Esto encontré en su historia',body:'Relacioné tu pregunta con '+docs.length+' momentos guardados.',matches:docs.slice(0,6)}:{title:'Todavía no encuentro algo relacionado',body:'Prueba con nombres de lugares, palabras de un recuerdo, “planes pendientes”, “viajes”, “canciones” o “cuántos días juntos”.',matches:[]};
+}
+function aiResultMarkup(result){
+ return '<div class="ai-answer"><span class="badge">Nuestra historia</span><h3>'+esc(result.title)+'</h3><p>'+esc(result.body)+'</p>'+(result.matches?.length?'<div class="stack compact">'+result.matches.map(m=>'<div class="ai-match"><b>'+esc(m.title||'Momento')+'</b><small>'+esc(m.body||m.date||'')+'</small></div>').join('')+'</div>':'')+'</div>';
+}
+function openOurAI(){
+ showModal('Nuestra IA','<div class="ai-intro"><p>Busca dentro de lo que ustedes han guardado. Nada de esta función sale a un servicio de IA externo.</p><div class="chips"><button class="chip" data-action="ai-question" data-question="¿Cuántos días llevamos juntos?">Días juntos</button><button class="chip" data-action="ai-question" data-question="¿Qué planes tenemos pendientes?">Planes</button><button class="chip" data-action="ai-question" data-question="¿Qué lugares hemos guardado?">Lugares</button><button class="chip" data-action="ai-question" data-question="Muéstrame nuestros viajes">Viajes</button></div></div><form id="ourAiForm" class="stack" style="margin-top:14px"><div class="field"><label>Pregunta</label><input class="input" name="question" placeholder="Ej. ¿qué recuerdos tenemos de Útica?" required></div><button class="btn" type="submit">'+ico('sparkles')+' Buscar en nuestra historia</button></form><div data-role="ai-result" style="margin-top:14px">'+aiResultMarkup(aiResult(''))+'</div>','our-ai');
+}
+function showAiAnswer(question){
+ const result=aiResult(question),box=modal.querySelector('[data-role="ai-result"]');if(box)box.innerHTML=aiResultMarkup(result);refreshIcons();
+}
+
 async function busy(task,success){
  try{await task();if(success)toast(success);}
  catch(e){toast(e.message);}
@@ -505,6 +592,7 @@ async function submitItem(form){
  if(fd.has('date'))data.date=fd.get('date');
  if(kind==='event')data.annual=fd.get('annual')==='on';
  if(kind==='plan'||kind==='wish')data.done=fd.get('done')==='on';
+ if(fd.has('placeId')&&String(fd.get('placeId')||''))data.placeId=Number(fd.get('placeId'));
  await api('item-save',{...(id?{id,version}:{}),kind,data});closeModal();await refreshState();toast('Guardado en nuestra galaxia.');
 }
 async function deleteItem(id){
@@ -539,10 +627,10 @@ document.addEventListener('click',async e=>{
   if(a==='modal-close'){closeModal();return;}
   if(a==='map'){go('map');return;}
   if(a==='moments'){go('moments');return;}
-  if(a==='add-memory'){openItemForm('memory');return;}
+  if(a==='add-memory'){if(!mapData)await refreshMap({quiet:true,detail:false});openItemForm('memory');return;}
   if(a==='add-plan'){openItemForm('plan');return;}
-  if(a==='item-new'){openItemForm(btn.dataset.kind);return;}
-  if(a==='item-edit'){openItemForm(cloud.items.find(i=>i.id===btn.dataset.id)?.kind,cloud.items.find(i=>i.id===btn.dataset.id));return;}
+  if(a==='item-new'){if(['memory','journey','event'].includes(btn.dataset.kind)&&!mapData)await refreshMap({quiet:true,detail:false});openItemForm(btn.dataset.kind);return;}
+  if(a==='item-edit'){const item=cloud.items.find(i=>i.id===btn.dataset.id);if(item&&['memory','journey','event'].includes(item.kind)&&!mapData)await refreshMap({quiet:true,detail:false});if(item)openItemForm(item.kind,item);return;}
   if(a==='item-delete'){await deleteItem(btn.dataset.id);return;}
   if(a==='mood'){await busy(()=>saveDaily('mood',btn.dataset.value),'Estado guardado.');return;}
   if(a==='gesture'){await busy(()=>sendGesture(btn.dataset.gesture));return;}
@@ -555,15 +643,15 @@ document.addEventListener('click',async e=>{
   if(a==='voice-for-item'){openVoice(btn.dataset.id);return;}
   if(a==='anniversary-open'){memoryTab='memory';go('memories');setTimeout(()=>document.querySelector('.constellation')?.scrollIntoView({behavior:'smooth',block:'center'}),80);return;}
   if(a==='constellation-item'){const i=cloud.items.find(x=>x.id===btn.dataset.id);if(i)showModal(i.data?.title||'Recuerdo','<div class="card" style="margin-top:16px"><span class="badge">'+esc(kindMeta[i.kind]?.[1]||'Historia')+'</span><p style="margin-top:10px">'+esc(i.data?.body||fmtDate(i.data?.date)||'Parte de nuestra historia.')+'</p>'+(linkedVoices(i.id).length?linkedVoices(i.id).map(voiceCard).join(''):'')+'</div>');return;}
-  if(a==='voice-record-start'){voiceResumeMusic=musicPlaying;if(musicPlaying)toggleMusic();await GalaxyNative.call('startVoiceRecording');voiceRecording=true;voiceReady=false;modal.querySelector('[data-role="voice-status"]').textContent='Grabando… máximo 1 minuto.';btn.hidden=true;modal.querySelector('[data-action="voice-record-stop"]').hidden=false;return;}
-  if(a==='voice-record-stop'){const info=await GalaxyNative.call('stopVoiceRecording');voiceRecording=false;voiceReady=true;modal.querySelector('[data-role="voice-status"]').textContent='Grabación lista · '+Math.max(1,Math.round((info.durationMs||0)/1000))+' s. Escúchala antes de guardar.';btn.hidden=true;modal.querySelector('[data-action="voice-record-start"]').hidden=false;modal.querySelector('[data-action="voice-preview"]').hidden=false;modal.querySelector('[data-action="voice-discard"]').hidden=false;if(voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}return;}
-  if(a==='voice-preview'){if(musicPlaying)toggleMusic();await GalaxyNative.call('playVoiceRecording');return;}
-  if(a==='voice-discard'){await GalaxyNative.call('discardVoiceRecording');voiceReady=false;voiceRecording=false;modal.querySelector('[data-role="voice-status"]').textContent='Audio descartado. Puedes grabarlo otra vez.';modal.querySelector('[data-action="voice-preview"]').hidden=true;btn.hidden=true;modal.querySelector('[data-action="voice-record-start"]').hidden=false;return;}
+  if(a==='voice-record-start'){voiceResumeMusic=musicPlaying;if(musicPlaying)toggleMusic();await GalaxyNative.call('startVoiceRecording');voiceRecording=true;voiceReady=false;startVoiceTimer();modal.querySelector('[data-role="voice-status"]').textContent='Grabando… 0 s / 60 s';btn.hidden=true;modal.querySelector('[data-action="voice-record-stop"]').hidden=false;return;}
+  if(a==='voice-record-stop'){const info=await GalaxyNative.call('stopVoiceRecording');stopVoiceTimer();voiceRecording=false;voiceReady=true;modal.querySelector('[data-role="voice-status"]').textContent='Grabación lista · '+Math.max(1,Math.round((info.durationMs||0)/1000))+' s. Escúchala antes de guardar.';btn.hidden=true;modal.querySelector('[data-action="voice-record-start"]').hidden=false;modal.querySelector('[data-action="voice-preview"]').hidden=false;modal.querySelector('[data-action="voice-discard"]').hidden=false;if(voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}return;}
+  if(a==='voice-preview'){voiceResumeMusic=musicPlaying;if(musicPlaying)toggleMusic();await GalaxyNative.call('playVoiceRecording');return;}
+  if(a==='voice-discard'){stopVoiceTimer();await GalaxyNative.call('discardVoiceRecording');voiceReady=false;voiceRecording=false;modal.querySelector('[data-role="voice-status"]').textContent='Audio descartado. Puedes grabarlo otra vez.';modal.querySelector('[data-action="voice-preview"]').hidden=true;btn.hidden=true;modal.querySelector('[data-action="voice-record-start"]').hidden=false;return;}
   if(a==='voice-file'){const form=modal.querySelector('#voiceForm'),fd=new FormData(form);pendingVoiceDraft={title:String(fd.get('title')||''),body:String(fd.get('body')||''),referenceId:String(fd.get('referenceId')||'')};if(!pendingVoiceDraft.title.trim()){toast('Ponle un título al mensaje.');return;}const upload=await GalaxyNative.call('pickMedia','voice');await api('bond-save',{type:'voice',data:{...pendingVoiceDraft,audioPath:upload.path,mime:upload.mime}});pendingVoiceDraft=null;closeModal();await refreshState();toast('Mensaje de voz guardado.');return;}
   if(a==='bond-delete'){await busy(()=>bondDelete(btn.dataset.id));return;}
   if(a==='game-guess'){await busy(async()=>{await api('bond-guess',{id:btn.dataset.id,guess:btn.dataset.guess});await refreshState();},'Respuesta enviada.');return;}
   if(a==='surprise'){openSurprise();return;}
-  if(a==='surprise-note-new'){openSurpriseNote();return;}
+  if(a==='surprise-note-new'){if(!mapData)await refreshMap({quiet:true,detail:false});openSurpriseNote();return;}
   if(a==='surprise-again'){openSurprise();return;}
   if(a==='surprise-save'&&lastSurprise){await busy(async()=>{await api('item-save',{kind:'plan',data:{title:lastSurprise.title,body:lastSurprise.body,category:'Cita sorpresa',done:false}});closeModal();await refreshState();},'Cita guardada en Planes.');return;}
   if(a==='music-add'){openMusicAdd();return;}
@@ -575,6 +663,12 @@ document.addEventListener('click',async e=>{
   if(a==='player-expand'){memoryTab='music';go('memories');return;}
   if(a==='media-add'){await GalaxyNative.call('pickMedia',btn.dataset.kind);media[btn.dataset.kind]=null;mediaLoadedAt[btn.dataset.kind]=0;await loadMedia(btn.dataset.kind,true);toast('Archivo añadido.');return;}
   if(a==='media-delete'){if(confirm('¿Eliminar este archivo?')){await api('media-delete',{kind:btn.dataset.kind,path:btn.dataset.path});media[btn.dataset.kind]=null;mediaLoadedAt[btn.dataset.kind]=0;await loadMedia(btn.dataset.kind,true);toast('Archivo eliminado.');}return;}
+  if(a==='history-place'){if(map)map.setView([Number(btn.dataset.lat),Number(btn.dataset.lon)],16);document.querySelector('#map')?.scrollIntoView({behavior:'smooth',block:'center'});return;}
+  if(a==='memory-at-place'){openItemForm('memory',{data:{placeId:Number(btn.dataset.id)}});return;}
+  if(a==='our-ai'){if(!mapData)await refreshMap({quiet:true,detail:true});openOurAI();return;}
+  if(a==='ai-question'){const q=btn.dataset.question||'';const input=modal.querySelector('#ourAiForm [name="question"]');if(input)input.value=q;showAiAnswer(q);return;}
+  if(a==='backup-export'){const backup=await api('backup-export');await GalaxyNative.call('exportJson','nuestra-galaxia-backup-'+(cloud.today||'copia')+'.json',JSON.stringify(backup));toast('Copia guardada en el teléfono.');return;}
+  if(a==='backup-import'){if(!confirm('Restaurar una copia añadirá lo que falte sin borrar lo que ya existe. ¿Continuar?'))return;const file=await GalaxyNative.call('importJson'),backup=JSON.parse(file.json||'{}'),result=await api('backup-import',{backup});await refreshState({quiet:true});await refreshMap({quiet:true,detail:true});render();const r=result.restored||{};toast('Copia restaurada: '+Number(r.items||0)+' contenidos, '+Number(r.places||0)+' lugares y '+Number(r.bond||0)+' momentos.');return;}
   if(a==='map-refresh'){await refreshMap({detail:true});return;}
   if(a==='status-menu'){$('#statusMenu')?.classList.toggle('open');return;}
   if(a==='status-set'){await api('status-set',{status:btn.dataset.status});$('#statusMenu')?.classList.remove('open');await refreshMap();toast('Estado actualizado.');return;}
@@ -585,6 +679,9 @@ document.addEventListener('click',async e=>{
   if(a==='place-new'){if(!mapData)await refreshMap({quiet:true,detail:true});openPlace();return;}
   if(a==='destination'){if(!mapData)await refreshMap({quiet:true,detail:true});openDestination();return;}
   if(a==='transport-set'){await api('transport-set',{preference:btn.dataset.value});await refreshState({quiet:true});await refreshMap({quiet:true});render();toast('Preferencia de transporte actualizada.');return;}
+  if(a==='now-settings'){go('more');setTimeout(()=>document.querySelector('.privacy-grid')?.scrollIntoView({behavior:'smooth',block:'center'}),80);return;}
+  if(a==='presence-battery'){await busy(()=>togglePresence('battery'),'Privacidad de batería actualizada.');return;}
+  if(a==='presence-listening'){await busy(()=>togglePresence('listening'),'Privacidad de música actualizada.');return;}
   if(a==='app-settings'){await GalaxyNative.call('openAppSettings');return;}
   if(a==='widget-add'){await GalaxyNative.call('addWidget');toast('Android abrió la solicitud del widget.');return;}
   if(a==='widget-photo'){await chooseWidgetPhoto();return;}
@@ -597,7 +694,7 @@ document.addEventListener('click',async e=>{
 });
 
 document.addEventListener('change',e=>{
- if(e.target.matches('[data-role="surprise-unlock"]')){const box=modal.querySelector('[data-role="surprise-date"]');if(box)box.hidden=e.target.value!=='date';}
+ if(e.target.matches('[data-role="surprise-unlock"]')){const dateBox=modal.querySelector('[data-role="surprise-date"]'),placeBox=modal.querySelector('[data-role="surprise-place"]');if(dateBox)dateBox.hidden=e.target.value!=='date';if(placeBox)placeBox.hidden=e.target.value!=='place';}
  if(e.target.matches('[data-role="game-question"]')){
    const q=gameQuestions[e.target.value],answer=modal.querySelector('[data-role="game-answer"]');
    answer.innerHTML=q.options.map(o=>'<option>'+esc(o)+'</option>').join('');
@@ -607,6 +704,7 @@ document.addEventListener('change',e=>{
 document.addEventListener('submit',async e=>{
  e.preventDefault();
  try{
+  if(e.target.id==='ourAiForm'){const q=String(new FormData(e.target).get('question')||'');showAiAnswer(q);return;}
   if(e.target.id==='pairForm'){
    const code=new FormData(e.target).get('code');await GalaxyNative.call('pair',String(code));native=nativeState();await refreshState();toast('Teléfono vinculado.');return;
   }
@@ -616,7 +714,7 @@ document.addEventListener('submit',async e=>{
   if(e.target.id==='gameForm'){const fd=new FormData(e.target);await api('bond-save',{type:'game',data:{questionId:fd.get('questionId'),answer:fd.get('answer')}});closeModal();await refreshState();toast('Pregunta guardada.');return;}
   if(e.target.id==='ritualForm'){const fd=new FormData(e.target),data={week:fd.get('week'),gratitude:fd.get('gratitude'),need:fd.get('need'),plan:fd.get('plan')},id=modal.dataset.editId,version=Number(modal.dataset.version||0);if(id)await api('bond-update',{id,version,data});else await api('bond-save',{type:'ritual',data});closeModal();await refreshState();toast('Ritual guardado.');return;}
   if(e.target.id==='sharedNoteForm'){const fd=new FormData(e.target),data={title:fd.get('title'),body:fd.get('body')},id=modal.dataset.editId,version=Number(modal.dataset.version||0);if(id)await api('bond-update',{id,version,data});else await api('bond-save',{type:'sharednote',data});closeModal();await refreshState();toast('Nota compartida guardada.');return;}
-  if(e.target.id==='surpriseNoteForm'){const fd=new FormData(e.target),unlockType=String(fd.get('unlockType')||'date'),data={title:String(fd.get('title')||''),body:String(fd.get('body')||''),category:'Sorpresa',surprise:true,unlockType,unlockDate:unlockType==='date'?String(fd.get('unlockDate')||''):'',latitude:unlockType==='place'?Number(fd.get('latitude')):null,longitude:unlockType==='place'?Number(fd.get('longitude')):null,radius:150};await api('item-save',{kind:'note',data});closeModal();await refreshState();toast('Sorpresa guardada.');return;}
+  if(e.target.id==='surpriseNoteForm'){const fd=new FormData(e.target),unlockType=String(fd.get('unlockType')||'date');let lat=null,lon=null,placeId=null,placeName='';if(unlockType==='place'){const choice=String(fd.get('placeChoice')||'');if(choice==='current'){const own=(cloud.locations||[]).find(l=>l.person===cloud.person&&l.sharing);if(!own)throw new Error('Activa tu ubicación o elige un lugar guardado.');lat=Number(own.latitude);lon=Number(own.longitude);placeName='Lugar actual';}else if(choice.startsWith('saved:')){const p=(mapData?.places||[]).find(x=>String(x.id)===choice.slice(6));if(!p)throw new Error('El lugar guardado ya no está disponible.');lat=Number(p.latitude);lon=Number(p.longitude);placeId=p.id;placeName=p.name;}else throw new Error('Elige dónde se desbloqueará la sorpresa.');}const data={title:String(fd.get('title')||''),body:String(fd.get('body')||''),category:'Sorpresa',surprise:true,unlockType,unlockDate:unlockType==='date'?String(fd.get('unlockDate')||''):'',latitude:lat,longitude:lon,radius:150,...(placeId?{placeId,placeName}:{} )};await api('item-save',{kind:'note',data});closeModal();await refreshState();toast('Sorpresa guardada.');return;}
   if(e.target.id==='voiceForm'){
    const fd=new FormData(e.target);pendingVoiceDraft={title:String(fd.get('title')||''),body:String(fd.get('body')||''),referenceId:String(fd.get('referenceId')||'')};
    if(voiceRecording)throw new Error('Detén la grabación antes de guardarla.');
@@ -651,4 +749,5 @@ document.addEventListener('visibilitychange',()=>{
 });
 
 render();
-if(native.paired)refreshState();
+if(native.paired)refreshState().then(()=>syncPresence()).catch(()=>{});
+setInterval(()=>{if(native.paired&&cloud&&document.visibilityState==='visible')syncPresence().catch(()=>{});},300000);

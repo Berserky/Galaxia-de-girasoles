@@ -9,7 +9,7 @@ public final class BondStore {
  public boolean enabled(){return prefs.getBoolean("enabled",false);}
  public void enabled(boolean enabled){prefs.edit().putBoolean("enabled",enabled).putBoolean("initialized",false).remove("seen").remove("latestCreated").commit();if(!enabled){android.app.NotificationManager manager=context.getSystemService(android.app.NotificationManager.class);for(android.service.notification.StatusBarNotification n:manager.getActiveNotifications())if("galaxy-moments".equals(n.getNotification().getChannelId()))manager.cancel(n.getTag(),n.getId());}}
  public JSONObject snapshot(){try{return new JSONObject(prefs.getString("snapshot","{}"));}catch(Exception e){return new JSONObject();}}
- public void snapshot(JSONObject data){JSONObject safe=new JSONObject();try{safe.put("names",data.optJSONArray("names"));safe.put("nextEvent",data.optJSONObject("nextEvent"));}catch(Exception ignored){}prefs.edit().putString("snapshot",safe.toString()).commit();}
+ public void snapshot(JSONObject data){JSONObject safe=new JSONObject();try{safe.put("names",data.optJSONArray("names"));safe.put("nextEvent",data.optJSONObject("nextEvent"));safe.put("now",data.optJSONObject("now"));}catch(Exception ignored){}prefs.edit().putString("snapshot",safe.toString()).commit();}
  public File photo(){return new File(context.getFilesDir(),"widget-photo.jpg");}
  public String feedback(){return prefs.getString("feedback","");}
  public void feedback(String text){prefs.edit().putString("feedback",text).commit();}
