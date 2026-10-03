@@ -1750,21 +1750,27 @@ async function gpsHistoryDelete(req:Request){
 }
 
 async function mapState(req:Request,body:any){
-  await device(req);
-  const [locations,places,tripPoints,destinations]=await Promise.all([
+  const d=await device(req),person=String(d.person);
+  const [locations,places,tripPoints,destinations,contextSettings,sessionRows]=await Promise.all([
     ok(db.from("galaxy_locations").select("*").order("person")),
     ok(db.from("galaxy_places").select("*").order("created_at",{ascending:false}).limit(100)),
     ok(db.from("galaxy_trip_points").select("*").order("created_at",{ascending:false}).limit(500)),
-    ok(db.from("galaxy_destinations").select("*"))
+    ok(db.from("galaxy_destinations").select("*")),
+    contextOwnSettings(person),
+    ok(db.from("galaxy_context_sessions").select("*").eq("person",person).eq("status","active").order("started_at",{ascending:false}).limit(1))
   ]);
-  const base={locations,places,tripPoints,destinations};
+  const session=sessionRows?.[0]||null;
+  const base={locations,places,tripPoints,destinations,context:{settings:contextSettings,session}};
   if(body.detail!==true)return json(base);
-  const [trips,events,encounters]=await Promise.all([
+  const [trips,events,encounters,suggestions,etaHistory,contextEvents]=await Promise.all([
     ok(db.from("galaxy_trip_history").select("*").order("started_at",{ascending:false}).limit(40)),
     ok(db.from("galaxy_place_events").select("*").order("happened_at",{ascending:false}).limit(40)),
-    ok(db.from("galaxy_encounters").select("*").order("started_at",{ascending:false}).limit(40))
+    ok(db.from("galaxy_encounters").select("*").order("started_at",{ascending:false}).limit(40)),
+    ok(db.from("galaxy_context_suggestions").select("*").eq("status","pending").order("created_at",{ascending:false}).limit(10)),
+    session?ok(db.from("galaxy_context_eta_history").select("captured_at,distance_m,eta_s,progress_pct").eq("session_id",session.id).order("captured_at",{ascending:false}).limit(30)):Promise.resolve([]),
+    ok(db.from("galaxy_context_events").select("id,event_type,person,partner_person,occurred_at,payload").order("occurred_at",{ascending:false}).limit(30))
   ]);
-  return json({...base,trips,events,encounters});
+  return json({...base,trips,events,encounters,context:{settings:contextSettings,session,suggestions:suggestions||[],etaHistory:etaHistory||[],events:contextEvents||[]}});
 }
 
 async function placeSave(req:Request,body:any){
