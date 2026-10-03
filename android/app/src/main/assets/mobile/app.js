@@ -42,7 +42,7 @@ const surpriseIdeas=[
  {title:'Álbum del mes',body:'Elegir juntos las mejores fotos del mes y escribir una frase para cada una.',minutes:60,budget:0,where:'casa'}
 ];
 
-let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map();
+let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false;
 let toastTimer,refreshing=false,updateState={text:'La app está al día.',progress:0,busy:false},pendingVoiceDraft=null,voiceReady=false,voiceRecording=false,voiceResumeMusic=false,lastSurprise=null;
 let presenceLastSignature='',voiceTimer=null,voiceSeconds=0;
 let welcomeStep=0,welcomePreview=false,welcomeGift=true,welcomeEntering=false,tourStep=-1;
@@ -241,6 +241,7 @@ function render(){
  if(view==='more')app.innerHTML=header()+moreView();
  refreshIcons();
  renderGlobalPlayer();
+ if(view==='home'&&!encounterStatsCache&&!encounterStatsLoading)setTimeout(()=>loadEncounterStats().catch(()=>{}),0);
  if(tourStep>=0)setTimeout(renderTourOverlay,30);
 }
 function renderOnboarding(){
@@ -297,7 +298,7 @@ function renderTourOverlay(){
 function homeView(){
  const own=ownDaily(),partner=partnerDaily(),next=cloud.nextEvent,garden=cloud.bond?.garden||{days:0,stage:0};
  const locs=cloud.locations||[];
- return anniversaryBanner()+'<section class="hero"><p class="eyebrow">NUESTRO UNIVERSO</p><h1>'+esc(myName())+' & '+esc(partnerName())+'</h1><p>Un lugar para acompañarnos, guardar lo vivido y seguir construyendo lo que viene.</p><div class="hero-stats"><div class="hero-stat"><b>'+coupleDays()+'</b><small>días juntos</small></div><div class="hero-stat"><b>'+items('memory').length+'</b><small>recuerdos</small></div><div class="hero-stat"><b>'+garden.days+'</b><small>días del girasol</small></div></div></section>'+monthlySummaryTeaser()+todayHistoryTeaser()+nowCard()+
+ return anniversaryBanner()+'<section class="hero"><p class="eyebrow">NUESTRO UNIVERSO</p><h1>'+esc(myName())+' & '+esc(partnerName())+'</h1><p>Un lugar para acompañarnos, guardar lo vivido y seguir construyendo lo que viene.</p><div class="hero-stats"><div class="hero-stat"><b>'+coupleDays()+'</b><small>días juntos</small></div><div class="hero-stat"><b>'+items('memory').length+'</b><small>recuerdos</small></div><div class="hero-stat"><b>'+garden.days+'</b><small>días del girasol</small></div></div></section>'+monthlySummaryTeaser()+todayHistoryTeaser()+encounterStatsTeaser()+nowCard()+
  '<section class="section"><div class="section-head"><div><h2>¿Cómo estás hoy?</h2><p>Tu estado se comparte solo con tu persona.</p></div></div><div class="mood-grid">'+Object.entries(moods).map(([id,m])=>'<button class="mood '+(own.mood===id?'active':'')+'" data-action="mood" data-value="'+id+'"><span>'+ico(m[0])+'</span>'+m[1]+'</button>').join('')+'</div>'+(partner.mood?'<div class="card" style="margin-top:10px"><span class="badge">'+esc(partnerName())+'</span> <b>'+esc(moods[partner.mood]?.[1]||partner.mood)+'</b></div>':'')+'</section>'+
  '<section class="section"><div class="card"><p class="eyebrow">PREGUNTA DEL DÍA</p><h3>'+esc(dailyQuestion())+'</h3>'+dailyAnswerMarkup(own,partner)+'</div></section>'+
  '<section class="section"><div class="grid">'+
@@ -411,6 +412,49 @@ async function openTodayHistoryItem(btn){
  const item=todayHistoryItems.get(id);if(!item)return;
  const meta=kindMeta[item.kind]||['sparkles','Historia'];
  showModal(item.title||meta[1],'<div class="card today-history-detail"><span class="badge">'+esc(meta[1])+'</span><p class="muted" style="margin-top:8px">'+esc(fmtDate(item.date))+(item.placeName?' · '+esc(item.placeName):'')+'</p>'+(item.body?'<p style="margin-top:14px">'+esc(item.body)+'</p>':'')+(item.category?'<p class="muted" style="margin-top:10px">'+esc(item.category)+'</p>':'')+'</div>');
+}
+
+function encounterStatsTeaser(){
+ const s=encounterStatsCache;
+ if(!s)return '<section class="section"><button class="card encounter-teaser" data-action="encounter-stats-open"><span class="encounter-teaser-icon">'+ico('heart-handshake')+'</span><span><p class="eyebrow">NUESTROS ENCUENTROS</p><h3>Construyendo el contador…</h3><p>Veces que hemos coincidido y tiempo compartido.</p></span>'+ico('chevron-right')+'</button></section>';
+ const total=window.GalaxyEncounters?.totalWithActive(s)||Number(s.total_seconds||0),count=Number(s.total_count||0),active=s.active;
+ const title=active?'Juntos ahora · '+(window.GalaxyEncounters?.durationLabel(window.GalaxyEncounters.activeElapsed(active))||fmtDuration(active.elapsed_seconds)):count?(window.GalaxyEncounters?.countLabel(count)||count+' encuentros'):'El primer encuentro todavía espera';
+ const copy=count?(window.GalaxyEncounters?.durationLabel(total)||fmtDuration(total))+' compartidos · '+Number(s.current_month?.count||0)+' este mes':'Cuando estén cerca durante un rato, la galaxia empezará a contarlo.';
+ return '<section class="section"><button class="card encounter-teaser '+(active?'active':'')+'" data-action="encounter-stats-open"><span class="encounter-teaser-icon">'+ico(active?'heart-pulse':'heart-handshake')+'</span><span><p class="eyebrow">NUESTROS ENCUENTROS</p><h3>'+esc(title)+'</h3><p>'+esc(copy)+'</p></span>'+ico('chevron-right')+'</button></section>';
+}
+async function loadEncounterStats(force=false){
+ if(encounterStatsLoading)return encounterStatsCache;
+ if(encounterStatsCache&&!force)return encounterStatsCache;
+ encounterStatsLoading=true;
+ try{
+  encounterStatsCache=await api('encounter-stats');
+  if(view==='home'&&!modal.open)render();
+  return encounterStatsCache;
+ }finally{encounterStatsLoading=false;}
+}
+function encounterStatsMarkup(s){
+ const helper=window.GalaxyEncounters,total=helper?.totalWithActive(s)||Number(s.total_seconds||0),month=s.current_month||{},active=s.active,recent=s.recent||[];
+ const duration=v=>helper?.durationLabel(v)||fmtDuration(v),count=Number(s.total_count||0),avg=Number(s.average_seconds||0),longest=Number(s.longest?.duration_seconds||0);
+ const activeBlock=active?'<div class="encounter-live"><span>'+ico('heart-pulse')+'</span><div><p class="eyebrow">JUNTOS AHORA</p><h3 data-encounter-live>'+esc(duration(helper?.activeElapsed(active)||active.elapsed_seconds||0))+'</h3><p>'+(Number.isFinite(Number(active.current_distance_m))?'Aproximadamente '+Math.round(Number(active.current_distance_m))+' m entre ustedes.':'El encuentro sigue activo.')+'</p></div></div>':'';
+ const recentRows=recent.map(r=>'<div class="encounter-recent '+(r.active?'active':'')+'"><span>'+ico(r.active?'heart-pulse':'heart')+'</span><div><b>'+esc(r.active?'Ahora mismo':fmtDateTime(r.started_at))+'</b><small>'+esc(duration(r.active?(helper?.activeElapsed(r)||r.duration_seconds):r.duration_seconds))+(Number.isFinite(Number(r.distance_m))?' · inicio a '+Math.round(Number(r.distance_m))+' m':'')+'</small></div></div>').join('');
+ return '<div class="encounter-stats">'+activeBlock+
+ '<div class="encounter-metrics">'+
+ '<div><span>'+ico('heart-handshake')+'</span><b>'+count+'</b><small>encuentros</small></div>'+
+ '<div><span>'+ico('clock-3')+'</span><b>'+esc(duration(total))+'</b><small>tiempo juntos</small></div>'+
+ '<div><span>'+ico('calendar-heart')+'</span><b>'+Number(month.count||0)+'</b><small>este mes · '+esc(duration(Number(month.seconds||0)))+'</small></div>'+
+ '<div><span>'+ico('timer')+'</span><b>'+esc(duration(avg))+'</b><small>promedio</small></div>'+
+ '<div><span>'+ico('trophy')+'</span><b>'+esc(duration(longest))+'</b><small>encuentro más largo</small></div>'+
+ '</div>'+
+ '<div class="encounter-note"><span>'+ico('info')+'</span><p>La galaxia registra un encuentro cuando ambos comparten ubicación, permanecen a unos 80 m o menos durante al menos un minuto, y lo cierra al separarse.</p></div>'+
+ (recentRows?'<div class="encounter-recent-list"><div class="section-head"><div><h3>Encuentros recientes</h3><p>Los últimos momentos detectados juntos.</p></div></div>'+recentRows+'</div>':'<div class="universal-search-empty">'+ico('heart-handshake')+'<h3>Aún no hay encuentros registrados</h3><p>Cuando la app detecte que están juntos, aparecerán aquí.</p></div>')+
+ '<div class="form-actions"><button class="btn secondary" data-action="encounter-map">'+ico('map-pin')+' Ver actividad en el mapa</button><button class="btn ghost" data-action="encounter-stats-refresh">'+ico('refresh-cw')+' Actualizar</button></div></div>';
+}
+async function openEncounterStats(force=false){
+ showModal('Nuestros encuentros',encounterStatsCache&&!force?encounterStatsMarkup(encounterStatsCache):'<div class="monthly-loading">'+loading('Contando nuestros encuentros')+'<p>Sumando tiempo, encuentros y lo vivido este mes…</p></div>');
+ try{
+  const stats=await loadEncounterStats(force||!encounterStatsCache);
+  if(modal.open)showModal('Nuestros encuentros',encounterStatsMarkup(stats));
+ }catch(error){if(modal.open)showModal('Nuestros encuentros','<div class="universal-search-empty">'+ico('circle-alert')+'<h3>No pudimos contar los encuentros</h3><p>'+esc(error.message||'Intenta nuevamente.')+'</p></div>');}
 }
 
 function universalSearchData(){return {items:cloud?.items||[],places:cloud?.places||mapData?.places||[]};}
@@ -582,7 +626,7 @@ function mapHistoryView(){
  return historyPlacesView()+'<section class="section"><div class="section-head"><div><h2>Actividad reciente</h2><p>Recorridos, llegadas y encuentros.</p></div></div><div class="stack">'+
  (trips.slice(0,4).map(t=>'<div class="card"><span class="badge">'+(names()[Number(t.person)]||'Nosotros')+'</span><h3 style="margin-top:8px">'+fmtDistance(t.distance_m)+' · '+fmtDuration(t.duration_s)+'</h3><p>'+esc(fmtDateTime(t.started_at))+(t.max_speed?' · máx. '+(Number(t.max_speed)*3.6).toFixed(0)+' km/h':'')+'</p></div>').join('')||
  events.slice(0,4).map(e=>'<div class="card"><h3>'+(e.event==='arrived'?'Llegada':'Salida')+'</h3><p>'+esc(fmtDateTime(e.happened_at))+'</p></div>').join('')||
- encounters.slice(0,3).map(e=>'<div class="card"><h3 class="icon-title">'+ico('heart')+'Nos encontramos</h3><p>'+esc(fmtDateTime(e.started_at))+'</p></div>').join('')||
+ encounters.slice(0,3).map(e=>'<div class="card" id="encounter-history"><h3 class="icon-title">'+ico('heart')+'Nos encontramos</h3><p>'+esc(fmtDateTime(e.started_at))+'</p></div>').join('')||
  '<div class="empty">Aquí aparecerán los recorridos y encuentros que vayamos guardando.</div>')+
  '</div></section>';
 }
@@ -798,6 +842,9 @@ document.addEventListener('click',async e=>{
   if(a==='today-history-open'){await openTodayHistory();return;}
   if(a==='today-history-refresh'){await openTodayHistory(true);return;}
   if(a==='today-history-item'){await openTodayHistoryItem(btn);return;}
+  if(a==='encounter-stats-open'){await openEncounterStats();return;}
+  if(a==='encounter-stats-refresh'){await openEncounterStats(true);return;}
+  if(a==='encounter-map'){closeModal();go('map');await refreshMap({detail:true});setTimeout(()=>document.querySelector('#encounter-history')?.scrollIntoView({behavior:'smooth',block:'center'}),120);return;}
   if(a==='map'){go('map');return;}
   if(a==='moments'){go('moments');return;}
   if(a==='add-memory'){if(!mapData)await refreshMap({quiet:true,detail:false});openItemForm('memory');return;}
