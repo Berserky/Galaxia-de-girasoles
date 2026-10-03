@@ -5,6 +5,7 @@ import { QUESTION_DECKS, buildDateRecap, buildSequentialPlan, buildSurpriseExper
 import { buildGoalDateSuggestions, buildGoalInsightSummary, computeGoalProgress, conversionDraft, normalizeContribution, normalizeGoalInput, reorderStepIds } from "./goals-engine.ts";
 import { BUILTIN_GESTURES, computeBondProgress, gestureSnapshot, normalizeCustomGesture, resolveGesture } from "./bond-engine.ts";
 import { PUSH_EVENT_TYPES, sanitizePushPayload, sendFcmData } from "./push-engine.ts";
+import { CONTEXT_EVENTS, buildDateContextRecap, buildEncounterSuggestion, buildTripContextRecap, contextStep, emptyContextState, haversineM, summarizeTrack } from "./context-engine.ts";
 
 const url=Deno.env.get("SUPABASE_URL")!;
 // FCM HTTP v1 transport lives in push-engine.ts; credentials are server-side only.
@@ -112,6 +113,322 @@ function point(body:any){
   const lat=Number(body.latitude),lon=Number(body.longitude),accuracy=Number(body.accuracy),speed=Number(body.speed),heading=Number(body.heading),motion=["still","walking","vehicle"].includes(body.motion)?body.motion:null;
   if(!Number.isFinite(lat)||lat<-90||lat>90||!Number.isFinite(lon)||lon<-180||lon>180)throw new Error("Ubicación no válida");
   return {lat,lon,accuracy:Number.isFinite(accuracy)&&accuracy>=0?accuracy:null,speed:Number.isFinite(speed)&&speed>=0?speed:null,heading:Number.isFinite(heading)&&heading>=0&&heading<=360?heading:null,motion};
+}
+
+
+function clampInt(value:any,min:number,max:number,fallback:number){
+ const n=Math.round(Number(value));return Number.isFinite(n)?Math.max(min,Math.min(max,n)):fallback;
+}
+function freshContextLocation(row:any,now=Date.now()){
+ return !!row?.sharing&&Number.isFinite(Number(row.latitude))&&Number.isFinite(Number(row.longitude))
+  &&!!row.updated_at&&now-Date.parse(row.updated_at)<=4*60*1000;
+}
+function contextDedupe(event:any){
+ const p=event?.payload||{},type=String(event?.type||"");
+ const identity=
+  p.sessionId||p.startedAt||
+  (p.placeId!=null?(String(p.person||"")+"|"+String(p.placeId)+"|"+String(p.candidateSince||event.occurredAt||"")):"")||
+  (p.targetPerson!=null?(String(p.targetPerson)+"|"+String(p.candidateSince||event.occurredAt||"")):"")||
+  String(event?.occurredAt||"");
+ return (type+"|"+identity).slice(0,240);
+}
+async function contextSettingsRows(){
+ return await ok(db.from("galaxy_context_settings").select("*").order("person"));
+}
+async function contextOwnSettings(person:string){
+ const row=(await ok(db.from("galaxy_context_settings").select("*").eq("person",person).limit(1)))?.[0];
+ return row||{person,near_enabled:false,near_distance_m:300,near_cooldown_minutes:60,arrived_safe_enabled:false,date_suggestions:true,memory_suggestions:true,shared_trip_detection:true};
+}
+async function contextEventByDedupe(key:string){
+ return (await ok(db.from("galaxy_context_events").select("*").eq("dedupe_key",key).limit(1)))?.[0]||null;
+}
+async function persistContextEvent(d:any,event:any){
+ const key=contextDedupe(event),payload=event?.payload&&typeof event.payload==="object"?event.payload:{};
+ const person=["0","1"].includes(String(payload.person))?String(payload.person):null;
+ const target=["0","1"].includes(String(payload.targetPerson))?String(payload.targetPerson):null;
+ const inserted=await ok(db.from("galaxy_context_events").upsert({
+  event_type:String(event.type),dedupe_key:key,person,partner_person:target,source_device_id:d?.id||null,
+  occurred_at:event.occurredAt||new Date().toISOString(),payload
+ },{onConflict:"dedupe_key",ignoreDuplicates:true}).select("*"));
+ return inserted?.[0]||await contextEventByDedupe(key);
+}
+async function contextMaybePush(d:any,eventRow:any,event:any,settings:any[]){
+ const payload=event?.payload||{};
+ if(event.type==="USER_NEAR_PARTNER"){
+  const target=String(payload.targetPerson||"");
+  const pref=(settings||[]).find((x:any)=>String(x.person)===target);
+  if(!pref?.near_enabled||!["0","1"].includes(target))return;
+  await dispatchPushEvent(d,target,"nearby",{title:"Están cerca",body:"Nuestra Galaxia detectó que están a unos "+Math.max(0,Math.round(Number(payload.distanceM)||0))+" m."});
+ }
+ if(event.type==="DESTINATION_REACHED"){
+  const person=String(payload.person||""),pref=(settings||[]).find((x:any)=>String(x.person)===person);
+  if(!pref?.arrived_safe_enabled||!["0","1"].includes(person))return;
+  const target=person==="0"?"1":"0";
+  await dispatchPushEvent(d,target,"arrived_safe",{title:"Llegó bien",body:(payload.label?"Llegó a "+String(payload.label)+".":"Llegó a su destino.")});
+ }
+}
+async function contextCreateSuggestions(eventRow:any,event:any,settings:any[]){
+ if(event.type!=="ENCOUNTER_ENDED")return;
+ const payload=event.payload||{},started=Date.parse(String(payload.startedAt||"")),ended=Date.parse(String(payload.endedAt||event.occurredAt||""));
+ const durationS=Number.isFinite(started)&&Number.isFinite(ended)?Math.max(0,Math.round((ended-started)/1000)):0;
+ const allowMemory=(settings||[]).some((x:any)=>x.memory_suggestions!==false);
+ const allowDate=(settings||[]).some((x:any)=>x.date_suggestions!==false);
+ let place:any=null;
+ if(Number.isFinite(ended)){
+  const recent=(await ok(db.from("galaxy_place_events").select("place_id,happened_at").gte("happened_at",new Date(ended-4*3600000).toISOString()).lte("happened_at",new Date(ended+15*60000).toISOString()).order("happened_at",{ascending:false}).limit(10)))||[];
+  if(recent.length)place=(await ok(db.from("galaxy_places").select("id,name,kind").eq("id",recent[0].place_id).limit(1)))?.[0]||null;
+ }
+ if(allowMemory&&durationS>=5*60){
+  const suggestion=buildEncounterSuggestion({encounter:{id:eventRow.id,started_at:payload.startedAt,ended_at:payload.endedAt||event.occurredAt},place,photos:[],songs:[]});
+  await ok(db.from("galaxy_context_suggestions").upsert({kind:"memory",source_event_id:eventRow.id,person:null,status:"pending",payload:suggestion},{onConflict:"source_event_id,kind",ignoreDuplicates:true}));
+ }
+ if(allowDate&&durationS>=2*3600){
+  await ok(db.from("galaxy_context_suggestions").upsert({
+   kind:"date",source_event_id:eventRow.id,person:null,status:"pending",
+   payload:{question:"¿Esto fue una cita?",requiresConfirmation:true,durationS,place:place?{id:place.id,name:place.name,kind:place.kind}:null}
+  },{onConflict:"source_event_id,kind",ignoreDuplicates:true}));
+ }
+}
+async function contextLegacySideEffects(d:any,eventRow:any,event:any){
+ const p=event.payload||{};
+ if(event.type==="ENCOUNTER_STARTED"){
+  const open=(await ok(db.from("galaxy_encounters").select("id").is("ended_at",null).limit(1)))?.[0];
+  if(!open)await ok(db.from("galaxy_encounters").insert({started_at:p.startedAt||event.occurredAt,distance_m:Math.max(0,Math.round(Number(p.distanceM)||0)),created_by:String(d.person)}));
+ }
+ if(event.type==="ENCOUNTER_ENDED"){
+  const open=(await ok(db.from("galaxy_encounters").select("id,started_at").is("ended_at",null).limit(1)))?.[0];
+  if(open)await ok(db.from("galaxy_encounters").update({ended_at:p.endedAt||event.occurredAt}).eq("id",open.id));
+ }
+ if(event.type==="PLACE_ENTERED"&&p.placeId!=null){
+  await ok(db.from("galaxy_place_events").insert({person:String(p.person),place_id:Number(p.placeId),event:"arrived",happened_at:event.occurredAt}));
+  if(p.name)await ok(db.from("galaxy_locations").update({status:"Llegué a "+text(p.name,80)}).eq("person",String(p.person)));
+ }
+ if(event.type==="PLACE_LEFT"&&p.placeId!=null){
+  await ok(db.from("galaxy_place_events").insert({person:String(p.person),place_id:Number(p.placeId),event:"left",happened_at:event.occurredAt}));
+ }
+ if(event.type==="SHARED_TRIP_DETECTED"){
+  await ok(db.from("galaxy_shared_trips").upsert({
+   source_event_id:eventRow.id,started_at:p.startedAt||event.occurredAt,sample_count:Math.max(0,Number(p.samples)||0),status:"detected",updated_at:new Date().toISOString()
+  },{onConflict:"source_event_id",ignoreDuplicates:true}));
+ }
+ if(event.type==="DESTINATION_REACHED"){
+  const sessionId=String(p.sessionId||"");
+  if(sessionId){
+   const session=(await ok(db.from("galaxy_context_sessions").select("*").eq("id",sessionId).limit(1)))?.[0];
+   if(session?.status==="active"){
+    const arrivedAt=event.occurredAt||new Date().toISOString();
+    await ok(db.from("galaxy_context_sessions").update({status:"arrived",arrived_at:arrivedAt,ended_at:arrivedAt,last_distance_m:Math.max(0,Math.round(Number(p.distanceM)||0)),progress_pct:100,updated_at:arrivedAt}).eq("id",sessionId));
+    if(session.auto_finish)await ok(db.from("galaxy_destinations").delete().eq("person",String(session.person)));
+   }
+  }
+ }
+}
+async function resolveContextDestinations(sessions:any[],locations:any[],places:any[]){
+ const out:any[]=[];
+ for(const s of sessions||[]){
+  let target:any=null;
+  if(s.destination_kind==="place")target=(places||[]).find((p:any)=>Number(p.id)===Number(s.place_id));
+  else target=(locations||[]).find((l:any)=>String(l.person)===String(s.target_person)&&freshContextLocation(l));
+  if(!target)continue;
+  out.push({person:String(s.person),sessionId:String(s.id),mode:String(s.mode),label:String(s.label),placeId:s.place_id??null,latitude:Number(target.latitude),longitude:Number(target.longitude),arrivalRadiusM:60});
+ }
+ return out;
+}
+async function updateContextSessionProgress(d:any,sessions:any[],locations:any[],places:any[]){
+ const person=String(d.person),session=(sessions||[]).find((s:any)=>String(s.person)===person&&s.status==="active");
+ if(!session)return;
+ const own=(locations||[]).find((l:any)=>String(l.person)===person&&freshContextLocation(l));
+ if(!own)return;
+ let target:any=null;
+ if(session.destination_kind==="place")target=(places||[]).find((p:any)=>Number(p.id)===Number(session.place_id));
+ else target=(locations||[]).find((l:any)=>String(l.person)===String(session.target_person)&&freshContextLocation(l));
+ if(!target)return;
+ const distance=Math.max(0,Math.round(dist(own,target))),etaMin=widgetEtaMinutes(distance,String(own.transport_preference||"auto"),Number.isFinite(Number(own.speed))?Number(own.speed):null),etaS=etaMin==null?null:etaMin*60;
+ const initial=Math.max(distance,Number(session.initial_distance_m)||0),progress=initial>0?Math.max(0,Math.min(100,Math.round((1-distance/initial)*100))):0;
+ const now=new Date(),lastUpdate=Date.parse(String(session.updated_at||"")),significant=Math.abs(distance-Number(session.last_distance_m??distance))>=25||Math.abs(progress-Number(session.progress_pct||0))>=2;
+ if(!Number.isFinite(lastUpdate)||now.getTime()-lastUpdate>=15000||significant){
+  const patch:any={last_distance_m:distance,last_eta_s:etaS,progress_pct:progress,updated_at:now.toISOString()};
+  if(session.initial_distance_m==null)patch.initial_distance_m=distance;
+  const sampleDue=!session.last_eta_sample_at||now.getTime()-Date.parse(session.last_eta_sample_at)>=60000||Math.abs(progress-Number(session.progress_pct||0))>=10;
+  if(sampleDue)patch.last_eta_sample_at=now.toISOString();
+  await ok(db.from("galaxy_context_sessions").update(patch).eq("id",session.id).eq("status","active"));
+  if(sampleDue)await ok(db.from("galaxy_context_eta_history").insert({session_id:session.id,captured_at:now.toISOString(),distance_m:distance,eta_s:etaS,progress_pct:progress}));
+ }
+}
+async function closeSharedTripIfNeeded(previous:any,next:any,at:string){
+ if(previous?.shared?.active!==true||next?.shared?.active===true)return;
+ const open=(await ok(db.from("galaxy_shared_trips").select("*").eq("status","detected").is("ended_at",null).order("started_at",{ascending:false}).limit(1)))?.[0];
+ if(!open)return;
+ const ended=new Date(at),started=Date.parse(open.started_at);
+ const rows=await ok(db.from("galaxy_location_history").select("latitude,longitude,speed,motion,captured_at").eq("person","0").gte("captured_at",open.started_at).lte("captured_at",ended.toISOString()).order("captured_at",{ascending:true}).limit(5000));
+ const summary=summarizeTrack(rows||[]);
+ await ok(db.from("galaxy_shared_trips").update({ended_at:ended.toISOString(),duration_s:Number.isFinite(started)?Math.max(summary.durationS,Math.round((ended.getTime()-started)/1000)):summary.durationS,distance_m:summary.distanceM,status:"ended",updated_at:ended.toISOString()}).eq("id",open.id));
+}
+async function contextTick(d:any){
+ const now=new Date(),[locations,stateRow,places,settings,sessions]=await Promise.all([
+  ok(db.from("galaxy_locations").select("*").order("person")),
+  ok(db.from("galaxy_context_state").select("data").eq("singleton",true).single()),
+  ok(db.from("galaxy_places").select("id,owner,name,kind,latitude,longitude").limit(500)),
+  contextSettingsRows(),
+  ok(db.from("galaxy_context_sessions").select("*").eq("status","active").order("started_at"))
+ ]);
+ const people=(locations||[]).filter((row:any)=>freshContextLocation(row,now.getTime())).map((row:any)=>({...row,captured_at:row.updated_at}));
+ const nearProfiles=Object.fromEntries((settings||[]).filter((x:any)=>x.near_enabled).map((x:any)=>[String(x.person),{enabled:true,distanceM:Number(x.near_distance_m)||300,cooldownS:(Number(x.near_cooldown_minutes)||60)*60}]));
+ const destinations=await resolveContextDestinations(sessions||[],locations||[],places||[]);
+ const previous=stateRow?.data&&Object.keys(stateRow.data).length?stateRow.data:emptyContextState();
+ const result=contextStep(previous,{at:now.toISOString(),people,places:places||[],destinations},{nearProfiles});
+ await ok(db.from("galaxy_context_state").upsert({singleton:true,data:result.state,updated_at:now.toISOString()},{onConflict:"singleton"}));
+ for(const event of result.events||[]){
+  const row=await persistContextEvent(d,event);
+  if(!row)continue;
+  await contextLegacySideEffects(d,row,event);
+  await contextMaybePush(d,row,event,settings||[]);
+  await contextCreateSuggestions(row,event,settings||[]);
+ }
+ await updateContextSessionProgress(d,sessions||[],locations||[],places||[]);
+ await closeSharedTripIfNeeded(previous,result.state,now.toISOString());
+ return result.events||[];
+}
+
+async function contextSettingsAction(req:Request,body:any){
+ const d=await device(req),person=String(d.person),operation=String(body.operation||"get");
+ if(operation==="get")return json({settings:await contextOwnSettings(person)});
+ if(operation!=="save")return json({error:"Operación de contexto no válida."},400);
+ const current=await contextOwnSettings(person),next={
+  person,
+  near_enabled:Object.hasOwn(body,"nearEnabled")?!!body.nearEnabled:!!current.near_enabled,
+  near_distance_m:Object.hasOwn(body,"nearDistanceM")?clampInt(body.nearDistanceM,80,5000,300):Number(current.near_distance_m)||300,
+  near_cooldown_minutes:Object.hasOwn(body,"nearCooldownMinutes")?clampInt(body.nearCooldownMinutes,5,1440,60):Number(current.near_cooldown_minutes)||60,
+  arrived_safe_enabled:Object.hasOwn(body,"arrivedSafeEnabled")?!!body.arrivedSafeEnabled:!!current.arrived_safe_enabled,
+  date_suggestions:Object.hasOwn(body,"dateSuggestions")?!!body.dateSuggestions:current.date_suggestions!==false,
+  memory_suggestions:Object.hasOwn(body,"memorySuggestions")?!!body.memorySuggestions:current.memory_suggestions!==false,
+  shared_trip_detection:Object.hasOwn(body,"sharedTripDetection")?!!body.sharedTripDetection:current.shared_trip_detection!==false,
+  updated_at:new Date().toISOString()
+ };
+ const saved=await ok(db.from("galaxy_context_settings").upsert(next,{onConflict:"person"}).select("*").single());
+ await ok(db.from("galaxy_push_subscriptions").upsert([
+  {device_id:d.id,event_type:"nearby",enabled:!!saved.near_enabled,updated_at:new Date().toISOString()},
+  {device_id:d.id,event_type:"arrived_safe",enabled:!!saved.arrived_safe_enabled,updated_at:new Date().toISOString()}
+ ],{onConflict:"device_id,event_type"}));
+ return json({settings:saved});
+}
+async function contextSessionAction(req:Request,body:any){
+ const d=await device(req),person=String(d.person),operation=String(body.operation||"state");
+ if(operation==="state"){
+  const session=(await ok(db.from("galaxy_context_sessions").select("*").eq("person",person).eq("status","active").order("started_at",{ascending:false}).limit(1)))?.[0]||null;
+  const eta=session?await ok(db.from("galaxy_context_eta_history").select("captured_at,distance_m,eta_s,progress_pct").eq("session_id",session.id).order("captured_at",{ascending:false}).limit(60)):[];
+  return json({session,etaHistory:eta||[]});
+ }
+ if(operation==="stop"){
+  const now=new Date().toISOString();
+  await ok(db.from("galaxy_context_sessions").update({status:"cancelled",ended_at:now,updated_at:now}).eq("person",person).eq("status","active"));
+  await ok(db.from("galaxy_destinations").delete().eq("person",person));
+  return json({ok:true,session:null});
+ }
+ if(operation!=="start")return json({error:"Operación de sesión no válida."},400);
+ const mode=String(body.mode||"accompany");
+ if(!["accompany","return_home"].includes(mode))return json({error:"Modo de acompañamiento no válido."},400);
+ let destinationKind=String(body.destinationKind||""),targetPerson:string|null=null,placeId:number|null=null,label="";
+ if(mode==="return_home"){
+  const home=(await ok(db.from("galaxy_places").select("id,name").eq("owner",person).eq("kind","home").order("created_at",{ascending:false}).limit(1)))?.[0];
+  if(!home)return json({error:"Guarda primero un lugar tipo Casa."},409);
+  destinationKind="place";placeId=Number(home.id);label=text(home.name||"Casa",80)||"Casa";
+ }else if(destinationKind==="person"){
+  targetPerson=String(body.targetPerson||"");if(!["0","1"].includes(targetPerson)||targetPerson===person)return json({error:"Destino no válido."},400);
+  label=text(body.label||"Mi persona",80)||"Mi persona";
+ }else if(destinationKind==="place"){
+  const place=(await ok(db.from("galaxy_places").select("id,name").eq("id",Number(body.placeId)).limit(1)))?.[0];
+  if(!place)return json({error:"Lugar no encontrado."},404);
+  placeId=Number(place.id);label=text(body.label||place.name,80)||"Destino";
+ }else return json({error:"Destino no válido."},400);
+ const now=new Date().toISOString();
+ await ok(db.from("galaxy_context_sessions").update({status:"cancelled",ended_at:now,updated_at:now}).eq("person",person).eq("status","active"));
+ const locations=await ok(db.from("galaxy_locations").select("*").order("person")),places=await ok(db.from("galaxy_places").select("id,latitude,longitude").limit(500));
+ const own=(locations||[]).find((x:any)=>String(x.person)===person&&freshContextLocation(x));
+ let target:any=destinationKind==="place"?(places||[]).find((x:any)=>Number(x.id)===Number(placeId)):(locations||[]).find((x:any)=>String(x.person)===targetPerson&&freshContextLocation(x));
+ const initial=own&&target?Math.max(0,Math.round(dist(own,target))):null;
+ const session=await ok(db.from("galaxy_context_sessions").insert({person,mode,destination_kind:destinationKind,target_person:targetPerson,place_id:placeId,label,status:"active",auto_finish:true,initial_distance_m:initial,last_distance_m:initial,progress_pct:0,started_at:now,updated_at:now}).select("*").single());
+ if(destinationKind==="person")await ok(db.from("galaxy_destinations").upsert({person,kind:"person",target_person:targetPerson,place_id:null,label,active:true,updated_at:now},{onConflict:"person"}));
+ else await ok(db.from("galaxy_destinations").upsert({person,kind:"place",target_person:null,place_id:placeId,label,active:true,updated_at:now},{onConflict:"person"}));
+ return json({ok:true,session});
+}
+async function contextEventsFeed(req:Request,body:any){
+ await device(req);
+ const limit=clampInt(body.limit,1,100,40),after=text(body.after||"",40);
+ let query=db.from("galaxy_context_events").select("id,event_type,person,partner_person,occurred_at,payload").order("occurred_at",{ascending:false}).limit(limit);
+ if(after)query=query.lt("occurred_at",after);
+ const rows=await ok(query);
+ return json({events:rows||[]});
+}
+async function contextSuggestionAction(req:Request,body:any){
+ const d=await device(req),operation=String(body.operation||"list");
+ if(operation==="list"){
+  const rows=await ok(db.from("galaxy_context_suggestions").select("*").eq("status","pending").order("created_at",{ascending:false}).limit(30));
+  return json({suggestions:rows||[]});
+ }
+ const id=String(body.id||"");if(!id)return json({error:"Sugerencia no válida."},400);
+ const row=(await ok(db.from("galaxy_context_suggestions").select("*").eq("id",id).limit(1)))?.[0];
+ if(!row)return json({error:"La sugerencia ya no existe."},404);
+ if(operation==="dismiss"||operation==="accept"){
+  const status=operation==="accept"?"accepted":"dismissed",resolved=new Date().toISOString();
+  await ok(db.from("galaxy_context_suggestions").update({status,resolved_at:resolved,person:String(d.person)}).eq("id",id).eq("status","pending"));
+  if(operation==="accept"&&row.kind==="memory"){
+   const p=row.payload||{};
+   const item=await ok(db.from("galaxy_items").insert({kind:"memory",author:String(d.person),data:{title:text(p.title||"Después de vernos",120),body:"Recuerdo sugerido por Galaxy Context Engine.",contextSourceEventId:row.source_event_id,placeId:p.place?.id||null,date:today()}}).select("*").single());
+   await recordParticipation(String(d.person));
+   return json({ok:true,status,item});
+  }
+  return json({ok:true,status});
+ }
+ return json({error:"Operación de sugerencia no válida."},400);
+}
+async function contextStateAction(req:Request){
+ const d=await device(req),person=String(d.person);
+ const [settings,sessionRows,suggestions,events]=await Promise.all([
+  contextOwnSettings(person),
+  ok(db.from("galaxy_context_sessions").select("*").eq("person",person).eq("status","active").order("started_at",{ascending:false}).limit(1)),
+  ok(db.from("galaxy_context_suggestions").select("*").eq("status","pending").order("created_at",{ascending:false}).limit(10)),
+  ok(db.from("galaxy_context_events").select("id,event_type,person,partner_person,occurred_at,payload").order("occurred_at",{ascending:false}).limit(20))
+ ]);
+ const session=sessionRows?.[0]||null;
+ const etaHistory=session?await ok(db.from("galaxy_context_eta_history").select("captured_at,distance_m,eta_s,progress_pct").eq("session_id",session.id).order("captured_at",{ascending:false}).limit(30)):[];
+ return json({settings,session,etaHistory:etaHistory||[],suggestions:suggestions||[],events:events||[]});
+}
+async function contextWindowAssets(startIso:string,endIso:string,person:string){
+ const start=Date.parse(startIso),end=Date.parse(endIso);
+ const [track,placeEvents,memories,songs,photos]=await Promise.all([
+  ok(db.from("galaxy_location_history").select("person,latitude,longitude,accuracy,speed,heading,motion,captured_at").eq("person",person).gte("captured_at",startIso).lte("captured_at",endIso).order("captured_at",{ascending:true}).limit(5000)),
+  ok(db.from("galaxy_place_events").select("place_id,happened_at").eq("person",person).gte("happened_at",startIso).lte("happened_at",endIso).order("happened_at",{ascending:true}).limit(100)),
+  ok(db.from("galaxy_items").select("id,data,created").eq("kind","memory").gte("created",new Date(start-12*3600000).toISOString()).lte("created",new Date(end+12*3600000).toISOString()).limit(100)),
+  ok(db.from("galaxy_items").select("id,data,created").eq("kind","song").gte("created",new Date(start-24*3600000).toISOString()).lte("created",new Date(end+24*3600000).toISOString()).limit(100)),
+  listBucket("galaxy-photos")
+ ]);
+ const ids=[...new Set((placeEvents||[]).map((x:any)=>Number(x.place_id)).filter(Number.isFinite))];
+ const places=ids.length?await ok(db.from("galaxy_places").select("id,name,kind").in("id",ids)):[];
+ const photoRows=(photos||[]).filter((x:any)=>{const t=Date.parse(String(x.created||""));return Number.isFinite(t)&&t>=start-6*3600000&&t<=end+6*3600000;}).slice(0,40);
+ return {track:track||[],places:places||[],photos:photoRows,songs:(songs||[]).map((x:any)=>({id:x.id,title:text(x.data?.title||"Canción",160),created:x.created})),memories:memories||[]};
+}
+async function contextRecapAction(req:Request,body:any){
+ const d=await device(req),kind=String(body.kind||""),person=String(body.person??d.person);
+ if(kind==="date"){
+  const event=(await ok(db.from("galaxy_context_events").select("*").eq("id",String(body.sourceEventId||"")).limit(1)))?.[0];
+  if(!event||event.event_type!=="ENCOUNTER_ENDED")return json({error:"Encuentro no encontrado."},404);
+  const start=String(event.payload?.startedAt||""),end=String(event.payload?.endedAt||event.occurred_at||"");
+  if(!start||!end)return json({error:"Encuentro incompleto."},409);
+  const assets=await contextWindowAssets(start,end,person);
+  return json({recap:buildDateContextRecap({encounter:{started_at:start,ended_at:end},...assets})});
+ }
+ if(kind==="trip"){
+  const trip=(await ok(db.from("galaxy_trip_history").select("*").eq("id",Number(body.tripId)).limit(1)))?.[0];
+  if(!trip)return json({error:"Recorrido no encontrado."},404);
+  if(String(trip.person)!==person&&person!==String(d.person))return json({error:"Recorrido no disponible."},403);
+  const assets=await contextWindowAssets(String(trip.started_at),String(trip.ended_at),String(trip.person));
+  const recap=buildTripContextRecap({trip, ...assets});
+  if(!recap.distanceM&&Number(trip.distance_m)>0)recap.distanceM=Number(trip.distance_m);
+  if(!recap.durationS&&Number(trip.duration_s)>0)recap.durationS=Number(trip.duration_s);
+  return json({recap});
+ }
+ return json({error:"Tipo de recap no válido."},400);
 }
 
 async function history(req:Request,body:any){
