@@ -799,11 +799,12 @@ async function presenceSet(req:Request,body:any){
 
 async function backupExport(req:Request){
   await device(req);
-  const [settings,items,daily,bond,places,goals,goalParticipants,goalSteps,goalLinks,goalContributions]=await Promise.all([
+  const [settings,items,daily,bond,bondGestures,places,goals,goalParticipants,goalSteps,goalLinks,goalContributions]=await Promise.all([
     ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
     ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:true}).limit(2000)),
     ok(db.from("galaxy_daily").select("day,person,mood,answer").order("day",{ascending:true}).limit(1000)),
     ok(db.from("galaxy_bond").select("id,type,author,data,created").order("created",{ascending:true}).limit(2000)),
+    ok(db.from("galaxy_bond_gestures").select("*").order("created_at",{ascending:true}).limit(100)),
     ok(db.from("galaxy_places").select("id,owner,name,kind,latitude,longitude,note,created_at").order("created_at",{ascending:true}).limit(500)),
     ok(db.from("galaxy_goals").select("*").order("created_at",{ascending:true}).limit(1000)),
     ok(db.from("galaxy_goal_participants").select("*").limit(2000)),
@@ -811,7 +812,7 @@ async function backupExport(req:Request){
     ok(db.from("galaxy_goal_links").select("*").order("created_at",{ascending:true}).limit(5000)),
     ok(db.from("galaxy_goal_contributions").select("*").order("contribution_date",{ascending:true}).limit(10000))
   ]);
-  return json({format:"nuestra-galaxia-backup",version:2,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:items||[],daily:daily||[],bond:bond||[],places:places||[],goals:goals||[],goalParticipants:goalParticipants||[],goalSteps:goalSteps||[],goalLinks:goalLinks||[],goalContributions:goalContributions||[]});
+  return json({format:"nuestra-galaxia-backup",version:2,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:items||[],daily:daily||[],bond:bond||[],bondGestures:bondGestures||[],places:places||[],goals:goals||[],goalParticipants:goalParticipants||[],goalSteps:goalSteps||[],goalLinks:goalLinks||[],goalContributions:goalContributions||[]});
 }
 
 function uuidish(v:unknown){return /^[0-9a-f-]{36}$/i.test(String(v||""));}
@@ -823,13 +824,14 @@ async function backupRestore(req:Request,body:any){
   const items=Array.isArray(backup.items)?backup.items.slice(0,2000):[];
   const daily=Array.isArray(backup.daily)?backup.daily.slice(0,1000):[];
   const bond=Array.isArray(backup.bond)?backup.bond.slice(0,2000):[];
+  const bondGestures=Array.isArray(backup.bondGestures)?backup.bondGestures.slice(0,100):[];
   const places=Array.isArray(backup.places)?backup.places.slice(0,500):[];
   const goals=Array.isArray(backup.goals)?backup.goals.slice(0,1000):[];
   const goalParticipants=Array.isArray(backup.goalParticipants)?backup.goalParticipants.slice(0,2000):[];
   const goalSteps=Array.isArray(backup.goalSteps)?backup.goalSteps.slice(0,5000):[];
   const goalLinks=Array.isArray(backup.goalLinks)?backup.goalLinks.slice(0,5000):[];
   const goalContributions=Array.isArray(backup.goalContributions)?backup.goalContributions.slice(0,10000):[];
-  let restoredItems=0,restoredDaily=0,restoredBond=0,restoredPlaces=0,restoredGoals=0,restoredGoalParticipants=0,restoredGoalSteps=0,restoredGoalLinks=0,restoredGoalContributions=0;
+  let restoredItems=0,restoredDaily=0,restoredBond=0,restoredBondGestures=0,restoredPlaces=0,restoredGoals=0,restoredGoalParticipants=0,restoredGoalSteps=0,restoredGoalLinks=0,restoredGoalContributions=0;
 
   if(backup.settings&&typeof backup.settings==="object"&&!Array.isArray(backup.settings)){
     const current=await ok(db.from("galaxy_settings").select("data").eq("id",1).single());
@@ -897,6 +899,17 @@ async function backupRestore(req:Request,body:any){
     restoredGoalLinks++;
   }
 
+  for(const row of bondGestures){
+    const id=String(row?.id||""),createdBy=String(row?.created_by||"");
+    if(!uuidish(id)||!["0","1"].includes(createdBy))continue;
+    let value;try{value=normalizeCustomGesture(row);}catch{continue;}
+    await ok(db.from("galaxy_bond_gestures").upsert({
+      id,...value,created_by:createdBy,enabled:row.enabled!==false,
+      created_at:row.created_at||new Date().toISOString(),updated_at:row.updated_at||row.created_at||new Date().toISOString()
+    },{onConflict:"id",ignoreDuplicates:true}));
+    restoredBondGestures++;
+  }
+
   for(const row of daily){
     const day=String(row?.day||""),person=String(row?.person||""),mood=text(row?.mood,30),answer=text(row?.answer,3000);
     if(!validDate(day)||!["0","1"].includes(person))continue;
@@ -913,7 +926,7 @@ async function backupRestore(req:Request,body:any){
     await ok(db.from("galaxy_bond").upsert({id,type,author,data,created:row.created||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
     restoredBond++;
   }
-  return json({ok:true,restored:{items:restoredItems,daily:restoredDaily,bond:restoredBond,places:restoredPlaces,goals:restoredGoals,goalParticipants:restoredGoalParticipants,goalSteps:restoredGoalSteps,goalLinks:restoredGoalLinks,goalContributions:restoredGoalContributions},restoredGoals});
+  return json({ok:true,restored:{items:restoredItems,daily:restoredDaily,bond:restoredBond,bondGestures:restoredBondGestures,places:restoredPlaces,goals:restoredGoals,goalParticipants:restoredGoalParticipants,goalSteps:restoredGoalSteps,goalLinks:restoredGoalLinks,goalContributions:restoredGoalContributions},restoredGoals});
 }
 
 async function recordParticipation(person:string){
@@ -923,9 +936,15 @@ async function recordParticipation(person:string){
 function validateBond(type:string,data:any){
   if(!data||typeof data!=="object"||Array.isArray(data))throw new Error("Datos no válidos");
   if(type==="gesture"){
-    const gesture=String(data.gesture||"");
-    if(!["hug","kiss","miss","tap"].includes(gesture))throw new Error("Gesto no válido");
-    return {gesture};
+    const gesture=String(data.gesture||data.gestureId||"");
+    const builtin=resolveGesture(gesture,[]);
+    if(builtin){
+      if(!data.name&&!data.text&&!data.icon&&!data.behavior)return {gesture};
+      const snapshot=gestureSnapshot(builtin);return {gesture,...snapshot};
+    }
+    if(!uuidish(gesture))throw new Error("Gesto no válido");
+    const normalized=normalizeCustomGesture(data),snapshot=gestureSnapshot({id:gesture,...normalized});
+    return {gesture,...snapshot};
   }
   if(type==="game"){
     const questionId=String(data.questionId||""),answer=text(data.answer,100);
