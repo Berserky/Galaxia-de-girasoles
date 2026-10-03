@@ -440,45 +440,7 @@ async function history(req:Request,body:any){
   return json({ok:true});
 }
 
-async function smartPlaces(d:any,p:any){
-  const places=await ok(db.from("galaxy_places").select("id,name,latitude,longitude,kind").eq("owner",d.person).in("kind",["home","work"])),now=Date.now();
-  for(const place of places||[]){
-    const meters=dist({latitude:p.lat,longitude:p.lon},place),presence=(await ok(db.from("galaxy_device_place_presence").select("*").eq("device_id",d.id).eq("place_id",place.id).limit(1)))?.[0];
-    if(meters<=80){
-      if(!presence){await ok(db.from("galaxy_device_place_presence").insert({device_id:d.id,place_id:place.id,entered_at:new Date().toISOString(),arrived:false}));continue;}
-      if(!presence.arrived&&now-Date.parse(presence.entered_at)>=45000){
-        await ok(db.from("galaxy_place_events").insert({person:d.person,place_id:place.id,event:"arrived"}));
-        await ok(db.from("galaxy_device_place_presence").update({arrived:true}).eq("device_id",d.id).eq("place_id",place.id));
-        await ok(db.from("galaxy_locations").update({status:"Llegué a "+place.name}).eq("person",d.person));
-      }
-    }else if(meters>150&&presence){
-      if(presence.arrived)await ok(db.from("galaxy_place_events").insert({person:d.person,place_id:place.id,event:"left"}));
-      await ok(db.from("galaxy_device_place_presence").delete().eq("device_id",d.id).eq("place_id",place.id));
-    }
-  }
-}
-
-async function encounter(){
-  const [locs,runtime,openRows]=await Promise.all([
-    ok(db.from("galaxy_locations").select("person,latitude,longitude,sharing,updated_at").eq("sharing",true)),
-    ok(db.from("galaxy_encounter_runtime").select("*").eq("singleton",true).single()),
-    ok(db.from("galaxy_encounters").select("id,started_at").is("ended_at",null).limit(1))
-  ]);
-  const open=openRows?.[0];
-  if(!locs||locs.length!==2||locs.some((x:any)=>x.latitude==null||x.longitude==null)){
-    if(runtime.near_since)await ok(db.from("galaxy_encounter_runtime").update({near_since:null}).eq("singleton",true));
-    if(open)await ok(db.from("galaxy_encounters").update({ended_at:new Date().toISOString()}).eq("id",open.id));
-    return;
-  }
-  const meters=dist(locs[0],locs[1]);
-  if(meters<=80){
-    if(!runtime.near_since){await ok(db.from("galaxy_encounter_runtime").update({near_since:new Date().toISOString()}).eq("singleton",true));return;}
-    if(!open&&Date.now()-Date.parse(runtime.near_since)>=60000)await ok(db.from("galaxy_encounters").insert({started_at:runtime.near_since,distance_m:Math.round(meters),created_by:locs[0].person}));
-  }else if(meters>150){
-    if(runtime.near_since)await ok(db.from("galaxy_encounter_runtime").update({near_since:null}).eq("singleton",true));
-    if(open)await ok(db.from("galaxy_encounters").update({ended_at:new Date().toISOString()}).eq("id",open.id));
-  }
-}
+// Place, encounter, proximity and destination transitions are derived only by contextTick().
 
 async function location(req:Request,body:any){
   const d=await device(req),now=new Date().toISOString();
