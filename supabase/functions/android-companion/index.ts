@@ -137,7 +137,7 @@ async function contextSettingsRows(){
 }
 async function contextOwnSettings(person:string){
  const row=(await ok(db.from("galaxy_context_settings").select("*").eq("person",person).limit(1)))?.[0];
- return row||{person,near_enabled:false,near_distance_m:300,near_cooldown_minutes:60,arrived_safe_enabled:false,date_suggestions:true,memory_suggestions:true,shared_trip_detection:true};
+ return row||{person,near_enabled:false,near_distance_m:300,near_cooldown_minutes:60,arrived_safe_enabled:false,date_suggestions:true,memory_suggestions:true,shared_trip_detection:false};
 }
 async function contextEventByDedupe(key:string){
  return (await ok(db.from("galaxy_context_events").select("*").eq("dedupe_key",key).limit(1)))?.[0]||null;
@@ -276,7 +276,7 @@ async function contextTick(d:any){
  const nearProfiles=Object.fromEntries((settings||[]).filter((x:any)=>x.near_enabled).map((x:any)=>[String(x.person),{enabled:true,distanceM:Number(x.near_distance_m)||300,cooldownS:(Number(x.near_cooldown_minutes)||60)*60}]));
  const destinations=await resolveContextDestinations(sessions||[],locations||[],places||[]);
  const previous=stateRow?.data&&Object.keys(stateRow.data).length?stateRow.data:emptyContextState();
- const result=contextStep(previous,{at:now.toISOString(),people,places:places||[],destinations},{nearProfiles});
+ const result=contextStep(previous,{at:now.toISOString(),people,places:places||[],destinations},{nearProfiles,sharedTripEnabled:(settings||[]).some((x:any)=>x.shared_trip_detection===true)});
  await ok(db.from("galaxy_context_state").upsert({singleton:true,data:result.state,updated_at:now.toISOString()},{onConflict:"singleton"}));
  for(const event of result.events||[]){
   const row=await persistContextEvent(d,event);
@@ -302,7 +302,7 @@ async function contextSettingsAction(req:Request,body:any){
   arrived_safe_enabled:Object.hasOwn(body,"arrivedSafeEnabled")?!!body.arrivedSafeEnabled:!!current.arrived_safe_enabled,
   date_suggestions:Object.hasOwn(body,"dateSuggestions")?!!body.dateSuggestions:current.date_suggestions!==false,
   memory_suggestions:Object.hasOwn(body,"memorySuggestions")?!!body.memorySuggestions:current.memory_suggestions!==false,
-  shared_trip_detection:Object.hasOwn(body,"sharedTripDetection")?!!body.sharedTripDetection:current.shared_trip_detection!==false,
+  shared_trip_detection:Object.hasOwn(body,"sharedTripDetection")?!!body.sharedTripDetection:current.shared_trip_detection===true,
   updated_at:new Date().toISOString()
  };
  const saved=await ok(db.from("galaxy_context_settings").upsert(next,{onConflict:"person"}).select("*").single());
