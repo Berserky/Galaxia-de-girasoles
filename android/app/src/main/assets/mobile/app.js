@@ -1631,6 +1631,10 @@ document.addEventListener('click',async e=>{
   if(a==='welcome-skip'){finishAdriWelcome();return;}
   if(a==='welcome-replay'){welcomePreview=true;welcomeStep=0;welcomeGift=true;welcomeEntering=false;tourStep=-1;render();window.scrollTo(0,0);return;}
   if(a==='modal-close'){closeModal();return;}
+  if(a==='chat-open'){chatState=null;go('chat');await loadChat({quiet:true});return;}
+  if(a==='chat-close'){chatReply=null;go('home');return;}
+  if(a==='chat-load-more'){await loadChat({older:true});return;}
+  if(a==='chat-reply-cancel'){chatReply=null;render();return;}
   if(a==='goals-open'){go('goals');await loadGoals(true);return;}
   if(a==='goals-filter'){goalsFilter=btn.dataset.value||'active';render();return;}
   if(a==='goal-new'){openGoalForm('goal');return;}
