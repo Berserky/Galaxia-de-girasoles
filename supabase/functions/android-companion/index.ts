@@ -2369,8 +2369,10 @@ function goalView(goal:any,data:any){
  const participants=(data.goalParticipants||[]).filter((row:any)=>String(row.goal_id)===id).map((row:any)=>String(row.person)).sort();
  const itemMap=new Map((data.items||[]).map((item:any)=>[String(item.id),item]));
  const links=(data.goalLinks||[]).filter((row:any)=>String(row.goal_id)===id).map((row:any)=>{
-  const item:any=itemMap.get(String(row.item_id));
-  return {...row,item:item?{id:item.id,kind:item.kind,title:text(item.data?.title||item.kind,160),body:text(item.data?.body||"",500)}:null};
+  const item:any=itemMap.get(String(row.item_id)),relation=String(row.relation||"");
+  const expected=relation==="note"?"note":relation==="memory"?"memory":relation==="plan"||relation==="source-plan"?"plan":relation==="source-wish"?"wish":"";
+  const validItem=!!item&&!!expected&&String(item.kind)===expected;
+  return {...row,item:validItem?{id:item.id,kind:item.kind,title:text(item.data?.title||item.kind,160),body:text(item.data?.body||"",500)}:null};
  });
  return {...goal,participants,steps,contributions,links,...computeGoalProgress(goal,steps,contributions)};
 }
@@ -2843,6 +2845,9 @@ async function backupRestore(req:Request,body:any){
   for(const row of goalLinks){
     const id=String(row?.id||""),goalId=String(row?.goal_id||""),itemId=String(row?.item_id||""),relation=String(row?.relation||"");
     if(!uuidish(id)||!uuidish(goalId)||!uuidish(itemId)||!["note","memory","plan","source-plan","source-wish"].includes(relation))continue;
+    const expected=relation==="note"?"note":relation==="memory"?"memory":relation==="plan"||relation==="source-plan"?"plan":"wish";
+    const linked=(await ok(db.from("galaxy_items").select("id,kind").eq("id",itemId).limit(1)))?.[0];
+    if(!linked||String(linked.kind)!==expected)continue;
     await ok(db.from("galaxy_goal_links").upsert({id,goal_id:goalId,item_id:itemId,relation,created_at:row.created_at||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
     restoredGoalLinks++;
   }
