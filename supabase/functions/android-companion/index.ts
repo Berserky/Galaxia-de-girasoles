@@ -51,10 +51,12 @@ const questions:Record<string,string[]>={
 async function device(req:Request){
   const token=req.headers.get("x-device-token")||"";
   if(token.length<40)throw new Error("Dispositivo no vinculado");
-  const hash=await sha(token),rows=await ok(db.from("galaxy_devices").select("id,person,name,revoked_at").eq("token_hash",hash).is("revoked_at",null).limit(1));
+  const hash=await sha(token),rows=await ok(db.from("galaxy_devices").select("id,person,name,revoked_at,last_seen_at").eq("token_hash",hash).is("revoked_at",null).limit(1));
   if(!rows?.length)throw new Error("Dispositivo revocado o no válido");
-  const d=rows[0];
-  await ok(db.from("galaxy_devices").update({last_seen_at:new Date().toISOString()}).eq("id",d.id));
+  const d=rows[0],lastSeen=Date.parse(String(d.last_seen_at||""));
+  if(!Number.isFinite(lastSeen)||Date.now()-lastSeen>5*60*1000){
+    await ok(db.from("galaxy_devices").update({last_seen_at:new Date().toISOString()}).eq("id",d.id));
+  }
   return d;
 }
 
@@ -701,10 +703,16 @@ async function chatHydrate(rows:any[],person:string){
  const pinMap=new Map((pins||[]).map((x:any)=>[String(x.message_id),x]));
  const favSet=new Set((favorites||[]).map((x:any)=>String(x.message_id)));
  const attachmentMap=new Map<string,any[]>();
- for(const a of attachments||[]){
+ const hydratedAttachments=await Promise.all((attachments||[]).map(async(a:any)=>{
   const bucket=String(a.bucket||"galaxy-chat-media"),path=String(a.path||"");
-  const url=await signed(bucket,path,1800),thumbnailUrl=a.thumbnail_path?await signed(bucket,String(a.thumbnail_path),1800):null;
-  const safe={id:a.id,kind:a.kind,mime:a.mime,name:a.name,sizeBytes:a.size_bytes,durationMs:a.duration_ms,width:a.width,height:a.height,caption:a.caption,url,thumbnailUrl};
+  const [url,thumbnailUrl]=await Promise.all([
+   signed(bucket,path,1800),
+   a.thumbnail_path?signed(bucket,String(a.thumbnail_path),1800):Promise.resolve(null)
+  ]);
+  return {...a,url,thumbnailUrl};
+ }));
+ for(const a of hydratedAttachments){
+  const safe={id:a.id,kind:a.kind,mime:a.mime,name:a.name,sizeBytes:a.size_bytes,durationMs:a.duration_ms,width:a.width,height:a.height,caption:a.caption,url:a.url,thumbnailUrl:a.thumbnailUrl};
   const k=String(a.message_id),v=attachmentMap.get(k)||[];v.push(safe);attachmentMap.set(k,v);
  }
  return list.map((row:any)=>({
