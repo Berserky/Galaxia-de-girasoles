@@ -135,6 +135,15 @@ create table if not exists public.galaxy_chat_sticker_favorites (
  primary key(sticker_id,person)
 );
 
+create table if not exists public.galaxy_chat_sticker_recents (
+ sticker_id uuid not null references public.galaxy_chat_stickers(id) on delete cascade,
+ person text not null check(person in ('0','1')),
+ last_used_at timestamptz not null default now(),
+ primary key(sticker_id,person)
+);
+create index if not exists galaxy_chat_sticker_recents_person_idx
+ on public.galaxy_chat_sticker_recents(person,last_used_at desc);
+
 -- Live location reuses galaxy_locations as the single GPS source of truth.
 -- This table stores only chat session metadata, never a second coordinate history.
 create table if not exists public.galaxy_chat_live_locations (
@@ -174,6 +183,7 @@ alter table public.galaxy_chat_albums enable row level security;
 alter table public.galaxy_chat_album_items enable row level security;
 alter table public.galaxy_chat_stickers enable row level security;
 alter table public.galaxy_chat_sticker_favorites enable row level security;
+alter table public.galaxy_chat_sticker_recents enable row level security;
 alter table public.galaxy_chat_live_locations enable row level security;
 alter table public.galaxy_chat_runtime enable row level security;
 
@@ -185,6 +195,7 @@ revoke all on
  public.galaxy_chat_album_items,
  public.galaxy_chat_stickers,
  public.galaxy_chat_sticker_favorites,
+ public.galaxy_chat_sticker_recents,
  public.galaxy_chat_live_locations,
  public.galaxy_chat_runtime
 from public,anon,authenticated;
@@ -197,6 +208,7 @@ grant select,insert,update,delete on
  public.galaxy_chat_album_items,
  public.galaxy_chat_stickers,
  public.galaxy_chat_sticker_favorites,
+ public.galaxy_chat_sticker_recents,
  public.galaxy_chat_live_locations
 to service_role;
 
