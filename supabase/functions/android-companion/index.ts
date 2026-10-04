@@ -544,6 +544,36 @@ async function pushPreferences(req:Request,body:any){
  const d=await device(req),subscriptions=await savePushPreferences(String(d.id),body.events||{});
  return json({ok:true,subscriptions,pushConfigured:!!fcmCredentials()});
 }
+async function persistNotification(sourceDevice:any,targetPerson:string,eventType:string,payload:any,pushEventId:string){
+ if(eventType==="gesture"&&String(payload?.behavior||"")==="haptic")return null;
+ return await ok(db.from("galaxy_notifications").insert({
+  target_person:targetPerson,
+  source_person:["0","1"].includes(String(sourceDevice?.person))?String(sourceDevice.person):null,
+  event_type:eventType,
+  title:text(payload?.title||"Nuestra Galaxia",120)||"Nuestra Galaxia",
+  body:text(payload?.body||"",500),
+  action:text(payload?.action||"",80)||null,
+  entity_type:text(payload?.entityType||"",80)||null,
+  entity_id:text(payload?.entityId||"",160)||null,
+  data:{senderName:text(payload?.senderName||"",80)},
+  push_event_id:pushEventId
+ }).select("*").single());
+}
+async function notificationSummary(person:string){
+ const {count,error}=await db.from("galaxy_notifications").select("id",{count:"exact",head:true}).eq("target_person",person).is("read_at",null);
+ if(error)throw error;
+ return {unread:Number(count||0)};
+}
+async function chatSummary(person:string){
+ const state=(await ok(db.from("galaxy_chat_read_state").select("*").eq("person",person).limit(1)))?.[0]||{};
+ const latest=(await ok(db.from("galaxy_chat_messages").select("id,sender_person,body,deleted_at,created_at").order("created_at",{ascending:false}).limit(1)))?.[0]||null;
+ let query=db.from("galaxy_chat_messages").select("id",{count:"exact",head:true}).neq("sender_person",person).is("deleted_at",null);
+ if(state.last_read_at)query=query.gt("created_at",state.last_read_at);
+ const {count,error}=await query;if(error)throw error;
+ const partnerState=(await ok(db.from("galaxy_chat_read_state").select("last_read_at,last_read_message_id").neq("person",person).limit(1)))?.[0]||null;
+ return {unread:Number(count||0),lastMessage:latest,partnerLastReadAt:partnerState?.last_read_at||null};
+}
+
 async function dispatchPushEvent(sourceDevice:any,targetPerson:string,eventType:string,payload:any,options:any={}){
  if(!PUSH_EVENT_TYPES.includes(eventType))throw new Error("Tipo de evento push no válido.");
  const sanitized=sanitizePushPayload(eventType,payload);
@@ -551,6 +581,7 @@ async function dispatchPushEvent(sourceDevice:any,targetPerson:string,eventType:
   source_device_id:sourceDevice?.id||null,source_person:String(sourceDevice?.person||"0"),target_person:targetPerson,event_type:eventType,payload:sanitized
  }).select("id").single());
  sanitized.eventId=String(event.id);
+ if(options?.persistNotification!==false)await persistNotification(sourceDevice,targetPerson,eventType,sanitized,String(event.id));
  const [devices,tokens,subscriptions]=await Promise.all([
   ok(db.from("galaxy_devices").select("id").eq("person",targetPerson).is("revoked_at",null).limit(20)),
   ok(db.from("galaxy_push_tokens").select("device_id,token").limit(50)),
