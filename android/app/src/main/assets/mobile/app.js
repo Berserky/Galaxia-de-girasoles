@@ -1537,7 +1537,7 @@ async function flushChatOutbox({retryFailed=false}={}){
    if(item.retryCount>=8&&item._localState==='FAILED')continue;
    patchLocalMessage(item.client_id,{_localState:'SENDING'});
    try{
-    const result=await api('chat-send',{clientId:item.client_id,clientCreatedAt:item.client_created_at,body:item.body||'',replyTo:item.reply_to||null,messageType:item.message_type||'text',attachments:item.attachments||[],attachment:item.attachment||{},scheduledAt:item.scheduled_at||null,silent:item.silent===true,ttlSeconds:item.ttl_seconds||null,viewOnce:item.view_once===true,effect:item.effect||null,retryCount:Number(item.retryCount||0)});
+    const result=await api('chat-send',{clientId:item.client_id,clientCreatedAt:item.client_created_at,body:item.body||'',replyTo:item.reply_to||null,messageType:item.message_type||'text',attachments:item.attachments||[],attachment:item.attachment||{},entityRef:item.entityRef||null,scheduledAt:item.scheduled_at||null,silent:item.silent===true,ttlSeconds:item.ttl_seconds||null,viewOnce:item.view_once===true,effect:item.effect||null,retryCount:Number(item.retryCount||0)});
     rows=readChatOutbox().filter(x=>String(x.client_id)!==String(item.client_id));writeChatOutbox(rows);
     if(result?.message){chatState=chatState||{messages:[],unread:0,pinnedIds:[]};const map=new Map([...(chatState.messages||[]),result.message].map(x=>[String(x.id),x]));chatState.messages=[...map.values()].sort((a,b)=>Number(a.server_seq||0)-Number(b.server_seq||0));}
     try{await api('chat-metric',{event:'sent',messageId:result?.message?.id,retryCount:Number(item.retryCount||0)});}catch{}
@@ -1550,16 +1550,21 @@ async function flushChatOutbox({retryFailed=false}={}){
   }
  }finally{chatOutboxFlushing=false;}
 }
-function queueChatMessage({body='',messageType='text',attachments=[],attachment={},scheduledAt=null,silent=false,ttlSeconds=null,viewOnce=false,effect=null}={}){
+function queueChatMessage({body='',messageType='text',attachments=[],attachment={},entityRef=null,card=null,scheduledAt=null,silent=false,ttlSeconds=null,viewOnce=false,effect=null}={}){
  const text=String(body||'').trim();
  if(!text&&messageType==='text'&&!attachments.length)return;
+ if(messageType==='card'&&!entityRef)return;
  const clientId=crypto.randomUUID(),created=new Date().toISOString();
- const row={client_id:clientId,client_created_at:created,body:text,reply_to:chatReply?.id||null,message_type:messageType,attachments,attachment,scheduled_at:scheduledAt,silent,ttl_seconds:ttlSeconds,view_once:viewOnce,effect,_localState:'PENDING',retryCount:0,local_order:Date.now()};
+ const row={client_id:clientId,client_created_at:created,body:text,reply_to:chatReply?.id||null,message_type:messageType,attachments,attachment,entityRef,card,scheduled_at:scheduledAt,silent,ttl_seconds:ttlSeconds,view_once:viewOnce,effect,_localState:'PENDING',retryCount:0,local_order:Date.now()};
  const rows=readChatOutbox();rows.push(row);writeChatOutbox(rows);
  chatReply=null;chatAttachmentsDraft=[];writeChatDraft('');
  try{api('chat-metric',{event:'queued',retryCount:0}).catch(()=>{});}catch{}
  if(view==='chat'){render();requestAnimationFrame(()=>{const el=document.querySelector('#chatMessages');if(el)el.scrollTop=el.scrollHeight;});}
  flushChatOutbox().then(()=>loadChat({quiet:true,force:true})).catch(()=>{});
+}
+function queueGalaxyCard(cardType,entityKind,entityId,localCard={}){
+ if(!entityId)return;
+ queueChatMessage({messageType:'card',entityRef:{cardType,entityKind,entityId:String(entityId)},card:{available:true,type:cardType,entityKind,entityId:String(entityId),...localCard}});
 }
 function setChatPresence(state='ONLINE'){
  clearTimeout(chatPresenceTimer);
