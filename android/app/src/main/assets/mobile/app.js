@@ -1322,7 +1322,7 @@ function chatGalaxyCardMarkup(card,m){
  if(!card)return'';
  const meta=chatCardMeta(card);
  if(card.available===false)return '<div class="chat-galaxy-card unavailable"><span>'+ico('circle-off')+'</span><div><p class="eyebrow">'+esc(meta.label)+'</p><h3>Contenido no disponible</h3><p>'+esc(card.message||'Este contenido ya no está disponible.')+'</p></div></div>';
- if(card.type==='CAPSULE'&&card.locked)return '<div class="chat-galaxy-card locked"><span>'+ico('lock-keyhole')+'</span><div><p class="eyebrow">CÁPSULA BLOQUEADA</p><h3>'+esc(card.title||'Cápsula')+'</h3><p>Se desbloquea '+esc(fmtDateTime(card.unlockAt))+'.</p></div></div>';
+ if(card.type==='CAPSULE'&&card.locked)return '<div class="chat-galaxy-card locked"><span>'+ico('lock-keyhole')+'</span><div><p class="eyebrow">CÁPSULA BLOQUEADA</p><h3>'+esc(card.title||'Cápsula')+'</h3><p>'+(card.unlockType==='place'?'Se desbloquea al llegar al lugar elegido.':'Se desbloquea '+esc(fmtDateTime(card.unlockAt))+'.')+'</p></div></div>';
  if(card.type==='POLL'){
   const options=(card.options||[]).map(o=>'<button type="button" class="chat-poll-option '+(o.selected?'selected':'')+'" data-action="chat-poll-vote" data-poll-id="'+attr(card.entityId)+'" data-option-id="'+attr(o.id)+'" data-selected="'+(o.selected?'true':'false')+'" '+(card.closed?'disabled':'')+'><span><b>'+esc(o.label)+'</b><small>'+Number(o.votes||0)+' voto'+(Number(o.votes||0)===1?'':'s')+' · '+Number(o.percent||0)+'%</small></span><i style="--p:'+Math.max(0,Math.min(100,Number(o.percent||0)))+'%"></i></button>').join('');
   return '<div class="chat-galaxy-card poll"><div class="chat-card-head"><span>'+ico(meta.icon)+'</span><div><p class="eyebrow">'+(card.closed?'ENCUESTA CERRADA':'ENCUESTA')+'</p><h3>'+esc(card.question||card.title)+'</h3></div></div><div class="chat-poll-options">'+options+'</div><div class="chat-card-actions">'+(!card.closed&&String(card.createdBy)===String(cloud.person)?'<button type="button" data-action="chat-poll-close" data-id="'+attr(card.entityId)+'">'+ico('lock')+' Cerrar</button>':'')+(card.options||[]).map(o=>'<button type="button" data-action="chat-poll-plan" data-poll-id="'+attr(card.entityId)+'" data-option="'+attr(o.label)+'">'+ico('calendar-plus')+' Plan: '+esc(o.label)+'</button>').join('')+'</div></div>';
@@ -1919,11 +1919,11 @@ function closeModal(){if(modal.dataset.form==='voice'&&pendingVoiceDraft!==null)
 function openItemForm(kind,item){
  const d=item?.data||{},meta=kindMeta[kind]||['sparkles','Contenido'],editing=!!item?.id,places=mapData?.places||[];
  modal.dataset.editId=item?.id||'';modal.dataset.version=item?.version||'';modal.dataset.kind=kind;
- const needsDate=['memory','event','capsule','journey'].includes(kind),canPlace=['memory','journey','event'].includes(kind),sourceField=d.source?'<input type="hidden" name="sourceJson" value="'+attr(JSON.stringify(d.source))+'">':'';
+ const needsDate=['memory','event','journey'].includes(kind),canPlace=['memory','journey','event'].includes(kind),sourceField=d.source?'<input type="hidden" name="sourceJson" value="'+attr(JSON.stringify(d.source))+'">':'';
  const placeField=canPlace?(places.length?'<div class="field"><label>Lugar de nuestra historia (opcional)</label><select name="placeId"><option value="">Sin lugar</option>'+places.map(p=>'<option value="'+p.id+'" '+(Number(d.placeId)===Number(p.id)?'selected':'')+'>'+esc(p.name)+'</option>').join('')+'</select></div>':(d.placeId?'<input type="hidden" name="placeId" value="'+attr(d.placeId)+'">':'')):'';
+ const capsuleFields=kind==='capsule'?'<div class="field"><label>Se desbloquea por</label><select name="unlockType"><option value="date" '+(d.unlockType!=='place'?'selected':'')+'>Fecha y hora</option><option value="place" '+(d.unlockType==='place'?'selected':'')+'>Llegar a un lugar</option></select></div><div class="field"><label>Fecha de desbloqueo</label><input class="input" type="date" name="date" value="'+attr(d.unlockDate||d.date||'')+'"></div><div class="field"><label>Hora de desbloqueo</label><input class="input" type="time" name="unlockTime" value="'+attr(d.unlockTime||'00:00')+'"></div>'+(places.length?'<div class="field"><label>Lugar de desbloqueo</label><select name="unlockPlaceId"><option value="">Elige un lugar</option>'+places.map(p=>'<option value="'+p.id+'" '+(Number(d.placeId)===Number(p.id)?'selected':'')+'>'+esc(p.name)+'</option>').join('')+'</select><small>Solo se usará cuando elijas “Llegar a un lugar”.</small></div>':''):'';
  const body='<form id="itemForm" class="stack" style="margin-top:16px">'+sourceField+'<div class="field"><label>Título</label><input class="input" name="title" value="'+attr(d.title||'')+'" required maxlength="160"></div><div class="field"><label>Texto</label><textarea name="body" placeholder="Escribe aquí…">'+esc(d.body||'')+'</textarea></div>'+
- (needsDate?'<div class="field"><label>'+(kind==='capsule'?'Fecha de desbloqueo':'Fecha')+'</label><input class="input" type="date" name="date" value="'+attr(d.unlockDate||d.date||'')+'"></div>':'')+
- (kind==='capsule'?'<div class="field"><label>Hora de desbloqueo</label><input class="input" type="time" name="unlockTime" value="'+attr(d.unlockTime||'00:00')+'"></div>':'')+
+ (needsDate?'<div class="field"><label>Fecha</label><input class="input" type="date" name="date" value="'+attr(d.date||'')+'"></div>':'')+capsuleFields+
  '<div class="field"><label>Categoría</label><input class="input" name="category" value="'+attr(d.category||'')+'" placeholder="'+attr(meta[1])+'"></div>'+placeField+
  (kind==='plan'?'<div class="date-plan-fields"><div class="field"><label>Cuándo</label><select name="planCategory"><option value="this-week" '+(d.planCategory==='this-week'?'selected':'')+'>Esta semana</option><option value="when-possible" '+(!d.planCategory||d.planCategory==='when-possible'?'selected':'')+'>Cuando podamos</option><option value="someday" '+(d.planCategory==='someday'?'selected':'')+'>Algún día</option><option value="travel" '+(d.planCategory==='travel'?'selected':'')+'>Viaje</option><option value="home" '+(d.planCategory==='home'?'selected':'')+'>En casa</option></select></div><div class="date-plan-grid"><div class="field"><label>Presupuesto estimado</label><input class="input" type="number" min="0" step="1000" name="budget" value="'+attr(d.budget??'')+'" placeholder="0"></div><div class="field"><label>Duración (min)</label><input class="input" type="number" min="15" step="15" name="minutes" value="'+attr(d.minutes??'')+'" placeholder="120"></div></div><div class="field"><label>Entorno</label><select name="where"><option value="salir" '+(d.where!=='casa'?'selected':'')+'>Salir</option><option value="casa" '+(d.where==='casa'?'selected':'')+'>En casa</option></select></div></div>':'')+
  (kind==='event'?'<label class="row"><input type="checkbox" name="annual" '+(d.annual?'checked':'')+'> Se repite cada año</label>':'')+
@@ -2154,7 +2154,19 @@ async function submitItem(form){
  const data={title:fd.get('title'),body:fd.get('body'),category:fd.get('category')};
  if(fd.has('sourceJson')&&String(fd.get('sourceJson')||'')){try{data.source=JSON.parse(String(fd.get('sourceJson')));}catch{}}
  if(fd.has('date'))data.date=fd.get('date');
- if(kind==='capsule'){data.unlockDate=String(fd.get('date')||'');data.unlockTime=String(fd.get('unlockTime')||'00:00');if(data.unlockDate)data.unlockAt=new Date(data.unlockDate+'T'+data.unlockTime+':00-05:00').toISOString();}
+ if(kind==='capsule'){
+  data.unlockType=fd.get('unlockType')==='place'?'place':'date';
+  if(data.unlockType==='place'){
+   const place=(mapData?.places||[]).find(p=>String(p.id)===String(fd.get('unlockPlaceId')||''));
+   if(!place)throw new Error('Elige el lugar que desbloqueará la cápsula.');
+   data.placeId=Number(place.id);data.placeName=String(place.name||'Lugar');data.latitude=Number(place.latitude);data.longitude=Number(place.longitude);data.radius=150;
+   data.unlockDate='';data.unlockTime='';delete data.unlockAt;
+  }else{
+   data.unlockDate=String(fd.get('date')||'');data.unlockTime=String(fd.get('unlockTime')||'00:00');
+   if(!data.unlockDate)throw new Error('Elige la fecha de desbloqueo.');
+   data.unlockAt=new Date(data.unlockDate+'T'+data.unlockTime+':00-05:00').toISOString();
+  }
+ }
  if(kind==='event')data.annual=fd.get('annual')==='on';
  if(kind==='plan'||kind==='wish')data.done=fd.get('done')==='on';
  if(kind==='plan'){data.planCategory=fd.get('planCategory');data.budget=Math.max(0,Number(fd.get('budget')||0));data.minutes=Math.max(15,Number(fd.get('minutes')||120));data.where=fd.get('where')==='casa'?'casa':'salir';}
