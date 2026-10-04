@@ -45,19 +45,30 @@ SQL
 
 printf '\xff\xd8\xff\xd9' > /tmp/qa-chat-photo.jpg
 
+ANON_KEY=$(supabase status -o env | sed -n 's/^ANON_KEY="\(.*\)"$/\1/p')
+[ -n "$ANON_KEY" ] || { echo "local Supabase ANON_KEY missing"; exit 1; }
+curl(){ command curl -H "Authorization: Bearer $ANON_KEY" "$@"; }
+
 supabase functions serve android-companion --no-verify-jwt >/tmp/android-companion-e2e.log 2>&1 &
 EDGE_PID=$!
 cleanup(){ kill "$EDGE_PID" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
+ready=false
 for _ in $(seq 1 60); do
   status=$(curl -sS -o /tmp/edge-health.json -w '%{http_code}' \
     -X POST "$FUNCTION_URL" \
     -H 'content-type: application/json' \
     --data '{"action":"pair"}' || true)
-  if [ "$status" != "000" ]; then break; fi
+  if [ "$status" = "400" ]; then ready=true; break; fi
   sleep 1
 done
+[ "$ready" = "true" ] || {
+  echo "android-companion local Edge did not become ready"
+  cat /tmp/edge-health.json 2>/dev/null || true
+  cat /tmp/android-companion-e2e.log || true
+  exit 1
+}
 
 owner_backup=$(curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $DEVICE_TOKEN" -H 'content-type: application/json' --data '{"action":"backup-export"}')
 partner_backup=$(curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $PARTNER_TOKEN" -H 'content-type: application/json' --data '{"action":"backup-export"}')
