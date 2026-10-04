@@ -116,21 +116,25 @@ create or replace function public.galaxy_capsule_protect_unlock_state()
 returns trigger
 language plpgsql security invoker
 set search_path=''
-as $$
+as $
 begin
-  if old.kind='capsule' and current_user not in ('postgres','service_role') then
-    new.data:=new.data-'unlockedFor'-'unlocked_for';
-    if jsonb_typeof(old.data->'unlockedFor')='array' then
-      new.data:=jsonb_set(new.data,'{unlockedFor}',old.data->'unlockedFor',true);
+  if new.kind='capsule' then
+    if tg_op='INSERT' then
+      new.data:=new.data-'unlockedFor'-'unlocked_for';
+    elsif old.kind='capsule' and current_user<>'postgres' then
+      new.data:=new.data-'unlockedFor'-'unlocked_for';
+      if jsonb_typeof(old.data->'unlockedFor')='array' then
+        new.data:=jsonb_set(new.data,'{unlockedFor}',old.data->'unlockedFor',true);
+      end if;
     end if;
   end if;
   return new;
-end $$;
+end $;
 revoke all on function public.galaxy_capsule_protect_unlock_state() from public,anon,authenticated;
 
 drop trigger if exists capsule_unlock_state_guard on public.galaxy_items;
 create trigger capsule_unlock_state_guard
-before update on public.galaxy_items
+before insert or update on public.galaxy_items
 for each row execute function public.galaxy_capsule_protect_unlock_state();
 
 drop policy if exists items_read on public.galaxy_items;
