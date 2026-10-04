@@ -230,7 +230,9 @@ create table public.galaxy_destinations (
 );
 alter table public.galaxy_destinations enable row level security;
 create policy destinations_read on public.galaxy_destinations for select to authenticated using(public.galaxy_person() is not null);
-create policy destinations_write_own on public.galaxy_destinations for all to authenticated using(person=public.galaxy_person()) with check(person=public.galaxy_person());
+create policy destinations_insert_own on public.galaxy_destinations for insert to authenticated with check(person=public.galaxy_person());
+create policy destinations_update_own on public.galaxy_destinations for update to authenticated using(person=public.galaxy_person()) with check(person=public.galaxy_person());
+create policy destinations_delete_own on public.galaxy_destinations for delete to authenticated using(person=public.galaxy_person());
 revoke all on public.galaxy_destinations from anon,authenticated;
 grant select,insert,update,delete on public.galaxy_destinations to authenticated;
 create index galaxy_destinations_place_id_idx on public.galaxy_destinations(place_id);
@@ -528,6 +530,7 @@ create table if not exists public.galaxy_daily_questions (
 );
 create index if not exists galaxy_daily_questions_created_idx on public.galaxy_daily_questions(created_at desc);
 alter table public.galaxy_daily_questions enable row level security;
+revoke all on public.galaxy_daily_questions from public,anon,authenticated;
 
 
 -- Mega Update 3.0 · Galaxy Goals Engine
@@ -838,6 +841,7 @@ create table if not exists public.galaxy_chat_metrics (
  created_at timestamptz not null default now()
 );
 create index if not exists galaxy_chat_metrics_created_idx on public.galaxy_chat_metrics(created_at desc);
+create index if not exists galaxy_chat_metrics_message_idx on public.galaxy_chat_metrics(message_id);
 
 create table if not exists public.galaxy_notifications (
  id uuid primary key default gen_random_uuid(),
