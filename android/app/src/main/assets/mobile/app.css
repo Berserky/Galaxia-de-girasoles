@@ -155,6 +155,11 @@ textarea{min-height:110px;resize:vertical}
 .chat-fab .ui-icon{width:23px;height:23px}
 .chat-fab-badge{position:absolute;right:-3px;top:-4px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#ef5350;color:#fff;border:2px solid var(--bg);display:grid;place-items:center;font-size:9px;font-weight:900;line-height:1}
 .chat-fab.has-unread{box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 12%,transparent),0 12px 32px rgba(50,32,90,.34)}
+.chat-shell{min-height:calc(100vh - env(safe-area-inset-top));padding:calc(14px + env(safe-area-inset-top)) 14px calc(26px + env(safe-area-inset-bottom));display:grid;grid-template-rows:auto 1fr;background:var(--bg)}
+.chat-shell-head{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:center;padding:7px 0 14px}
+.chat-shell-head h2,.chat-shell-head p,.chat-shell-head small{margin:0}.chat-shell-head small{color:var(--muted)}
+.chat-back{width:42px;height:42px;border:1px solid var(--border);border-radius:15px;background:var(--surface);color:var(--text);display:grid;place-items:center}
+.chat-bootstrap{align-self:center;display:grid;grid-template-columns:44px minmax(0,1fr);gap:12px;align-items:center}.chat-bootstrap>.ui-icon{color:var(--accent)}.chat-bootstrap h3,.chat-bootstrap p{margin:0}.chat-bootstrap p{margin-top:4px;color:var(--muted)}
 .global-player.visible~.provider-player{}
 body:has(.global-player.visible) .chat-fab{bottom:calc(154px + env(safe-area-inset-bottom))}
 @media(max-width:360px){.chat-fab{right:12px;width:48px;height:48px}}
