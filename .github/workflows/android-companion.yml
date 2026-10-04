@@ -70,9 +70,34 @@ jobs:
         if: always()
         with: { name: NuestraGalaxia-debug, path: android/app/build/outputs/apk/debug/app-debug.apk, retention-days: 7 }
 
-  release:
+  release_scope:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: build
+    runs-on: ubuntu-latest
+    outputs:
+      android_changed: ${{ steps.scope.outputs.android_changed }}
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+      - id: scope
+        name: Detectar cambio Android real
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$BEFORE_SHA" ] || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            echo "android_changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git diff --name-only "$BEFORE_SHA" "$CURRENT_SHA" > /tmp/android-release-paths.txt
+          if grep -Eq '^(android/|musica\.mp3$)' /tmp/android-release-paths.txt; then
+            echo "android_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "android_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.release_scope.outputs.android_changed == 'true'
+    needs: [build, release_scope]
     permissions:
       contents: write
     runs-on: ubuntu-latest
