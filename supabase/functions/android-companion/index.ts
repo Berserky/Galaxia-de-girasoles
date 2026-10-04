@@ -1252,14 +1252,17 @@ async function chatCollection(req:Request,body:any,kind:"pins"|"saved"){
 }
 async function chatSearch(req:Request,body:any={}){
  const d=await device(req),person=String(d.person),q=text(body.query||"",160).toLocaleLowerCase("es"),sender=String(body.sender||"all"),type=String(body.type||"all"),date=String(body.date||"");
- let rows=await chatVisibleRows(person,db.from("galaxy_chat_messages").select("*").order("server_seq",{ascending:false}).limit(800));
- if(q)rows=rows.filter((x:any)=>String(x.body||"").toLocaleLowerCase("es").includes(q));
+ let rows=await chatVisibleRows(person,db.from("galaxy_chat_messages").select("*").order("server_seq",{ascending:false}).limit(500));
  if(sender==="me")rows=rows.filter((x:any)=>String(x.sender_person)===person);
  if(sender==="partner")rows=rows.filter((x:any)=>String(x.sender_person)!==person);
- if(["photo","video","audio","file","link"].includes(type))rows=rows.filter((x:any)=>String(x.message_type)===type||(type==="link"&&Object.keys(x.link_preview||{}).length>0));
  if(/^\d{4}-\d{2}-\d{2}$/.test(date))rows=rows.filter((x:any)=>String(x.created_at||"").slice(0,10)===date);
- rows=rows.slice(0,80);
- return json({messages:await chatHydrate(rows,person)});
+ if(["photo","video","audio","file","link"].includes(type))rows=rows.filter((x:any)=>String(x.message_type)===type||(type==="link"&&Object.keys(x.link_preview||{}).length>0));
+ let hydrated=await chatHydrate(rows.slice(0,240),person);
+ const cardTypes:Record<string,string>={memories:"MEMORY",plans:"PLAN",music:"SONG",places:"PLACE",goals:"GOAL",polls:"POLL",checklists:"CHECKLIST",capsules:"CAPSULE",events:"EVENT",eta:"ETA",daily:"DAILY_QUESTION",status:"STATUS"};
+ if(type==="messages")hydrated=hydrated.filter((x:any)=>x.message_type!=="card");
+ else if(cardTypes[type])hydrated=hydrated.filter((x:any)=>x.card?.available&&String(x.card.type)===cardTypes[type]);
+ if(q)hydrated=hydrated.filter((x:any)=>String(x.body||"").toLocaleLowerCase("es").includes(q)||(x.card?.available&&JSON.stringify(x.card).toLocaleLowerCase("es").includes(q)));
+ return json({messages:hydrated.slice(0,80)});
 }
 async function chatPresence(req:Request,body:any={}){
  const d=await device(req),person=String(d.person),state=String(body.state||"ONLINE"),now=new Date();
