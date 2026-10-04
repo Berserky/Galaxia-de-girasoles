@@ -1763,6 +1763,25 @@ async function mobileState(req:Request){
     }
     return copy;
   }));
+  const albumMemoryItems=safeItems.filter((row:any)=>row.kind==="memory"&&row.data?.source?.type==="chat-album"&&Array.isArray(row.data?.source?.attachmentIds));
+  const albumAttachmentIds=[...new Set(albumMemoryItems.flatMap((row:any)=>row.data.source.attachmentIds.map((id:any)=>String(id)).filter(uuidish)))].slice(0,120);
+  if(albumAttachmentIds.length){
+    const attachments=await ok(db.from("galaxy_chat_attachments").select("id,bucket,path,kind,mime,name").in("id",albumAttachmentIds).limit(120));
+    const mediaMap=new Map<string,any>();
+    for(const attachment of attachments||[]){
+      if(!["photo","video"].includes(String(attachment.kind)))continue;
+      try{
+        mediaMap.set(String(attachment.id),{
+          id:String(attachment.id),kind:String(attachment.kind),mime:text(attachment.mime||"",100),
+          name:text(attachment.name||"",180),url:await signed(String(attachment.bucket||"galaxy-chat-media"),String(attachment.path),900)
+        });
+      }catch{}
+    }
+    for(const row of albumMemoryItems){
+      const media=(row.data.source.attachmentIds||[]).map((id:any)=>mediaMap.get(String(id))).filter(Boolean).slice(0,12);
+      if(media.length)row.data.sourceMedia=media;
+    }
+  }
   const safePresence=(presence||[]).map((row:any)=>{
     if(String(row.person)===person)return row;
     return {
@@ -2094,6 +2113,10 @@ function cleanItem(kind:string,data:any){
       if(!Number.isFinite(ms))throw new Error("Momento de desbloqueo no válido");
       out.unlockAt=new Date(ms).toISOString();out.unlockDate=unlockDate;out.unlockTime=unlockTime;
     }
+  }
+  if(kind==="event"&&out.time){
+    out.time=String(out.time);
+    if(!/^\d{2}:\d{2}$/.test(out.time))throw new Error("Hora del evento no válida");
   }
   if(kind==="capsule"){
     if(out.photoPath)out.photoPath=text(out.photoPath,400);
