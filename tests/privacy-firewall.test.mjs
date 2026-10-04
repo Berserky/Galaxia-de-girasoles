@@ -31,6 +31,18 @@ test('NG-QA-001 direct galaxy_items access cannot reveal locked capsule payload'
   assert.match(itemsPolicy,/galaxy_capsule/i);
 });
 
+test('NG-QA-001 locked capsules cannot be unlocked by partner UPDATE/DELETE',()=>{
+  const writePolicies=block(firewall,'drop policy if exists items_update','create or replace function public.galaxy_capsule_object_access');
+  assert.match(writePolicies,/author=public\.galaxy_person/);
+  const save=block(edge,'async function itemSave(','async function itemDelete(');
+  const del=block(edge,'async function itemDelete(','async function settingsSave(');
+  assert.match(save,/row\.kind.*capsule/);
+  assert.match(save,/row\.author.*person/);
+  assert.match(save,/No puedes cambiar el tipo de contenido/);
+  assert.match(del,/row\.kind.*capsule/);
+  assert.match(del,/row\.author.*person/);
+});
+
 test('NG-QA-001 Storage SELECT checks capsule lock before exposing linked media',()=>{
   const photoPolicy=block(firewall,'create policy galaxy_photos_read','drop policy if exists galaxy_voice_read');
   const voicePolicy=block(firewall,'create policy galaxy_voice_read','drop policy if exists locations_read');
