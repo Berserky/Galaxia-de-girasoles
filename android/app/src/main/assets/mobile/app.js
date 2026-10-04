@@ -92,8 +92,10 @@ window.GalaxyNative={
    const id=(Date.now().toString(36)+Math.random().toString(36).slice(2));
    return new Promise((resolve,reject)=>{
      this.pending.set(id,{resolve,reject});
-     try{GalaxyAndroid[method](id,...args);}
-     catch(e){this.pending.delete(id);reject(e);}
+     try{
+       if(!window.GalaxyAndroid?.postMessage)throw new Error('Puente Android no disponible.');
+       GalaxyAndroid.postMessage(JSON.stringify({id,method,args}));
+     }catch(e){this.pending.delete(id);reject(e);}
    });
  },
  receive(id,json,error){
@@ -112,14 +114,12 @@ window.GalaxyNative={
  back(){
    if(modal.open){closeModal();return;}
    if(view!=='home'){go('home');return;}
-   try{GalaxyAndroid.closeApp();}catch{}
+   this.call('closeApp').catch(()=>{});
  }
 };
 
-function nativeState(){
- try{return JSON.parse(GalaxyAndroid.nativeState()||'{}');}catch{return {paired:false};}
-}
-native=nativeState();
+function nativeState(){return native&&typeof native==='object'?native:{paired:false};}
+native={paired:false};
 
 const api=(action,payload={})=>GalaxyNative.call('api',JSON.stringify({action,...payload}));
 const toast=message=>{toastEl.textContent=message;toastEl.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toastEl.classList.remove('show'),3500);};
