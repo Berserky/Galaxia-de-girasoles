@@ -12,7 +12,7 @@ const notifications=read('android/app/src/main/java/com/nuestragalaxia/companion
 const main=read('android/app/src/main/java/com/nuestragalaxia/companion/MainActivity.java');
 const bridge=read('android/app/src/main/java/com/nuestragalaxia/companion/GalaxyBridge.java');
 const workflow=read('.github/workflows/android-companion.yml');
-const migration=read('supabase/migrations/20261003235000_galaxy_chat_notifications_31.sql');
+const migration=read('supabase/migrations/20261004002624_galaxy_chat_notifications_31.sql');
 
 test('Galaxy Chat has private persistence, read state and service-role-only access',()=>{
  for(const marker of ['galaxy_chat_messages','galaxy_chat_read_state','galaxy_notifications','enable row level security','revoke all'])assert.ok(migration.includes(marker),marker);
