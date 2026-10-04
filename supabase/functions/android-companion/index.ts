@@ -201,12 +201,11 @@ async function contextCreateSuggestions(eventRow:any,event:any,settings:any[]){
  const recent=(await ok(db.from("galaxy_place_events").select("place_id,happened_at").gte("happened_at",new Date(ended-4*3600000).toISOString()).lte("happened_at",new Date(ended+15*60000).toISOString()).order("happened_at",{ascending:false}).limit(10)))||[];
  if(recent.length)place=(await ok(db.from("galaxy_places").select("id,name,kind").eq("id",recent[0].place_id).limit(1)))?.[0]||null;
  const enabled=(settings||[]).filter((x:any)=>["0","1"].includes(String(x.person)));
- const needsMemory=enabled.some((x:any)=>x.memory_suggestions!==false);
- const assets=needsMemory?await contextWindowAssets(startedIso,endedIso,"0"):null;
  const trip=(await ok(db.from("galaxy_trip_history").select("id,person,started_at,ended_at,distance_m,duration_s,dominant_motion").lte("started_at",endedIso).gte("ended_at",startedIso).order("started_at",{ascending:false}).limit(1)))?.[0]||null;
  for(const pref of enabled){
   const person=String(pref.person);
   if(pref.memory_suggestions!==false){
+   const assets=await contextWindowAssets(startedIso,endedIso,person,person);
    const suggestion=buildEncounterSuggestion({
     encounter:{id:eventRow.id,started_at:startedIso,ended_at:endedIso},place,trip,
     photos:assets?.photos||[],songs:assets?.songs||[]
@@ -1799,17 +1798,14 @@ async function bondState(person:string){
       const ref=copy.data?.referenceId;
       if(ref){
         const target=(await ok(db.from("galaxy_items").select("kind,data,author").eq("id",String(ref)).limit(1)))?.[0];
-        if(target&&String(target.author)!==person){
-          if(target.kind==="capsule"){
-            const locs=await ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude,updated_at").eq("person",person).limit(1));
-            reveal=!chatCapsuleAccess(target.data||{},person,locs||[]).locked;
-          }
-          if(target.kind==="note"&&target.data?.surprise){
-            if(target.data.unlockType==="date"&&target.data.unlockDate>today())reveal=false;
-            if(target.data.unlockType==="place"){
-              const loc=(await ok(db.from("galaxy_locations").select("*").eq("person",person).limit(1)))?.[0];
-              reveal=!!loc?.sharing&&meters(Number(loc.latitude),Number(loc.longitude),Number(target.data.latitude),Number(target.data.longitude))<=Number(target.data.radius||150);
-            }
+        if(target?.kind==="capsule"){
+          const locs=await ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude,updated_at").eq("person",person).limit(1));
+          reveal=!chatCapsuleAccess(target.data||{},person,locs||[]).locked;
+        }else if(target&&String(target.author)!==person&&target.kind==="note"&&target.data?.surprise){
+          if(target.data.unlockType==="date"&&target.data.unlockDate>today())reveal=false;
+          if(target.data.unlockType==="place"){
+            const loc=(await ok(db.from("galaxy_locations").select("*").eq("person",person).limit(1)))?.[0];
+            reveal=!!loc?.sharing&&meters(Number(loc.latitude),Number(loc.longitude),Number(target.data.latitude),Number(target.data.longitude))<=Number(target.data.radius||150);
           }
         }
       }
