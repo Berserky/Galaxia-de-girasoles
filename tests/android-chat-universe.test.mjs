@@ -38,9 +38,8 @@ test('native cards preserve references to the original Galaxy domains',()=>{
 });
 
 test('locked capsules never expose protected content through Chat hydration',()=>{
- const block=edge.slice(edge.indexOf('function chatItemCard('),edge.indexOf('function chatNormalizeEntityRef('));
- const lock=block.indexOf('if(locked)return {...base,title,locked:true,unlockAt}');
- const body=block.indexOf('if(data.body)safe.body');
+ const lock=edge.indexOf('if(locked)return {...base,title,locked:true,unlockAt}');
+ const body=edge.indexOf('if(data.body)safe.body',lock);
  assert.ok(lock>=0&&body>lock,'capsule lock must be evaluated before body/media metadata is exposed');
  assert.ok(app.includes("card.type==='CAPSULE'&&card.locked"));
 });
