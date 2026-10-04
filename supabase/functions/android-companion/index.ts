@@ -493,6 +493,8 @@ async function location(req:Request,body:any){
   }
   const p=point(body),existing=(await ok(db.from("galaxy_locations").select("*").eq("person",d.person).limit(1)))?.[0]||{};
   await ok(db.from("galaxy_locations").upsert({person:d.person,sharing:true,latitude:p.lat,longitude:p.lon,accuracy:p.accuracy,speed:p.speed,heading:p.heading,motion:p.motion,status:existing.status||null,trip_active:!!existing.trip_active,trip_started_at:existing.trip_started_at||null,transport_preference:existing.transport_preference||null,updated_at:now},{onConflict:"person"}));
+  const newlyUnlocked=Number(await ok(db.rpc("galaxy_capsule_mark_place_unlocks",{viewer:String(d.person),at_time:now})))||0;
+  if(newlyUnlocked>0)await intelligenceBestEffort("capsule-place-unlock",()=>reconcileIntelligenceCapsules());
   if(body.history===true)await history(req,body);
   if(existing.trip_active&&body.trip_point===true)await ok(db.from("galaxy_trip_points").insert({person:d.person,latitude:p.lat,longitude:p.lon}));
   if(body.trip_point===true)await contextTick(d);
@@ -741,10 +743,8 @@ function chatCapsuleUnlockAt(data:any){
 function chatCapsuleAccess(data:any,person:string,locations:any[]=[],now=Date.now()){
  const unlockType=String(data?.unlockType||data?.unlock_type||"date")==="place"?"place":"date";
  if(unlockType==="place"){
-  const lat=Number(data?.latitude),lon=Number(data?.longitude),radius=Math.max(50,Math.min(1000,Number(data?.radius)||150));
-  const own=(locations||[]).find((x:any)=>String(x.person)===String(person)&&x.sharing===true&&freshContextLocation(x,now));
-  const unlocked=!!own&&[lat,lon].every(Number.isFinite)&&meters(Number(own.latitude),Number(own.longitude),lat,lon)<=radius;
-  return {locked:!unlocked,unlockType,unlockAt:null};
+  const unlockedFor=Array.isArray(data?.unlockedFor)?data.unlockedFor.map(String):[];
+  return {locked:!unlockedFor.includes(String(person)),unlockType,unlockAt:null};
  }
  const unlockAt=chatCapsuleUnlockAt(data);
  return {locked:!!unlockAt&&Date.parse(unlockAt)>now,unlockType,unlockAt};
@@ -2232,6 +2232,8 @@ function cleanItem(kind:string,data:any){
   if("category" in out)out.category=text(out.category,80);
   if("date" in out&&out.date!==""&&!validDate(out.date))throw new Error("Fecha no válida");
   if(kind==="capsule"){
+    delete out.unlockedFor;
+    delete out.unlocked_for;
     out.unlockType=String(out.unlockType||"date")==="place"?"place":"date";
     if(out.unlockType==="place"){
       const lat=Number(out.latitude),lon=Number(out.longitude),placeId=Number(out.placeId),radius=Math.max(50,Math.min(1000,Number(out.radius)||150));
@@ -2283,6 +2285,7 @@ async function itemSave(req:Request,body:any){
     if(!row)return json({error:"El contenido ya no existe"},404);
     if(String(row.kind)!==kind)return json({error:"No puedes cambiar el tipo de contenido."},409);
     if(String(row.kind)==="capsule"&&String(row.author)!==person)return json({error:"Solo quien creó la cápsula puede modificarla."},403);
+    if(String(row.kind)==="capsule"&&Array.isArray(row.data?.unlockedFor))data.unlockedFor=row.data.unlockedFor.map(String).filter((x:string)=>x==="0"||x==="1");
     if(Number(body.version)!==Number(row.version))return json({error:"Este contenido cambió. Actualiza antes de guardar otra vez."},409);
     const updated=await ok(db.from("galaxy_items").update({data}).eq("id",row.id).eq("version",row.version).select("*").single());
     await intelligenceBestEffort("item-update",()=>syncIntelligenceItem(updated));
