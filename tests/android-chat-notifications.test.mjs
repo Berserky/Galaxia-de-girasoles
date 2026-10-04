@@ -29,7 +29,7 @@ test('chat API supports history, idempotent send, read receipts and own-delete',
 
 test('chat is a floating entry point, not a bottom-nav or More tool',()=>{
  assert.ok(app.includes('function renderChatFab()'));
- assert.ok(app.includes("data-action="chat-open"")||read('android/app/src/main/assets/mobile/index.html').includes('data-action="chat-open"'));
+ assert.ok(app.includes('data-action="chat-open"')||read('android/app/src/main/assets/mobile/index.html').includes('data-action="chat-open"'));
  assert.ok(css.includes('.chat-fab'));
  assert.ok(app.includes("if(view==='chat')"));
  const navLine=app.match(/const nav=\[[^\n]+/i)?.[0]||'';
