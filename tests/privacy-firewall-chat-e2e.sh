@@ -15,12 +15,26 @@ values
  ('1','Privacy QA Device 1',:'partner_hash',now())
 on conflict(token_hash) do update set revoked_at=null,last_seen_at=excluded.last_seen_at;
 
-insert into public.galaxy_items(id,kind,data,author) values(
+insert into public.galaxy_items(id,kind,data,author) values
+(
  'b5000000-0000-4000-8000-000000000001',
  'capsule',
  '{"title":"Edge locked capsule","body":"EDGE-CAPSULE-SECRET","unlockType":"date","unlockDate":"2099-12-01","unlockTime":"21:30","photoPath":"0/edge-capsule.jpg"}'::jsonb,
  '0'
-) on conflict(id) do nothing;
+),
+(
+ 'b5000000-0000-4000-8000-000000000002',
+ 'capsule',
+ jsonb_build_object(
+   'title','Today locked capsule',
+   'body','TODAY-LOCKED-SECRET',
+   'date',(now() at time zone 'America/Bogota')::date::text,
+   'unlockType','date',
+   'unlockAt','2099-12-01T02:30:00.000Z'
+ ),
+ '0'
+)
+on conflict(id) do nothing;
 SQL
 
 printf '\xff\xd8\xff\xd9' > /tmp/qa-chat-photo.jpg
@@ -38,6 +52,27 @@ for _ in $(seq 1 60); do
   if [ "$status" != "000" ]; then break; fi
   sleep 1
 done
+
+owner_backup=$(curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $DEVICE_TOKEN" -H 'content-type: application/json' --data '{"action":"backup-export"}')
+partner_backup=$(curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $PARTNER_TOKEN" -H 'content-type: application/json' --data '{"action":"backup-export"}')
+for backup in "$owner_backup" "$partner_backup"; do
+  if grep -q 'EDGE-CAPSULE-SECRET' <<<"$backup"; then
+    echo "NG-QA-001: backup leaked locked capsule body"
+    exit 1
+  fi
+  if grep -q '0/edge-capsule.jpg' <<<"$backup"; then
+    echo "NG-QA-001: backup leaked locked capsule media path"
+    exit 1
+  fi
+done
+
+today=$(TZ=America/Bogota date +%F)
+history_payload=$(jq -nc --arg day "$today" '{action:"today-history",day:$day}')
+history_resp=$(curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $DEVICE_TOKEN" -H 'content-type: application/json' --data "$history_payload")
+if grep -q 'TODAY-LOCKED-SECRET' <<<"$history_resp"; then
+  echo "NG-QA-001: Today History leaked locked capsule body to its author"
+  exit 1
+fi
 
 partner_update=$(jq -nc '{
   action:"item-save",
@@ -128,6 +163,12 @@ do
     exit 1
   fi
 done
+
+post_delete_backup=$(curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $DEVICE_TOKEN" -H 'content-type: application/json' --data '{"action":"backup-export"}')
+if grep -q "$message_id" <<<"$post_delete_backup" || grep -q "$path" <<<"$post_delete_backup"; then
+  echo "NG-QA-014: backup retained deleted message or attachment path"
+  exit 1
+fi
 
 attachment_count=$(psql "$DB_URL" -Atqc "select count(*) from public.galaxy_chat_attachments where message_id='$message_id'::uuid")
 object_count=$(psql "$DB_URL" -Atqc "select count(*) from storage.objects where bucket_id='galaxy-chat-media' and name='$path'")
