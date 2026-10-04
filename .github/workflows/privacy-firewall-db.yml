@@ -7,6 +7,7 @@ on:
       - 'supabase/**'
       - 'tests/privacy-firewall-db.sql'
       - 'tests/privacy-firewall-pre-migration.sql'
+      - 'tests/privacy-firewall-stable-fixtures.sql'
       - 'tests/privacy-firewall-chat-e2e.sh'
       - 'tests/supabase-rls.sql'
       - '.github/workflows/privacy-firewall-db.yml'
@@ -50,6 +51,7 @@ jobs:
           git show origin/main:supabase/migrations/20261004060000_galaxy_chat_premium_340.sql > /tmp/main-chat-premium.sql
           psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f /tmp/main-schema.sql
           psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f /tmp/main-chat-premium.sql
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/privacy-firewall-stable-fixtures.sql
 
       - name: Seed pre-migration orphan
         run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/privacy-firewall-pre-migration.sql
