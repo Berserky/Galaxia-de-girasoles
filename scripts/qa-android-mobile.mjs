@@ -62,6 +62,11 @@ assert.ok(existsSync(resolve(root,'android/app/src/main/assets/mobile/lucide.js'
 assert.ok(existsSync(resolve(root,'android/app/src/main/assets/mobile/LICENSE-lucide')),'Falta licencia de Lucide');
 assert.ok(manifest.includes('android.permission.CAMERA'),'Android debe declarar permiso de cámara');
 assert.ok(manifest.includes('androidx.core.content.FileProvider'),'Android debe usar FileProvider para capturas');
+assert.ok(main.includes('WebViewCompat.addWebMessageListener')&&main.includes('https://appassets.androidplatform.net'),'El puente nativo debe limitarse al origen local confiable');
+assert.equal(main.includes('addJavascriptInterface'),false,'No se debe exponer addJavascriptInterface a iframes externos');
+assert.ok(main.includes('settings.setAllowFileAccess(false)'),'WebView no debe permitir acceso directo al sistema de archivos');
+assert.equal(index.includes("default-src 'self' file:"),false,'La CSP móvil no debe permitir el esquema file');
+assert.ok(app.includes('GalaxyAndroid.postMessage(JSON.stringify({id,method,args}))'),'La UI debe usar el puente nativo basado en mensajes');
 assert.ok(filePaths.includes('name="camera-media"')&&filePaths.includes('path="camera-media/"'),'FileProvider debe exponer la caché camera-media usada por foto y video');
 assert.ok(main.includes('FileProvider.getUriForFile(this,getPackageName()+".files",file)'),'Foto/video deben generar content URI mediante FileProvider');
 assert.ok(main.includes('ClipData.newUri(getContentResolver(),"galaxy-camera",uri)')&&main.includes('ClipData.newUri(getContentResolver(),"galaxy-video",uri)'),'Foto/video deben conceder acceso al URI a la app de cámara');
