@@ -10,11 +10,12 @@ test('renewed Android layout keeps every interactive control used by the activit
  for(const id of new Set(referenced))assert.ok(layout.includes('@+id/'+id),id+' must stay in the layout');
 });
 
-test('stable update metadata matches the Android package version',()=>{
+test('stable update metadata is derived from the Android package version',()=>{
  const gradle=read('android/app/build.gradle.kts'),workflow=read('.github/workflows/android-companion.yml');
  const code=Number(gradle.match(/versionCode = (\d+)/)[1]);
  const name=gradle.match(/versionName = "([^"]+)"/)[1];
- assert.equal(Number(workflow.match(/"versionCode":(\d+)/)[1]),code);
- assert.equal(workflow.match(/"versionName":"([^"]+)"/)[1],name);
- assert.ok(code>2,'existing signed installs must detect this update');
+ assert.ok(workflow.includes("VERSION_CODE=$(printf '%s'")&&workflow.includes('versionCode = ([0-9]+)'));
+ assert.ok(workflow.includes('VERSION_NAME=$(printf')&&workflow.includes('versionName = "([^"]+)"'));
+ assert.ok(workflow.includes('"versionCode":%s')&&workflow.includes('"versionName":"%s'));
+ assert.ok(code>2&&name.length>0,'existing signed installs must detect this update');
 });
