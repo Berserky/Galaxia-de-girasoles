@@ -1271,6 +1271,30 @@ async function loadChat({older=false,quiet=false}={}){
  finally{chatLoading=false;}
 }
 
+function notificationIcon(type){
+ return type==='chat_message'?'message-circle':type==='status_changed'?'message-square':type==='mood_changed'?'heart-pulse':type==='daily_answer'?'message-square':type==='goal_update'?'target':type==='nearby'?'map-pin':type==='arrived_safe'?'house':type==='memory_shared'?'images':type==='plan_update'?'calendar-heart':type==='gesture'?'hand-heart':'bell';
+}
+async function openNotificationCenter(){
+ const result=await api('notifications-list',{limit:80});notificationState=result;
+ const rows=result.notifications||[];
+ showModal('Notificaciones','<div class="notification-center-head"><p>'+Number(result.unread||0)+' sin leer</p>'+(result.unread?'<button class="btn small ghost" data-action="notifications-read-all">Marcar todas</button>':'')+'</div><div class="notification-center-list">'+(rows.length?rows.map(n=>'<button class="notification-row '+(!n.read_at?'unread':'')+'" data-action="notification-open" data-id="'+attr(n.id)+'" data-target="'+attr(n.action||'home')+'" data-entity-id="'+attr(n.entity_id||'')+'"><span class="notification-row-icon">'+ico(notificationIcon(n.event_type))+'</span><span><b>'+esc(n.title)+'</b><small>'+esc(n.body||'')+'</small><em>'+esc(fmtDateTime(n.created_at))+'</em></span></button>').join(''):'<div class="empty">Todavía no hay notificaciones.</div>')+'</div>','notifications');
+}
+async function routeGalaxyAction(action,entityId=''){
+ const target=String(action||'home');
+ if(target==='chat'){chatState=null;go('chat');await loadChat({quiet:true});return;}
+ if(target==='map'){go('map');await refreshMap({quiet:true,detail:true});return;}
+ if(target==='goals'){go('goals');await loadGoals(true);if(entityId)setTimeout(()=>openGoalDetail(entityId),80);return;}
+ if(target==='moments'){go('moments');return;}
+ if(target==='memories'){go('memories');return;}
+ if(target==='ai'){go('ai');return;}
+ go('home');
+}
+async function consumeDeepLink(){
+ if(!pendingDeepLink||!cloud)return;
+ const data=pendingDeepLink;pendingDeepLink=null;
+ await routeGalaxyAction(data.action,data.entityId).catch(()=>{});
+}
+
 function intelligenceHubView(){
  return '<section class="ai-hub"><div class="ai-hub-hero card"><span class="ai-hub-orbit">'+ico('sparkles')+'</span><div><p class="eyebrow">GALAXY INTELLIGENCE</p><h2>Nuestra IA</h2><p>Busca en su historia, conecta momentos y organiza recuerdos usando únicamente el contenido privado de Nuestra Galaxia.</p></div></div>'+
  '<button class="card ai-hub-primary" type="button" data-action="our-ai"><span>'+ico('message-circle')+'</span><div><p class="eyebrow">PREGÚNTALE A SU HISTORIA</p><h3>Buscar y preguntar</h3><p>Búsqueda híbrida con coincidencias exactas, texto completo y contexto semántico.</p></div>'+ico('chevron-right')+'</button>'+
