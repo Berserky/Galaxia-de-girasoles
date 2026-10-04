@@ -50,7 +50,7 @@ test('QA hardening migration keeps least privilege and removes known planner war
 
 
 test('chat_sync push hotfix is compatible with database constraints',()=>{
- const sql=read('supabase/migrations/20261004050000_allow_chat_sync_push.sql');
+ const sql=read('supabase/migrations/20261004045515_allow_chat_sync_push.sql');
  assert.match(sql,/galaxy_push_subscriptions_event_type_check[\s\S]*?'chat_sync'/i);
  assert.match(sql,/galaxy_push_events_event_type_check[\s\S]*?'chat_sync'/i);
  assert.equal(/drop table|truncate table|drop column/i.test(sql),false);
