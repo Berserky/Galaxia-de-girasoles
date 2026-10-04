@@ -1164,16 +1164,26 @@ async function settingsSave(req:Request,body:any){
 }
 
 async function dailySave(req:Request,body:any){
-  const d=await device(req),field=String(body.field||""),value=text(body.value,3000),day=today();
+  const d=await device(req),person=String(d.person),field=String(body.field||""),value=text(body.value,3000),day=today();
+  const previous=(await ok(db.from("galaxy_daily").select("mood,answer").eq("day",day).eq("person",person).limit(1)))?.[0]||{};
   if(field==="mood"){
     if(!["feliz","tranquilo","cansado","sensible","abrazo"].includes(value))return json({error:"Elige una emoción válida."},400);
-    await ok(db.from("galaxy_daily").upsert({day,person:String(d.person),mood:value},{onConflict:"day,person"}));
+    await ok(db.from("galaxy_daily").upsert({day,person,mood:value},{onConflict:"day,person"}));
   }else if(field==="answer"){
     if(!value)return json({error:"Escribe una respuesta."},400);
-    await ok(db.from("galaxy_daily").upsert({day,person:String(d.person),answer:value},{onConflict:"day,person"}));
+    await ok(db.from("galaxy_daily").upsert({day,person,answer:value},{onConflict:"day,person"}));
   }else return json({error:"Campo no válido."},400);
-  await recordParticipation(String(d.person));
+  await recordParticipation(person);
   if(field==="answer")await intelligenceBestEffort("daily-answer",()=>syncIntelligenceDaily(day));
+  if(String(previous?.[field]||"")!==value){
+    const names=await profileNames(),target=person==="0"?"1":"0",name=names[Number(person)]||"Tu persona";
+    if(field==="mood"){
+      const labels:any={feliz:"feliz",tranquilo:"en calma",cansado:"sin energía",sensible:"sensible",abrazo:"con ganas de un abrazo"};
+      await dispatchPushEvent(d,target,"mood_changed",{title:name+" actualizó cómo se siente",body:"Ahora está "+(labels[value]||value)+".",action:"home",senderName:name,entityType:"mood",entityId:day});
+    }else{
+      await dispatchPushEvent(d,target,"daily_answer",{title:name+" respondió la pregunta del día",body:"Hay una nueva respuesta para compartir.",action:"home",senderName:name,entityType:"daily",entityId:day});
+    }
+  }
   return json({ok:true});
 }
 
