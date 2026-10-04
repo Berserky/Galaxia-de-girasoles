@@ -592,7 +592,7 @@ async function notificationSummary(person:string){
 }
 async function chatSummary(person:string){
  const latest=(await ok(db.from("galaxy_chat_messages").select("id,sender_person,body,message_type,deleted_at,created_at,server_seq").order("server_seq",{ascending:false}).limit(1)))?.[0]||null;
- const {count,error}=await db.from("galaxy_chat_messages").select("id",{count:"exact",head:true}).neq("sender_person",person).is("read_at",null).is("deleted_at",null);
+ const {count,error}=await db.from("galaxy_chat_messages").select("id",{count:"exact",head:true}).neq("sender_person",person).eq("schedule_state","sent").is("read_at",null).is("deleted_at",null);
  if(error)throw error;
  const partner=person==="0"?"1":"0";
  const partnerPresence=(await ok(db.from("galaxy_chat_presence").select("state,last_active_at,expires_at").eq("person",partner).limit(1)))?.[0]||null;
@@ -601,7 +601,14 @@ async function chatSummary(person:string){
 
 async function dispatchPushEvent(sourceDevice:any,targetPerson:string,eventType:string,payload:any,options:any={}){
  if(!PUSH_EVENT_TYPES.includes(eventType))throw new Error("Tipo de evento push no válido.");
- const sanitized=sanitizePushPayload(eventType,payload);
+ let prepared=payload&&typeof payload==="object"?{...payload}:{};
+ if(eventType==="chat_message"){
+  const pref=(await ok(db.from("galaxy_chat_preferences").select("notification_privacy").eq("person",targetPerson).limit(1)))?.[0];
+  const privacy=String(pref?.notification_privacy||"full");
+  if(privacy==="generic")prepared={...prepared,title:"Nuestra Galaxia",body:"Nuevo mensaje",senderName:"Nuestra Galaxia"};
+  else if(privacy==="name")prepared={...prepared,body:"Nuevo mensaje"};
+ }
+ const sanitized=sanitizePushPayload(eventType,prepared);
  const event=await ok(db.from("galaxy_push_events").insert({
   source_device_id:sourceDevice?.id||null,source_person:String(sourceDevice?.person||"0"),target_person:targetPerson,event_type:eventType,payload:sanitized
  }).select("id").single());
@@ -652,6 +659,8 @@ function chatSafeObject(value:any,maxBytes=8192){
  }catch{return {};}
 }
 function chatStatus(row:any){
+ if(row?.schedule_state==="pending")return "SCHEDULED";
+ if(row?.schedule_state==="cancelled")return "CANCELLED";
  if(row?.read_at)return "READ";
  if(row?.delivered_at)return "DELIVERED";
  if(row?.sent_at)return "SENT";
@@ -734,14 +743,21 @@ async function chatHydrate(rows:any[],person:string){
   reactions:reactionMap.get(String(row.id))||[],
   pin:pinMap.get(String(row.id))||null,
   favorite:favSet.has(String(row.id)),
-  attachments:attachmentMap.get(String(row.id))||[]
+  attachments:(row.view_once&&row.opened_at&&String(row.sender_person)!==person)?[]:(attachmentMap.get(String(row.id))||[])
  }));
 }
 async function chatVisibleRows(person:string,query:any){
  const hidden=await ok(db.from("galaxy_chat_hidden").select("message_id").eq("person",person).limit(1000));
  const blocked=new Set((hidden||[]).map((x:any)=>String(x.message_id)));
  const rows=await ok(query);
- return (rows||[]).filter((x:any)=>!blocked.has(String(x.id)));
+ const now=Date.now();
+ return (rows||[]).filter((x:any)=>{
+  if(blocked.has(String(x.id)))return false;
+  if(String(x.schedule_state||"sent")==="cancelled")return false;
+  if(String(x.schedule_state||"sent")==="pending"&&String(x.sender_person)!==person)return false;
+  if(x.expires_at&&Date.parse(String(x.expires_at))<=now)return false;
+  return true;
+ });
 }
 
 async function chatState(req:Request,body:any={}){
@@ -758,7 +774,7 @@ async function chatState(req:Request,body:any={}){
  }
  let rows=await chatVisibleRows(person,query);
  if(!aroundId)rows=rows.slice(0,limit).reverse();
- const incoming=rows.filter((x:any)=>String(x.sender_person)!==person&&!x.delivered_at&&!x.deleted_at).map((x:any)=>String(x.id));
+ const incoming=rows.filter((x:any)=>String(x.sender_person)!==person&&String(x.schedule_state||"sent")==="sent"&&!x.delivered_at&&!x.deleted_at).map((x:any)=>String(x.id));
  const deliveredAt=new Date().toISOString();
  if(incoming.length){
   await ok(db.from("galaxy_chat_messages").update({delivered_at:deliveredAt}).in("id",incoming).is("delivered_at",null));
@@ -791,35 +807,47 @@ async function chatSend(req:Request,body:any){
  if(!row){
   const now=new Date().toISOString(),clientRaw=String(body.clientCreatedAt||"");
   const clientCreatedAt=Number.isFinite(Date.parse(clientRaw))&&Math.abs(Date.now()-Date.parse(clientRaw))<7*86400000?new Date(clientRaw).toISOString():now;
+  const scheduleRaw=String(body.scheduledAt||"");
+  const scheduleMs=Date.parse(scheduleRaw);
+  const scheduled=Number.isFinite(scheduleMs)&&scheduleMs>Date.now()+15000;
+  const scheduledAt=scheduled?new Date(scheduleMs).toISOString():null;
+  const ttlSeconds=Number(body.ttlSeconds||0);
+  const baseMs=scheduled?scheduleMs:Date.now();
+  const expiresAt=Number.isFinite(ttlSeconds)&&ttlSeconds>=3600&&ttlSeconds<=31536000?new Date(baseMs+ttlSeconds*1000).toISOString():null;
+  const effect=["hearts","confetti","stars","kiss","sunflowers","galaxy"].includes(String(body.effect||""))?String(body.effect):null;
   const preview=message?await chatLinkPreview(message):{};
   row=await ok(db.from("galaxy_chat_messages").insert({
    client_id:clientId,sender_person:person,body:message,reply_to:replyTo,message_type:messageType,attachment:attachmentMeta,link_preview:preview,
-   client_created_at:clientCreatedAt,server_received_at:now,sent_at:now
+   client_created_at:clientCreatedAt,server_received_at:now,sent_at:scheduled?null:now,
+   scheduled_at:scheduledAt,schedule_state:scheduled?"pending":"sent",silent:body.silent===true,
+   expires_at:expiresAt,view_once:body.viewOnce===true,effect
   }).select("*").single());
   isNew=true;
-  await ok(db.from("galaxy_chat_metrics").insert({message_id:row.id,event:"sent",send_latency_ms:Math.max(0,Date.now()-Date.parse(clientCreatedAt)),server_latency_ms:Date.now()-started,retry_count:clampInt(body.retryCount,0,100,0)}));
+  await ok(db.from("galaxy_chat_metrics").insert({message_id:row.id,event:scheduled?"scheduled":"sent",send_latency_ms:Math.max(0,Date.now()-Date.parse(clientCreatedAt)),server_latency_ms:Date.now()-started,retry_count:clampInt(body.retryCount,0,100,0)}));
  }
  const attachmentRows:any[]=[];
  for(const input of files){
   const kind=["photo","video","audio","file"].includes(String(input?.kind))?String(input.kind):"file";
   const path=text(input?.path,400),bucket=["galaxy-chat-media","galaxy-voice"].includes(String(input?.bucket))?String(input.bucket):"galaxy-chat-media";
   if(!path.startsWith(person+"/"))continue;
+  const waveform=Array.isArray(input?.waveform)?input.waveform.slice(0,256).map((v:any)=>Math.max(0,Math.min(1,Number(v)||0))):[];
+  const quality=["optimized","hd","original"].includes(String(input?.mediaQuality))?String(input.mediaQuality):"optimized";
   attachmentRows.push({
    message_id:row.id,kind,bucket,path,mime:text(input?.mime||"application/octet-stream",120),name:text(input?.name||"archivo",240),
    size_bytes:Math.max(0,Number(input?.size||input?.sizeBytes||0)),duration_ms:Number.isFinite(Number(input?.durationMs))?Math.max(0,Number(input.durationMs)):null,
    width:Number.isFinite(Number(input?.width))?Math.max(1,Number(input.width)):null,height:Number.isFinite(Number(input?.height))?Math.max(1,Number(input.height)):null,
-   thumbnail_path:text(input?.thumbnailPath||"",400)||null,caption:text(input?.caption||"",1000)
+   thumbnail_path:text(input?.thumbnailPath||"",400)||null,caption:text(input?.caption||"",1000),waveform,media_quality:quality
   });
  }
  if(attachmentRows.length)await ok(db.from("galaxy_chat_attachments").upsert(attachmentRows,{onConflict:"message_id,path",ignoreDuplicates:true}));
- await ok(db.from("galaxy_chat_read_state").upsert({person,last_read_at:row.created_at,last_read_message_id:row.id,updated_at:new Date().toISOString()},{onConflict:"person"}));
- let push:any={sent:0,configured:false};
- if(isNew){
+ if(!scheduled)await ok(db.from("galaxy_chat_read_state").upsert({person,last_read_at:row.created_at,last_read_message_id:row.id,updated_at:new Date().toISOString()},{onConflict:"person"}));
+ let push:any={sent:0,configured:false,scheduled};
+ if(isNew&&!scheduled){
   const names=await profileNames(),pushBody=message||({photo:"Foto",video:"Video",audio:"Nota de voz",file:"Archivo",location:"Ubicación",song:"Canción",link:"Enlace"}[messageType]||"Mensaje");
-  push=await dispatchPushEvent(d,target,"chat_message",{title:names[Number(person)]||"Tu persona",body:pushBody,action:"chat",senderName:names[Number(person)]||"Tu persona",entityType:"chat_message",entityId:String(row.id)});
+  push=await dispatchPushEvent(d,target,"chat_message",{title:names[Number(person)]||"Tu persona",body:pushBody,action:"chat",senderName:names[Number(person)]||"Tu persona",entityType:"chat_message",entityId:String(row.id),silent:row.silent===true});
  }
  const hydrated=(await chatHydrate([row],person))[0];
- return json({message:hydrated,push,idempotent:!isNew},isNew?201:200);
+ return json({message:hydrated,push,idempotent:!isNew,scheduled},isNew?201:200);
 }
 async function chatRead(req:Request,body:any={}){
  const d=await device(req),person=String(d.person),target=person==="0"?"1":"0";
@@ -828,8 +856,8 @@ async function chatRead(req:Request,body:any={}){
  if(!row)row=(await ok(db.from("galaxy_chat_messages").select("id,created_at,server_seq").order("server_seq",{ascending:false}).limit(1)))?.[0];
  if(!row)return json({ok:true});
  const now=new Date().toISOString(),seq=Number(row.server_seq);
- await ok(db.from("galaxy_chat_messages").update({delivered_at:now}).neq("sender_person",person).lte("server_seq",seq).is("delivered_at",null));
- await ok(db.from("galaxy_chat_messages").update({read_at:now}).neq("sender_person",person).lte("server_seq",seq).is("read_at",null));
+ await ok(db.from("galaxy_chat_messages").update({delivered_at:now}).neq("sender_person",person).eq("schedule_state","sent").lte("server_seq",seq).is("delivered_at",null));
+ await ok(db.from("galaxy_chat_messages").update({read_at:now}).neq("sender_person",person).eq("schedule_state","sent").lte("server_seq",seq).is("read_at",null));
  await ok(db.from("galaxy_chat_read_state").upsert({person,last_read_at:now,last_read_message_id:row.id,updated_at:now},{onConflict:"person"}));
  await ok(db.from("galaxy_notifications").update({read_at:now}).eq("target_person",person).eq("event_type","chat_message").is("read_at",null));
  await chatSignal(d,target,String(row.id));
@@ -928,6 +956,115 @@ async function chatPresence(req:Request,body:any={}){
  await chatSignal(d,person==="0"?"1":"0","", "chat_sync");
  return json({ok:true,state,expiresAt:expires,partner:await chatPartnerPresence(person)});
 }
+
+async function chatScheduleUpdate(req:Request,body:any={}){
+ const d=await device(req),person=String(d.person),id=String(body.id||"");
+ const row=(await ok(db.from("galaxy_chat_messages").select("*").eq("id",id).limit(1)))?.[0];
+ if(!row)return json({error:"Mensaje programado no encontrado."},404);
+ if(String(row.sender_person)!==person)return json({error:"Solo puedes cambiar tus mensajes programados."},403);
+ if(String(row.schedule_state)!=="pending")return json({error:"Este mensaje ya no está pendiente."},409);
+ if(body.cancel===true){
+  const updated=await ok(db.from("galaxy_chat_messages").update({schedule_state:"cancelled",deleted_at:new Date().toISOString()}).eq("id",id).eq("schedule_state","pending").select("*").single());
+  return json({ok:true,message:(await chatHydrate([updated],person))[0]});
+ }
+ const when=Date.parse(String(body.scheduledAt||row.scheduled_at||""));
+ if(!Number.isFinite(when)||when<=Date.now()+15000)return json({error:"Elige una fecha futura válida."},400);
+ const updated=await ok(db.from("galaxy_chat_messages").update({scheduled_at:new Date(when).toISOString(),silent:body.silent===undefined?row.silent:body.silent===true}).eq("id",id).eq("schedule_state","pending").select("*").single());
+ return json({ok:true,message:(await chatHydrate([updated],person))[0]});
+}
+async function chatPreferences(req:Request,body:any={}){
+ const d=await device(req),person=String(d.person),operation=String(body.operation||"get");
+ if(operation==="get"){
+  const row=(await ok(db.from("galaxy_chat_preferences").select("*").eq("person",person).limit(1)))?.[0]||null;
+  return json({preferences:row||{person,partner_nickname:null,theme:"galaxy",notification_privacy:"full",show_read:true,show_last_seen:true,show_typing:true,default_ttl_seconds:null}});
+ }
+ const patch:any={person,updated_at:new Date().toISOString()};
+ if(body.partnerNickname!==undefined)patch.partner_nickname=text(body.partnerNickname,40)||null;
+ if(["galaxy","sunflowers","night","cyberpunk","romantic","minimal"].includes(String(body.theme)))patch.theme=String(body.theme);
+ if(["full","name","generic"].includes(String(body.notificationPrivacy)))patch.notification_privacy=String(body.notificationPrivacy);
+ for(const [src,dst] of [["showRead","show_read"],["showLastSeen","show_last_seen"],["showTyping","show_typing"]] as const)if(body[src]!==undefined)patch[dst]=body[src]===true;
+ if(body.defaultTtlSeconds!==undefined){
+  const ttl=Number(body.defaultTtlSeconds||0);patch.default_ttl_seconds=ttl>=3600&&ttl<=31536000?Math.round(ttl):null;
+ }
+ const saved=await ok(db.from("galaxy_chat_preferences").upsert(patch,{onConflict:"person"}).select("*").single());
+ await chatSignal(d,person==="0"?"1":"0","");
+ return json({preferences:saved});
+}
+async function chatOpenOnce(req:Request,body:any={}){
+ const d=await device(req),person=String(d.person),id=String(body.id||"");
+ const row=(await ok(db.from("galaxy_chat_messages").select("*").eq("id",id).limit(1)))?.[0];
+ if(!row||!row.view_once)return json({error:"Contenido de una sola visualización no disponible."},404);
+ if(String(row.sender_person)===person)return json({error:"El contenido de una sola visualización solo lo abre quien lo recibe."},409);
+ if(row.opened_at)return json({error:"Este contenido ya fue abierto."},410);
+ if(row.deleted_at||String(row.schedule_state)!=="sent")return json({error:"Este contenido ya no está disponible."},410);
+ const attachments=await ok(db.from("galaxy_chat_attachments").select("*").eq("message_id",id).limit(10));
+ if(!(attachments||[]).length)return json({error:"El archivo ya no está disponible."},410);
+ const openedAt=new Date(),expiresAt=new Date(openedAt.getTime()+120000);
+ const claimed=await ok(db.from("galaxy_chat_messages").update({opened_at:openedAt.toISOString(),expires_at:expiresAt.toISOString()}).eq("id",id).is("opened_at",null).select("id").maybeSingle());
+ if(!claimed)return json({error:"Este contenido ya fue abierto."},410);
+ const media=await Promise.all((attachments||[]).map(async(a:any)=>({id:a.id,kind:a.kind,mime:a.mime,name:a.name,url:await signed(String(a.bucket),String(a.path),120),durationMs:a.duration_ms,width:a.width,height:a.height})));
+ await chatSignal(d,person==="0"?"1":"0",id);
+ return json({media,expiresAt:expiresAt.toISOString()});
+}
+async function chatTranscript(req:Request,body:any={}){
+ const d=await device(req),person=String(d.person),attachmentId=String(body.attachmentId||"");
+ const existing=(await ok(db.from("galaxy_chat_transcripts").select("*").eq("attachment_id",attachmentId).limit(1)))?.[0];
+ if(existing)return json({transcript:existing});
+ const attachment=(await ok(db.from("galaxy_chat_attachments").select("*,galaxy_chat_messages!inner(id,sender_person,deleted_at)").eq("id",attachmentId).limit(1)))?.[0];
+ if(!attachment||attachment.kind!=="audio"||attachment.galaxy_chat_messages?.deleted_at)return json({error:"Audio no disponible."},404);
+ await intelligenceUsage(person,"transcribe",8);
+ const {data:blob,error}=await db.storage.from(String(attachment.bucket)).download(String(attachment.path));
+ if(error||!blob)return json({error:"No pude abrir el audio."},503);
+ try{
+  const result=await transcribeAudioBlob(blob,String(attachment.name||"audio.m4a"),String(attachment.mime||"audio/mp4"));
+  const saved=await ok(db.from("galaxy_chat_transcripts").insert({attachment_id:attachmentId,requested_by:person,transcript:text(result.text,30000),segments:sanitizeTranscriptSegments(result.segments),provider:result.provider,model:result.model}).select("*").single());
+  return json({transcript:saved});
+ }catch{return json({error:"No se pudo transcribir este audio."},503);}
+}
+async function chatTranslate(req:Request,body:any={}){
+ const d=await device(req),person=String(d.person),id=String(body.id||""),targetLanguage=text(body.targetLanguage||"es",24);
+ const row=(await ok(db.from("galaxy_chat_messages").select("id,body,deleted_at").eq("id",id).limit(1)))?.[0];
+ if(!row||row.deleted_at||!String(row.body||"").trim())return json({error:"Mensaje no disponible para traducir."},404);
+ const cached=(await ok(db.from("galaxy_chat_translations").select("*").eq("message_id",id).eq("person",person).eq("target_language",targetLanguage).limit(1)))?.[0];
+ if(cached)return json({translation:cached});
+ if(!aiProviderConfig().configured)return json({error:"La traducción requiere el proveedor de IA configurado."},503);
+ await intelligenceUsage(person,"ask",30);
+ try{
+  const translated=text(await generateGroundedResponse("Traduce fielmente el texto al idioma solicitado. Devuelve únicamente la traducción, sin explicaciones ni contenido adicional.","IDIOMA: "+targetLanguage+"\nTEXTO:\n"+String(row.body),800),8000);
+  const saved=await ok(db.from("galaxy_chat_translations").insert({message_id:id,person,target_language:targetLanguage,translated_text:translated,provider:"openai-compatible",model:aiProviderConfig().model||"configured"}).select("*").single());
+  return json({translation:saved});
+ }catch{return json({error:"No se pudo traducir el mensaje."},503);}
+}
+async function chatExpireRow(row:any){
+ const attachments=await ok(db.from("galaxy_chat_attachments").select("id,bucket,path").eq("message_id",String(row.id)).limit(20));
+ const byBucket=new Map<string,string[]>();
+ for(const a of attachments||[]){const b=String(a.bucket),v=byBucket.get(b)||[];v.push(String(a.path));byBucket.set(b,v);}
+ for(const [bucket,paths] of byBucket){try{await db.storage.from(bucket).remove(paths);}catch{}}
+ if((attachments||[]).length)await ok(db.from("galaxy_chat_attachments").delete().eq("message_id",String(row.id)));
+ await ok(db.from("galaxy_chat_messages").update({deleted_at:new Date().toISOString(),body:"Mensaje temporal expirado",attachment:{},link_preview:{}}).eq("id",String(row.id)).is("deleted_at",null));
+}
+async function chatProcessDue(req:Request){
+ const token=String(req.headers.get("x-galaxy-cron-token")||"");
+ const runtime=(await ok(db.from("galaxy_chat_runtime").select("cron_token").eq("id",1).limit(1)))?.[0];
+ if(!runtime||token!==String(runtime.cron_token))return json({error:"No autorizado"},401);
+ const now=new Date().toISOString();
+ const expired=await ok(db.from("galaxy_chat_messages").select("*").lte("expires_at",now).is("deleted_at",null).limit(100));
+ for(const row of expired||[])await chatExpireRow(row);
+ const due=await ok(db.from("galaxy_chat_messages").select("*").eq("schedule_state","pending").lte("scheduled_at",now).is("deleted_at",null).order("scheduled_at",{ascending:true}).limit(50));
+ let sent=0;
+ for(const row of due||[]){
+  const claimed=await ok(db.from("galaxy_chat_messages").update({schedule_state:"processing"}).eq("id",String(row.id)).eq("schedule_state","pending").select("*").maybeSingle());
+  if(!claimed)continue;
+  const sentAt=new Date().toISOString();
+  const updated=await ok(db.from("galaxy_chat_messages").update({schedule_state:"sent",sent_at:sentAt,server_received_at:sentAt}).eq("id",String(row.id)).select("*").single());
+  const sender=String(updated.sender_person),target=sender==="0"?"1":"0",names=await profileNames();
+  const pushBody=String(updated.body||"").trim()||({photo:"Foto",video:"Video",audio:"Nota de voz",file:"Archivo"}[String(updated.message_type)]||"Mensaje");
+  await dispatchPushEvent({person:sender,id:null},target,"chat_message",{title:names[Number(sender)]||"Tu persona",body:pushBody,action:"chat",senderName:names[Number(sender)]||"Tu persona",entityType:"chat_message",entityId:String(updated.id),silent:updated.silent===true});
+  sent++;
+ }
+ return json({ok:true,sent,expired:(expired||[]).length});
+}
+
 async function chatMetric(req:Request,body:any={}){
  await device(req);
  const allowed=new Set(["queued","sending","sent","delivered","read","failed","retry","realtime_connected","realtime_fallback"]);
@@ -2721,6 +2858,7 @@ Deno.serve(async req=>{
     let body:any;
     try{body=JSON.parse(rawBody||"{}");}catch{return json({error:"JSON no válido"},400);}
     const action=String(body.action||"");
+    if(action==="chat-process-due")return await chatProcessDue(req);
     if(action==="pair")return await pair(body);
     if(action==="pair-code-create")return await pairCodeCreate(req,body);
     if(action==="profile-repair")return await profileRepair(req,body);
@@ -2747,6 +2885,11 @@ Deno.serve(async req=>{
     if(action==="chat-search")return await chatSearch(req,body);
     if(action==="chat-presence")return await chatPresence(req,body);
     if(action==="chat-metric")return await chatMetric(req,body);
+    if(action==="chat-schedule-update")return await chatScheduleUpdate(req,body);
+    if(action==="chat-preferences")return await chatPreferences(req,body);
+    if(action==="chat-open-once")return await chatOpenOnce(req,body);
+    if(action==="chat-transcript")return await chatTranscript(req,body);
+    if(action==="chat-translate")return await chatTranslate(req,body);
     if(action==="notifications-list")return await notificationsList(req,body);
     if(action==="notifications-read")return await notificationsRead(req,body);
     if(action==="item-save")return await itemSave(req,body);
