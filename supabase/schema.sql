@@ -1353,12 +1353,21 @@ alter table public.galaxy_chat_poll_votes enable row level security;
 alter table public.galaxy_chat_checklists enable row level security;
 alter table public.galaxy_chat_checklist_items enable row level security;
 
-revoke all on table public.galaxy_chat_entity_refs from anon,authenticated;
-revoke all on table public.galaxy_chat_polls from anon,authenticated;
-revoke all on table public.galaxy_chat_poll_options from anon,authenticated;
-revoke all on table public.galaxy_chat_poll_votes from anon,authenticated;
-revoke all on table public.galaxy_chat_checklists from anon,authenticated;
-revoke all on table public.galaxy_chat_checklist_items from anon,authenticated;
+revoke all on table public.galaxy_chat_entity_refs from public,anon,authenticated;
+revoke all on table public.galaxy_chat_polls from public,anon,authenticated;
+revoke all on table public.galaxy_chat_poll_options from public,anon,authenticated;
+revoke all on table public.galaxy_chat_poll_votes from public,anon,authenticated;
+revoke all on table public.galaxy_chat_checklists from public,anon,authenticated;
+revoke all on table public.galaxy_chat_checklist_items from public,anon,authenticated;
+
+grant select,insert,update,delete on table
+ public.galaxy_chat_entity_refs,
+ public.galaxy_chat_polls,
+ public.galaxy_chat_poll_options,
+ public.galaxy_chat_poll_votes,
+ public.galaxy_chat_checklists,
+ public.galaxy_chat_checklist_items
+to service_role;
 
 revoke all on function public.galaxy_chat_poll_vote_guard() from public,anon,authenticated;
 
