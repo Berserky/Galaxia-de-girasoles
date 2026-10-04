@@ -1964,6 +1964,7 @@ document.addEventListener('click',async e=>{
   if(a==='chat-result-jump'){const id=btn.dataset.id;closeModal();await jumpToChatMessage(id);return;}
   if(a==='chat-edit-open'){openChatEdit(btn.dataset.id);return;}
   if(a==='chat-delete-open'){openChatDelete(btn.dataset.id);return;}
+  if(a==='chat-delete'){openChatDelete(btn.dataset.id);return;}
   if(a==='chat-delete-scope'){await api('chat-delete',{id:btn.dataset.id,scope:btn.dataset.scope});closeModal();await loadChat({quiet:true,force:true});return;}
   if(a==='chat-pin-toggle'){await api('chat-pin',{id:btn.dataset.id,pinned:btn.dataset.pinned!=='true'});closeModal();await loadChat({quiet:true,force:true});return;}
   if(a==='chat-favorite-toggle'){await api('chat-favorite',{id:btn.dataset.id,saved:btn.dataset.saved!=='true'});closeModal();await loadChat({quiet:true,force:true});return;}
