@@ -1272,7 +1272,7 @@ async function loadChat({older=false,quiet=false}={}){
 }
 
 function notificationIcon(type){
- return type==='chat_message'?'message-circle':type==='status_changed'?'message-square':type==='mood_changed'?'heart-pulse':type==='daily_answer'?'message-square':type==='goal_update'?'target':type==='nearby'?'map-pin':type==='arrived_safe'?'house':type==='memory_shared'?'images':type==='plan_update'?'calendar-heart':type==='gesture'?'hand-heart':'bell';
+ return type==='chat_message'?'message-circle':type==='status_changed'?'message-circle':type==='mood_changed'?'heart':type==='daily_answer'?'message-circle':type==='goal_update'?'target':type==='nearby'?'map-pin':type==='arrived_safe'?'house':type==='memory_shared'?'images':type==='plan_update'?'calendar':type==='gesture'?'hand-heart':'bell';
 }
 async function openNotificationCenter(){
  const result=await api('notifications-list',{limit:80});notificationState=result;
