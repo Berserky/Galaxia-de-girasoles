@@ -120,6 +120,7 @@ public final class MainActivity extends ComponentActivity {
             }
         };
         IntentFilter chatSyncFilter=new IntentFilter("com.nuestragalaxia.CHAT_SYNC");
+        // App-internal chat wakeups must never be exported to other applications.
         ContextCompat.registerReceiver(this,chatSyncReceiver,chatSyncFilter,ContextCompat.RECEIVER_NOT_EXPORTED);
 
         updater=new UpdateManager(this,(text,progress,busy)->{
