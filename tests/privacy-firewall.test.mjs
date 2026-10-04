@@ -115,6 +115,23 @@ test('NG-QA-002 place capsule is denied from Intelligence while lock is unresolv
   assert.equal(JSON.stringify(doc).includes('SECRETO-LUGAR'),false);
 });
 
+test('NG-QA-002 unlocked place capsule is indexed only for profiles that actually unlocked it',()=>{
+  const one=intelligence.buildIntelligenceDocument('item',{
+    id:'capsule-place-one',kind:'capsule',author:'1',version:2,created:'2026-10-04T12:00:00Z',
+    data:{title:'Lugar secreto',body:'SECRETO-LUGAR',unlockType:'place',unlockedFor:['0'],placeId:7,placeName:'Destino',latitude:4.7,longitude:-74.2,radius:150}
+  },{today:'2026-10-04',now:'2026-10-04T21:00:00.000Z'});
+  assert.equal(one.searchable,true);
+  assert.equal(one.ownerPerson,'0');
+  assert.equal(one.content.includes('SECRETO-LUGAR'),true);
+
+  const both=intelligence.buildIntelligenceDocument('item',{
+    id:'capsule-place-both',kind:'capsule',author:'1',version:3,created:'2026-10-04T12:00:00Z',
+    data:{title:'Lugar secreto',body:'SECRETO-LUGAR',unlockType:'place',unlockedFor:['0','1'],placeId:7,placeName:'Destino',latitude:4.7,longitude:-74.2,radius:150}
+  },{today:'2026-10-04',now:'2026-10-04T21:00:00.000Z'});
+  assert.equal(both.searchable,true);
+  assert.equal(both.ownerPerson,null);
+});
+
 test('NG-QA-003 direct location policies expose own rows or actively shared partner rows only',()=>{
   const current=block(firewall,'create policy locations_read','drop policy if exists trip_points_read');
   const points=block(firewall,'create policy trip_points_read','drop policy if exists location_history_read');
