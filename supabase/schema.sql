@@ -1461,6 +1461,27 @@ end $$;
 revoke all on function public.galaxy_capsule_mark_place_unlocks(text,timestamptz) from public,anon,authenticated;
 grant execute on function public.galaxy_capsule_mark_place_unlocks(text,timestamptz) to service_role;
 
+create or replace function public.galaxy_capsule_protect_unlock_state()
+returns trigger
+language plpgsql security invoker
+set search_path=''
+as $$
+begin
+  if old.kind='capsule' and current_user not in ('postgres','service_role') then
+    new.data:=new.data-'unlockedFor'-'unlocked_for';
+    if jsonb_typeof(old.data->'unlockedFor')='array' then
+      new.data:=jsonb_set(new.data,'{unlockedFor}',old.data->'unlockedFor',true);
+    end if;
+  end if;
+  return new;
+end $$;
+revoke all on function public.galaxy_capsule_protect_unlock_state() from public,anon,authenticated;
+
+drop trigger if exists capsule_unlock_state_guard on public.galaxy_items;
+create trigger capsule_unlock_state_guard
+before update on public.galaxy_items
+for each row execute function public.galaxy_capsule_protect_unlock_state();
+
 drop policy if exists items_read on public.galaxy_items;
 create policy items_read on public.galaxy_items for select to authenticated
 using(public.galaxy_person() is not null and (kind<>'capsule' or public.galaxy_capsule_unlocked(data,public.galaxy_person(),now())));
