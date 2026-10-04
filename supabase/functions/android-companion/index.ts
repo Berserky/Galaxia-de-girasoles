@@ -2703,7 +2703,13 @@ Deno.serve(async req=>{
   if(req.method!=="POST")return json({error:"Método no permitido"},405);
   try{
     if(req.headers.get("x-mobile-action")==="upload")return await upload(req);
-    const body=await req.json(),action=String(body.action||"");
+    const declaredBody=Number(req.headers.get("content-length")||0);
+    if(declaredBody>3*1024*1024)return json({error:"Solicitud demasiado grande"},413);
+    const rawBody=await req.text();
+    if(new TextEncoder().encode(rawBody).length>3*1024*1024)return json({error:"Solicitud demasiado grande"},413);
+    let body:any;
+    try{body=JSON.parse(rawBody||"{}");}catch{return json({error:"JSON no válido"},400);}
+    const action=String(body.action||"");
     if(action==="pair")return await pair(body);
     if(action==="pair-code-create")return await pairCodeCreate(req,body);
     if(action==="profile-repair")return await profileRepair(req,body);
