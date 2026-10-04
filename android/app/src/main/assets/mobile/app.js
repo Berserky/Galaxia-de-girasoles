@@ -48,7 +48,7 @@ let dateContext=null,dateContextLoadedAt=0,dateQuestionNonce=0,dateMode=null,dat
 let goalsState=null,goalsLoadedAt=0,goalsFilter='active';
 let presenceLastSignature='',voiceTimer=null,voiceSeconds=0,intelligenceSearchNonce=0;
 let chatState=null,chatLoading=false,chatReply=null,chatStateSignature='',notificationState=null,pendingDeepLink=null;
-let chatAttachmentsDraft=[],chatNewCount=0,chatPinIndex=0,chatTypingTimer=null,chatPresenceTimer=null,chatOutboxFlushing=false,chatInitialScroll=true,chatVoiceState={recording:false,paused:false,ready:false,durationMs:0};
+let chatAttachmentsDraft=[],chatNewCount=0,chatPinIndex=0,chatTypingTimer=null,chatPresenceTimer=null,chatOutboxFlushing=false,chatInitialScroll=true,chatVoiceState={recording:false,paused:false,ready:false,durationMs:0},chatHoldRecord=null;
 let welcomeStep=0,welcomePreview=false,welcomeGift=true,welcomeEntering=false,tourStep=-1;
 const welcomeMusic=new Audio('../musica.mp3');welcomeMusic.loop=true;welcomeMusic.volume=.32;
 const globalPlayer=document.getElementById('globalPlayer'),providerPlayer=document.getElementById('providerPlayer');
@@ -1371,7 +1371,7 @@ function chatView(){
  '<form id="chatForm" class="chat-composer" autocomplete="off">'+
  (chatReply?'<div class="chat-compose-reply"><span>'+ico('reply')+' Respondiendo a '+esc(chatOwn(chatReply)?'ti':partnerName())+'<small>'+esc(chatReply.body||'Mensaje')+'</small></span><button type="button" data-action="chat-reply-cancel" aria-label="Cancelar respuesta">'+ico('x')+'</button></div>':'')+
  chatDraftAttachmentMarkup()+
- '<div class="chat-compose-row"><button class="chat-plus" type="button" data-action="chat-attach-open" aria-label="Adjuntar">'+ico('plus')+'</button><textarea name="body" maxlength="4000" rows="1" placeholder="Mensaje para '+attr(partnerName())+'" aria-label="Mensaje">'+esc(draft)+'</textarea><button class="chat-send" type="submit" aria-label="Enviar">'+ico('send')+'</button></div></form></section>';
+ '<div class="chat-compose-row"><button class="chat-plus" type="button" data-action="chat-attach-open" aria-label="Adjuntar">'+ico('plus')+'</button><textarea name="body" maxlength="4000" rows="1" placeholder="Mensaje para '+attr(partnerName())+'" aria-label="Mensaje">'+esc(draft)+'</textarea>'+(draft||chatAttachmentsDraft.length?'<button class="chat-send" type="submit" aria-label="Enviar">'+ico('send')+'</button>':'<button class="chat-send chat-mic-hold" type="button" data-action="chat-hold-record" aria-label="Mantén pulsado para grabar">'+ico('mic')+'</button>')+'</div><div class="chat-hold-hint" aria-live="polite" hidden></div></form></section>';
 }
 function chatSignature(state){
  const messages=(state?.messages||[]).map(m=>[m.id,m.body,m.deleted_at,m.edited_at,m.delivered_at,m.read_at,m.reply_to,m.server_seq,JSON.stringify(m.reactions||[]),!!m.pin,!!m.favorite,JSON.stringify(m.attachments||[])]);
@@ -1534,6 +1534,42 @@ function openChatSongPicker(){
  rebuildMusicQueue();
  showModal('Compartir canción','<div class="chat-song-picker">'+(musicQueue.length?musicQueue.map((x,i)=>'<button type="button" data-action="chat-song-pick" data-index="'+i+'">'+ico('music')+'<span><b>'+esc(x.title)+'</b><small>'+esc(x.platform)+'</small></span></button>').join(''):'<div class="empty">Agrega una canción primero en Recuerdos.</div>')+'</div>','chat-song');
 }
+function chatComposerRightMode(textarea){
+ const row=textarea?.closest('.chat-compose-row'),button=row?.querySelector('.chat-send');if(!button)return;
+ const sending=String(textarea?.value||'').trim().length>0||chatAttachmentsDraft.length>0;
+ button.type=sending?'submit':'button';
+ if(sending){delete button.dataset.action;button.classList.remove('chat-mic-hold');button.setAttribute('aria-label','Enviar');button.innerHTML=ico('send');}
+ else{button.dataset.action='chat-hold-record';button.classList.add('chat-mic-hold');button.setAttribute('aria-label','Mantén pulsado para grabar');button.innerHTML=ico('mic');}
+ refreshIcons();
+}
+function chatHoldHint(text='',kind=''){
+ const hint=document.querySelector('.chat-hold-hint');if(!hint)return;
+ hint.hidden=!text;hint.textContent=text;hint.dataset.kind=kind||'';
+}
+async function finishChatHoldRecording({cancel=false}={}){
+ const state=chatHoldRecord;if(!state)return;chatHoldRecord=null;
+ const button=document.querySelector('[data-action="chat-hold-record"],[data-action="chat-hold-stop"]');button?.classList.remove('recording','canceling','locked');
+ chatHoldHint('');
+ try{
+  if(cancel){await GalaxyNative.call('discardVoiceRecording');setChatPresence('ONLINE');return;}
+  const info=await GalaxyNative.call('stopVoiceRecording');
+  setChatPresence('ONLINE');
+  chatVoiceState={recording:false,paused:false,ready:true,durationMs:Number(info?.durationMs||0)};
+  showModal('Nota de voz','<div class="chat-voice-panel"><div class="chat-voice-orb ready">'+ico('audio-lines')+'</div><b data-role="chat-voice-status">Grabación lista · '+Math.max(1,Math.round(chatVoiceState.durationMs/1000))+' s</b><p class="muted">Escúchala antes de enviarla o elimínala para repetir.</p><div class="chat-voice-actions"><button class="btn secondary" type="button" data-action="chat-voice-preview">'+ico('play')+' Escuchar</button><button class="btn ghost" type="button" data-action="chat-voice-discard">Eliminar</button><button class="btn" type="button" data-action="chat-voice-send">'+ico('send')+' Enviar</button></div></div>','chat-voice-ready');
+ }catch(e){setChatPresence('ONLINE');toast(e.message||'No pudimos terminar la grabación.');}
+}
+async function beginChatHoldRecording(e,button){
+ if(chatHoldRecord)return;
+ try{
+  await GalaxyNative.call('startVoiceRecording');
+  setChatPresence('RECORDING_AUDIO');
+  chatHoldRecord={pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,cancel:false,locked:false};
+  try{button.setPointerCapture(e.pointerId);}catch{}
+  button.classList.add('recording');
+  chatHoldHint('Suelta para enviar · desliza a la izquierda para cancelar · arriba para bloquear','recording');
+ }catch(err){chatHoldRecord=null;setChatPresence('ONLINE');toast(err.message||'No pudimos iniciar la grabación.');}
+}
+
 function openChatVoice(){
  chatVoiceState={recording:false,paused:false,ready:false,durationMs:0};
  showModal('Nota de voz','<div class="chat-voice-panel"><div class="chat-voice-orb">'+ico('mic')+'</div><b data-role="chat-voice-status">Lista para grabar</b><div class="chat-voice-actions"><button class="btn" type="button" data-action="chat-voice-start">Grabar</button><button class="btn secondary" type="button" data-action="chat-voice-pause" hidden>Pausar</button><button class="btn secondary" type="button" data-action="chat-voice-resume" hidden>Reanudar</button><button class="btn danger" type="button" data-action="chat-voice-stop" hidden>Detener</button><button class="btn ghost" type="button" data-action="chat-voice-preview" hidden>'+ico('play')+' Escuchar</button><button class="btn ghost" type="button" data-action="chat-voice-discard" hidden>Eliminar</button><button class="btn" type="button" data-action="chat-voice-send" hidden>Enviar</button></div></div>','chat-voice');
@@ -1945,6 +1981,8 @@ document.addEventListener('click',async e=>{
   if(a==='chat-location-open'){go('map');await refreshMap({quiet:true,detail:false});setTimeout(()=>map?.setView([Number(btn.dataset.lat),Number(btn.dataset.lon)],16),120);return;}
   if(a==='chat-audio-toggle'){const card=btn.closest('.chat-audio-card'),audio=card?.querySelector('audio');if(!audio)return;if(audio.paused){document.querySelectorAll('.chat-audio-card audio').forEach(x=>{if(x!==audio)x.pause();});await audio.play();btn.innerHTML=ico('pause');}else{audio.pause();btn.innerHTML=ico('play');}refreshIcons();return;}
   if(a==='chat-audio-speed'){const card=btn.closest('.chat-audio-card'),audio=card?.querySelector('audio');if(!audio)return;const current=Number(btn.dataset.speed||1),next=current===1?1.5:current===1.5?2:1;audio.playbackRate=next;btn.dataset.speed=String(next);btn.textContent=next+'×';return;}
+  if(a==='chat-hold-record'){return;}
+  if(a==='chat-hold-stop'){await finishChatHoldRecording();return;}
   if(a==='chat-voice-open'){openChatVoice();return;}
   if(a==='chat-voice-start'){await GalaxyNative.call('startVoiceRecording');chatVoiceState={recording:true,paused:false,ready:false,durationMs:0};setChatPresence('RECORDING_AUDIO');updateChatVoiceUi();return;}
   if(a==='chat-voice-pause'){await GalaxyNative.call('pauseVoiceRecording');chatVoiceState.paused=true;updateChatVoiceUi();return;}
@@ -2132,6 +2170,7 @@ document.addEventListener('input',e=>{
  if(e.target.matches('#chatForm textarea')){
    writeChatDraft(e.target.value);
    e.target.style.height='auto';e.target.style.height=Math.min(120,e.target.scrollHeight)+'px';
+   chatComposerRightMode(e.target);
    chatTyping();
  }
 });
@@ -2218,12 +2257,29 @@ document.addEventListener('scroll',e=>{
 },true);
 let chatPress=null,chatSwipe=null;
 document.addEventListener('pointerdown',e=>{
+ const hold=e.target.closest?.('[data-action="chat-hold-record"]');
+ if(hold){e.preventDefault();beginChatHoldRecording(e,hold);return;}
  const row=e.target.closest?.('.chat-message[data-id]');if(!row||!row.dataset.id)return;
  chatPress={id:row.dataset.id,x:e.clientX,y:e.clientY,timer:setTimeout(()=>{openChatMessageMenu(row.dataset.id);chatPress=null;},520)};
 });
-document.addEventListener('pointermove',e=>{if(chatPress&&Math.hypot(e.clientX-chatPress.x,e.clientY-chatPress.y)>12){clearTimeout(chatPress.timer);chatPress=null;}});
-document.addEventListener('pointerup',()=>{if(chatPress){clearTimeout(chatPress.timer);chatPress=null;}});
-document.addEventListener('pointercancel',()=>{if(chatPress){clearTimeout(chatPress.timer);chatPress=null;}});
+document.addEventListener('pointermove',e=>{
+ if(chatHoldRecord&&e.pointerId===chatHoldRecord.pointerId&&!chatHoldRecord.locked){
+  const dx=e.clientX-chatHoldRecord.startX,dy=e.clientY-chatHoldRecord.startY;
+  const button=document.querySelector('[data-action="chat-hold-record"]');
+  if(dx<-75){chatHoldRecord.cancel=true;button?.classList.add('canceling');chatHoldHint('Suelta para cancelar','cancel');}
+  else{chatHoldRecord.cancel=false;button?.classList.remove('canceling');if(dy<-70){chatHoldRecord.locked=true;button?.classList.add('locked');if(button){button.dataset.action='chat-hold-stop';button.innerHTML=ico('square');button.setAttribute('aria-label','Detener grabación');try{button.releasePointerCapture(e.pointerId);}catch{}}chatHoldHint('Grabación bloqueada · toca detener','locked');refreshIcons();}else chatHoldHint('Suelta para enviar · ← cancelar · ↑ bloquear','recording');}
+  return;
+ }
+ if(chatPress&&Math.hypot(e.clientX-chatPress.x,e.clientY-chatPress.y)>12){clearTimeout(chatPress.timer);chatPress=null;}
+});
+document.addEventListener('pointerup',e=>{
+ if(chatHoldRecord&&e.pointerId===chatHoldRecord.pointerId&&!chatHoldRecord.locked){finishChatHoldRecording({cancel:chatHoldRecord.cancel});return;}
+ if(chatPress){clearTimeout(chatPress.timer);chatPress=null;}
+});
+document.addEventListener('pointercancel',e=>{
+ if(chatHoldRecord&&e.pointerId===chatHoldRecord.pointerId&&!chatHoldRecord.locked){finishChatHoldRecording({cancel:true});return;}
+ if(chatPress){clearTimeout(chatPress.timer);chatPress=null;}
+});
 document.addEventListener('touchstart',e=>{const row=e.target.closest?.('.chat-message[data-id]'),t=e.touches?.[0];if(row&&row.dataset.id&&t)chatSwipe={id:row.dataset.id,x:t.clientX,y:t.clientY};},{passive:true});
 document.addEventListener('touchend',e=>{if(!chatSwipe)return;const t=e.changedTouches?.[0],swipe=chatSwipe;chatSwipe=null;if(!t)return;const dx=t.clientX-swipe.x,dy=Math.abs(t.clientY-swipe.y);if(dx>58&&dy<45){const m=(chatState?.messages||[]).find(x=>String(x.id)===String(swipe.id));if(m){chatReply=m;render();requestAnimationFrame(()=>document.querySelector('#chatForm textarea')?.focus());}}},{passive:true});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&view==='chat')setChatPresence('OFFLINE');});
