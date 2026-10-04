@@ -37,6 +37,16 @@ test('native cards preserve references to the original Galaxy domains',()=>{
  assert.ok(edge.includes('chatCardUnavailable(ref)'));
 });
 
+test('capsules support date/time or place unlock without exposing coordinates while locked',()=>{
+ assert.ok(app.includes('name="unlockType"'));
+ assert.ok(app.includes('name="unlockPlaceId"'));
+ assert.ok(edge.includes('out.unlockType=String(out.unlockType||"date")==="place"?"place":"date"'));
+ assert.ok(edge.includes('chatCapsuleAccess(data,person,locations||[])'));
+ assert.ok(app.includes('Se desbloquea al llegar al lugar elegido.'));
+ const card=edge.slice(edge.indexOf('function chatItemCard('),edge.indexOf('function chatNormalizeEntityRef(')>edge.indexOf('function chatItemCard(')?edge.indexOf('function chatNormalizeEntityRef('):edge.indexOf('async function chatHydrateEntityRef('));
+ assert.equal(/latitude|longitude/.test(card.slice(card.indexOf('if(access.locked)'),card.indexOf('if(data.body)'))),false);
+});
+
 test('locked capsules never expose protected content through Chat hydration',()=>{
  const lock=edge.indexOf('if(locked)return {...base,title,locked:true,unlockAt}');
  const body=edge.indexOf('if(data.body)safe.body',lock);
