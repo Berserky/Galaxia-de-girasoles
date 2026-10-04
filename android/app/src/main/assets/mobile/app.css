@@ -151,6 +151,13 @@ textarea{min-height:110px;resize:vertical}
 .timeline .card{position:relative}
 .timeline .card:before{content:"";position:absolute;left:-22px;top:20px;width:10px;height:10px;border-radius:50%;background:var(--accent);border:3px solid var(--bg)}
 .floating-add{position:fixed;z-index:600;right:19px;bottom:calc(91px + env(safe-area-inset-bottom));width:54px;height:54px;border-radius:50%;border:0;background:var(--accent);color:#fff;font-size:27px;box-shadow:0 10px 28px rgba(80,59,150,.3)}
+.chat-fab{position:fixed;z-index:1120;right:18px;bottom:calc(92px + env(safe-area-inset-bottom));width:52px;height:52px;border:1px solid color-mix(in srgb,var(--accent) 28%,var(--border));border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;box-shadow:0 12px 32px rgba(50,32,90,.32);backdrop-filter:blur(14px)}
+.chat-fab .ui-icon{width:23px;height:23px}
+.chat-fab-badge{position:absolute;right:-3px;top:-4px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#ef5350;color:#fff;border:2px solid var(--bg);display:grid;place-items:center;font-size:9px;font-weight:900;line-height:1}
+.chat-fab.has-unread{box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 12%,transparent),0 12px 32px rgba(50,32,90,.34)}
+.global-player.visible~.provider-player{}
+body:has(.global-player.visible) .chat-fab{bottom:calc(154px + env(safe-area-inset-bottom))}
+@media(max-width:360px){.chat-fab{right:12px;width:48px;height:48px}}
 .hidden{display:none!important}
 .skeleton{animation:pulse 1.2s infinite alternate;background:var(--surface2);border-radius:18px;min-height:100px}
 @keyframes pulse{to{opacity:.48}}
