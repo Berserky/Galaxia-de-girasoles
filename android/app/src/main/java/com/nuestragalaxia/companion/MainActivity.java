@@ -99,6 +99,7 @@ public final class MainActivity extends ComponentActivity {
         store=new DeviceStore(this);
         cloudMedia=new CloudMediaStore(this);
         PushManager.initialize(this);
+        bootstrapPush();
         web=findViewById(R.id.webView);
         setupWeb();
 
@@ -172,7 +173,7 @@ public final class MainActivity extends ComponentActivity {
             state.put("tracking",paired&&store.tracking());
             state.put("momentNotifications",new BondStore(this).enabled());
             state.put("bondHaptics",new BondStore(this).hapticEnabled());
-            state.put("pushConfigured",PushManager.configured());
+            state.put("pushConfigured",PushManager.configured(this));
             ContextStore contextPrefs=new ContextStore(this);
             state.put("contextNearbyPush",contextPrefs.nearbyEnabled());
             state.put("contextArrivedSafePush",contextPrefs.arrivedSafeEnabled());
@@ -225,6 +226,7 @@ public final class MainActivity extends ComponentActivity {
                 ApiClient.PairResult result=ApiClient.pair(clean,Build.MANUFACTURER+" "+Build.MODEL);
                 store.save(result.token,result.person,result.name);
                 PushManager.initialize(this);
+                bootstrapPush();
                 refreshMomentsInternal();
                 resolve(requestId,nativeState());
                 nativeChanged();
@@ -699,6 +701,20 @@ public final class MainActivity extends ComponentActivity {
         });
     }
 
+    private void bootstrapPush(){
+        if(store==null||!store.pairedFast())return;
+        io.execute(()->{
+            try{
+                String token=store.token();if(token==null)return;
+                JSONObject response=MobileApiClient.post(token,new JSONObject().put("action","push-client-config"));
+                if(response.optBoolean("available",false)){
+                    PushManager.configure(getApplicationContext(),response.optJSONObject("config"));
+                    nativeChanged();
+                }
+            }catch(Exception ignored){}
+        });
+    }
+
     void requestGalaxyNotifications(String requestId){
         runOnUiThread(()->{
             if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
@@ -933,7 +949,7 @@ public final class MainActivity extends ComponentActivity {
     @Override protected void onResume(){
         super.onResume();
         ensureTrackingService();
-        if(store!=null&&store.pairedFast())PushManager.schedule(this);
+        if(store!=null&&store.pairedFast()){PushManager.schedule(this);if(!PushManager.configured(this))bootstrapPush();}
         if(updater!=null)updater.resumePendingInstall();
         if(pageReady){nativeChanged();refreshMomentsInternal();emitPendingDeepLink();}
     }
