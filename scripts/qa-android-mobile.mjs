@@ -61,6 +61,8 @@ assert.equal(emoji.test(widget),false,'El widget no debe usar emojis/dingbats co
 assert.ok(existsSync(resolve(root,'android/app/src/main/assets/mobile/lucide.js')),'Falta Lucide local');
 assert.ok(existsSync(resolve(root,'android/app/src/main/assets/mobile/LICENSE-lucide')),'Falta licencia de Lucide');
 assert.ok(manifest.includes('android.permission.CAMERA'),'Android debe declarar permiso de cámara');
+assert.equal(manifest.includes('ACCESS_BACKGROUND_LOCATION'),false,'La app no debe solicitar ubicación permanente: el tracking usa foreground service visible');
+assert.ok(manifest.includes('FOREGROUND_SERVICE_LOCATION')&&manifest.includes('android:foregroundServiceType="location"'),'El seguimiento en segundo plano debe mantenerse mediante foreground service explícito');
 assert.ok(manifest.includes('androidx.core.content.FileProvider'),'Android debe usar FileProvider para capturas');
 assert.ok(main.includes('WebViewCompat.addWebMessageListener')&&main.includes('https://appassets.androidplatform.net'),'El puente nativo debe limitarse al origen local confiable');
 assert.equal(main.includes('addJavascriptInterface'),false,'No se debe exponer addJavascriptInterface a iframes externos');
