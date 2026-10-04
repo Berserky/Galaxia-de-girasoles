@@ -32,6 +32,18 @@ const sha=async(value:string)=>Array.from(new Uint8Array(await crypto.subtle.dig
 const dist=(a:any,b:any)=>{const R=6371000,rad=(x:number)=>x*Math.PI/180,dLat=rad(Number(b.latitude)-Number(a.latitude)),dLon=rad(Number(b.longitude)-Number(a.longitude)),h=Math.sin(dLat/2)**2+Math.cos(rad(Number(a.latitude)))*Math.cos(rad(Number(b.latitude)))*Math.sin(dLon/2)**2;return R*2*Math.atan2(Math.sqrt(h),Math.sqrt(1-h));};
 const ok=async(q:PromiseLike<any>)=>{const {data,error}=await q;if(error)throw error;return data;};
 const today=()=>new Intl.DateTimeFormat("en-CA",{timeZone:"America/Bogota",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+function monthBounds(month:string){
+  if(!/^\d{4}-\d{2}$/.test(month))throw new Error("Mes no válido");
+  const [yearValue,monthValue]=month.split("-").map(Number);
+  if(!Number.isInteger(yearValue)||monthValue<1||monthValue>12)throw new Error("Mes no válido");
+  // Bogotá is UTC-05:00 year-round. These instants represent local month boundaries.
+  const start=new Date(Date.UTC(yearValue,monthValue-1,1,5,0,0,0));
+  const nextYear=monthValue===12?yearValue+1:yearValue;
+  const nextMonth=monthValue===12?0:monthValue;
+  const end=new Date(Date.UTC(nextYear,nextMonth,1,5,0,0,0));
+  return {start:start.toISOString(),end:end.toISOString()};
+}
+
 const text=(v:unknown,max:number)=>String(v??"").trim().slice(0,max);
 const validDate=(v:unknown)=>{
   if(typeof v!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(v))return false;
