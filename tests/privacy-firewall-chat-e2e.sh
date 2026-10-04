@@ -4,12 +4,23 @@ set -euo pipefail
 DB_URL='postgresql://postgres:postgres@127.0.0.1:54322/postgres'
 FUNCTION_URL='http://127.0.0.1:54321/functions/v1/android-companion'
 DEVICE_TOKEN='qa-device-token-000000000000000000000000000000000000000000000000000001'
+PARTNER_TOKEN='qa-device-token-000000000000000000000000000000000000000000000000000002'
 
 TOKEN_HASH=$(printf '%s' "$DEVICE_TOKEN" | sha256sum | awk '{print $1}')
-psql "$DB_URL" -v ON_ERROR_STOP=1 -v token_hash="$TOKEN_HASH" <<'SQL'
+PARTNER_HASH=$(printf '%s' "$PARTNER_TOKEN" | sha256sum | awk '{print $1}')
+psql "$DB_URL" -v ON_ERROR_STOP=1 -v token_hash="$TOKEN_HASH" -v partner_hash="$PARTNER_HASH" <<'SQL'
 insert into public.galaxy_devices(person,name,token_hash,last_seen_at)
-values('0','Privacy QA Device',:'token_hash',now())
+values
+ ('0','Privacy QA Device 0',:'token_hash',now()),
+ ('1','Privacy QA Device 1',:'partner_hash',now())
 on conflict(token_hash) do update set revoked_at=null,last_seen_at=excluded.last_seen_at;
+
+insert into public.galaxy_items(id,kind,data,author) values(
+ 'b5000000-0000-4000-8000-000000000001',
+ 'capsule',
+ '{"title":"Edge locked capsule","body":"EDGE-CAPSULE-SECRET","unlockType":"date","unlockDate":"2099-12-01","unlockTime":"21:30","photoPath":"0/edge-capsule.jpg"}'::jsonb,
+ '0'
+) on conflict(id) do nothing;
 SQL
 
 printf '\xff\xd8\xff\xd9' > /tmp/qa-chat-photo.jpg
@@ -27,6 +38,22 @@ for _ in $(seq 1 60); do
   if [ "$status" != "000" ]; then break; fi
   sleep 1
 done
+
+partner_update=$(jq -nc '{
+  action:"item-save",
+  id:"b5000000-0000-4000-8000-000000000001",
+  version:1,
+  kind:"capsule",
+  data:{title:"Edge locked capsule",body:"HACKED",unlockType:"date",unlockDate:"2020-01-01",unlockTime:"00:00"}
+}')
+partner_update_status=$(curl -sS -o /tmp/partner-update.json -w '%{http_code}' \
+  -X POST "$FUNCTION_URL" -H "x-device-token: $PARTNER_TOKEN" -H 'content-type: application/json' --data "$partner_update")
+[ "$partner_update_status" = "403" ] || { echo "NG-QA-001: partner mutated locked capsule through Edge ($partner_update_status)"; cat /tmp/partner-update.json; exit 1; }
+
+partner_delete='{"action":"item-delete","id":"b5000000-0000-4000-8000-000000000001","version":1}'
+partner_delete_status=$(curl -sS -o /tmp/partner-delete.json -w '%{http_code}' \
+  -X POST "$FUNCTION_URL" -H "x-device-token: $PARTNER_TOKEN" -H 'content-type: application/json' --data "$partner_delete")
+[ "$partner_delete_status" = "403" ] || { echo "NG-QA-001: partner deleted locked capsule through Edge ($partner_delete_status)"; cat /tmp/partner-delete.json; exit 1; }
 
 upload_json=$(curl -fsS \
   -X POST "$FUNCTION_URL" \
