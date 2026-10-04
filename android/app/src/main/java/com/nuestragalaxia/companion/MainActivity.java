@@ -35,6 +35,8 @@ import org.json.JSONObject;
 import java.time.Instant;
 import java.util.*;
 import java.io.*;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.concurrent.*;
 
 public final class MainActivity extends ComponentActivity {
