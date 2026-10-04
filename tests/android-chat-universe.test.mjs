@@ -1,0 +1,123 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import {readFileSync} from 'node:fs';
+
+const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
+const app=read('android/app/src/main/assets/mobile/app.js');
+const css=read('android/app/src/main/assets/mobile/app.css');
+const edge=read('supabase/functions/android-companion/index.ts');
+const migration=read('supabase/migrations/20261004173000_galaxy_chat_universe_350.sql');
+const schema=read('supabase/schema.sql');
+const main=read('android/app/src/main/java/com/nuestragalaxia/companion/MainActivity.java');
+const gradle=read('android/app/build.gradle.kts');
+
+test('Galaxy Chat Universe 3.5 parses and is versioned as Android 34',()=>{
+ assert.doesNotThrow(()=>new vm.Script(app,{filename:'app.js'}));
+ assert.match(gradle,/versionCode = 34; versionName = "3\.5\.0"/);
+ assert.ok(css.includes('Galaxy Chat Universe 3.5.0'));
+});
+
+test('Universe migration adds only Chat-native references, polls and checklists',()=>{
+ for(const table of ['galaxy_chat_entity_refs','galaxy_chat_polls','galaxy_chat_poll_options','galaxy_chat_poll_votes','galaxy_chat_checklists','galaxy_chat_checklist_items']){
+  assert.match(migration,new RegExp('create table if not exists public\\.'+table));
+  assert.match(schema,new RegExp('create table if not exists public\\.'+table));
+ }
+ for(const forbidden of ['galaxy_chat_memories','galaxy_chat_plans','galaxy_chat_goals','galaxy_chat_places','galaxy_chat_songs','galaxy_chat_capsules','galaxy_chat_eta_engine'])
+  assert.equal(migration.includes(forbidden),false,forbidden);
+ assert.ok(migration.includes('to service_role'));
+ assert.equal(/\b(drop table|truncate table|drop column|drop schema)\b/i.test(migration),false);
+});
+
+test('native cards preserve references to the original Galaxy domains',()=>{
+ for(const marker of ['MEMORY:"memory"','PLAN:"plan"','GOAL:"goal"','PLACE:"place"','SONG:"song"','ETA:"context_session"','CHECK_IN:"context_session"','POLL:"poll"','CHECKLIST:"checklist"','CAPSULE:"capsule"','DAILY_QUESTION:"daily_question"','EVENT:"event"','STATUS:"status"'])
+  assert.ok(edge.includes(marker),marker);
+ for(const source of ['db.from("galaxy_items")','db.from("galaxy_goals")','db.from("galaxy_places")','db.from("galaxy_daily_questions")','db.from("galaxy_context_sessions")'])
+  assert.ok(edge.includes(source),source);
+ assert.ok(edge.includes('chatCardUnavailable(ref)'));
+});
+
+test('locked capsules never expose protected content through Chat hydration',()=>{
+ const block=edge.slice(edge.indexOf('function chatItemCard('),edge.indexOf('function chatNormalizeEntityRef('));
+ const lock=block.indexOf('if(locked)return {...base,title,locked:true,unlockAt}');
+ const body=block.indexOf('if(data.body)safe.body');
+ assert.ok(lock>=0&&body>lock,'capsule lock must be evaluated before body/media metadata is exposed');
+ assert.ok(app.includes("card.type==='CAPSULE'&&card.locked"));
+});
+
+test('polls are normalized, idempotent and notify the exact Chat card',()=>{
+ assert.ok(migration.includes('galaxy_chat_poll_vote_guard'));
+ assert.ok(migration.includes('position between 0 and 9'));
+ assert.ok(edge.includes('labels.length<2'));
+ assert.ok(edge.includes('slice(0,10)'));
+ assert.ok(edge.includes('onConflict:"poll_id,option_id,person"'));
+ assert.ok(edge.includes('senderName+" votó en "'));
+ assert.ok(edge.includes('entityType:"chat_message",entityId:String(poll.message_id)'));
+ assert.ok(app.includes('chat-poll-vote'));
+ assert.ok(app.includes('chat-poll-plan'));
+});
+
+test('checklists use optimistic versions and exact-card notifications',()=>{
+ assert.ok(migration.includes('version integer not null default 1'));
+ assert.ok(edge.includes('expectedVersion'));
+ assert.ok(edge.includes('.eq("version",item.version)'));
+ assert.ok(edge.includes('senderName+(checked?" completó ":" reabrió ")'));
+ assert.ok(app.includes('chat-check-set'));
+ assert.ok(app.includes('chat-check-convert'));
+});
+
+test('ETA and check-in reuse Context Engine and expose lifecycle states',()=>{
+ assert.equal(migration.includes('create table if not exists public.galaxy_chat_eta'),false);
+ assert.ok(edge.includes('db.from("galaxy_context_sessions")'));
+ assert.ok(edge.includes('db.from("galaxy_context_eta_history")'));
+ for(const state of ['EN CAMINO','CERCA','LLEGÓ','CANCELADO','FINALIZADO'])assert.ok(edge.includes('"'+state+'"'),state);
+ assert.ok(app.includes('chat-card-eta-map'));
+});
+
+test('Daily Question replies stay in the existing Daily system',()=>{
+ assert.ok(edge.includes('db.from("galaxy_daily_questions")'));
+ assert.ok(edge.includes('db.from("galaxy_daily")'));
+ assert.ok(app.includes("saveDaily('answer',answer)"));
+ assert.equal(migration.includes('galaxy_chat_daily_answers'),false);
+});
+
+test('sharing, save-as and album-to-memory require human confirmation paths',()=>{
+ assert.ok(app.includes('Compartir en Galaxy Chat'));
+ for(const kind of ['memory','plan','goal','place','song','note','wish'])assert.ok(app.includes("'"+kind+"'"),kind);
+ assert.ok(app.includes('No se creará nada automáticamente.'));
+ assert.ok(app.includes("type:'chat-album'"));
+ assert.ok(app.includes('attachmentIds'));
+ assert.ok(app.includes('Nada se guardará hasta que confirmes en el editor.'));
+});
+
+test('statuses can enter Chat and be replied to from the exact status card',()=>{
+ assert.ok(app.includes('status-chat-reply'));
+ assert.ok(app.includes('chat-card-status-reply'));
+ assert.ok(edge.includes('type:"STATUS"'));
+});
+
+test('smart actions are deterministic and do not invoke Galaxy Intelligence',()=>{
+ const start=app.indexOf('function chatSmartActionsMarkup(');
+ const end=app.indexOf('\nfunction ',start+1);
+ const block=app.slice(start,end);
+ for(const marker of ['chat-smart-link','chat-smart-plan','chat-smart-place'])assert.ok(block.includes(marker),marker);
+ assert.equal(/intelligence|openai|embedding/i.test(block),false);
+});
+
+test('typed search includes Universe cards',()=>{
+ for(const type of ['memories','plans','music','places','goals','polls','checklists','capsules','events','eta','daily','status'])
+  assert.ok(edge.includes(type+':"'),type);
+ for(const label of ['Recuerdos','Planes','Música','Lugares','Objetivos','Encuestas','Checklists','Cápsulas','Eventos'])
+  assert.ok(app.includes(label),label);
+});
+
+test('backup v4 includes new Chat-native Universe state by reference',()=>{
+ assert.ok(edge.includes('version:4'));
+ for(const field of ['entityRefs:chatEntityRefs','polls:chatPolls','pollOptions:chatPollOptions','pollVotes:chatPollVotes','checklists:chatChecklists','checklistItems:chatChecklistItems'])
+  assert.ok(edge.includes(field),field);
+ assert.ok(edge.includes('![1,2,3,4].includes(Number(backup.version))'));
+});
+
+test('Android native allowlist exposes new Chat APIs',()=>{
+ for(const action of ['chat-poll','chat-checklist','chat-search'])assert.ok(main.includes('"'+action+'"'),action);
+});
