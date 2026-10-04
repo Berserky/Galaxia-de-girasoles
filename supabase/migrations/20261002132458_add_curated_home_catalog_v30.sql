@@ -1,0 +1,1 @@
+insert into public.galaxy_home_catalog(item_key,price) values ('kitchen_sink',30) on conflict(item_key) do update set price=excluded.price;
