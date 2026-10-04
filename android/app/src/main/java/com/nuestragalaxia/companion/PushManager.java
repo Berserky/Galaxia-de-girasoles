@@ -34,6 +34,7 @@ public final class PushManager {
     }
 
     public static void initialize(Context context){
+        GalaxyNotifications.prepare(context);
         if(ensureFirebase(context)&&new DeviceStore(context).pairedFast())schedule(context);
     }
 
@@ -64,9 +65,16 @@ public final class PushManager {
             value.put("gesture",bond.enabled()||bond.hapticEnabled());
             value.put("arrived_safe",contextPrefs.arrivedSafeEnabled());
             value.put("nearby",contextPrefs.nearbyEnabled());
-            value.put("capsule",false);
-            value.put("note",false);
-            value.put("reminder",false);
+            value.put("capsule",true);
+            value.put("note",true);
+            value.put("reminder",true);
+            value.put("chat_message",true);
+            value.put("status_changed",true);
+            value.put("mood_changed",true);
+            value.put("daily_answer",true);
+            value.put("goal_update",true);
+            value.put("memory_shared",true);
+            value.put("plan_update",true);
         }catch(Exception ignored){}
         return value;
     }
