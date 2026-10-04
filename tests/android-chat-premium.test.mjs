@@ -51,3 +51,40 @@ test('premium chat settings remain scoped to Galaxy Chat',()=>{
  for(const marker of ['chatPreferencesState','chatPartnerLabel','chat-theme-','chatPreferencesForm','notificationPrivacy'])assert.ok(app.includes(marker),marker);
  assert.ok(css.includes('.chat-theme-cyberpunk'));
 });
+
+
+test('premium shared media features are wired end to end',()=>{
+ for(const action of ['chat-shared','chat-albums','chat-stickers','chat-live-location','chat-gif-import','chat-transcript-delete']){
+  assert.ok(edge.includes(action),action+' edge');
+  assert.ok(main.includes(action),action+' android allowlist');
+ }
+ for(const marker of ['openChatAlbums','openChatStickerPicker','openChatLocationMenu','chat-video-message','chat-gif-pick','chat-location-live']){
+  assert.ok(app.includes(marker),marker);
+ }
+});
+
+test('live location is consent based and reuses the existing GPS source of truth',()=>{
+ assert.ok(migration.includes('galaxy_chat_live_locations'));
+ assert.ok(migration.includes('Live location reuses galaxy_locations'));
+ assert.ok(edge.includes('db.from("galaxy_locations")'));
+ assert.ok(app.includes("if(!native.tracking)"));
+ assert.equal(app.includes("native=await GalaxyNative.call('startLocation')"),false);
+});
+
+test('translation is ephemeral unless persistence is explicitly requested',()=>{
+ assert.ok(edge.includes('persist=body.persist===true'));
+ assert.ok(edge.includes('if(!persist)return json({translation:result,persisted:false})'));
+});
+
+test('backup v3 includes premium chat metadata',()=>{
+ for(const marker of ['stickerRecents:chatStickerRecents','liveLocations:chatLiveLocations','chatStickerRecents','chatLiveLocations'])assert.ok(edge.includes(marker),marker);
+});
+
+test('native premium bridge includes short video, GIPHY and point location',()=>{
+ const bridge=read('android/app/src/main/java/com/nuestragalaxia/companion/GalaxyBridge.java');
+ const mobile=read('android/app/src/main/java/com/nuestragalaxia/companion/MobileApiClient.java');
+ const gradle=read('android/app/build.gradle.kts');
+ for(const marker of ['captureChatVideoMessage','searchGiphy','getChatLocation'])assert.ok(bridge.includes(marker),marker);
+ assert.ok(mobile.includes('giphySearch('));
+ assert.ok(gradle.includes('GIPHY_API_KEY'));
+});
