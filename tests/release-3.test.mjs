@@ -38,7 +38,7 @@ test('canonical schema no longer contains duplicated Mega blocks or broken dolla
 
 
 test('QA hardening migration keeps least privilege and removes known planner warnings',()=>{
- const sql=read('supabase/migrations/20261004044500_qa_hardening_330.sql');
+ const sql=read('supabase/migrations/20261004051137_qa_hardening_330.sql');
  assert.match(sql,/revoke all on public\.galaxy_daily_questions from public, anon, authenticated/i);
  assert.match(sql,/drop policy if exists destinations_write_own/i);
  assert.match(sql,/create policy destinations_insert_own/i);
