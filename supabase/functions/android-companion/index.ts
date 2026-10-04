@@ -807,17 +807,24 @@ async function privacyItemResponse(row:any,person:string){
  }
  return copy;
 }
-async function intelligenceCapsuleDependencyLocked(bucket:string,path:string){
- if(!path)return false;
+function intelligenceCapsuleAudience(data:any){
+ const allowed=["0","1"].filter((person)=>!chatCapsuleAccess(data,person,[]).locked);
+ return {locked:allowed.length===0,ownerPerson:allowed.length===1?allowed[0]:null,allowed};
+}
+async function intelligenceCapsuleDependencyPrivacy(bucket:string,path:string){
+ if(!path)return {locked:false,ownerPerson:null};
  const capsules=await ok(db.from("galaxy_items").select("data").eq("kind","capsule").limit(1000));
+ let linked=false;
+ const allowed=new Set<string>(["0","1"]);
  for(const row of capsules||[]){
   const data=row?.data||{};
-  const linked=(bucket==="galaxy-photos"&&String(data.photoPath||"")===path)||(bucket==="galaxy-voice"&&String(data.audioPath||"")===path);
-  if(!linked)continue;
-  const unlockType=String(data.unlockType||"date")==="place"?"place":"date";
-  if(unlockType==="place"||chatCapsuleAccess(data,"0",[]).locked)return true;
+  const matches=(bucket==="galaxy-photos"&&String(data.photoPath||"")===path)||(bucket==="galaxy-voice"&&String(data.audioPath||"")===path);
+  if(!matches)continue;
+  linked=true;
+  const audience=intelligenceCapsuleAudience(data);
+  for(const person of [...allowed])if(!audience.allowed.includes(person))allowed.delete(person);
  }
- return false;
+ return {locked:linked&&allowed.size===0,ownerPerson:linked&&allowed.size===1?[...allowed][0]:null};
 }
 
 function chatCardUnavailable(ref:any){
@@ -2027,8 +2034,8 @@ async function intelligenceVoicePrivacy(voice:any){
  const target=(await ok(db.from("galaxy_items").select("kind,data,author").eq("id",ref).limit(1)))?.[0];
  if(!target)return {ownerPerson:null,visibleAfter:null,locked:false};
  if(target.kind==="capsule"){
-  const unlockType=String(target.data?.unlockType||"date")==="place"?"place":"date";
-  return {ownerPerson:null,visibleAfter:null,locked:unlockType==="place"||chatCapsuleAccess(target.data||{},"0",[]).locked};
+  const audience=intelligenceCapsuleAudience(target.data||{});
+  return {ownerPerson:audience.ownerPerson,visibleAfter:null,locked:audience.locked};
  }
  if(target.kind==="note"&&target.data?.surprise){
   if(target.data.unlockType==="date")return {ownerPerson:author,visibleAfter:String(target.data.unlockDate||"")||null,locked:false};
@@ -2053,8 +2060,9 @@ async function syncIntelligenceVoiceTranscript(bondId:string){
 async function syncIntelligencePhotoContext(path:string){
  const row=(await ok(db.from("galaxy_photo_context").select("*").eq("path",path).limit(1)))?.[0];
  if(!row){await deleteIntelligenceSource("photo",path);return;}
- if(await intelligenceCapsuleDependencyLocked("galaxy-photos",path)){await deleteIntelligenceSource("photo",path);return;}
- await syncIntelligenceDocument(buildIntelligenceDocument("photo-context",row,{today:today()}));
+ const privacy=await intelligenceCapsuleDependencyPrivacy("galaxy-photos",path);
+ if(privacy.locked){await deleteIntelligenceSource("photo",path);return;}
+ await syncIntelligenceDocument(buildIntelligenceDocument("photo-context",{...row,ownerPerson:privacy.ownerPerson},{today:today()}));
 }
 async function reconcileIntelligenceCapsules(){
  const capsules=await ok(db.from("galaxy_items").select("*").eq("kind","capsule").limit(1000));
