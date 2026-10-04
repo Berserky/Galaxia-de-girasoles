@@ -286,6 +286,7 @@ assert.ok(widget.includes('widgetModules')&&widget.includes('moduleValue')&&widg
 assert.ok(edge.includes('p.share_battery?p.battery:null')&&edge.includes('p.share_song?text(p.song_title,160):""'),'El widget no debe exponer batería o música sin opt-in');
 assert.ok(edge.includes('sharing:!!loc?.sharing')&&edge.includes('listening'),'El widget debe conservar el contrato sharing/listening');
 
+assert.ok(edge.includes('3*1024*1024')&&edge.includes('Solicitud demasiado grande')&&edge.includes('JSON no válido'),'El backend móvil debe limitar y validar el JSON antes de procesarlo');
 assert.ok(edge.includes('body.detail!==true'),'El mapa debe tener refresco ligero');
 assert.ok(app.includes("refreshMap({quiet:true,detail:false})"),'El polling del mapa debe usar refresco ligero');
 assert.ok(app.includes("document.visibilityState!=='visible'"),'La app debe pausar polling fuera de primer plano');
