@@ -2281,6 +2281,8 @@ async function itemSave(req:Request,body:any){
   if(body.id){
     const row=(await ok(db.from("galaxy_items").select("*").eq("id",String(body.id)).limit(1)))?.[0];
     if(!row)return json({error:"El contenido ya no existe"},404);
+    if(String(row.kind)!==kind)return json({error:"No puedes cambiar el tipo de contenido."},409);
+    if(String(row.kind)==="capsule"&&String(row.author)!==person)return json({error:"Solo quien creó la cápsula puede modificarla."},403);
     if(Number(body.version)!==Number(row.version))return json({error:"Este contenido cambió. Actualiza antes de guardar otra vez."},409);
     const updated=await ok(db.from("galaxy_items").update({data}).eq("id",row.id).eq("version",row.version).select("*").single());
     await intelligenceBestEffort("item-update",()=>syncIntelligenceItem(updated));
@@ -2301,9 +2303,10 @@ async function itemSave(req:Request,body:any){
 }
 
 async function itemDelete(req:Request,body:any){
-  await device(req);
-  const row=(await ok(db.from("galaxy_items").select("id,version").eq("id",String(body.id||"")).limit(1)))?.[0];
+  const d=await device(req),person=String(d.person);
+  const row=(await ok(db.from("galaxy_items").select("id,version,kind,author").eq("id",String(body.id||"")).limit(1)))?.[0];
   if(!row)return json({error:"El contenido ya no existe"},404);
+  if(String(row.kind)==="capsule"&&String(row.author)!==person)return json({error:"Solo quien creó la cápsula puede borrarla."},403);
   if(Number(body.version)!==Number(row.version))return json({error:"Este contenido cambió. Actualiza antes de borrarlo."},409);
   await ok(db.from("galaxy_items").delete().eq("id",row.id).eq("version",row.version));
   await intelligenceBestEffort("item-delete",()=>reconcileIntelligenceCleanup());
