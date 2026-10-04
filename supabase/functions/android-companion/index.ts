@@ -3733,7 +3733,8 @@ async function upload(req:Request){
   const originalExt=originalName.includes(".")?String(originalName.split(".").pop()||"").toLowerCase().replace(/[^a-z0-9]/g,"").slice(0,12):"";
   const extension=rules.ext?.[mime]||originalExt||"bin";
   const path=String(d.person)+"/"+String(rules.pathKind||kind).replace(/[^a-z0-9_-]/gi,"")+"-"+crypto.randomUUID()+"."+extension;
-  const {error}=await db.storage.from(rules.bucket).upload(path,bytes,{contentType:mime,upsert:false,cacheControl:"3600",metadata:{originalName}});
+  const cacheControl=kind.startsWith("chat-")?"0":"3600";
+  const {error}=await db.storage.from(rules.bucket).upload(path,bytes,{contentType:mime,upsert:false,cacheControl,metadata:{originalName}});
   if(error)throw error;
   const signedUrl=await signed(rules.bucket,path,3600);
   return json({path,mime,url:signedUrl,name:originalName,size:bytes.length},201);
