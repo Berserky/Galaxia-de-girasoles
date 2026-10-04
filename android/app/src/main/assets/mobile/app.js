@@ -1696,7 +1696,12 @@ async function openChatLocationMenu(){
  showModal('Compartir ubicación','<div class="chat-location-options"><button class="card" type="button" data-action="chat-location-current">'+ico('locate-fixed')+'<span><b>Ubicación actual</b><small>Una posición puntual obtenida ahora.</small></span></button><div class="chat-live-options"><b>Ubicación en vivo</b><small>Reutiliza el GPS de Nuestra Galaxia. Android mantendrá una notificación visible mientras esté activa.</small><div><button class="btn small secondary" type="button" data-action="chat-location-live" data-duration="900">15 min</button><button class="btn small secondary" type="button" data-action="chat-location-live" data-duration="3600">1 h</button><button class="btn small secondary" type="button" data-action="chat-location-live" data-duration="28800">8 h</button><button class="btn small secondary" type="button" data-action="chat-location-live" data-duration="">Hasta detener</button></div></div>'+(places.length?'<div class="chat-place-list"><b>Lugares guardados</b>'+places.slice(0,30).map(p=>'<button type="button" data-action="chat-location-place" data-lat="'+attr(p.latitude)+'" data-lon="'+attr(p.longitude)+'" data-label="'+attr(p.name)+'">'+ico('map-pin')+'<span>'+esc(p.name)+'</span></button>').join('')+'</div>':'')+'</div>','chat-location');
 }
 function openChatAttachMenu(){
- showModal('Adjuntar','<div class="chat-attach-grid"><button type="button" data-action="chat-attach-file">'+ico('paperclip')+'<span>Archivos</span></button><button type="button" data-action="chat-attach-location">'+ico('map-pin')+'<span>Ubicación</span></button><button type="button" data-action="chat-galaxy-open">'+ico('orbit')+'<span>Nuestra Galaxia</span></button><button type="button" data-action="chat-poll-open">'+ico('list-checks')+'<span>Encuesta</span></button><button type="button" data-action="chat-check-open">'+ico('list-todo')+'<span>Checklist</span></button><button type="button" data-action="chat-stickers-open">'+ico('sticker')+'<span>GIF / stickers</span></button></div>','chat-attach');
+ showModal('Adjuntar','<div class="chat-attach-grid"><button type="button" data-action="chat-attach-file">'+ico('paperclip')+'<span>Archivos</span></button><button type="button" data-action="chat-attach-location">'+ico('map-pin')+'<span>Ubicación</span></button><button type="button" data-action="chat-context-open">'+ico('route')+'<span>Acompáñame</span></button><button type="button" data-action="chat-galaxy-open">'+ico('orbit')+'<span>Nuestra Galaxia</span></button><button type="button" data-action="chat-poll-open">'+ico('list-checks')+'<span>Encuesta</span></button><button type="button" data-action="chat-check-open">'+ico('list-todo')+'<span>Checklist</span></button><button type="button" data-action="chat-stickers-open">'+ico('sticker')+'<span>GIF / stickers</span></button></div>','chat-attach');
+}
+async function openChatContextMenu(){
+ if(!mapData)await refreshMap({quiet:true,detail:true}).catch(()=>{});
+ const places=(mapData?.places||[]).slice(0,20);
+ showModal('Acompáñame','<div class="stack"><p class="muted">Inicia una sesión del Galaxy Context Engine y comparte la misma card en Chat.</p><button class="card" type="button" data-action="chat-context-start" data-kind="person" data-id="'+attr(String(cloud.person)==='0'?'1':'0')+'">'+ico('navigation')+'<span><b>Voy hacia '+esc(partnerName())+'</b><small>ETA vivo hacia tu persona</small></span></button><button class="card" type="button" data-action="chat-context-start" data-kind="home">'+ico('house')+'<span><b>Voy a casa</b><small>Usa tu lugar Casa guardado</small></span></button>'+(places.length?'<div class="field"><label>Otro lugar guardado</label><div class="stack">'+places.map(p=>'<button class="card" type="button" data-action="chat-context-start" data-kind="place" data-id="'+attr(p.id)+'">'+ico('map-pin')+'<span><b>'+esc(p.name)+'</b><small>'+esc(p.note||'Lugar guardado')+'</small></span></button>').join('')+'</div></div>':'')+'</div>','chat-context');
 }
 async function openChatGalaxyPicker(){
  if(!mapData)await refreshMap({quiet:true,detail:true}).catch(()=>{});
@@ -2198,6 +2203,20 @@ document.addEventListener('click',async e=>{
    if(a==='galaxy-share'){shareGalaxyEntity(btn.dataset.cardType,btn.dataset.kind,btn.dataset.id,btn.dataset.title||'');return;}
    if(a==='status-chat-reply'){shareGalaxyEntity('STATUS','status',btn.dataset.id,btn.dataset.title||'Estado');go('chat');setTimeout(()=>document.querySelector('#chatForm textarea')?.focus(),120);return;}
   if(a==='chat-search-open'){openChatSearch();return;}
+   if(a==='chat-context-open'){await openChatContextMenu();return;}
+   if(a==='chat-context-start'){
+    if(!native.tracking){closeModal();toast('Activa Compartir ubicación para iniciar Acompáñame. La app no activará el GPS automáticamente.');go('map');return;}
+    const kind=btn.dataset.kind,id=btn.dataset.id;
+    const result=kind==='home'
+      ?await api('context-session',{operation:'start',mode:'return_home'})
+      :await api('context-session',{operation:'start',mode:'accompany',destinationKind:kind,...(kind==='person'?{targetPerson:id,label:partnerName()}:{placeId:Number(id)})});
+    if(!result?.session?.id)throw new Error('No pudimos iniciar Acompáñame.');
+    closeModal();
+    await refreshMap({quiet:true,detail:true}).catch(()=>{});
+    queueGalaxyCard('CHECK_IN','context_session',result.session.id,{title:result.session.label||'Acompáñame'});
+    toast('Acompáñame iniciado y compartido en Galaxy Chat.');
+    return;
+   }
    if(a==='chat-galaxy-open'){await openChatGalaxyPicker();return;}
    if(a==='chat-galaxy-pick'){const cardType=btn.dataset.cardType,kind=btn.dataset.kind,id=btn.dataset.id,title=btn.dataset.title||'';closeModal();queueGalaxyCard(cardType,kind,id,{title});toast('Compartido en Galaxy Chat.');return;}
    if(a==='chat-poll-open'){openChatPollForm();return;}
