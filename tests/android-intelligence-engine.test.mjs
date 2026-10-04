@@ -34,13 +34,15 @@ test('item projection indexes searchable history without raw coordinates',()=>{
  assert.equal(JSON.stringify(doc).includes('-74.5'),false);
 });
 
-test('future capsule remains owner-only until its date',()=>{
+test('future capsule is not indexed until its exact unlock time',()=>{
  const doc=api.buildIntelligenceDocument('item',{
   id:'c1',kind:'capsule',author:'0',version:1,created:'2026-10-01T12:00:00Z',
   data:{title:'Sorpresa',body:'Secreto',date:'2026-12-01'}
- },{today:'2026-10-03'});
- assert.equal(doc.ownerPerson,'0');
- assert.equal(doc.visibleAfter,'2026-12-01');
+ },{today:'2026-10-03',now:'2026-10-03T12:00:00Z'});
+ assert.equal(doc.searchable,false);
+ assert.equal(doc.ownerPerson,null);
+ assert.equal(doc.visibleAfter,null);
+ assert.equal(doc.content.includes('Secreto'),false);
 });
 
 test('place-unlock surprise never exposes hidden coordinates or semantic text to partner',()=>{
