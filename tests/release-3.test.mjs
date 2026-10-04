@@ -16,10 +16,10 @@ test('Mega 3.0 release migration is canonical and non-destructive',()=>{
 
 test('Android stable metadata is aligned to Mega 3.0',()=>{
  const gradle=read('android/app/build.gradle.kts'),workflow=read('.github/workflows/android-companion.yml');
- assert.match(gradle,/versionCode = 25/);
- assert.match(gradle,/versionName = "3\.1\.0"/);
- assert.match(workflow,/"versionCode":25/);
- assert.match(workflow,/"versionName":"3\.1\.0"/);
+ assert.match(gradle,/versionCode = 26/);
+ assert.match(gradle,/versionName = "3\.1\.1"/);
+ assert.match(workflow,/"versionCode":26/);
+ assert.match(workflow,/"versionName":"3\.1\.1"/);
 });
 
 test('canonical schema no longer contains duplicated Mega blocks or broken dollar quotes',()=>{

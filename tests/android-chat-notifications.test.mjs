@@ -38,10 +38,13 @@ test('chat is a floating entry point, not a bottom-nav or More tool',()=>{
  assert.equal(more.includes('data-action="chat-open"'),false,'Más no debe contener un acceso funcional al Chat');
 });
 
-test('chat UI supports reply, delete, unread badge and active synchronization',()=>{
- for(const marker of ['chatMessageMarkup','chat-reply','chat-delete','chat-load-more','chatForm','partnerLastReadAt','Leído','Enviado'])assert.ok(app.includes(marker),marker);
+test('chat UI supports reply, delete, unread badge and stable active synchronization',()=>{
+ for(const marker of ['chatMessageMarkup','chat-reply','chat-delete','chat-load-more','chatForm','partnerLastReadAt','Leído','Enviado','chatStateSignature','chatSignature'])assert.ok(app.includes(marker),marker);
  assert.ok(css.includes('.chat-message.own'));
  assert.ok(css.includes('.chat-composer'));
+ assert.ok(css.includes('body.chat-mode'));
+ assert.ok(css.includes('body.chat-mode .bottom-nav'));
+ assert.ok(app.includes("view!=='chat'"));
  assert.ok(app.includes("view==='chat'&&document.visibilityState==='visible'"));
 });
 

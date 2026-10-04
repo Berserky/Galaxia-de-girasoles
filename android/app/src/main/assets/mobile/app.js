@@ -47,7 +47,7 @@ let toastTimer,refreshing=false,updateState={text:'La app está al día.',progre
 let dateContext=null,dateContextLoadedAt=0,dateQuestionNonce=0,dateMode=null,dateModeTimer=null,dateLastExperience=null;
 let goalsState=null,goalsLoadedAt=0,goalsFilter='active';
 let presenceLastSignature='',voiceTimer=null,voiceSeconds=0,intelligenceSearchNonce=0;
-let chatState=null,chatLoading=false,chatReply=null,notificationState=null,pendingDeepLink=null;
+let chatState=null,chatLoading=false,chatReply=null,chatStateSignature='',notificationState=null,pendingDeepLink=null;
 let welcomeStep=0,welcomePreview=false,welcomeGift=true,welcomeEntering=false,tourStep=-1;
 const welcomeMusic=new Audio('../musica.mp3');welcomeMusic.loop=true;welcomeMusic.volume=.32;
 const globalPlayer=document.getElementById('globalPlayer'),providerPlayer=document.getElementById('providerPlayer');
@@ -303,7 +303,7 @@ function header(){
  return '<header class="header"><div class="brand"><div class="brand-mark">'+ico('sparkles')+'</div><div><strong>Nuestra Galaxia</strong><small>'+esc(native.paired?(myName()+' & '+partnerName()):'Un espacio para dos')+'</small></div></div><div class="header-actions"><button class="header-search header-notifications '+(unread?'has-unread':'')+'" data-action="notifications-open" aria-label="Notificaciones">'+ico('bell')+(unread?'<span class="header-notification-badge">'+(unread>99?'99+':unread)+'</span>':'')+'</button><button class="header-search" data-action="universal-search-open" aria-label="Buscar en nuestra galaxia">'+ico('search')+'</button><div class="avatar">'+esc((native.paired?myName():'N').slice(0,1).toUpperCase())+'</div></div></header>';
 }
 function renderNav(){
- navEl.style.display=native.paired&&!shouldShowAdriWelcome()?'grid':'none';
+ navEl.style.display=native.paired&&!shouldShowAdriWelcome()&&view!=='chat'?'grid':'none';
  navEl.innerHTML=nav.map(([id,label])=>'<button class="nav-btn '+(view===id?'active':'')+'" data-view="'+id+'">'+ico(icons[id],'nav-icon')+'<span>'+label+'</span></button>').join('');
 }
 function renderChatFab(){
@@ -332,6 +332,7 @@ function render(){
  if(currentMemoriesTabs)memoriesTabsScroll=currentMemoriesTabs.scrollLeft;
  const themeState=window.GalaxyTheme?.applyTheme(window.GalaxyTheme.getChoice());
  syncSystemTheme(themeState);
+ document.body.classList.toggle('chat-mode',native.paired&&view==='chat'&&!shouldShowAdriWelcome());
  renderNav();
  renderChatFab();
  if(!native.paired){renderOnboarding();refreshIcons();return;}
@@ -347,7 +348,7 @@ function render(){
  if(view==='chat'){app.innerHTML=chatView();if(!chatState&&!chatLoading)setTimeout(()=>loadChat({quiet:true}),0);}
  if(view==='more')app.innerHTML=header()+moreView();
  refreshIcons();
- renderGlobalPlayer();
+ if(view==='chat')globalPlayer.className='global-player';else renderGlobalPlayer();
  if(view==='home'&&!encounterStatsCache&&!encounterStatsLoading)setTimeout(()=>loadEncounterStats().catch(()=>{}),0);
  if(tourStep>=0)setTimeout(renderTourOverlay,30);
  if(pendingDeepLink&&cloud)setTimeout(()=>consumeDeepLink(),0);
@@ -1260,13 +1261,22 @@ function chatMessagesMarkup(){
 function chatView(){
  return '<section class="chat-shell"><div class="chat-shell-head"><button class="chat-back" data-action="chat-close">'+ico('arrow-left')+'</button><div class="chat-avatar">'+esc(partnerName().slice(0,1).toUpperCase())+'</div><div><p class="eyebrow">GALAXY CHAT</p><h2>'+esc(partnerName())+'</h2><small>Conversación privada</small></div></div><div id="chatMessages" class="chat-messages">'+chatMessagesMarkup()+'</div><form id="chatForm" class="chat-composer">'+(chatReply?'<div class="chat-compose-reply"><span>Respondiendo a '+esc(String(chatReply.sender_person)===String(cloud.person)?'ti':partnerName())+'</span><button type="button" data-action="chat-reply-cancel">'+ico('x')+'</button></div>':'')+'<div class="chat-compose-row"><textarea name="body" maxlength="4000" rows="1" placeholder="Mensaje para '+attr(partnerName())+'"></textarea><button type="submit">'+ico('send')+'</button></div></form></section>';
 }
-async function loadChat({older=false,quiet=false}={}){
+function chatSignature(state){
+ const messages=(state?.messages||[]).map(m=>[m.id,m.body,m.deleted_at,m.reply_to,m.created_at]);
+ return JSON.stringify([messages,state?.unread||0,state?.partnerLastReadAt||'',state?.nextBefore||'']);
+}
+async function loadChat({older=false,quiet=false,force=false}={}){
  if(chatLoading)return;chatLoading=true;
  try{
   const before=older?chatState?.nextBefore:null,result=await api('chat-state',{limit:60,...(before?{before}:{})});
-  if(older&&chatState){const map=new Map([...(result.messages||[]),...(chatState.messages||[])].map(m=>[String(m.id),m]));chatState={...result,messages:[...map.values()].sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)))};}else chatState=result;
-  const last=chatState.messages?.at(-1);if(last){await api('chat-read',{messageId:last.id});chatState.unread=0;if(cloud?.chat)cloud.chat.unread=0;}
-  if(view==='chat'){render();setTimeout(()=>{const el=document.querySelector('#chatMessages');if(el&&!older)el.scrollTop=el.scrollHeight;},20);}else renderChatFab();
+  let nextState=result;
+  if(older&&chatState){const map=new Map([...(result.messages||[]),...(chatState.messages||[])].map(m=>[String(m.id),m]));nextState={...result,messages:[...map.values()].sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)))};}
+  const nextSignature=chatSignature(nextState),changed=force||older||nextSignature!==chatStateSignature||!chatState;
+  chatState=nextState;chatStateSignature=nextSignature;
+  const last=chatState.messages?.at(-1);if(last&&Number(chatState.unread||0)>0){await api('chat-read',{messageId:last.id});chatState.unread=0;chatStateSignature=chatSignature(chatState);if(cloud?.chat)cloud.chat.unread=0;}
+  if(view==='chat'){
+   if(changed){const current=document.querySelector('#chatMessages'),nearBottom=!current||current.scrollHeight-current.scrollTop-current.clientHeight<90;render();setTimeout(()=>{const el=document.querySelector('#chatMessages');if(el&&(!older||nearBottom))el.scrollTop=el.scrollHeight;},20);}
+  }else renderChatFab();
  }catch(error){if(!quiet)toast(error.message||'No pudimos cargar el chat.');}
  finally{chatLoading=false;}
 }
@@ -1867,8 +1877,8 @@ document.addEventListener('submit',async e=>{
 
 modal.addEventListener('click',e=>{if(e.target===modal)closeModal();});
 function editingNow(){
- const el=document.activeElement,playing=[...document.querySelectorAll('audio')].some(audio=>!audio.paused);
- return modal.open||playing||!!(el&&['INPUT','TEXTAREA','SELECT'].includes(el.tagName));
+ const el=document.activeElement,playing=[...document.querySelectorAll('audio')].some(audio=>!audio.paused),draft=String(document.querySelector('#chatForm textarea')?.value||'').trim();
+ return modal.open||playing||draft.length>0||!!(el&&['INPUT','TEXTAREA','SELECT'].includes(el.tagName));
 }
 setInterval(()=>{
  if(!native.paired||document.visibilityState!=='visible')return;
