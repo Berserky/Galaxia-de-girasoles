@@ -1105,3 +1105,5 @@ body.chat-mode .chat-composer{
 .chat-galaxy-picker{display:grid;gap:7px;max-height:64vh;overflow:auto}.chat-galaxy-picker>.card{width:100%;display:grid;grid-template-columns:34px minmax(0,1fr) 22px;gap:9px;align-items:center;text-align:left}.chat-galaxy-picker>.card>div{display:grid;min-width:0}.chat-galaxy-picker b,.chat-galaxy-picker small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.chat-galaxy-picker small{color:var(--muted)}
 .chat-save-as{display:grid;gap:12px}.chat-save-as .chat-attach-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 @media(max-width:390px){.chat-galaxy-card{width:min(310px,100%)}.chat-save-as .chat-attach-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.chat-song-cover{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:12px;background:var(--surface2)}
