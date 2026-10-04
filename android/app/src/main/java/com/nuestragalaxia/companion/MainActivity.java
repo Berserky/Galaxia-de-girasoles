@@ -60,7 +60,7 @@ public final class MainActivity extends ComponentActivity {
         "map-state","place-save","place-delete","status-set","transport-set","destination-save","trip","context-state","context-settings","context-session","context-events","context-suggestion","context-recap",
         "intelligence-search","intelligence-ask","intelligence-connections","intelligence-narrate","intelligence-book","intelligence-transcribe","intelligence-transcript-delete","intelligence-index",
         "media-list","media-delete","presence-set","backup-export","backup-import",
-        "pair-code-create","profile-repair","device-revoke","push-token-register","push-token-unregister","push-preferences","chat-state","chat-send","chat-read","chat-edit","chat-delete","chat-react","chat-pin","chat-favorite","chat-pins","chat-saved","chat-search","chat-presence","chat-metric","notifications-list","notifications-read","goals-engine","date-engine","insights-summary","monthly-summary","today-history","encounter-stats","frequent-places","gps-history-export","gps-history-delete"
+        "pair-code-create","profile-repair","device-revoke","push-token-register","push-token-unregister","push-preferences","chat-state","chat-send","chat-read","chat-edit","chat-delete","chat-react","chat-pin","chat-favorite","chat-pins","chat-saved","chat-search","chat-presence","chat-metric","chat-schedule-update","chat-preferences","chat-open-once","chat-transcript","chat-translate","notifications-list","notifications-read","goals-engine","date-engine","insights-summary","monthly-summary","today-history","encounter-stats","frequent-places","gps-history-export","gps-history-delete"
     );
 
     private DeviceStore store;
