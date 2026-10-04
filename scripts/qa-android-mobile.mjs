@@ -34,6 +34,7 @@ const pushManager=read('android/app/src/main/java/com/nuestragalaxia/companion/P
 const widgetPrefs=read('android/app/src/main/java/com/nuestragalaxia/companion/WidgetPrefs.java');
 const trackingService=read('android/app/src/main/java/com/nuestragalaxia/companion/TrackingService.java');
 const updater=read('android/app/src/main/java/com/nuestragalaxia/companion/UpdateManager.java');
+const apiClient=read('android/app/src/main/java/com/nuestragalaxia/companion/ApiClient.java');
 const edge=read('supabase/functions/android-companion/index.ts');
 const serverInsights=read('supabase/functions/android-companion/insights.ts');
 const dateEngine=read('supabase/functions/android-companion/date-engine.ts');
