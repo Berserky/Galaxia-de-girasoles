@@ -4,7 +4,7 @@ import { aggregateInsightRows, evaluateAchievements, isInsightVisibleItem, perio
 import { QUESTION_DECKS, buildDateRecap, buildSequentialPlan, buildSurpriseExperience, normalizePlanCategory, questionById, roulettePendingPlans, selectQuestion } from "./date-engine.ts";
 import { buildGoalDateSuggestions, buildGoalInsightSummary, computeGoalProgress, conversionDraft, normalizeContribution, normalizeGoalInput, reorderStepIds } from "./goals-engine.ts";
 import { BUILTIN_GESTURES, computeBondProgress, gestureSnapshot, normalizeCustomGesture, resolveGesture } from "./bond-engine.ts";
-import { PUSH_EVENT_TYPES, sanitizePushPayload, sendFcmData } from "./push-engine.ts";
+import { PUSH_EVENT_TYPES, firebaseAndroidClientConfig, sanitizePushPayload, sendFcmData } from "./push-engine.ts";
 import { CONTEXT_EVENTS, buildDateContextRecap, buildEncounterSuggestion, buildTripContextRecap, contextStep, emptyContextState, haversineM, summarizeTrack } from "./context-engine.ts";
 import { bookSections, buildIntelligenceDocument, contentHashInput, explainConnection, normalizeSearchText, sanitizeTranscriptSegments, validateNarrative } from "./intelligence-engine.ts";
 import { aiProviderConfig, extractJsonObject, generateGroundedResponse, gteSmallEmbedding, transcribeAudioBlob } from "./intelligence-provider.ts";
@@ -511,6 +511,11 @@ function pushEventEnabledMap(value:any){
  const source=value&&typeof value==="object"&&!Array.isArray(value)?value:{};
  return Object.fromEntries(PUSH_EVENT_TYPES.map(type=>[type,source[type]===true]));
 }
+async function profileNames(){
+ const settings=await ok(db.from("galaxy_settings").select("data").eq("id",1).single());
+ const names=Array.isArray(settings?.data?.names)?settings.data.names:["Sebas","Adri"];
+ return [text(names[0]||"Sebas",40),text(names[1]||"Adri",40)];
+}
 async function savePushPreferences(deviceId:string,value:any){
  const enabled=pushEventEnabledMap(value),now=new Date().toISOString();
  await ok(db.from("galaxy_push_subscriptions").upsert(
@@ -519,6 +524,19 @@ async function savePushPreferences(deviceId:string,value:any){
  ));
  return enabled;
 }
+async function pushClientConfig(req:Request){
+ const d=await device(req);
+ const credentials=fcmCredentials();
+ if(!credentials)return json({available:false},503);
+ try{
+  const config=await firebaseAndroidClientConfig(credentials,"com.nuestragalaxia.companion");
+  return json({available:true,config,deviceId:String(d.id)});
+ }catch(error){
+  console.error("push-client-config",error instanceof Error?error.message:"error");
+  return json({available:false},503);
+ }
+}
+
 async function pushTokenRegister(req:Request,body:any){
  const d=await device(req),token=text(body.token,4096);
  if(token.length<20)return json({error:"Token push no válido."},400);
@@ -539,6 +557,36 @@ async function pushPreferences(req:Request,body:any){
  const d=await device(req),subscriptions=await savePushPreferences(String(d.id),body.events||{});
  return json({ok:true,subscriptions,pushConfigured:!!fcmCredentials()});
 }
+async function persistNotification(sourceDevice:any,targetPerson:string,eventType:string,payload:any,pushEventId:string){
+ if(eventType==="gesture"&&String(payload?.behavior||"")==="haptic")return null;
+ return await ok(db.from("galaxy_notifications").insert({
+  target_person:targetPerson,
+  source_person:["0","1"].includes(String(sourceDevice?.person))?String(sourceDevice.person):null,
+  event_type:eventType,
+  title:text(payload?.title||"Nuestra Galaxia",120)||"Nuestra Galaxia",
+  body:text(payload?.body||"",500),
+  action:text(payload?.action||"",80)||null,
+  entity_type:text(payload?.entityType||"",80)||null,
+  entity_id:text(payload?.entityId||"",160)||null,
+  data:{senderName:text(payload?.senderName||"",80)},
+  push_event_id:pushEventId
+ }).select("*").single());
+}
+async function notificationSummary(person:string){
+ const {count,error}=await db.from("galaxy_notifications").select("id",{count:"exact",head:true}).eq("target_person",person).is("read_at",null);
+ if(error)throw error;
+ return {unread:Number(count||0)};
+}
+async function chatSummary(person:string){
+ const state=(await ok(db.from("galaxy_chat_read_state").select("*").eq("person",person).limit(1)))?.[0]||{};
+ const latest=(await ok(db.from("galaxy_chat_messages").select("id,sender_person,body,deleted_at,created_at").order("created_at",{ascending:false}).limit(1)))?.[0]||null;
+ let query=db.from("galaxy_chat_messages").select("id",{count:"exact",head:true}).neq("sender_person",person).is("deleted_at",null);
+ if(state.last_read_at)query=query.gt("created_at",state.last_read_at);
+ const {count,error}=await query;if(error)throw error;
+ const partnerState=(await ok(db.from("galaxy_chat_read_state").select("last_read_at,last_read_message_id").neq("person",person).limit(1)))?.[0]||null;
+ return {unread:Number(count||0),lastMessage:latest,partnerLastReadAt:partnerState?.last_read_at||null};
+}
+
 async function dispatchPushEvent(sourceDevice:any,targetPerson:string,eventType:string,payload:any,options:any={}){
  if(!PUSH_EVENT_TYPES.includes(eventType))throw new Error("Tipo de evento push no válido.");
  const sanitized=sanitizePushPayload(eventType,payload);
@@ -546,6 +594,7 @@ async function dispatchPushEvent(sourceDevice:any,targetPerson:string,eventType:
   source_device_id:sourceDevice?.id||null,source_person:String(sourceDevice?.person||"0"),target_person:targetPerson,event_type:eventType,payload:sanitized
  }).select("id").single());
  sanitized.eventId=String(event.id);
+ if(options?.persistNotification!==false)await persistNotification(sourceDevice,targetPerson,eventType,sanitized,String(event.id));
  const [devices,tokens,subscriptions]=await Promise.all([
   ok(db.from("galaxy_devices").select("id").eq("person",targetPerson).is("revoked_at",null).limit(20)),
   ok(db.from("galaxy_push_tokens").select("device_id,token").limit(50)),
@@ -575,6 +624,69 @@ async function dispatchPushEvent(sourceDevice:any,targetPerson:string,eventType:
  }
  if(deliveries.length)await ok(db.from("galaxy_push_deliveries").upsert(deliveries,{onConflict:"event_id,device_id"}));
  return {eventId:event.id,sent:deliveries.filter(x=>x.status==="sent").length,configured:!!credentials};
+}
+
+async function chatState(req:Request,body:any={}){
+ const d=await device(req),person=String(d.person),limit=clampInt(body.limit,20,100,60),before=text(body.before||"",40);
+ let query=db.from("galaxy_chat_messages").select("id,client_id,sender_person,body,reply_to,deleted_at,created_at").order("created_at",{ascending:false}).order("id",{ascending:false}).limit(limit+1);
+ if(before&&Number.isFinite(Date.parse(before)))query=query.lt("created_at",before);
+ const rows=await ok(query),hasMore=(rows||[]).length>limit,page=(rows||[]).slice(0,limit);
+ const replyIds=[...new Set(page.map((x:any)=>x.reply_to).filter(Boolean).map(String))];
+ const replies=replyIds.length?await ok(db.from("galaxy_chat_messages").select("id,sender_person,body,deleted_at,created_at").in("id",replyIds)):[];
+ const replyMap=new Map((replies||[]).map((x:any)=>[String(x.id),x]));
+ const messages=page.slice().reverse().map((row:any)=>({...row,body:row.deleted_at?"":row.body,reply:row.reply_to?replyMap.get(String(row.reply_to))||null:null}));
+ const partnerState=(await ok(db.from("galaxy_chat_read_state").select("*").neq("person",person).limit(1)))?.[0]||{};
+ const summary=await chatSummary(person);
+ return json({messages,unread:summary.unread,partnerLastReadAt:partnerState.last_read_at||null,nextBefore:hasMore?page[page.length-1]?.created_at:null});
+}
+async function chatSend(req:Request,body:any){
+ const d=await device(req),person=String(d.person),message=text(body.body,4000),clientId=String(body.clientId||"");
+ if(!message)return json({error:"Escribe un mensaje."},400);
+ if(!uuidish(clientId))return json({error:"Identificador de mensaje no válido."},400);
+ const recent=await ok(db.from("galaxy_chat_messages").select("id").eq("sender_person",person).gt("created_at",new Date(Date.now()-60000).toISOString()).limit(80));
+ if((recent||[]).length>=60)return json({error:"Espera un momento antes de enviar más mensajes."},429);
+ let replyTo:string|null=null;
+ if(body.replyTo){
+  const reply=(await ok(db.from("galaxy_chat_messages").select("id").eq("id",String(body.replyTo)).limit(1)))?.[0];
+  if(!reply)return json({error:"El mensaje al que respondes ya no existe."},404);
+  replyTo=String(reply.id);
+ }
+ let row=(await ok(db.from("galaxy_chat_messages").select("*").eq("sender_person",person).eq("client_id",clientId).limit(1)))?.[0];
+ if(!row)row=await ok(db.from("galaxy_chat_messages").insert({client_id:clientId,sender_person:person,body:message,reply_to:replyTo}).select("*").single());
+ await ok(db.from("galaxy_chat_read_state").upsert({person,last_read_at:row.created_at,last_read_message_id:row.id,updated_at:new Date().toISOString()},{onConflict:"person"}));
+ const names=await profileNames(),target=person==="0"?"1":"0";
+ const push=await dispatchPushEvent(d,target,"chat_message",{title:names[Number(person)]||"Tu persona",body:message,action:"chat",senderName:names[Number(person)]||"Tu persona",entityType:"chat_message",entityId:String(row.id)});
+ return json({message:row,push},201);
+}
+async function chatRead(req:Request,body:any={}){
+ const d=await device(req),person=String(d.person);
+ let row:any=null;
+ if(body.messageId)row=(await ok(db.from("galaxy_chat_messages").select("id,created_at").eq("id",String(body.messageId)).limit(1)))?.[0];
+ if(!row)row=(await ok(db.from("galaxy_chat_messages").select("id,created_at").order("created_at",{ascending:false}).limit(1)))?.[0];
+ if(!row)return json({ok:true});
+ await ok(db.from("galaxy_chat_read_state").upsert({person,last_read_at:row.created_at,last_read_message_id:row.id,updated_at:new Date().toISOString()},{onConflict:"person"}));
+ await ok(db.from("galaxy_notifications").update({read_at:new Date().toISOString()}).eq("target_person",person).eq("event_type","chat_message").is("read_at",null).lte("created_at",row.created_at));
+ return json({ok:true,lastReadAt:row.created_at});
+}
+async function chatDelete(req:Request,body:any){
+ const d=await device(req),person=String(d.person),id=String(body.id||"");
+ const row=(await ok(db.from("galaxy_chat_messages").select("id,sender_person,deleted_at").eq("id",id).limit(1)))?.[0];
+ if(!row)return json({ok:true});
+ if(String(row.sender_person)!==person)return json({error:"Solo puedes eliminar tus propios mensajes."},403);
+ if(!row.deleted_at)await ok(db.from("galaxy_chat_messages").update({deleted_at:new Date().toISOString(),body:"Mensaje eliminado"}).eq("id",id));
+ return json({ok:true});
+}
+async function notificationsList(req:Request,body:any={}){
+ const d=await device(req),person=String(d.person),limit=clampInt(body.limit,20,100,60);
+ const rows=await ok(db.from("galaxy_notifications").select("*").eq("target_person",person).order("created_at",{ascending:false}).limit(limit));
+ const summary=await notificationSummary(person);
+ return json({notifications:rows||[],unread:summary.unread});
+}
+async function notificationsRead(req:Request,body:any={}){
+ const d=await device(req),person=String(d.person),now=new Date().toISOString();
+ if(body.id)await ok(db.from("galaxy_notifications").update({read_at:now}).eq("id",String(body.id)).eq("target_person",person));
+ else await ok(db.from("galaxy_notifications").update({read_at:now}).eq("target_person",person).is("read_at",null));
+ return json({ok:true,...await notificationSummary(person)});
 }
 
 async function bondGestureCatalog(req:Request){
@@ -714,10 +826,11 @@ async function mobileState(req:Request){
   let devicesQuery=db.from("galaxy_devices").select("id,person,name,created_at,last_seen_at").is("revoked_at",null).order("created_at",{ascending:false}).limit(30);
   if(person!=="0")devicesQuery=devicesQuery.eq("person",person);
   const devices=await ok(devicesQuery);
+  const [chat,notifications]=await Promise.all([chatSummary(person),notificationSummary(person)]);
   return json({
     person,device:{id:d.id,name:d.name},today:day,settings,items:safeItems,daily:maskedDaily(daily||[],person),
-    bond,locations,places,presence:safePresence,devices,nextEvent:nextCalendarEvent(safeItems.filter((i:any)=>i.kind==="event"),day),
-    capabilities:{photos:true,music:true,voice:true,widget:true,backgroundLocation:true,trips:true,backup:true,presence:true,profileManagement:true,intelligence:true,transcription:true,book:true}
+    bond,locations,places,presence:safePresence,devices,chat,notifications,nextEvent:nextCalendarEvent(safeItems.filter((i:any)=>i.kind==="event"),day),
+    capabilities:{photos:true,music:true,voice:true,widget:true,backgroundLocation:true,trips:true,backup:true,presence:true,profileManagement:true,intelligence:true,transcription:true,book:true,chat:true,notifications:true}
   });
 }
 
@@ -1035,8 +1148,17 @@ async function itemSave(req:Request,body:any){
     return json({item:updated});
   }
   const created=await ok(db.from("galaxy_items").insert({kind,data,author:String(d.person)}).select("*").single());
-  await recordParticipation(String(d.person));
+  const person=String(d.person);
+  await recordParticipation(person);
   await intelligenceBestEffort("item-create",()=>syncIntelligenceItem(created));
+  if(kind==="memory"||kind==="plan"){
+    const names=await profileNames(),target=person==="0"?"1":"0",name=names[Number(person)]||"Tu persona";
+    await dispatchPushEvent(d,target,kind==="memory"?"memory_shared":"plan_update",{
+      title:kind==="memory"?name+" guardó un recuerdo":name+" agregó un plan",
+      body:text(data.title||data.body||(kind==="memory"?"Nuevo recuerdo":"Nuevo plan"),180),
+      action:"memories",senderName:name,entityType:kind,entityId:String(created.id)
+    });
+  }
   return json({item:created},201);
 }
 
@@ -1064,16 +1186,26 @@ async function settingsSave(req:Request,body:any){
 }
 
 async function dailySave(req:Request,body:any){
-  const d=await device(req),field=String(body.field||""),value=text(body.value,3000),day=today();
+  const d=await device(req),person=String(d.person),field=String(body.field||""),value=text(body.value,3000),day=today();
+  const previous=(await ok(db.from("galaxy_daily").select("mood,answer").eq("day",day).eq("person",person).limit(1)))?.[0]||{};
   if(field==="mood"){
     if(!["feliz","tranquilo","cansado","sensible","abrazo"].includes(value))return json({error:"Elige una emoción válida."},400);
-    await ok(db.from("galaxy_daily").upsert({day,person:String(d.person),mood:value},{onConflict:"day,person"}));
+    await ok(db.from("galaxy_daily").upsert({day,person,mood:value},{onConflict:"day,person"}));
   }else if(field==="answer"){
     if(!value)return json({error:"Escribe una respuesta."},400);
-    await ok(db.from("galaxy_daily").upsert({day,person:String(d.person),answer:value},{onConflict:"day,person"}));
+    await ok(db.from("galaxy_daily").upsert({day,person,answer:value},{onConflict:"day,person"}));
   }else return json({error:"Campo no válido."},400);
-  await recordParticipation(String(d.person));
+  await recordParticipation(person);
   if(field==="answer")await intelligenceBestEffort("daily-answer",()=>syncIntelligenceDaily(day));
+  if(String(previous?.[field]||"")!==value){
+    const names=await profileNames(),target=person==="0"?"1":"0",name=names[Number(person)]||"Tu persona";
+    if(field==="mood"){
+      const labels:any={feliz:"feliz",tranquilo:"en calma",cansado:"sin energía",sensible:"sensible",abrazo:"con ganas de un abrazo"};
+      await dispatchPushEvent(d,target,"mood_changed",{title:name+" actualizó cómo se siente",body:"Ahora está "+(labels[value]||value)+".",action:"home",senderName:name,entityType:"mood",entityId:day});
+    }else{
+      await dispatchPushEvent(d,target,"daily_answer",{title:name+" respondió la pregunta del día",body:"Hay una nueva respuesta para compartir.",action:"home",senderName:name,entityType:"daily",entityId:day});
+    }
+  }
   return json({ok:true});
 }
 
@@ -1128,6 +1260,11 @@ async function goalResponse(id:string){
  const data=await loadGoalData(),goal=(data.goals||[]).find((row:any)=>String(row.id)===String(id));
  return goal?goalView(goal,data):null;
 }
+async function notifyGoalUpdate(d:any,goal:any,copy:string){
+ if(!goal)return;
+ const person=String(d.person),target=person==="0"?"1":"0",names=await profileNames(),name=names[Number(person)]||"Tu persona";
+ await dispatchPushEvent(d,target,"goal_update",{title:name+" actualizó un objetivo",body:text(copy||goal.title||"Nuestros objetivos",180),action:"goals",senderName:name,entityType:"goal",entityId:String(goal.id)});
+}
 async function convertItemToGoal(req:Request,body:any){
  const d=await device(req),id=String(body.itemId||""),item=(await ok(db.from("galaxy_items").select("*").eq("id",id).limit(1)))?.[0];
  if(!item||!["plan","wish"].includes(String(item.kind)))return json({error:"Solo un plan o deseo puede convertirse en objetivo."},400);
@@ -1149,6 +1286,7 @@ async function goalsEngine(req:Request,body:any){
   const goal=await createGoalRecord(person,body.goal||body);
   await recordParticipation(person);
   await intelligenceBestEffort("goal-create",()=>syncIntelligenceGoal(goal));
+  await notifyGoalUpdate(d,goal,"Nuevo objetivo: "+String(goal.title||""));
   return json({goal:await goalResponse(String(goal.id))},201);
  }
  if(operation==="convert-item")return await convertItemToGoal(req,body);
@@ -1167,6 +1305,7 @@ async function goalsEngine(req:Request,body:any){
   await ok(db.from("galaxy_goal_participants").insert(normalized.participants.map((p:string)=>({goal_id:id,person:p}))));
   await recordParticipation(person);
   await intelligenceBestEffort("goal-update",()=>syncIntelligenceGoal(updated));
+  await notifyGoalUpdate(d,updated,"Actualizó "+String(updated.title||"un objetivo")+".");
   return json({goal:await goalResponse(id)});
  }
  if(operation==="delete"){
@@ -1189,7 +1328,9 @@ async function goalsEngine(req:Request,body:any){
   const claimed=await touchGoalVersion(id,expectedVersion);if(!claimed)return json({error:"Este objetivo cambió en otro dispositivo."},409);
   const complete=body.completed!==false;
   await ok(db.from("galaxy_goal_steps").update({completed_at:complete?new Date().toISOString():null,completed_by:complete?person:null}).eq("id",stepId).eq("goal_id",id));
-  await recordParticipation(person);await intelligenceBestEffort("goal-step-toggle",()=>syncIntelligenceGoal(id));return json({goal:await goalResponse(id)});
+  await recordParticipation(person);await intelligenceBestEffort("goal-step-toggle",()=>syncIntelligenceGoal(id));
+  if(complete)await notifyGoalUpdate(d,existing,"Completó un paso de "+String(existing.title||"un objetivo")+".");
+  return json({goal:await goalResponse(id)});
  }
  if(operation==="step-reorder"){
   const rows=await ok(db.from("galaxy_goal_steps").select("*").eq("goal_id",id).order("position"));
@@ -1204,7 +1345,9 @@ async function goalsEngine(req:Request,body:any){
   let contribution;try{contribution=normalizeContribution(body.contribution||body,person);}catch(e){return json({error:e instanceof Error?e.message:"Aporte no válido."},400);}
   const claimed=await touchGoalVersion(id,expectedVersion);if(!claimed)return json({error:"Este objetivo cambió en otro dispositivo."},409);
   await ok(db.from("galaxy_goal_contributions").insert({goal_id:id,...contribution}));
-  await recordParticipation(person);return json({goal:await goalResponse(id)});
+  await recordParticipation(person);
+  await notifyGoalUpdate(d,existing,"Registró un aporte en "+String(existing.title||"una meta de ahorro")+".");
+  return json({goal:await goalResponse(id)});
  }
  if(operation==="contribution-delete"){
   if(existing.kind!=="savings")return json({error:"Este objetivo no es una meta de ahorro."},400);
@@ -2110,8 +2253,13 @@ async function placeDelete(req:Request,body:any){
 }
 
 async function setStatus(req:Request,body:any){
-  const d=await device(req),status=text(body.status,40);
-  await ok(db.from("galaxy_locations").update({status:status||null}).eq("person",String(d.person)));
+  const d=await device(req),person=String(d.person),status=text(body.status,40);
+  const current=(await ok(db.from("galaxy_locations").select("status").eq("person",person).limit(1)))?.[0]?.status||"";
+  await ok(db.from("galaxy_locations").update({status:status||null}).eq("person",person));
+  if(String(current||"")!==status){
+    const names=await profileNames(),target=person==="0"?"1":"0",name=names[Number(person)]||"Tu persona";
+    await dispatchPushEvent(d,target,"status_changed",{title:name+" cambió su estado",body:status||"Quitó su estado actual.",action:"home",senderName:name,entityType:"status",entityId:person});
+  }
   return json({ok:true,status});
 }
 
@@ -2296,6 +2444,7 @@ Deno.serve(async req=>{
     if(action==="pair-code-create")return await pairCodeCreate(req,body);
     if(action==="profile-repair")return await profileRepair(req,body);
     if(action==="device-revoke")return await deviceRevoke(req,body);
+    if(action==="push-client-config")return await pushClientConfig(req);
     if(action==="push-token-register")return await pushTokenRegister(req,body);
     if(action==="push-token-unregister")return await pushTokenUnregister(req);
     if(action==="push-preferences")return await pushPreferences(req,body);
@@ -2304,6 +2453,12 @@ Deno.serve(async req=>{
     if(action==="history")return await history(req,body);
     if(action==="location")return await location(req,body);
     if(action==="mobile-state")return await mobileState(req);
+    if(action==="chat-state")return await chatState(req,body);
+    if(action==="chat-send")return await chatSend(req,body);
+    if(action==="chat-read")return await chatRead(req,body);
+    if(action==="chat-delete")return await chatDelete(req,body);
+    if(action==="notifications-list")return await notificationsList(req,body);
+    if(action==="notifications-read")return await notificationsRead(req,body);
     if(action==="item-save")return await itemSave(req,body);
     if(action==="item-delete")return await itemDelete(req,body);
     if(action==="settings-save")return await settingsSave(req,body);

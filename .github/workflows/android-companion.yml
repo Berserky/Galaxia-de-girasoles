@@ -1,5 +1,5 @@
 name: Nuestra Galaxia Android
-# Release 3.0.2
+# Release 3.1.0
 on:
   pull_request:
     branches: [main]
@@ -15,6 +15,11 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID || vars.FIREBASE_PROJECT_ID }}
+      FIREBASE_APPLICATION_ID: ${{ secrets.FIREBASE_APPLICATION_ID || vars.FIREBASE_APPLICATION_ID }}
+      FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY || vars.FIREBASE_API_KEY }}
+      FIREBASE_SENDER_ID: ${{ secrets.FIREBASE_SENDER_ID || vars.FIREBASE_SENDER_ID }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v4
@@ -29,6 +34,13 @@ jobs:
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: "9.4.1" }
+      - name: Estado configuración Firebase
+        run: |
+          if [ -n "$FIREBASE_PROJECT_ID" ] && [ -n "$FIREBASE_APPLICATION_ID" ] && [ -n "$FIREBASE_API_KEY" ] && [ -n "$FIREBASE_SENDER_ID" ]; then
+            echo "Firebase client configurado desde GitHub."
+          else
+            echo "Firebase client se completará en runtime desde el backend seguro."
+          fi
       - name: Empaquetar música de bienvenida
         run: cp musica.mp3 android/app/src/main/assets/musica.mp3
       - name: QA interfaz móvil
@@ -56,7 +68,7 @@ jobs:
           gradle -p android assembleRelease -Pandroid.injected.signing.store.file="$PWD/android/release.keystore" -Pandroid.injected.signing.store.password="$STORE_PASSWORD" -Pandroid.injected.signing.key.alias="$KEY_ALIAS" -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
           cp android/app/build/outputs/apk/release/app-release.apk NuestraGalaxia.apk
           SHA=$(sha256sum NuestraGalaxia.apk | awk '{print $1}')
-          printf '{"versionCode":24,"versionName":"3.0.2","apkUrl":"https://github.com/Berserky/Galaxia-de-girasoles/releases/download/android-stable/NuestraGalaxia.apk","sha256":"%s","notes":"Nuestra Galaxia 3.0.2 corrige la actualización real del GPS, distingue ubicaciones antiguas y explica el cálculo de distancia y ETA."}\n' "$SHA" > update.json
+          printf '{"versionCode":25,"versionName":"3.1.0","apkUrl":"https://github.com/Berserky/Galaxia-de-girasoles/releases/download/android-stable/NuestraGalaxia.apk","sha256":"%s","notes":"Nuestra Galaxia 3.1.0 incorpora Galaxy Chat, centro de notificaciones, mensajes nativos, estados y actividad con deep links."}\n' "$SHA" > update.json
       - name: Publicar canal estable
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env: { GH_TOKEN: "${{ github.token }}" }

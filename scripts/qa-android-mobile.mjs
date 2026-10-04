@@ -29,6 +29,7 @@ const cloudMediaStore=read('android/app/src/main/java/com/nuestragalaxia/compani
 const bondWorker=read('android/app/src/main/java/com/nuestragalaxia/companion/BondWorker.java');
 const bondStore=read('android/app/src/main/java/com/nuestragalaxia/companion/BondStore.java');
 const pushService=read('android/app/src/main/java/com/nuestragalaxia/companion/GalaxyFirebaseService.java');
+const galaxyNotifications=read('android/app/src/main/java/com/nuestragalaxia/companion/GalaxyNotifications.java');
 const pushManager=read('android/app/src/main/java/com/nuestragalaxia/companion/PushManager.java');
 const widgetPrefs=read('android/app/src/main/java/com/nuestragalaxia/companion/WidgetPrefs.java');
 const trackingService=read('android/app/src/main/java/com/nuestragalaxia/companion/TrackingService.java');
@@ -47,6 +48,7 @@ const schema=read('supabase/schema.sql');
 const build=read('android/app/build.gradle.kts');
 const manifest=read('android/app/src/main/AndroidManifest.xml');
 const workflow=read('.github/workflows/android-companion.yml');
+const chatMigration=read('supabase/migrations/20261004002624_galaxy_chat_notifications_31.sql');
 const widget=read('android/app/src/main/res/layout/widget_bond.xml')+read('android/app/src/main/java/com/nuestragalaxia/companion/BondWidget.java');
 const motionTest=read('android/app/src/test/java/com/nuestragalaxia/companion/MotionClassifierThresholdTest.java');
 
@@ -97,6 +99,24 @@ for(const action of apiCalls){
  assert.ok(edgeActions.has(action),'Acción UI no implementada en Edge Function: '+action);
 }
 assert.ok(mainActions.has('transport-set')&&edgeActions.has('transport-set'),'Falta transporte habitual end-to-end');
+
+for(const action of ['chat-state','chat-send','chat-read','chat-delete','notifications-list','notifications-read']){
+ assert.ok(mainActions.has(action)&&edgeActions.has(action),'Falta '+action+' end-to-end');
+}
+assert.ok(index.includes('id="chatFab"')&&app.includes('function renderChatFab()'),'Galaxy Chat debe abrir desde una burbuja flotante persistente');
+assert.ok(app.includes('function chatView()')&&app.includes('id="chatForm"')&&app.includes('partnerLastReadAt'),'Falta experiencia completa de Galaxy Chat');
+assert.ok(app.includes("if(a==='chat-reply')")&&app.includes("if(a==='chat-delete')")&&app.includes("if(a==='chat-load-more')"),'Chat debe soportar respuesta, eliminación y paginación');
+assert.ok(css.includes('.chat-fab')&&css.includes('.chat-message.own')&&css.includes('.chat-composer'),'Faltan estilos del chat flotante y conversación');
+assert.ok(chatMigration.includes('galaxy_chat_messages')&&chatMigration.includes('galaxy_chat_read_state')&&chatMigration.includes('galaxy_notifications'),'Falta persistencia privada de Chat y Centro de notificaciones');
+assert.ok(chatMigration.includes('enable row level security')&&chatMigration.includes('revoke all'),'Chat y notificaciones deben quedar cerrados a clientes directos');
+assert.ok(pushEngine.includes('chat_message')&&pushEngine.includes('status_changed')&&pushEngine.includes('goal_update'),'Push Engine debe cubrir mensajería y actividad de producto');
+assert.ok(galaxyNotifications.includes('galaxy-chat-v1')&&galaxyNotifications.includes('IMPORTANCE_HIGH')&&galaxyNotifications.includes('MessagingStyle'),'Mensajes deben usar un canal Android visible y MessagingStyle');
+assert.ok(galaxyNotifications.includes('galaxy-activity-v1'),'Actividad general debe usar un canal separado');
+assert.ok(pushService.includes('GalaxyNotifications.show')&&pushService.includes('chat_message'),'FCM debe rutear eventos al Notification Router');
+assert.ok(main.includes('captureDeepLink')&&main.includes('onNewIntent')&&app.includes("name==='deep-link'")&&app.includes('routeGalaxyAction'),'Las notificaciones deben abrir la superficie correcta');
+assert.ok(app.includes('function openNotificationCenter()')&&app.includes('header-notification-badge'),'Falta centro de notificaciones con badge');
+assert.ok(bridge.includes('requestGalaxyNotifications')&&main.includes('REQ_GALAXY_NOTIFICATIONS'),'Permiso general de notificaciones debe ser independiente del sistema legacy de momentos');
+for(const key of ['FIREBASE_PROJECT_ID','FIREBASE_APPLICATION_ID','FIREBASE_API_KEY','FIREBASE_SENDER_ID'])assert.ok(workflow.includes(key),'Workflow no inyecta '+key);
 for(const action of ['presence-set','backup-export','backup-import','pair-code-create','profile-repair','device-revoke'])assert.ok(mainActions.has(action)&&edgeActions.has(action),'Falta '+action+' end-to-end');
 assert.ok(app.includes('function deviceProfilesCard()'),'Falta administración visible de perfiles y teléfonos');
 assert.ok(app.includes("data-action=\"pair-code-partner\"")&&app.includes("data-action=\"profile-repair\""),'Falta flujo explícito para Adri');

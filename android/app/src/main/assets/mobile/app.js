@@ -1,5 +1,5 @@
 const $=s=>document.querySelector(s);
-const app=$('#app'),navEl=$('#bottomNav'),modal=$('#modal'),toastEl=$('#toast');
+const app=$('#app'),navEl=$('#bottomNav'),chatFab=$('#chatFab'),modal=$('#modal'),toastEl=$('#toast');
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const attr=esc;
 const ico=(name,cls='')=>'<i data-lucide="'+attr(name)+'" class="ui-icon '+attr(cls)+'" aria-hidden="true"></i>';
@@ -47,6 +47,7 @@ let toastTimer,refreshing=false,updateState={text:'La app está al día.',progre
 let dateContext=null,dateContextLoadedAt=0,dateQuestionNonce=0,dateMode=null,dateModeTimer=null,dateLastExperience=null;
 let goalsState=null,goalsLoadedAt=0,goalsFilter='active';
 let presenceLastSignature='',voiceTimer=null,voiceSeconds=0,intelligenceSearchNonce=0;
+let chatState=null,chatLoading=false,chatReply=null,notificationState=null,pendingDeepLink=null;
 let welcomeStep=0,welcomePreview=false,welcomeGift=true,welcomeEntering=false,tourStep=-1;
 const welcomeMusic=new Audio('../musica.mp3');welcomeMusic.loop=true;welcomeMusic.volume=.32;
 const globalPlayer=document.getElementById('globalPlayer'),providerPlayer=document.getElementById('providerPlayer');
@@ -103,6 +104,7 @@ window.GalaxyNative={
    let data={};try{data=JSON.parse(json||'{}');}catch{}
    if(name==='native'){native=data;render();}
    if(name==='update'){updateState=data;renderUpdateOnly();}
+   if(name==='deep-link'){pendingDeepLink=data;if(cloud)setTimeout(()=>consumeDeepLink(),0);}
    if(name==='voice'&&data.ready&&modal.open){stopVoiceTimer();voiceRecording=false;voiceReady=true;const status=modal.querySelector('[data-role="voice-status"]');if(status)status.textContent='Grabación lista. Escúchala antes de guardar.';modal.querySelector('[data-action="voice-record-stop"]')?.setAttribute('hidden','');modal.querySelector('[data-action="voice-preview"]')?.removeAttribute('hidden');modal.querySelector('[data-action="voice-discard"]')?.removeAttribute('hidden');modal.querySelector('[data-action="voice-record-start"]')?.removeAttribute('hidden');if(voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}}
    if(name==='voice-preview-ended'&&voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}
  },
@@ -297,11 +299,21 @@ async function refreshGoal(id){
  const goal=goalById(id);if(goal)openGoalDetail(id);else{closeModal();render();}
 }
 function header(){
- return '<header class="header"><div class="brand"><div class="brand-mark">'+ico('sparkles')+'</div><div><strong>Nuestra Galaxia</strong><small>'+esc(native.paired?(myName()+' & '+partnerName()):'Un espacio para dos')+'</small></div></div><div class="header-actions"><button class="header-search" data-action="universal-search-open" aria-label="Buscar en nuestra galaxia">'+ico('search')+'</button><div class="avatar">'+esc((native.paired?myName():'N').slice(0,1).toUpperCase())+'</div></div></header>';
+ const unread=Math.max(0,Number(cloud?.notifications?.unread||0));
+ return '<header class="header"><div class="brand"><div class="brand-mark">'+ico('sparkles')+'</div><div><strong>Nuestra Galaxia</strong><small>'+esc(native.paired?(myName()+' & '+partnerName()):'Un espacio para dos')+'</small></div></div><div class="header-actions"><button class="header-search header-notifications '+(unread?'has-unread':'')+'" data-action="notifications-open" aria-label="Notificaciones">'+ico('bell')+(unread?'<span class="header-notification-badge">'+(unread>99?'99+':unread)+'</span>':'')+'</button><button class="header-search" data-action="universal-search-open" aria-label="Buscar en nuestra galaxia">'+ico('search')+'</button><div class="avatar">'+esc((native.paired?myName():'N').slice(0,1).toUpperCase())+'</div></div></header>';
 }
 function renderNav(){
  navEl.style.display=native.paired&&!shouldShowAdriWelcome()?'grid':'none';
  navEl.innerHTML=nav.map(([id,label])=>'<button class="nav-btn '+(view===id?'active':'')+'" data-view="'+id+'">'+ico(icons[id],'nav-icon')+'<span>'+label+'</span></button>').join('');
+}
+function renderChatFab(){
+ if(!chatFab)return;
+ const enabled=!!(native.paired&&cloud?.capabilities?.chat&&!shouldShowAdriWelcome());
+ const unread=Math.max(0,Number(cloud?.chat?.unread||0));
+ chatFab.classList.toggle('hidden',!enabled||view==='chat');
+ if(!enabled||view==='chat'){chatFab.innerHTML='';return;}
+ chatFab.innerHTML=ico('message-circle')+(unread?'<span class="chat-fab-badge">'+(unread>99?'99+':unread)+'</span>':'');
+ chatFab.classList.toggle('has-unread',unread>0);
 }
 function go(next){
  const hadMap=!!mapData;
@@ -321,6 +333,7 @@ function render(){
  const themeState=window.GalaxyTheme?.applyTheme(window.GalaxyTheme.getChoice());
  syncSystemTheme(themeState);
  renderNav();
+ renderChatFab();
  if(!native.paired){renderOnboarding();refreshIcons();return;}
  if(shouldShowAdriWelcome()){globalPlayer.className='global-player';renderAdriWelcome();refreshIcons();return;}
  if(!cloud){app.innerHTML=header()+loading('Cargando nuestra galaxia');refreshIcons();refreshState();return;}
@@ -331,11 +344,13 @@ function render(){
  if(view==='memories'){app.innerHTML=header()+memoriesView();requestAnimationFrame(()=>{const tabs=$('.memories-tabs');if(tabs)tabs.scrollLeft=memoriesTabsScroll;});if((memoryTab==='album'&&!mediaFresh('photo'))||(memoryTab==='music'&&!mediaFresh('music')))setTimeout(()=>loadMedia(memoryTab==='album'?'photo':'music').catch(e=>toast(e.message)),0);}
  if(view==='goals'){app.innerHTML=header()+goalsView();if(!goalsState)setTimeout(()=>loadGoals().catch(e=>toast(e.message)),0);}
  if(view==='ai'){app.innerHTML=header()+intelligenceHubView();if(!mapData)setTimeout(()=>refreshMap({quiet:true,detail:true}).catch(()=>{}),0);}
+ if(view==='chat'){app.innerHTML=chatView();if(!chatState&&!chatLoading)setTimeout(()=>loadChat({quiet:true}),0);}
  if(view==='more')app.innerHTML=header()+moreView();
  refreshIcons();
  renderGlobalPlayer();
  if(view==='home'&&!encounterStatsCache&&!encounterStatsLoading)setTimeout(()=>loadEncounterStats().catch(()=>{}),0);
  if(tourStep>=0)setTimeout(renderTourOverlay,30);
+ if(pendingDeepLink&&cloud)setTimeout(()=>consumeDeepLink(),0);
 }
 function renderOnboarding(){
  app.innerHTML='<div class="onboarding"><div class="card"><div class="onboarding-logo">'+ico('sparkles')+'</div><p class="eyebrow">NUESTRA GALAXIA · ANDROID</p><h1>Todo lo nuestro, ahora en el teléfono.</h1><p>Vincula este dispositivo con el código generado en Ajustes de Nuestra Galaxia. El código solo sirve una vez y el token queda cifrado por Android.</p><form id="pairForm" class="stack" style="margin-top:22px"><div class="field"><label>Código de vinculación</label><input class="input" name="code" autocomplete="off" autocapitalize="characters" placeholder="Pega aquí el código" required></div><button class="btn" type="submit">Vincular este teléfono</button></form><p class="muted" style="font-size:11px;margin-top:16px">Versión '+esc(native.version||'')+'</p></div></div>';
@@ -1228,6 +1243,58 @@ function themeSettingsCard(){
  return '<div class="card theme-settings-card"><div class="row between"><div><p class="eyebrow">APARIENCIA</p><h3>Temas de Nuestra Galaxia</h3><p>'+(automatic?'Automático está activo. Ahora se ve como <b>'+esc(engine.LABELS[state.active])+'</b>.':'Elegiste <b>'+esc(engine.LABELS[state.active])+'</b> manualmente.')+'</p></div>'+ico(themeIcon(state.active))+'</div><div class="theme-grid">'+engine.options().map(option=>'<button class="theme-option '+(choice===option.id?'active':'')+'" data-action="theme-set" data-value="'+attr(option.id)+'"><span class="theme-preview" data-preview="'+attr(option.id)+'">'+ico(themeIcon(option.id))+'</span><span><b>'+esc(option.label)+'</b><small>'+(option.id==='auto'?'Cambia con la fecha':option.id===state.active?'Vista actual':'Elegir tema')+'</small></span>'+(choice===option.id?ico('circle-check-big'):'')+'</button>').join('')+'</div><p class="theme-local-note">'+ico('smartphone')+' La apariencia se guarda en este teléfono. No cambia el tema del teléfono de '+esc(partnerName())+'.</p></div>';
 }
 
+function chatTime(value){try{return new Intl.DateTimeFormat('es-CO',{hour:'numeric',minute:'2-digit'}).format(new Date(value));}catch{return'';}}
+function chatDay(value){try{return new Intl.DateTimeFormat('es-CO',{weekday:'short',day:'numeric',month:'short'}).format(new Date(value));}catch{return'';}}
+function chatMessageMarkup(m){
+ const own=String(m.sender_person)===String(cloud.person),read=own&&chatState?.partnerLastReadAt&&Date.parse(m.created_at)<=Date.parse(chatState.partnerLastReadAt);
+ const reply=m.reply?'<div class="chat-reply-preview"><b>'+esc(String(m.reply.sender_person)===String(cloud.person)?'Tú':partnerName())+'</b><span>'+esc(m.reply.deleted_at?'Mensaje eliminado':m.reply.body||'')+'</span></div>':'';
+ return '<article class="chat-message '+(own?'own':'partner')+' '+(m.deleted_at?'deleted':'')+'" data-message-id="'+attr(m.id)+'">'+reply+'<div class="chat-bubble">'+(m.deleted_at?'<em>Mensaje eliminado</em>':'<p>'+esc(m.body||'')+'</p>')+'<div class="chat-meta"><span>'+esc(chatTime(m.created_at))+'</span>'+(own?'<span>'+(read?'Leído':'Enviado')+'</span>':'')+'</div></div>'+(!m.deleted_at?'<div class="chat-message-actions"><button data-action="chat-reply" data-id="'+attr(m.id)+'">'+ico('reply')+'</button>'+(own?'<button data-action="chat-delete" data-id="'+attr(m.id)+'">'+ico('trash-2')+'</button>':'')+'</div>':'')+'</article>';
+}
+function chatMessagesMarkup(){
+ if(chatLoading&&!chatState)return loading('Cargando mensajes');
+ const list=chatState?.messages||[];if(!list.length)return '<div class="chat-empty">'+ico('message-circle')+'<h3>Empiecen por aquí</h3><p>Este chat es privado y no entra automáticamente a Galaxy Intelligence.</p></div>';
+ let out='',last='';
+ for(const m of list){const day=chatDay(m.created_at);if(day!==last){out+='<div class="chat-day"><span>'+esc(day)+'</span></div>';last=day;}out+=chatMessageMarkup(m);}
+ return (chatState?.nextBefore?'<button class="chat-load-more" data-action="chat-load-more">Cargar mensajes anteriores</button>':'')+out;
+}
+function chatView(){
+ return '<section class="chat-shell"><div class="chat-shell-head"><button class="chat-back" data-action="chat-close">'+ico('arrow-left')+'</button><div class="chat-avatar">'+esc(partnerName().slice(0,1).toUpperCase())+'</div><div><p class="eyebrow">GALAXY CHAT</p><h2>'+esc(partnerName())+'</h2><small>Conversación privada</small></div></div><div id="chatMessages" class="chat-messages">'+chatMessagesMarkup()+'</div><form id="chatForm" class="chat-composer">'+(chatReply?'<div class="chat-compose-reply"><span>Respondiendo a '+esc(String(chatReply.sender_person)===String(cloud.person)?'ti':partnerName())+'</span><button type="button" data-action="chat-reply-cancel">'+ico('x')+'</button></div>':'')+'<div class="chat-compose-row"><textarea name="body" maxlength="4000" rows="1" placeholder="Mensaje para '+attr(partnerName())+'"></textarea><button type="submit">'+ico('send')+'</button></div></form></section>';
+}
+async function loadChat({older=false,quiet=false}={}){
+ if(chatLoading)return;chatLoading=true;
+ try{
+  const before=older?chatState?.nextBefore:null,result=await api('chat-state',{limit:60,...(before?{before}:{})});
+  if(older&&chatState){const map=new Map([...(result.messages||[]),...(chatState.messages||[])].map(m=>[String(m.id),m]));chatState={...result,messages:[...map.values()].sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)))};}else chatState=result;
+  const last=chatState.messages?.at(-1);if(last){await api('chat-read',{messageId:last.id});chatState.unread=0;if(cloud?.chat)cloud.chat.unread=0;}
+  if(view==='chat'){render();setTimeout(()=>{const el=document.querySelector('#chatMessages');if(el&&!older)el.scrollTop=el.scrollHeight;},20);}else renderChatFab();
+ }catch(error){if(!quiet)toast(error.message||'No pudimos cargar el chat.');}
+ finally{chatLoading=false;}
+}
+
+function notificationIcon(type){
+ return type==='chat_message'?'message-circle':type==='status_changed'?'message-circle':type==='mood_changed'?'heart':type==='daily_answer'?'message-circle':type==='goal_update'?'target':type==='nearby'?'map-pin':type==='arrived_safe'?'house':type==='memory_shared'?'images':type==='plan_update'?'calendar':type==='gesture'?'hand-heart':'bell';
+}
+async function openNotificationCenter(){
+ const result=await api('notifications-list',{limit:80});notificationState=result;
+ const rows=result.notifications||[];
+ showModal('Notificaciones','<div class="notification-center-head"><p>'+Number(result.unread||0)+' sin leer</p>'+(result.unread?'<button class="btn small ghost" data-action="notifications-read-all">Marcar todas</button>':'')+'</div><div class="notification-center-list">'+(rows.length?rows.map(n=>'<button class="notification-row '+(!n.read_at?'unread':'')+'" data-action="notification-open" data-id="'+attr(n.id)+'" data-target="'+attr(n.action||'home')+'" data-entity-id="'+attr(n.entity_id||'')+'"><span class="notification-row-icon">'+ico(notificationIcon(n.event_type))+'</span><span><b>'+esc(n.title)+'</b><small>'+esc(n.body||'')+'</small><em>'+esc(fmtDateTime(n.created_at))+'</em></span></button>').join(''):'<div class="empty">Todavía no hay notificaciones.</div>')+'</div>','notifications');
+}
+async function routeGalaxyAction(action,entityId=''){
+ const target=String(action||'home');
+ if(target==='chat'){chatState=null;go('chat');await loadChat({quiet:true});return;}
+ if(target==='map'){go('map');await refreshMap({quiet:true,detail:true});return;}
+ if(target==='goals'){go('goals');await loadGoals(true);if(entityId)setTimeout(()=>openGoalDetail(entityId),80);return;}
+ if(target==='moments'){go('moments');return;}
+ if(target==='memories'){go('memories');return;}
+ if(target==='ai'){go('ai');return;}
+ go('home');
+}
+async function consumeDeepLink(){
+ if(!pendingDeepLink||!cloud)return;
+ const data=pendingDeepLink;pendingDeepLink=null;
+ await routeGalaxyAction(data.action,data.entityId).catch(()=>{});
+}
+
 function intelligenceHubView(){
  return '<section class="ai-hub"><div class="ai-hub-hero card"><span class="ai-hub-orbit">'+ico('sparkles')+'</span><div><p class="eyebrow">GALAXY INTELLIGENCE</p><h2>Nuestra IA</h2><p>Busca en su historia, conecta momentos y organiza recuerdos usando únicamente el contenido privado de Nuestra Galaxia.</p></div></div>'+
  '<button class="card ai-hub-primary" type="button" data-action="our-ai"><span>'+ico('message-circle')+'</span><div><p class="eyebrow">PREGÚNTALE A SU HISTORIA</p><h3>Buscar y preguntar</h3><p>Búsqueda híbrida con coincidencias exactas, texto completo y contexto semántico.</p></div>'+ico('chevron-right')+'</button>'+
@@ -1237,13 +1304,13 @@ function intelligenceHubView(){
 
 function moreView(){
  const settings=cloud.settings||{data:{},version:1},data=settings.data||{},presence=ownPresence();
- return '<section><div class="section-head"><div><p class="eyebrow">NUESTRA APP</p><h2>Más</h2><p>Privacidad, respaldo, nuestra historia inteligente y ajustes.</p></div></div>'+
+ return '<section><div class="section-head"><div><p class="eyebrow">CONFIGURACIÓN</p><h2>Más</h2><p>Privacidad, permisos, respaldo, dispositivos, apariencia y mantenimiento de la app.</p></div></div>'+
  '<div class="card"><div class="row between"><div><h3>Privacidad de “Ahora”</h3><p>Tu ubicación sigue teniendo su propio interruptor. Aquí decides si compartes batería y la canción que estás escuchando.</p></div>'+ico('shield-check')+'</div><div class="privacy-grid"><button class="privacy-toggle '+(presence.shareBattery?'active':'')+'" data-action="presence-battery">'+ico('battery-charging')+'<span><b>Batería</b><small>'+(presence.shareBattery?'Compartida':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(presence.shareListening?'active':'')+'" data-action="presence-listening">'+ico('music')+'<span><b>Escuchando</b><small>'+(presence.shareListening?'Compartido':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(native.tracking?'active':'')+'" data-action="map">'+ico('map-pin')+'<span><b>Ubicación</b><small>'+(native.tracking?'Compartiendo':'Pausada')+'</small></span></button></div></div>'+gpsHistoryPrivacyCard()+
  themeSettingsCard()+
- '<div class="card"><div class="row between"><div><h3>Galaxy Goals</h3><p>Objetivos compartidos, pasos y metas de ahorro registradas manualmente.</p></div>'+ico('target')+'</div><button class="btn small" style="margin-top:14px" data-action="goals-open">Abrir nuestros objetivos</button></div>'+'<div class="card"><div class="row between"><div><h3>Nuestra IA 2.0</h3><p>Búsqueda híbrida, conexiones, narración y Libro de Nuestra Galaxia con fuentes privadas y fallback clásico.</p></div>'+ico('sparkles')+'</div><button class="btn small" style="margin-top:14px" data-action="our-ai">Abrir Galaxy Intelligence</button></div>'+
+ '<div class="card"><div class="row between"><div><p class="eyebrow">NOTIFICACIONES</p><h3>Mensajes y actividad</h3><p>Galaxy Chat, estados, mapa, objetivos, recuerdos y demás actividad usan notificaciones nativas de Android.</p></div><span class="badge '+(native.notificationsGranted&&native.notificationsEnabled?'good':'warn')+'">'+(native.notificationsGranted&&native.notificationsEnabled?'Activas':'Requieren ajuste')+'</span></div><div class="notification-health"><span class="'+(native.notificationsGranted?'good':'')+'">'+ico(native.notificationsGranted?'check':'circle-alert')+' Permiso '+(native.notificationsGranted?'concedido':'pendiente')+'</span><span class="'+(native.pushConfigured?'good':'')+'">'+ico(native.pushConfigured?'radio':'circle-alert')+' Push '+(native.pushConfigured?'configurado':'pendiente')+'</span></div><div class="row wrap" style="margin-top:14px">'+(!native.notificationsGranted?'<button class="btn small" data-action="galaxy-notifications-enable">'+ico('bell-ring')+' Activar notificaciones</button>':'')+'<button class="btn small ghost" data-action="app-settings">'+ico('settings')+' Ajustes de Android</button></div></div>'+
  '<div class="card"><div class="row between"><div><h3>Copia de nuestra galaxia</h3><p>Exporta los datos a un archivo JSON o restaura una copia. Fotos, música y audios permanecen en su almacenamiento privado y se conservan por referencia.</p></div>'+ico('archive')+'</div><div class="row wrap" style="margin-top:14px"><button class="btn small secondary" data-action="backup-export">'+ico('download')+' Exportar</button><button class="btn small ghost" data-action="backup-import">'+ico('upload')+' Restaurar</button></div></div>'+
  '<div class="card"><div class="row between"><div><h3>Widget “Nuestra Galaxia” 2.0</h3><p>Foto, fecha, mood, distancia, ETA, canción, próximo plan, jardín y gesto rápido. Elige módulos al añadir cada widget.</p></div><span class="badge '+(native.canPinWidget?'good':'')+'">'+(native.canPinWidget?'Disponible':'Manual')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small" data-action="widget-add">Añadir widget</button><button class="btn small secondary" data-action="widget-photo">Elegir foto</button><button class="btn small ghost" data-action="widget-photo-clear">Quitar foto</button></div></div>'+
- '<div class="card"><div class="row between"><div><h3>Notificaciones de momentos</h3><p>Gestos y fechas especiales. Android revisa en segundo plano y también al abrir la app.</p></div><span class="badge '+(native.momentNotifications&&native.notificationsGranted&&native.notificationsEnabled?'good':'')+'">'+(native.momentNotifications?(native.notificationsGranted&&native.notificationsEnabled?'Listas':'Requieren ajuste'):'Pausadas')+'</span></div><div class="notification-health"><span class="'+(native.notificationsGranted?'good':'')+'">'+ico(native.notificationsGranted?'check':'circle-alert')+' Permiso '+(native.notificationsGranted?'concedido':'pendiente')+'</span><span class="'+(native.notificationsEnabled?'good':'')+'">'+ico(native.notificationsEnabled?'bell-ring':'bell-off')+' Sistema '+(native.notificationsEnabled?'habilitado':'bloqueado')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small secondary" data-action="moment-notifications">'+(native.momentNotifications?'Desactivar':'Activar')+'</button><button class="btn small '+(native.bondHaptics?'secondary':'ghost')+'" data-action="bond-haptics">'+ico('smartphone')+' Hápticos '+(native.bondHaptics?'activos':'apagados')+'</button>'+(native.momentNotifications?'<button class="btn small ghost" data-action="moment-notification-test">'+ico('bell-ring')+' Probar ahora</button>':'')+(!native.notificationsEnabled?'<button class="btn small ghost" data-action="app-settings">'+ico('settings')+' Ajustes</button>':'')+'</div><p class="muted" style="margin-top:10px">Push instantáneo: '+(native.pushConfigured?'configurado':'pendiente de Firebase')+'. Notificaciones y vibración se controlan por separado.</p></div>'+
+ '<div class="card"><div class="row between"><div><h3>Gestos y fechas especiales</h3><p>Control adicional para abrazos, besos, “te extraño” y fechas del vínculo.</p></div><span class="badge '+(native.momentNotifications&&native.notificationsGranted&&native.notificationsEnabled?'good':'')+'">'+(native.momentNotifications?(native.notificationsGranted&&native.notificationsEnabled?'Listas':'Requieren ajuste'):'Pausadas')+'</span></div><div class="notification-health"><span class="'+(native.notificationsGranted?'good':'')+'">'+ico(native.notificationsGranted?'check':'circle-alert')+' Permiso '+(native.notificationsGranted?'concedido':'pendiente')+'</span><span class="'+(native.notificationsEnabled?'good':'')+'">'+ico(native.notificationsEnabled?'bell-ring':'bell-off')+' Sistema '+(native.notificationsEnabled?'habilitado':'bloqueado')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small secondary" data-action="moment-notifications">'+(native.momentNotifications?'Desactivar':'Activar')+'</button><button class="btn small '+(native.bondHaptics?'secondary':'ghost')+'" data-action="bond-haptics">'+ico('smartphone')+' Hápticos '+(native.bondHaptics?'activos':'apagados')+'</button>'+(native.momentNotifications?'<button class="btn small ghost" data-action="moment-notification-test">'+ico('bell-ring')+' Probar ahora</button>':'')+(!native.notificationsEnabled?'<button class="btn small ghost" data-action="app-settings">'+ico('settings')+' Ajustes</button>':'')+'</div><p class="muted" style="margin-top:10px">Push instantáneo: '+(native.pushConfigured?'configurado':'pendiente de Firebase')+'. Notificaciones y vibración se controlan por separado.</p></div>'+
  '<div class="card"><h3>Nuestros datos</h3><form id="settingsForm" class="stack" style="margin-top:12px"><div class="grid"><div class="field"><label>Nombre 1</label><input class="input" name="name0" value="'+attr(data.names?.[0]||'')+'" required></div><div class="field"><label>Nombre 2</label><input class="input" name="name1" value="'+attr(data.names?.[1]||'')+'" required></div></div><div class="field"><label>Inicio de nuestra historia</label><input class="input" type="date" name="startDate" value="'+attr(data.startDate||'')+'"></div><div class="field"><label>Álbum de Google Fotos (opcional)</label><input class="input" name="albumUrl" value="'+attr(data.albumUrl||'')+'" placeholder="https://photos.app.goo.gl/…"></div><button class="btn" type="submit">Guardar ajustes</button></form></div>'+
  (Number(cloud?.person)===0?'<div class="card"><div class="row between"><div><h3>Previsualización de Adri</h3><p>Solo tú puedes ver este control. Abre la bienvenida exactamente como la verá Adri, sin marcarla como completada.</p></div>'+ico('sparkles')+'</div><button class="btn small secondary" style="margin-top:14px" data-action="welcome-replay">Previsualizar bienvenida</button></div>':'')+
  deviceProfilesCard()+'<div class="card"><h3>Permisos de Android</h3><p>Ubicación: '+(native.locationGranted?'concedida':'pendiente')+' · Segundo plano: '+(native.backgroundLocationGranted?'concedido':'opcional')+' · Notificaciones: '+(native.notificationsGranted?'concedidas':'pendientes')+'</p><button class="btn small secondary" style="margin-top:14px" data-action="app-settings">Abrir ajustes del sistema</button></div>'+
@@ -1565,6 +1632,16 @@ document.addEventListener('click',async e=>{
   if(a==='welcome-skip'){finishAdriWelcome();return;}
   if(a==='welcome-replay'){welcomePreview=true;welcomeStep=0;welcomeGift=true;welcomeEntering=false;tourStep=-1;render();window.scrollTo(0,0);return;}
   if(a==='modal-close'){closeModal();return;}
+  if(a==='chat-open'){chatState=null;go('chat');await loadChat({quiet:true});return;}
+  if(a==='chat-close'){chatReply=null;go('home');return;}
+  if(a==='chat-load-more'){await loadChat({older:true});return;}
+  if(a==='chat-reply'){chatReply=(chatState?.messages||[]).find(m=>String(m.id)===String(btn.dataset.id))||null;render();return;}
+  if(a==='chat-delete'){if(confirm('¿Eliminar este mensaje?')){await api('chat-delete',{id:btn.dataset.id});await loadChat({quiet:true});}return;}
+  if(a==='chat-reply-cancel'){chatReply=null;render();return;}
+  if(a==='notifications-open'){await openNotificationCenter();return;}
+  if(a==='notifications-read-all'){await api('notifications-read');if(cloud?.notifications)cloud.notifications.unread=0;await openNotificationCenter();return;}
+  if(a==='notification-open'){await api('notifications-read',{id:btn.dataset.id});if(cloud?.notifications)cloud.notifications.unread=Math.max(0,Number(cloud.notifications.unread||0)-1);const target=btn.dataset.target||'home',entity=btn.dataset.entityId||'';closeModal();await routeGalaxyAction(target,entity);return;}
+  if(a==='galaxy-notifications-enable'){await GalaxyNative.call('requestGalaxyNotifications');native=nativeState();render();toast('Notificaciones activadas.');return;}
   if(a==='goals-open'){go('goals');await loadGoals(true);return;}
   if(a==='goals-filter'){goalsFilter=btn.dataset.value||'active';render();return;}
   if(a==='goal-new'){openGoalForm('goal');return;}
@@ -1750,6 +1827,7 @@ document.addEventListener('change',e=>{
 document.addEventListener('submit',async e=>{
  e.preventDefault();
  try{
+  if(e.target.id==='chatForm'){const fd=new FormData(e.target),body=String(fd.get('body')||'').trim();if(!body)return;const replyTo=chatReply?.id||'';const textarea=e.target.querySelector('textarea');if(textarea)textarea.value='';await api('chat-send',{clientId:crypto.randomUUID(),body,...(replyTo?{replyTo}:{})});chatReply=null;await loadChat({quiet:false});return;}
   if(e.target.id==='ourAiForm'){const q=String(new FormData(e.target).get('question')||'');await showAiAnswer(q);return;}
   if(e.target.id==='intelligenceNarratorForm'){const ids=new FormData(e.target).getAll('sourceId').map(String);if(ids.length<5||ids.length>10)throw new Error('Selecciona entre 5 y 10 recuerdos.');const box=modal.querySelector('[data-role="narrative-result"]');if(box)box.innerHTML='<div class="monthly-loading">'+loading('Escribiendo solo con fuentes reales')+'<p>Validaremos cada párrafo antes de mostrarlo…</p></div>';const result=await api('intelligence-narrate',{sourceIds:ids});if(box)box.innerHTML=narrativeMarkup(result);refreshIcons();return;}
   if(e.target.id==='gpsHistoryDeleteForm'){const value=new FormData(e.target).get('confirmation');if(!window.GalaxyGpsHistory?.validDeleteConfirmation(value))throw new Error('Escribe BORRAR exactamente para confirmar.');const submit=e.target.querySelector('button[type="submit"]');if(submit)submit.disabled=true;await deleteGpsHistory();return;}
@@ -1799,10 +1877,14 @@ setInterval(()=>{
 setInterval(()=>{
  if(native.paired&&view==='map'&&document.visibilityState==='visible')refreshMap({quiet:true,detail:false}).catch(()=>{});
 },12000);
+setInterval(()=>{
+ if(native.paired&&view==='chat'&&document.visibilityState==='visible'&&!editingNow())loadChat({quiet:true}).catch(()=>{});
+},4000);
 document.addEventListener('visibilitychange',()=>{
  if(document.visibilityState==='visible'&&native.paired){
    refreshStateIfChanged().catch(()=>{});
    if(view==='map')refreshMap({quiet:true,detail:false}).catch(()=>{});
+   if(view==='chat')loadChat({quiet:true}).catch(()=>{});
    if(native.momentNotifications)GalaxyNative.call('refreshMoments').catch(()=>{});
  }
 });
