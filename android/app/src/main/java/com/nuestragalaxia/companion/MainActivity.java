@@ -1,6 +1,7 @@
 package com.nuestragalaxia.companion;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.*;
 import android.appwidget.AppWidgetManager;
 import android.content.*;
@@ -146,6 +147,7 @@ public final class MainActivity extends ComponentActivity {
     }
 
     @SuppressWarnings("SetJavaScriptEnabled")
+    @SuppressLint("RequiresFeature")
     private void setupWeb(){
         assetLoader=new WebViewAssetLoader.Builder().addPathHandler("/assets/",new WebViewAssetLoader.AssetsPathHandler(this)).build();
         WebSettings settings=web.getSettings();
