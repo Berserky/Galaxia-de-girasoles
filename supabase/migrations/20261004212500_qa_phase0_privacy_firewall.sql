@@ -116,7 +116,7 @@ create or replace function public.galaxy_capsule_protect_unlock_state()
 returns trigger
 language plpgsql security invoker
 set search_path=''
-as $
+as $capsule_guard$
 begin
   if new.kind='capsule' then
     if tg_op='INSERT' then
@@ -129,7 +129,7 @@ begin
     end if;
   end if;
   return new;
-end $;
+end $capsule_guard$;
 revoke all on function public.galaxy_capsule_protect_unlock_state() from public,anon,authenticated;
 
 drop trigger if exists capsule_unlock_state_guard on public.galaxy_items;
@@ -243,7 +243,7 @@ create or replace function public.galaxy_chat_attachment_path_guard()
 returns trigger
 language plpgsql security invoker
 set search_path=''
-as $
+as $chat_path_guard$
 declare
   sender text;
   p text;
@@ -288,7 +288,7 @@ begin
   end if;
 
   return new;
-end $;
+end $chat_path_guard$;
 
 revoke all on function public.galaxy_chat_attachment_path_guard() from public,anon,authenticated;
 
