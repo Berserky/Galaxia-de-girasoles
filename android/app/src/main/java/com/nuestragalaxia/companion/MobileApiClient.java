@@ -38,7 +38,7 @@ public final class MobileApiClient {
                     if(total>MAX_JSON_RESPONSE_BYTES)throw new IOException("Respuesta demasiado grande.");
                     out.write(buffer,0,read);
                 }
-                text=out.toString(StandardCharsets.UTF_8);
+                text=new String(out.toByteArray(),StandardCharsets.UTF_8);
             }
         }
         JSONObject result=text.trim().isEmpty()?new JSONObject():new JSONObject(text);
