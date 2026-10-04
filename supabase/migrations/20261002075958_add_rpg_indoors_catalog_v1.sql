@@ -1,0 +1,1 @@
+insert into public.galaxy_home_catalog(item_key,price) values ('rpgchair',18),('rpgtable',24),('rpgshelf',28),('rpgplant',16),('rpgcabinet',26),('rpgcounter',26),('rpgrug',20),('rpgwall',12) on conflict(item_key) do update set price=excluded.price;
