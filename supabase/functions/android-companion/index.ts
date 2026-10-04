@@ -778,21 +778,21 @@ async function chatSend(req:Request,body:any){
    client_created_at:clientCreatedAt,server_received_at:now,sent_at:now
   }).select("*").single());
   isNew=true;
-  const attachmentRows:any[]=[];
-  for(const input of files){
-   const kind=["photo","video","audio","file"].includes(String(input?.kind))?String(input.kind):"file";
-   const path=text(input?.path,400),bucket=["galaxy-chat-media","galaxy-voice"].includes(String(input?.bucket))?String(input.bucket):"galaxy-chat-media";
-   if(!path.startsWith(person+"/"))continue;
-   attachmentRows.push({
-    message_id:row.id,kind,bucket,path,mime:text(input?.mime||"application/octet-stream",120),name:text(input?.name||"archivo",240),
-    size_bytes:Math.max(0,Number(input?.size||input?.sizeBytes||0)),duration_ms:Number.isFinite(Number(input?.durationMs))?Math.max(0,Number(input.durationMs)):null,
-    width:Number.isFinite(Number(input?.width))?Math.max(1,Number(input.width)):null,height:Number.isFinite(Number(input?.height))?Math.max(1,Number(input.height)):null,
-    thumbnail_path:text(input?.thumbnailPath||"",400)||null,caption:text(input?.caption||"",1000)
-   });
-  }
-  if(attachmentRows.length)await ok(db.from("galaxy_chat_attachments").insert(attachmentRows));
   await ok(db.from("galaxy_chat_metrics").insert({message_id:row.id,event:"sent",send_latency_ms:Math.max(0,Date.now()-Date.parse(clientCreatedAt)),server_latency_ms:Date.now()-started,retry_count:clampInt(body.retryCount,0,100,0)}));
  }
+ const attachmentRows:any[]=[];
+ for(const input of files){
+  const kind=["photo","video","audio","file"].includes(String(input?.kind))?String(input.kind):"file";
+  const path=text(input?.path,400),bucket=["galaxy-chat-media","galaxy-voice"].includes(String(input?.bucket))?String(input.bucket):"galaxy-chat-media";
+  if(!path.startsWith(person+"/"))continue;
+  attachmentRows.push({
+   message_id:row.id,kind,bucket,path,mime:text(input?.mime||"application/octet-stream",120),name:text(input?.name||"archivo",240),
+   size_bytes:Math.max(0,Number(input?.size||input?.sizeBytes||0)),duration_ms:Number.isFinite(Number(input?.durationMs))?Math.max(0,Number(input.durationMs)):null,
+   width:Number.isFinite(Number(input?.width))?Math.max(1,Number(input.width)):null,height:Number.isFinite(Number(input?.height))?Math.max(1,Number(input.height)):null,
+   thumbnail_path:text(input?.thumbnailPath||"",400)||null,caption:text(input?.caption||"",1000)
+  });
+ }
+ if(attachmentRows.length)await ok(db.from("galaxy_chat_attachments").upsert(attachmentRows,{onConflict:"message_id,path",ignoreDuplicates:true}));
  await ok(db.from("galaxy_chat_read_state").upsert({person,last_read_at:row.created_at,last_read_message_id:row.id,updated_at:new Date().toISOString()},{onConflict:"person"}));
  let push:any={sent:0,configured:false};
  if(isNew){
