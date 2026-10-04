@@ -1960,7 +1960,7 @@ async function presenceSet(req:Request,body:any){
 
 async function backupExport(req:Request){
   await device(req);
-  const [settings,items,daily,bond,bondGestures,places,goals,goalParticipants,goalSteps,goalLinks,goalContributions,voiceTranscripts,photoContext]=await Promise.all([
+  const [settings,items,daily,bond,bondGestures,places,goals,goalParticipants,goalSteps,goalLinks,goalContributions,voiceTranscripts,photoContext,chatMessages,chatReactions,chatPins,chatFavorites,chatAttachments,chatPreferences,chatTranscripts,chatTranslations,chatAlbums,chatAlbumItems,chatStickers,chatStickerFavorites]=await Promise.all([
     ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
     ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:true}).limit(2000)),
     ok(db.from("galaxy_daily").select("day,person,mood,answer").order("day",{ascending:true}).limit(1000)),
@@ -1973,9 +1973,21 @@ async function backupExport(req:Request){
     ok(db.from("galaxy_goal_links").select("*").order("created_at",{ascending:true}).limit(5000)),
     ok(db.from("galaxy_goal_contributions").select("*").order("contribution_date",{ascending:true}).limit(10000)),
     ok(db.from("galaxy_voice_transcripts").select("*").order("created_at",{ascending:true}).limit(500)),
-    ok(db.from("galaxy_photo_context").select("*").order("created_at",{ascending:true}).limit(500))
+    ok(db.from("galaxy_photo_context").select("*").order("created_at",{ascending:true}).limit(500)),
+    ok(db.from("galaxy_chat_messages").select("*").order("server_seq",{ascending:true}).limit(10000)),
+    ok(db.from("galaxy_chat_reactions").select("*").limit(20000)),
+    ok(db.from("galaxy_chat_pins").select("*").limit(1000)),
+    ok(db.from("galaxy_chat_favorites").select("*").limit(10000)),
+    ok(db.from("galaxy_chat_attachments").select("*").order("created_at",{ascending:true}).limit(20000)),
+    ok(db.from("galaxy_chat_preferences").select("*").limit(2)),
+    ok(db.from("galaxy_chat_transcripts").select("*").limit(5000)),
+    ok(db.from("galaxy_chat_translations").select("*").limit(10000)),
+    ok(db.from("galaxy_chat_albums").select("*").order("created_at",{ascending:true}).limit(1000)),
+    ok(db.from("galaxy_chat_album_items").select("*").limit(20000)),
+    ok(db.from("galaxy_chat_stickers").select("*").order("created_at",{ascending:true}).limit(2000)),
+    ok(db.from("galaxy_chat_sticker_favorites").select("*").limit(4000))
   ]);
-  return json({format:"nuestra-galaxia-backup",version:2,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:items||[],daily:daily||[],bond:bond||[],bondGestures:bondGestures||[],places:places||[],goals:goals||[],goalParticipants:goalParticipants||[],goalSteps:goalSteps||[],goalLinks:goalLinks||[],goalContributions:goalContributions||[],voiceTranscripts:voiceTranscripts||[],photoContext:photoContext||[]});
+  return json({format:"nuestra-galaxia-backup",version:3,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:items||[],daily:daily||[],bond:bond||[],bondGestures:bondGestures||[],places:places||[],goals:goals||[],goalParticipants:goalParticipants||[],goalSteps:goalSteps||[],goalLinks:goalLinks||[],goalContributions:goalContributions||[],voiceTranscripts:voiceTranscripts||[],photoContext:photoContext||[],chat:{messages:chatMessages||[],reactions:chatReactions||[],pins:chatPins||[],favorites:chatFavorites||[],attachments:chatAttachments||[],preferences:chatPreferences||[],transcripts:chatTranscripts||[],translations:chatTranslations||[],albums:chatAlbums||[],albumItems:chatAlbumItems||[],stickers:chatStickers||[],stickerFavorites:chatStickerFavorites||[]}});
 }
 
 function uuidish(v:unknown){return /^[0-9a-f-]{36}$/i.test(String(v||""));}
@@ -1983,7 +1995,7 @@ function uuidish(v:unknown){return /^[0-9a-f-]{36}$/i.test(String(v||""));}
 async function backupRestore(req:Request,body:any){
   await device(req);
   const backup=body?.backup;
-  if(!backup||backup.format!=="nuestra-galaxia-backup"||![1,2].includes(Number(backup.version)))return json({error:"La copia no pertenece a Nuestra Galaxia."},400);
+  if(!backup||backup.format!=="nuestra-galaxia-backup"||![1,2,3].includes(Number(backup.version)))return json({error:"La copia no pertenece a Nuestra Galaxia."},400);
   const items=Array.isArray(backup.items)?backup.items.slice(0,2000):[];
   const daily=Array.isArray(backup.daily)?backup.daily.slice(0,1000):[];
   const bond=Array.isArray(backup.bond)?backup.bond.slice(0,2000):[];
@@ -1996,7 +2008,20 @@ async function backupRestore(req:Request,body:any){
   const goalContributions=Array.isArray(backup.goalContributions)?backup.goalContributions.slice(0,10000):[];
   const voiceTranscripts=Array.isArray(backup.voiceTranscripts)?backup.voiceTranscripts.slice(0,500):[];
   const photoContext=Array.isArray(backup.photoContext)?backup.photoContext.slice(0,500):[];
-  let restoredItems=0,restoredDaily=0,restoredBond=0,restoredBondGestures=0,restoredPlaces=0,restoredGoals=0,restoredGoalParticipants=0,restoredGoalSteps=0,restoredGoalLinks=0,restoredGoalContributions=0,restoredVoiceTranscripts=0,restoredPhotoContext=0;
+  const chat=backup.chat&&typeof backup.chat==="object"&&!Array.isArray(backup.chat)?backup.chat:{};
+  const chatMessages=Array.isArray(chat.messages)?chat.messages.slice(0,10000):[];
+  const chatReactions=Array.isArray(chat.reactions)?chat.reactions.slice(0,20000):[];
+  const chatPins=Array.isArray(chat.pins)?chat.pins.slice(0,1000):[];
+  const chatFavorites=Array.isArray(chat.favorites)?chat.favorites.slice(0,10000):[];
+  const chatAttachments=Array.isArray(chat.attachments)?chat.attachments.slice(0,20000):[];
+  const chatPreferences=Array.isArray(chat.preferences)?chat.preferences.slice(0,2):[];
+  const chatTranscripts=Array.isArray(chat.transcripts)?chat.transcripts.slice(0,5000):[];
+  const chatTranslations=Array.isArray(chat.translations)?chat.translations.slice(0,10000):[];
+  const chatAlbums=Array.isArray(chat.albums)?chat.albums.slice(0,1000):[];
+  const chatAlbumItems=Array.isArray(chat.albumItems)?chat.albumItems.slice(0,20000):[];
+  const chatStickers=Array.isArray(chat.stickers)?chat.stickers.slice(0,2000):[];
+  const chatStickerFavorites=Array.isArray(chat.stickerFavorites)?chat.stickerFavorites.slice(0,4000):[];
+  let restoredItems=0,restoredDaily=0,restoredBond=0,restoredBondGestures=0,restoredPlaces=0,restoredGoals=0,restoredGoalParticipants=0,restoredGoalSteps=0,restoredGoalLinks=0,restoredGoalContributions=0,restoredVoiceTranscripts=0,restoredPhotoContext=0,restoredChat=0;
 
   if(backup.settings&&typeof backup.settings==="object"&&!Array.isArray(backup.settings)){
     const current=await ok(db.from("galaxy_settings").select("data").eq("id",1).single());
@@ -2113,7 +2138,48 @@ async function backupRestore(req:Request,body:any){
     },{onConflict:"path"}));
     restoredPhotoContext++;
   }
-  return json({ok:true,restored:{items:restoredItems,daily:restoredDaily,bond:restoredBond,bondGestures:restoredBondGestures,places:restoredPlaces,goals:restoredGoals,goalParticipants:restoredGoalParticipants,goalSteps:restoredGoalSteps,goalLinks:restoredGoalLinks,goalContributions:restoredGoalContributions,voiceTranscripts:restoredVoiceTranscripts,photoContext:restoredPhotoContext},restoredGoals});
+
+  for(const row of chatMessages){
+    const id=String(row?.id||""),clientId=String(row?.client_id||""),sender=String(row?.sender_person||"");
+    if(!uuidish(id)||!uuidish(clientId)||!["0","1"].includes(sender))continue;
+    const type=CHAT_MESSAGE_TYPES.has(String(row?.message_type||"text"))?String(row.message_type):"text";
+    await ok(db.from("galaxy_chat_messages").upsert({
+      id,client_id:clientId,sender_person:sender,body:text(row?.body,4000),reply_to:uuidish(row?.reply_to)?String(row.reply_to):null,
+      deleted_at:row?.deleted_at||null,created_at:row?.created_at||new Date().toISOString(),client_created_at:row?.client_created_at||row?.created_at||new Date().toISOString(),
+      server_received_at:row?.server_received_at||row?.created_at||new Date().toISOString(),sent_at:row?.sent_at||null,delivered_at:row?.delivered_at||null,read_at:row?.read_at||null,edited_at:row?.edited_at||null,
+      message_type:type,attachment:chatSafeObject(row?.attachment,4096),link_preview:chatSafeObject(row?.link_preview,8192),
+      silent:row?.silent===true,scheduled_at:row?.scheduled_at||null,schedule_state:["pending","processing","sent","cancelled"].includes(String(row?.schedule_state))?String(row.schedule_state):"sent",
+      expires_at:row?.expires_at||null,view_once:row?.view_once===true,opened_at:row?.opened_at||null,
+      effect:["hearts","confetti","stars","kiss","sunflowers","galaxy"].includes(String(row?.effect))?String(row.effect):null,format_version:1
+    },{onConflict:"id",ignoreDuplicates:true}));
+    restoredChat++;
+  }
+  for(const row of chatAttachments){
+    const id=String(row?.id||""),messageId=String(row?.message_id||""),kind=String(row?.kind||"file");
+    if(!uuidish(id)||!uuidish(messageId)||!["photo","video","audio","file"].includes(kind))continue;
+    await ok(db.from("galaxy_chat_attachments").upsert({id,message_id:messageId,kind,bucket:text(row?.bucket||"galaxy-chat-media",80)||"galaxy-chat-media",path:text(row?.path,400),mime:text(row?.mime,120),name:text(row?.name,240),size_bytes:Math.max(0,Number(row?.size_bytes)||0),duration_ms:row?.duration_ms||null,width:row?.width||null,height:row?.height||null,thumbnail_path:text(row?.thumbnail_path,400)||null,caption:text(row?.caption,1000),media_quality:["optimized","hd","original"].includes(String(row?.media_quality))?String(row.media_quality):"optimized",waveform:Array.isArray(row?.waveform)?row.waveform.slice(0,256):[],created_at:row?.created_at||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
+  }
+  for(const row of chatReactions)if(uuidish(row?.message_id)&&["0","1"].includes(String(row?.person))&&CHAT_REACTIONS.has(String(row?.emoji)))await ok(db.from("galaxy_chat_reactions").upsert({message_id:String(row.message_id),person:String(row.person),emoji:String(row.emoji),created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()},{onConflict:"message_id,person",ignoreDuplicates:true}));
+  for(const row of chatPins)if(uuidish(row?.message_id)&&["0","1"].includes(String(row?.pinned_by)))await ok(db.from("galaxy_chat_pins").upsert({message_id:String(row.message_id),pinned_by:String(row.pinned_by),pinned_at:row?.pinned_at||new Date().toISOString()},{onConflict:"message_id",ignoreDuplicates:true}));
+  for(const row of chatFavorites)if(uuidish(row?.message_id)&&["0","1"].includes(String(row?.person)))await ok(db.from("galaxy_chat_favorites").upsert({message_id:String(row.message_id),person:String(row.person),saved_at:row?.saved_at||new Date().toISOString()},{onConflict:"message_id,person",ignoreDuplicates:true}));
+  for(const row of chatPreferences){
+    const person=String(row?.person||"");if(!["0","1"].includes(person))continue;
+    await ok(db.from("galaxy_chat_preferences").upsert({person,partner_nickname:text(row?.partner_nickname,40)||null,theme:["galaxy","sunflowers","night","cyberpunk","romantic","minimal"].includes(String(row?.theme))?String(row.theme):"galaxy",notification_privacy:["full","name","generic"].includes(String(row?.notification_privacy))?String(row.notification_privacy):"full",show_read:row?.show_read!==false,show_last_seen:row?.show_last_seen!==false,show_typing:row?.show_typing!==false,default_ttl_seconds:Number(row?.default_ttl_seconds)||null,updated_at:new Date().toISOString()},{onConflict:"person"}));
+  }
+  for(const row of chatTranscripts)if(uuidish(row?.attachment_id)&&["0","1"].includes(String(row?.requested_by))&&text(row?.transcript,30000))await ok(db.from("galaxy_chat_transcripts").upsert({attachment_id:String(row.attachment_id),requested_by:String(row.requested_by),transcript:text(row.transcript,30000),segments:sanitizeTranscriptSegments(row?.segments||[]),provider:text(row?.provider||"backup",40)||"backup",model:text(row?.model||"restored",120)||"restored",created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()},{onConflict:"attachment_id"}));
+  for(const row of chatTranslations)if(uuidish(row?.message_id)&&["0","1"].includes(String(row?.person))&&text(row?.target_language,24)&&text(row?.translated_text,8000))await ok(db.from("galaxy_chat_translations").upsert({message_id:String(row.message_id),person:String(row.person),target_language:text(row.target_language,24),translated_text:text(row.translated_text,8000),provider:text(row?.provider||"backup",40)||"backup",model:text(row?.model||"restored",120)||"restored",created_at:row?.created_at||new Date().toISOString()},{onConflict:"message_id,person,target_language",ignoreDuplicates:true}));
+  for(const row of chatStickers){
+    if(!uuidish(row?.id)||!["0","1"].includes(String(row?.created_by))||!text(row?.path,400))continue;
+    await ok(db.from("galaxy_chat_stickers").upsert({id:String(row.id),created_by:String(row.created_by),bucket:text(row?.bucket||"galaxy-chat-media",80)||"galaxy-chat-media",path:text(row.path,400),name:text(row?.name||"Sticker",80)||"Sticker",created_at:row?.created_at||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
+  }
+  for(const row of chatStickerFavorites)if(uuidish(row?.sticker_id)&&["0","1"].includes(String(row?.person)))await ok(db.from("galaxy_chat_sticker_favorites").upsert({sticker_id:String(row.sticker_id),person:String(row.person),last_used_at:row?.last_used_at||null,saved_at:row?.saved_at||new Date().toISOString()},{onConflict:"sticker_id,person",ignoreDuplicates:true}));
+  for(const row of chatAlbums){
+    if(!uuidish(row?.id)||!["0","1"].includes(String(row?.created_by))||!text(row?.name,80))continue;
+    await ok(db.from("galaxy_chat_albums").upsert({id:String(row.id),name:text(row.name,80),cover_attachment_id:uuidish(row?.cover_attachment_id)?String(row.cover_attachment_id):null,album_date:validDate(row?.album_date)?String(row.album_date):null,created_by:String(row.created_by),created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
+  }
+  for(const row of chatAlbumItems)if(uuidish(row?.album_id)&&uuidish(row?.attachment_id)&&["0","1"].includes(String(row?.added_by)))await ok(db.from("galaxy_chat_album_items").upsert({album_id:String(row.album_id),attachment_id:String(row.attachment_id),added_by:String(row.added_by),added_at:row?.added_at||new Date().toISOString()},{onConflict:"album_id,attachment_id",ignoreDuplicates:true}));
+
+  return json({ok:true,restored:{items:restoredItems,daily:restoredDaily,bond:restoredBond,bondGestures:restoredBondGestures,places:restoredPlaces,goals:restoredGoals,goalParticipants:restoredGoalParticipants,goalSteps:restoredGoalSteps,goalLinks:restoredGoalLinks,goalContributions:restoredGoalContributions,voiceTranscripts:restoredVoiceTranscripts,photoContext:restoredPhotoContext,chatMessages:restoredChat},restoredGoals});
 }
 
 async function recordParticipation(person:string){
