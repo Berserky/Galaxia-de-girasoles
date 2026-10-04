@@ -511,6 +511,11 @@ function pushEventEnabledMap(value:any){
  const source=value&&typeof value==="object"&&!Array.isArray(value)?value:{};
  return Object.fromEntries(PUSH_EVENT_TYPES.map(type=>[type,source[type]===true]));
 }
+async function profileNames(){
+ const settings=await ok(db.from("galaxy_settings").select("data").eq("id",1).single());
+ const names=Array.isArray(settings?.data?.names)?settings.data.names:["Sebas","Adri"];
+ return [text(names[0]||"Sebas",40),text(names[1]||"Adri",40)];
+}
 async function savePushPreferences(deviceId:string,value:any){
  const enabled=pushEventEnabledMap(value),now=new Date().toISOString();
  await ok(db.from("galaxy_push_subscriptions").upsert(
