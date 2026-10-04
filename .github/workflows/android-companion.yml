@@ -1,5 +1,5 @@
 name: Nuestra Galaxia Android
-# Release 3.1.0
+# Release 3.1.1
 on:
   pull_request:
     branches: [main]
@@ -68,7 +68,7 @@ jobs:
           gradle -p android assembleRelease -Pandroid.injected.signing.store.file="$PWD/android/release.keystore" -Pandroid.injected.signing.store.password="$STORE_PASSWORD" -Pandroid.injected.signing.key.alias="$KEY_ALIAS" -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
           cp android/app/build/outputs/apk/release/app-release.apk NuestraGalaxia.apk
           SHA=$(sha256sum NuestraGalaxia.apk | awk '{print $1}')
-          printf '{"versionCode":25,"versionName":"3.1.0","apkUrl":"https://github.com/Berserky/Galaxia-de-girasoles/releases/download/android-stable/NuestraGalaxia.apk","sha256":"%s","notes":"Nuestra Galaxia 3.1.0 incorpora Galaxy Chat, centro de notificaciones, mensajes nativos, estados y actividad con deep links."}\n' "$SHA" > update.json
+          printf '{"versionCode":26,"versionName":"3.1.1","apkUrl":"https://github.com/Berserky/Galaxia-de-girasoles/releases/download/android-stable/NuestraGalaxia.apk","sha256":"%s","notes":"Nuestra Galaxia 3.1.1 corrige el layout fullscreen de Galaxy Chat, mantiene visible el compositor y elimina saltos durante la sincronización."}\n' "$SHA" > update.json
       - name: Publicar canal estable
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env: { GH_TOKEN: "${{ github.token }}" }
