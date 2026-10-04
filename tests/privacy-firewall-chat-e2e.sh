@@ -52,7 +52,9 @@ curl(){ command curl -H "Authorization: Bearer $ANON_KEY" "$@"; }
 supabase functions serve android-companion --no-verify-jwt >/tmp/android-companion-e2e.log 2>&1 &
 EDGE_PID=$!
 cleanup(){ kill "$EDGE_PID" >/dev/null 2>&1 || true; }
+dump_edge_log(){ echo "--- android-companion local log ---"; tail -200 /tmp/android-companion-e2e.log 2>/dev/null || true; }
 trap cleanup EXIT
+trap 'code=$?; dump_edge_log; exit "$code"' ERR
 
 ready=false
 for _ in $(seq 1 60); do
@@ -70,8 +72,12 @@ done
   exit 1
 }
 
-owner_backup=$(curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $DEVICE_TOKEN" -H 'content-type: application/json' --data '{"action":"backup-export"}')
-partner_backup=$(curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $PARTNER_TOKEN" -H 'content-type: application/json' --data '{"action":"backup-export"}')
+owner_status=$(curl -sS -o /tmp/owner-backup.json -w '%{http_code}' -X POST "$FUNCTION_URL" -H "x-device-token: $DEVICE_TOKEN" -H 'content-type: application/json' --data '{"action":"backup-export"}')
+if [ "$owner_status" != "200" ]; then echo "owner backup failed: HTTP $owner_status"; cat /tmp/owner-backup.json; dump_edge_log; exit 1; fi
+owner_backup=$(cat /tmp/owner-backup.json)
+partner_status=$(curl -sS -o /tmp/partner-backup.json -w '%{http_code}' -X POST "$FUNCTION_URL" -H "x-device-token: $PARTNER_TOKEN" -H 'content-type: application/json' --data '{"action":"backup-export"}')
+if [ "$partner_status" != "200" ]; then echo "partner backup failed: HTTP $partner_status"; cat /tmp/partner-backup.json; dump_edge_log; exit 1; fi
+partner_backup=$(cat /tmp/partner-backup.json)
 for backup in "$owner_backup" "$partner_backup"; do
   if grep -q 'EDGE-CAPSULE-SECRET' <<<"$backup"; then
     echo "NG-QA-001: backup leaked locked capsule body"
