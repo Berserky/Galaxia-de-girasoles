@@ -56,6 +56,9 @@ jobs:
       - name: Run Phase 0 two-profile attack probes
         run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/privacy-firewall-db.sql
 
+      - name: Run delete-for-both signed URL E2E
+        run: bash tests/privacy-firewall-chat-e2e.sh
+
       - name: Stop isolated Supabase
         if: always()
         run: supabase stop --no-backup
