@@ -97,6 +97,10 @@ public final class GalaxyBridge {
         activity.openAppSettings(requestId);
     }
 
+    @JavascriptInterface public void clearChatNotifications(String requestId){
+        activity.clearChatNotifications(requestId);
+    }
+
     @JavascriptInterface public void checkUpdate(String requestId){
         activity.checkUpdate(requestId);
     }
