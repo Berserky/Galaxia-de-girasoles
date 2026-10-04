@@ -233,6 +233,7 @@ public final class MainActivity extends FragmentActivity {
             state.put("driveFolderConnected",cloudMedia!=null&&cloudMedia.connected());
             state.put("driveFolderName",cloudMedia==null?"":cloudMedia.driveName());
             state.put("chatLockEnabled",getSharedPreferences(CHAT_SECURITY_PREFS,MODE_PRIVATE).getBoolean(CHAT_LOCK_ENABLED,false));
+            state.put("giphyConfigured",BuildConfig.GIPHY_API_KEY!=null&&!BuildConfig.GIPHY_API_KEY.isBlank());
             BatteryManager battery=getSystemService(BatteryManager.class);
             int batteryPct=battery==null?-1:battery.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
             state.put("battery",batteryPct>=0&&batteryPct<=100?batteryPct:JSONObject.NULL);
