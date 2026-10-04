@@ -1546,7 +1546,7 @@ revoke all on public.galaxy_intelligence_cleanup_queue from public,anon,authenti
 grant select,insert,update,delete on public.galaxy_intelligence_cleanup_queue to service_role;
 
 create or replace function public.galaxy_intelligence_enqueue_source_cleanup()
-returns trigger language plpgsql security invoker set search_path=''
+returns trigger language plpgsql security definer set search_path=''
 as $$
 declare payload jsonb:=to_jsonb(old); source_kind text:=tg_argv[0]; source_key text;
 begin
