@@ -465,8 +465,7 @@ async function history(req:Request,body:any){
   const d=await device(req),p=point(body),sample=String(body.sample_id||"");
   if(!/^[0-9a-f-]{36}$/i.test(sample))throw new Error("Muestra no válida");
   const row={person:d.person,latitude:p.lat,longitude:p.lon,accuracy:p.accuracy,speed:p.speed,heading:p.heading,motion:p.motion,captured_at:body.captured_at||new Date().toISOString(),source_device_id:d.id,client_sample_id:sample};
-  const {error}=await db.from("galaxy_location_history").insert(row);
-  if(error&&error.code!=="23505")throw error;
+  await ok(db.from("galaxy_location_history").upsert(row,{onConflict:"source_device_id,client_sample_id",ignoreDuplicates:true}));
   return json({ok:true});
 }
 
