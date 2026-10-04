@@ -260,7 +260,7 @@ assert.ok(!backupSection.includes('galaxy_presence')&&!backupSection.includes('s
 const nativeCalls=new Set([...app.matchAll(/GalaxyNative\.call\(['"]([^'"]+)['"]/g)].map(m=>m[1]));
 const bridgeMethods=new Set([...bridge.matchAll(/public void (\w+)\(/g)].map(m=>m[1]));
 for(const method of nativeCalls)assert.ok(bridgeMethods.has(method),'Método nativo sin bridge: '+method);
-assert.ok(bridgeMethods.has('closeApp')&&app.includes('GalaxyAndroid.closeApp()'),'El botón Atrás debe poder cerrar la app desde Inicio');
+assert.ok(bridgeMethods.has('closeApp')&&app.includes("this.call('closeApp')"),'El botón Atrás debe poder cerrar la app desde Inicio mediante el puente seguro');
 assert.ok(bridgeMethods.has('exportJson')&&bridgeMethods.has('importJson'),'Faltan puentes nativos de backup');
 assert.ok(main.includes('REQ_BACKUP_EXPORT')&&main.includes('REQ_BACKUP_IMPORT'),'Falta Storage Access Framework para backups');
 
