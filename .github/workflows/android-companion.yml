@@ -28,6 +28,10 @@ jobs:
       FIREBASE_SENDER_ID: ${{ secrets.FIREBASE_SENDER_ID || vars.FIREBASE_SENDER_ID }}
     steps:
       - uses: actions/checkout@v5
+      - uses: denoland/setup-deno@v2
+        with: { deno-version: "v2.x" }
+      - name: QA Supabase Edge Functions
+        run: deno check supabase/functions/android-companion/index.ts
       - uses: actions/setup-java@v5
         with: { distribution: temurin, java-version: "17" }
       - name: Preparar Android SDK
