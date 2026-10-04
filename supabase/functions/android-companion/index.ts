@@ -840,7 +840,7 @@ async function chatDelete(req:Request,body:any){
   await ok(db.from("galaxy_chat_hidden").upsert({message_id:id,person},{onConflict:"message_id,person"}));
   return json({ok:true,scope:"me"});
  }
- if(String(row.sender_person)!==person)return json({error:"Solo puedes eliminar para ambos tus propios mensajes."},403);
+ if(String(row.sender_person)!==person)return json({error:"Solo puedes eliminar tus propios mensajes."},403);
  if(Date.now()-Date.parse(row.created_at)>CHAT_DELETE_MINUTES*60000)return json({error:"La ventana para eliminar para ambos ya terminó."},409);
  if(!row.deleted_at)await ok(db.from("galaxy_chat_messages").update({deleted_at:new Date().toISOString(),body:"Mensaje eliminado",attachment:{},link_preview:{}}).eq("id",id));
  await chatSignal(d,target,id);
