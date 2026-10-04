@@ -52,6 +52,7 @@ create policy trip_history_read on public.galaxy_trip_history for select to auth
 using(public.galaxy_person() is not null);
 
 drop function if exists public.galaxy_capsule_object_access(text,text);
+drop function if exists public.galaxy_capsule_mark_place_unlocks(text,timestamptz);
 drop function if exists public.galaxy_capsule_unlocked(jsonb,text,timestamptz);
 
 commit;
