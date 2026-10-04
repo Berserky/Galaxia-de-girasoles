@@ -35,7 +35,7 @@ test('chat is a floating entry point, not a bottom-nav or More tool',()=>{
  const navLine=app.match(/const nav=\[[^\n]+/i)?.[0]||'';
  assert.equal(navLine.includes("'chat'"),false);
  const moreStart=app.indexOf('function moreView()'),moreEnd=app.indexOf('function updateMarkup()',moreStart),more=app.slice(moreStart,moreEnd);
- assert.equal(more.includes('Galaxy Chat'),false);
+ assert.equal(more.includes('data-action="chat-open"'),false,'Más no debe contener un acceso funcional al Chat');
 });
 
 test('chat UI supports reply, delete, unread badge and active synchronization',()=>{
