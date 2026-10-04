@@ -966,6 +966,18 @@ public final class MainActivity extends ComponentActivity {
         });
     }
 
+    private static void pruneChatFileCache(File dir){
+        File[] files=dir.listFiles();
+        if(files==null||files.length==0)return;
+        Arrays.sort(files,(a,b)->Long.compare(b.lastModified(),a.lastModified()));
+        long cutoff=System.currentTimeMillis()-24L*60L*60L*1000L;
+        for(int i=0;i<files.length;i++){
+            File file=files[i];
+            if(!file.isFile())continue;
+            if(file.lastModified()<cutoff||i>=20)try{file.delete();}catch(Exception ignored){}
+        }
+    }
+
     void openChatFile(String requestId,String rawUrl,String rawName,String rawMime){
         if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
         io.execute(()->{
@@ -985,6 +997,7 @@ public final class MainActivity extends ComponentActivity {
                 if(safeName.length()>120)safeName=safeName.substring(safeName.length()-120);
                 File dir=new File(getCacheDir(),"chat-files");
                 if(!dir.exists()&&!dir.mkdirs())throw new IOException("No se pudo preparar el archivo.");
+                pruneChatFileCache(dir);
                 target=new File(dir,UUID.randomUUID()+"-"+safeName);
                 connection=(HttpURLConnection)new URL(source.toString()).openConnection();
                 connection.setConnectTimeout(15000);
