@@ -55,3 +55,11 @@ test('chat_sync push hotfix is compatible with database constraints',()=>{
  assert.match(sql,/galaxy_push_events_event_type_check[\s\S]*?'chat_sync'/i);
  assert.equal(/drop table|truncate table|drop column/i.test(sql),false);
 });
+
+
+test('encounter stats defines deterministic Bogotá month boundaries',()=>{
+ const edge=read('supabase/functions/android-companion/index.ts');
+ assert.match(edge,/function monthBounds\(month:string\)/);
+ assert.match(edge,/Date\.UTC\(yearValue,monthValue-1,1,5,0,0,0\)/);
+ assert.match(edge,/bounds=monthBounds\(currentMonth\)/);
+});
