@@ -1135,8 +1135,17 @@ async function itemSave(req:Request,body:any){
     return json({item:updated});
   }
   const created=await ok(db.from("galaxy_items").insert({kind,data,author:String(d.person)}).select("*").single());
-  await recordParticipation(String(d.person));
+  const person=String(d.person);
+  await recordParticipation(person);
   await intelligenceBestEffort("item-create",()=>syncIntelligenceItem(created));
+  if(kind==="memory"||kind==="plan"){
+    const names=await profileNames(),target=person==="0"?"1":"0",name=names[Number(person)]||"Tu persona";
+    await dispatchPushEvent(d,target,kind==="memory"?"memory_shared":"plan_update",{
+      title:kind==="memory"?name+" guardó un recuerdo":name+" agregó un plan",
+      body:text(data.title||data.body||(kind==="memory"?"Nuevo recuerdo":"Nuevo plan"),180),
+      action:"memories",senderName:name,entityType:kind,entityId:String(created.id)
+    });
+  }
   return json({item:created},201);
 }
 
