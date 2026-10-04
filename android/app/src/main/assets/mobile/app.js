@@ -2182,10 +2182,31 @@ document.addEventListener('click',async e=>{
   if(a==='chat-pin-jump'){await jumpToChatMessage(btn.dataset.id);return;}
   if(a==='chat-jump-present'){chatNewCount=0;const el=document.querySelector('#chatMessages');if(el)el.scrollTo({top:el.scrollHeight,behavior:'smooth'});btn.remove();setTimeout(()=>markChatReadIfVisible(),250);return;}
   if(a==='chat-search-open'){openChatSearch();return;}
+   if(a==='chat-galaxy-open'){await openChatGalaxyPicker();return;}
+   if(a==='chat-galaxy-pick'){const cardType=btn.dataset.cardType,kind=btn.dataset.kind,id=btn.dataset.id,title=btn.dataset.title||'';closeModal();queueGalaxyCard(cardType,kind,id,{title});toast('Compartido en Galaxy Chat.');return;}
+   if(a==='chat-poll-open'){openChatPollForm();return;}
+   if(a==='chat-check-open'){openChatChecklistForm();return;}
+   if(a==='chat-save-as-open'){openChatSaveAs(btn.dataset.id);return;}
+   if(a==='chat-save-as-kind'){
+    const m=chatMessageById(btn.dataset.id),kind=btn.dataset.kind;if(!m)return;
+    const title=String(m.card?.title||m.body||'').trim().slice(0,160),body=String(m.body||m.card?.body||'').trim();
+    closeModal();
+    if(kind==='goal'){prefillGoalFromChat(title||'Objetivo desde el chat',body);return;}
+    if(kind==='place'){
+      const lat=Number(m.card?.latitude??m.attachment?.latitude),lon=Number(m.card?.longitude??m.attachment?.longitude);
+      if(!Number.isFinite(lat)||!Number.isFinite(lon)){toast('Este mensaje no incluye una ubicación para guardar.');return;}
+      showModal('Guardar lugar','<form id="placeForm" class="stack"><div class="field"><label>Nombre</label><input class="input" name="name" value="'+attr(title||'Lugar del chat')+'" required></div><div class="field"><label>Tipo</label><select name="kind"><option value="memory">Recuerdo</option><option value="home">Casa</option><option value="work">Trabajo</option><option value="adventure">Aventura</option></select></div><div class="field"><label>Nota</label><textarea name="note">'+esc(body)+'</textarea></div><input type="hidden" name="latitude" value="'+attr(lat)+'"><input type="hidden" name="longitude" value="'+attr(lon)+'"><button class="btn" type="submit">Guardar lugar</button></form>','place');return;
+    }
+    if(kind==='song'){
+      openMusicUrl();const song=m.card?.type==='SONG'?m.card:null,u=String(m.body||'').match(/https:\/\/[^\s<]+/i)?.[0]||song?.url||'';const ti=modal.querySelector('[name="title"]'),url=modal.querySelector('[name="url"]');if(ti)ti.value=title||'Canción';if(url)url.value=u;return;
+    }
+    chatOpenItemDraft(kind,title||({memory:'Recuerdo',plan:'Plan',note:'Nota',wish:'Deseo'}[kind]||'Contenido'),body);return;
+   }
   if(a==='chat-settings-open'){openChatSettings();return;}
   if(a==='chat-albums-open'){await openChatAlbums();return;}
   if(a==='chat-album-create'){openChatAlbumCreate();return;}
   if(a==='chat-album-open'){await openChatAlbum(btn.dataset.id);return;}
+   if(a==='chat-album-memory'){if(confirm('¿Abrir un recuerdo con este álbum? Nada se guardará hasta que confirmes en el editor.'))await openChatAlbumAsMemory(btn.dataset.id);return;}
   if(a==='chat-album-delete'){if(confirm('¿Eliminar este álbum? Las fotos y videos seguirán en el chat.')){await api('chat-albums',{operation:'delete',id:btn.dataset.id});await openChatAlbums();}return;}
   if(a==='chat-album-add-open'){await openChatAlbumPicker(btn.dataset.attachmentId);return;}
   if(a==='chat-album-add'){await api('chat-albums',{operation:'add',id:btn.dataset.albumId,attachmentIds:[btn.dataset.attachmentId]});closeModal();toast('Añadido al álbum.');return;}
@@ -2238,7 +2259,23 @@ document.addEventListener('click',async e=>{
   if(a==='chat-attach-file'){await addChatNativeMedia('pickMedia',['chat-file'],'file');return;}
   if(a==='chat-attach-location'){await openChatLocationMenu();return;}
   if(a==='chat-attach-song'){openChatSongPicker();return;}
-  if(a==='chat-song-pick'){rebuildMusicQueue();const song=musicQueue[Number(btn.dataset.index)];if(song){closeModal();queueChatMessage({messageType:'song',attachment:{title:song.title,url:song.url,platform:song.platform}});}return;}
+   if(a==='chat-song-pick'){const song=songItems().find(x=>String(x.id)===String(btn.dataset.id));if(song){closeModal();queueGalaxyCard('SONG','song',song.id,{title:song.title});}return;}
+   if(a==='chat-poll-vote'){await api('chat-poll',{operation:'vote',pollId:btn.dataset.pollId,optionId:btn.dataset.optionId,selected:btn.dataset.selected!=='true'});await loadChat({quiet:true,force:true});return;}
+   if(a==='chat-poll-close'){if(confirm('¿Cerrar esta encuesta?')){await api('chat-poll',{operation:'close',pollId:btn.dataset.id});await loadChat({quiet:true,force:true});}return;}
+   if(a==='chat-poll-plan'){if(confirm('¿Abrir un plan con “'+btn.dataset.option+'”?')){closeModal();chatOpenItemDraft('plan',btn.dataset.option,'Creado desde una encuesta de Galaxy Chat.');}return;}
+   if(a==='chat-check-set'){await api('chat-checklist',{operation:'set',checklistId:btn.dataset.listId,itemId:btn.dataset.itemId,checked:btn.dataset.checked!=='true',expectedVersion:Number(btn.dataset.version||1)});await loadChat({quiet:true,force:true});return;}
+   if(a==='chat-check-convert'){const card=(chatState?.messages||[]).map(x=>x.card).find(x=>x?.type==='CHECKLIST'&&String(x.entityId)===String(btn.dataset.id));if(!card)return;if(!confirm('¿Abrir el editor para convertir esta checklist?'))return;const body=(card.items||[]).map(x=>(x.checked?'[x] ':'[ ] ')+x.label).join('\n');closeModal();if(btn.dataset.kind==='goal')prefillGoalFromChat(card.title,body);else chatOpenItemDraft('plan',card.title,body);return;}
+   if(a==='chat-daily-answer'){if(String(btn.dataset.day)!==String(cloud.today)){toast('Esta pregunta ya no corresponde al día de hoy.');return;}showModal('Responder pregunta del día','<form id="chatDailyAnswerForm" class="stack"><textarea name="answer" required maxlength="3000" rows="6" placeholder="Tu respuesta…"></textarea><button class="btn" type="submit">Guardar respuesta</button></form>','chat-daily-answer');return;}
+   if(a==='chat-card-eta-map'){closeModal();go('map');await refreshMap({quiet:true,detail:true});setTimeout(()=>document.querySelector('#etaCard')?.scrollIntoView({behavior:'smooth',block:'center'}),100);return;}
+   if(a==='chat-card-place-map'){closeModal();go('map');await refreshMap({quiet:true,detail:true});setTimeout(()=>map?.setView([Number(btn.dataset.lat),Number(btn.dataset.lon)],16),120);return;}
+   if(a==='chat-card-place-go'){if(!native.tracking){toast('Activa Compartir ubicación para iniciar Acompáñame.');go('map');return;}await api('context-session',{operation:'start',mode:'accompany',destinationKind:'place',placeId:Number(btn.dataset.id)});closeModal();go('map');await refreshMap({quiet:true,detail:true});toast('Acompáñame iniciado hacia este lugar.');return;}
+   if(a==='chat-card-place-save'){if((mapData?.places||cloud?.places||[]).some(p=>String(p.id)===String(btn.dataset.id)))toast('Este lugar ya está guardado en Nuestro Mapa.');else toast('Abre el lugar para confirmar antes de guardarlo.');return;}
+   if(a==='chat-card-song-play'){rebuildMusicQueue();const index=musicQueue.findIndex(x=>String(x.id)===String(btn.dataset.id));if(index>=0)playMusicAt(index);else toast('Esta canción ya no está disponible en Nuestra Música.');return;}
+   if(a==='chat-card-event-plan'){const event=(cloud?.items||[]).find(x=>x.kind==='event'&&String(x.id)===String(btn.dataset.id));if(event&&confirm('¿Abrir un plan con este evento?')){closeModal();chatOpenItemDraft('plan',event.data?.title||'Plan',event.data?.body||'',{date:event.data?.date||''});}return;}
+   if(a==='chat-card-event-remind'){if(!native.momentNotifications){if(!confirm('¿Activar recordatorios de momentos para este teléfono?'))return;native=await GalaxyNative.call('setMomentNotifications',true);}await GalaxyNative.call('refreshMoments');toast('Recordatorio sincronizado con las notificaciones existentes.');return;}
+   if(a==='chat-smart-link'){await GalaxyNative.call('openExternal',btn.dataset.url||'');return;}
+   if(a==='chat-smart-plan'){const m=chatMessageById(btn.dataset.id);if(m){closeModal();chatOpenItemDraft('plan',String(m.body||'Plan desde el chat').slice(0,160),m.body||'',{date:btn.dataset.date||''});}return;}
+   if(a==='chat-smart-place'){const m=chatMessageById(btn.dataset.id),lat=Number(m?.attachment?.latitude),lon=Number(m?.attachment?.longitude);if(!Number.isFinite(lat)||!Number.isFinite(lon))return;showModal('Guardar lugar','<form id="placeForm" class="stack"><div class="field"><label>Nombre</label><input class="input" name="name" required placeholder="Nombre del lugar"></div><div class="field"><label>Tipo</label><select name="kind"><option value="memory">Recuerdo</option><option value="home">Casa</option><option value="work">Trabajo</option><option value="adventure">Aventura</option></select></div><div class="field"><label>Nota</label><textarea name="note"></textarea></div><input type="hidden" name="latitude" value="'+attr(lat)+'"><input type="hidden" name="longitude" value="'+attr(lon)+'"><button class="btn" type="submit">Guardar lugar</button></form>','place');return;}
   if(a==='chat-media-view'){showModal('Foto','<img class="chat-photo-full" src="'+attr(btn.dataset.url)+'" alt="Foto compartida">','chat-photo-view');return;}
   if(a==='chat-file-open'){await GalaxyNative.call('openChatFile',btn.dataset.url||'',btn.dataset.name||'archivo',btn.dataset.mime||'application/octet-stream');return;}
   if(a==='chat-location-open'){go('map');await refreshMap({quiet:true,detail:false});setTimeout(()=>map?.setView([Number(btn.dataset.lat),Number(btn.dataset.lon)],16),120);return;}
@@ -2452,6 +2489,9 @@ document.addEventListener('submit',async e=>{
  try{
   if(e.target.id==='chatForm'){queueCurrentChat({ttlSeconds:chatPreferencesState?.default_ttl_seconds||null});return;}
   if(e.target.id==='chatPremiumSendForm'){const fd=new FormData(e.target),when=new Date(String(fd.get('scheduledAt')||''));if(!Number.isFinite(when.getTime())||when.getTime()<=Date.now()+15000)throw new Error('Elige una fecha futura.');const rawTtl=String(fd.get('ttlSeconds')||''),ttl=rawTtl==='custom'?Math.max(1,Math.min(8760,Number(fd.get('ttlCustomHours')||1)))*3600:(Number(rawTtl||0)||chatPreferencesState?.default_ttl_seconds||null);const viewOnce=fd.get('viewOnce')==='on',effect=String(fd.get('effect')||'')||null,quality=String(fd.get('mediaQuality')||'optimized');chatAttachmentsDraft.forEach(x=>{if(x.kind==='photo'||x.kind==='video')x.mediaQuality=quality;});closeModal();queueCurrentChat({scheduledAt:when.toISOString(),ttlSeconds:ttl,viewOnce,effect});return;}
+   if(e.target.id==='chatPollForm'){const fd=new FormData(e.target),options=String(fd.get('options')||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean).slice(0,10);if(options.length<2)throw new Error('Escribe al menos dos opciones.');const raw=String(fd.get('closesAt')||''),closesAt=raw?new Date(raw).toISOString():null;await api('chat-poll',{operation:'create',pollId:crypto.randomUUID(),clientId:crypto.randomUUID(),question:String(fd.get('question')||''),options,allowMultiple:fd.get('allowMultiple')==='on',closesAt});closeModal();await loadChat({quiet:true,force:true});return;}
+   if(e.target.id==='chatChecklistForm'){const fd=new FormData(e.target),items=String(fd.get('items')||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean).slice(0,50);if(!items.length)throw new Error('Escribe al menos un elemento.');await api('chat-checklist',{operation:'create',checklistId:crypto.randomUUID(),clientId:crypto.randomUUID(),title:String(fd.get('title')||''),items});closeModal();await loadChat({quiet:true,force:true});return;}
+   if(e.target.id==='chatDailyAnswerForm'){const answer=String(new FormData(e.target).get('answer')||'').trim();await saveDaily('answer',answer);closeModal();await loadChat({quiet:true,force:true});toast('Respuesta guardada en Pregunta del día.');return;}
   if(e.target.id==='chatPreferencesForm'){const fd=new FormData(e.target),raw=String(fd.get('defaultTtlSeconds')||''),defaultTtl=raw==='custom'?Math.max(1,Math.min(8760,Number(fd.get('defaultTtlHours')||1)))*3600:(Number(raw||0)||null),result=await api('chat-preferences',{operation:'save',partnerNickname:String(fd.get('partnerNickname')||''),theme:String(fd.get('theme')||'galaxy'),notificationPrivacy:String(fd.get('notificationPrivacy')||'full'),showRead:fd.get('showRead')==='on',showLastSeen:fd.get('showLastSeen')==='on',showTyping:fd.get('showTyping')==='on',defaultTtlSeconds:defaultTtl});chatPreferencesState=result.preferences||null;closeModal();render();toast('Ajustes del chat guardados.');return;}
   if(e.target.id==='chatScheduleEditForm'){const fd=new FormData(e.target),when=new Date(String(fd.get('scheduledAt')||''));await api('chat-schedule-update',{id:String(fd.get('id')||''),scheduledAt:when.toISOString(),silent:fd.get('silent')==='on'});closeModal();await loadChat({quiet:true,force:true});return;}
   if(e.target.id==='chatEditForm'){const fd=new FormData(e.target);await api('chat-edit',{id:String(fd.get('id')||''),body:String(fd.get('body')||'')});closeModal();await loadChat({quiet:true,force:true});return;}
