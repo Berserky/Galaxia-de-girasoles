@@ -51,6 +51,9 @@ drop policy if exists trip_history_read on public.galaxy_trip_history;
 create policy trip_history_read on public.galaxy_trip_history for select to authenticated
 using(public.galaxy_person() is not null);
 
+drop trigger if exists capsule_unlock_state_guard on public.galaxy_items;
+drop function if exists public.galaxy_capsule_protect_unlock_state();
+
 drop function if exists public.galaxy_capsule_object_access(text,text);
 drop function if exists public.galaxy_capsule_mark_place_unlocks(text,timestamptz);
 drop function if exists public.galaxy_capsule_unlocked(jsonb,text,timestamptz);
