@@ -340,6 +340,7 @@ function render(){
  if(view==='memories'){app.innerHTML=header()+memoriesView();requestAnimationFrame(()=>{const tabs=$('.memories-tabs');if(tabs)tabs.scrollLeft=memoriesTabsScroll;});if((memoryTab==='album'&&!mediaFresh('photo'))||(memoryTab==='music'&&!mediaFresh('music')))setTimeout(()=>loadMedia(memoryTab==='album'?'photo':'music').catch(e=>toast(e.message)),0);}
  if(view==='goals'){app.innerHTML=header()+goalsView();if(!goalsState)setTimeout(()=>loadGoals().catch(e=>toast(e.message)),0);}
  if(view==='ai'){app.innerHTML=header()+intelligenceHubView();if(!mapData)setTimeout(()=>refreshMap({quiet:true,detail:true}).catch(()=>{}),0);}
+ if(view==='chat')app.innerHTML=chatView();
  if(view==='more')app.innerHTML=header()+moreView();
  refreshIcons();
  renderGlobalPlayer();
@@ -1235,6 +1236,11 @@ function themeSettingsCard(){
  const engine=window.GalaxyTheme;if(!engine)return'';
  const choice=engine.getChoice(),state=engine.resolve(choice),automatic=choice==='auto';
  return '<div class="card theme-settings-card"><div class="row between"><div><p class="eyebrow">APARIENCIA</p><h3>Temas de Nuestra Galaxia</h3><p>'+(automatic?'Automático está activo. Ahora se ve como <b>'+esc(engine.LABELS[state.active])+'</b>.':'Elegiste <b>'+esc(engine.LABELS[state.active])+'</b> manualmente.')+'</p></div>'+ico(themeIcon(state.active))+'</div><div class="theme-grid">'+engine.options().map(option=>'<button class="theme-option '+(choice===option.id?'active':'')+'" data-action="theme-set" data-value="'+attr(option.id)+'"><span class="theme-preview" data-preview="'+attr(option.id)+'">'+ico(themeIcon(option.id))+'</span><span><b>'+esc(option.label)+'</b><small>'+(option.id==='auto'?'Cambia con la fecha':option.id===state.active?'Vista actual':'Elegir tema')+'</small></span>'+(choice===option.id?ico('circle-check-big'):'')+'</button>').join('')+'</div><p class="theme-local-note">'+ico('smartphone')+' La apariencia se guarda en este teléfono. No cambia el tema del teléfono de '+esc(partnerName())+'.</p></div>';
+}
+
+function chatView(){
+ const unread=Math.max(0,Number(cloud?.chat?.unread||0));
+ return '<section class="chat-shell"><div class="chat-shell-head"><button class="chat-back" data-action="chat-close" aria-label="Cerrar chat">'+ico('arrow-left')+'</button><div><p class="eyebrow">GALAXY CHAT</p><h2>'+esc(partnerName())+'</h2><small>'+esc(unread?unread+' sin leer':'Conversación privada')+'</small></div></div><div class="card chat-bootstrap">'+ico('message-circle')+'<div><h3>Nuestro chat</h3><p>La interfaz ya tiene su espacio propio. Mensajes, lectura, adjuntos y notificaciones se conectarán aquí durante el update 3.1.</p></div></div></section>';
 }
 
 function intelligenceHubView(){
