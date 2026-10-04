@@ -1050,6 +1050,123 @@ async function chatSend(req:Request,body:any){
  const hydrated=(await chatHydrate([row],person))[0];
  return json({message:hydrated,push,idempotent:!isNew,scheduled},isNew?201:200);
 }
+async function chatCreateNativeCardMessage(d:any,clientId:string,ref:{cardType:string,entityKind:string,entityId:string}){
+ const person=String(d.person),target=person==="0"?"1":"0";
+ if(!uuidish(clientId))throw new Error("Identificador de mensaje no válido.");
+ let row=(await ok(db.from("galaxy_chat_messages").select("*").eq("sender_person",person).eq("client_id",clientId).limit(1)))?.[0],created=false;
+ if(!row){
+  const now=new Date().toISOString();
+  row=await ok(db.from("galaxy_chat_messages").insert({
+   client_id:clientId,sender_person:person,body:"",message_type:"card",attachment:{},link_preview:{},
+   client_created_at:now,server_received_at:now,sent_at:now,schedule_state:"sent",silent:false
+  }).select("*").single());
+  created=true;
+ }
+ await ok(db.from("galaxy_chat_entity_refs").upsert({message_id:row.id,card_type:ref.cardType,entity_kind:ref.entityKind,entity_id:ref.entityId,snapshot:{},created_by:person,updated_at:new Date().toISOString()},{onConflict:"message_id"}));
+ await ok(db.from("galaxy_chat_read_state").upsert({person,last_read_at:row.created_at,last_read_message_id:row.id,updated_at:new Date().toISOString()},{onConflict:"person"}));
+ if(created){
+  const names=await profileNames(),senderName=names[Number(person)]||"Tu persona";
+  await dispatchPushEvent(d,target,"chat_message",{title:senderName,body:senderName+" "+chatCardPushBody({card_type:ref.cardType}),action:"chat",senderName,entityType:"chat_message",entityId:String(row.id)});
+  await ok(db.from("galaxy_chat_metrics").insert({message_id:row.id,event:"sent",send_latency_ms:0,server_latency_ms:0,retry_count:0}));
+ }
+ return {message:(await chatHydrate([row],person))[0],created};
+}
+async function chatPoll(req:Request,body:any={}){
+ const d=await device(req),person=String(d.person),target=person==="0"?"1":"0",operation=String(body.operation||"state");
+ if(operation==="create"){
+  const pollId=String(body.pollId||""),clientId=String(body.clientId||""),question=text(body.question,500);
+  const labels=(Array.isArray(body.options)?body.options:[]).map((x:any)=>text(x,240)).filter(Boolean).slice(0,10);
+  if(!uuidish(pollId)||!uuidish(clientId)||!question||labels.length<2||new Set(labels.map((x:string)=>x.toLocaleLowerCase("es"))).size!==labels.length)return json({error:"Completa la encuesta con 2 a 10 opciones distintas."},400);
+  let closesAt:null|string=null;
+  if(body.closesAt){
+   const ms=Date.parse(String(body.closesAt));if(!Number.isFinite(ms)||ms<=Date.now()+60000)return json({error:"El cierre debe ser una fecha futura."},400);
+   closesAt=new Date(ms).toISOString();
+  }
+  let poll=(await ok(db.from("galaxy_chat_polls").select("*").eq("id",pollId).limit(1)))?.[0];
+  if(poll&&String(poll.created_by)!==person)return json({error:"Encuesta no disponible."},403);
+  if(!poll){
+   poll=await ok(db.from("galaxy_chat_polls").insert({id:pollId,created_by:person,question,allow_multiple:body.allowMultiple===true,closes_at:closesAt}).select("*").single());
+   await ok(db.from("galaxy_chat_poll_options").insert(labels.map((label:string,position:number)=>({poll_id:pollId,label,position}))));
+  }
+  const shell=await chatCreateNativeCardMessage(d,clientId,{cardType:"POLL",entityKind:"poll",entityId:pollId});
+  if(!poll.message_id)await ok(db.from("galaxy_chat_polls").update({message_id:shell.message.id,updated_at:new Date().toISOString()}).eq("id",pollId).is("message_id",null));
+  return json({message:shell.message,poll:await chatPollCard(pollId,person),idempotent:!shell.created},shell.created?201:200);
+ }
+ const pollId=String(body.pollId||body.id||"");
+ if(!uuidish(pollId))return json({error:"Encuesta no válida."},400);
+ const poll=(await ok(db.from("galaxy_chat_polls").select("*").eq("id",pollId).limit(1)))?.[0];
+ if(!poll)return json({error:"Encuesta no disponible."},404);
+ if(operation==="state")return json({poll:await chatPollCard(pollId,person)});
+ if(operation==="close"){
+  if(String(poll.created_by)!==person)return json({error:"Solo quien creó la encuesta puede cerrarla."},403);
+  const now=new Date().toISOString();
+  await ok(db.from("galaxy_chat_polls").update({closed_at:poll.closed_at||now,updated_at:now}).eq("id",pollId));
+  if(poll.message_id)await chatSignal(d,target,String(poll.message_id));
+  return json({poll:await chatPollCard(pollId,person)});
+ }
+ if(operation==="vote"){
+  const optionId=String(body.optionId||"");
+  if(!uuidish(optionId))return json({error:"Opción no válida."},400);
+  const option=(await ok(db.from("galaxy_chat_poll_options").select("id,poll_id,label").eq("id",optionId).eq("poll_id",pollId).limit(1)))?.[0];
+  if(!option)return json({error:"Opción no disponible."},404);
+  const closed=!!poll.closed_at||(poll.closes_at&&Date.parse(String(poll.closes_at))<=Date.now());
+  if(closed)return json({error:"La encuesta está cerrada."},409);
+  const selected=body.selected!==false;
+  if(selected)await ok(db.from("galaxy_chat_poll_votes").upsert({poll_id:pollId,option_id:optionId,person,voted_at:new Date().toISOString()},{onConflict:"poll_id,option_id,person"}));
+  else await ok(db.from("galaxy_chat_poll_votes").delete().eq("poll_id",pollId).eq("option_id",optionId).eq("person",person));
+  const card=await chatPollCard(pollId,person);
+  if(poll.message_id){
+   const names=await profileNames(),senderName=names[Number(person)]||"Tu persona";
+   await dispatchPushEvent(d,target,"chat_message",{title:senderName,body:senderName+" votó en "+text(poll.question,120),action:"chat",senderName,entityType:"chat_message",entityId:String(poll.message_id)});
+   await chatSignal(d,target,String(poll.message_id));
+  }
+  return json({poll:card});
+ }
+ return json({error:"Operación de encuesta no válida."},400);
+}
+async function chatChecklist(req:Request,body:any={}){
+ const d=await device(req),person=String(d.person),target=person==="0"?"1":"0",operation=String(body.operation||"state");
+ if(operation==="create"){
+  const checklistId=String(body.checklistId||""),clientId=String(body.clientId||""),title=text(body.title,300);
+  const labels=(Array.isArray(body.items)?body.items:[]).map((x:any)=>text(x,300)).filter(Boolean).slice(0,50);
+  if(!uuidish(checklistId)||!uuidish(clientId)||!title||!labels.length)return json({error:"Ponle un título y al menos un elemento a la checklist."},400);
+  let list=(await ok(db.from("galaxy_chat_checklists").select("*").eq("id",checklistId).limit(1)))?.[0];
+  if(list&&String(list.created_by)!==person)return json({error:"Checklist no disponible."},403);
+  if(!list){
+   list=await ok(db.from("galaxy_chat_checklists").insert({id:checklistId,created_by:person,title}).select("*").single());
+   await ok(db.from("galaxy_chat_checklist_items").insert(labels.map((label:string,position:number)=>({checklist_id:checklistId,label,position,checked:false,updated_by:person}))));
+  }
+  const shell=await chatCreateNativeCardMessage(d,clientId,{cardType:"CHECKLIST",entityKind:"checklist",entityId:checklistId});
+  if(!list.message_id)await ok(db.from("galaxy_chat_checklists").update({message_id:shell.message.id,updated_at:new Date().toISOString()}).eq("id",checklistId).is("message_id",null));
+  return json({message:shell.message,checklist:await chatChecklistCard(checklistId),idempotent:!shell.created},shell.created?201:200);
+ }
+ const checklistId=String(body.checklistId||body.id||"");
+ if(!uuidish(checklistId))return json({error:"Checklist no válida."},400);
+ const list=(await ok(db.from("galaxy_chat_checklists").select("*").eq("id",checklistId).limit(1)))?.[0];
+ if(!list)return json({error:"Checklist no disponible."},404);
+ if(operation==="state")return json({checklist:await chatChecklistCard(checklistId)});
+ if(operation==="set"){
+  const itemId=String(body.itemId||""),checked=body.checked===true;
+  if(!uuidish(itemId))return json({error:"Elemento no válido."},400);
+  const item=(await ok(db.from("galaxy_chat_checklist_items").select("*").eq("id",itemId).eq("checklist_id",checklistId).limit(1)))?.[0];
+  if(!item)return json({error:"Elemento no disponible."},404);
+  if(!!item.checked!==checked){
+   const expected=Number(body.expectedVersion||item.version);
+   if(expected!==Number(item.version))return json({error:"La checklist cambió. Actualiza antes de intentarlo otra vez."},409);
+   const now=new Date().toISOString();
+   const updated=await ok(db.from("galaxy_chat_checklist_items").update({checked,updated_by:person,version:Number(item.version)+1,updated_at:now}).eq("id",itemId).eq("version",item.version).select("id").maybeSingle());
+   if(!updated)return json({error:"La checklist cambió. Actualiza antes de intentarlo otra vez."},409);
+   await ok(db.from("galaxy_chat_checklists").update({version:Number(list.version)+1,updated_at:now}).eq("id",checklistId));
+   if(list.message_id){
+    const names=await profileNames(),senderName=names[Number(person)]||"Tu persona";
+    await dispatchPushEvent(d,target,"chat_message",{title:senderName,body:senderName+(checked?" completó ":" reabrió ")+text(item.label,120),action:"chat",senderName,entityType:"chat_message",entityId:String(list.message_id)});
+    await chatSignal(d,target,String(list.message_id));
+   }
+  }
+  return json({checklist:await chatChecklistCard(checklistId)});
+ }
+ return json({error:"Operación de checklist no válida."},400);
+}
 async function chatRead(req:Request,body:any={}){
  const d=await device(req),person=String(d.person),target=person==="0"?"1":"0";
  let row:any=null;
@@ -3330,6 +3447,8 @@ Deno.serve(async req=>{
     if(action==="mobile-state")return await mobileState(req);
     if(action==="chat-state")return await chatState(req,body);
     if(action==="chat-send")return await chatSend(req,body);
+    if(action==="chat-poll")return await chatPoll(req,body);
+    if(action==="chat-checklist")return await chatChecklist(req,body);
     if(action==="chat-read")return await chatRead(req,body);
     if(action==="chat-edit")return await chatEdit(req,body);
     if(action==="chat-delete")return await chatDelete(req,body);
