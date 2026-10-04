@@ -82,6 +82,13 @@ test('NG-QA-001 backup and history apply capsule privacy even for the author',()
   assert.match(history,/chatCapsuleAccess/);
 });
 
+test('NG-QA-001 capsule media cannot be laundered through Bond or voice validation',()=>{
+  const widget=block(edge,'async function bondWidget(','async function gesture(');
+  const voice=block(edge,'async function validateVoice(','async function bondVoice(');
+  assert.match(widget,/signedForPerson\("galaxy-photos"/);
+  assert.match(voice,/signedForPerson\("galaxy-voice"/);
+});
+
 test('NG-QA-002 future date-time capsule is not searchable or semantically indexed',()=>{
   const doc=intelligence.buildIntelligenceDocument('item',{
     id:'capsule-future',kind:'capsule',author:'0',version:1,created:'2026-10-04T12:00:00Z',
