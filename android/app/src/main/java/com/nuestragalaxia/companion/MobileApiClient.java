@@ -12,14 +12,32 @@ import java.nio.charset.StandardCharsets;
 public final class MobileApiClient {
     private MobileApiClient(){}
 
+    private static final int MAX_JSON_RESPONSE_BYTES=4*1024*1024;
+
+    private static long uploadLimit(String kind){
+        return switch(kind){
+            case "photo" -> 12L*1024L*1024L;
+            case "music" -> 20L*1024L*1024L;
+            case "voice" -> 5L*1024L*1024L;
+            case "chat-photo","chat-audio" -> 15L*1024L*1024L;
+            case "chat-video" -> 60L*1024L*1024L;
+            case "chat-file" -> 30L*1024L*1024L;
+            default -> -1L;
+        };
+    }
+
     private static JSONObject response(HttpURLConnection c) throws Exception {
         int code=c.getResponseCode();
         InputStream stream=code>=200&&code<300?c.getInputStream():c.getErrorStream();
         String text="";
         if(stream!=null){
             try(BufferedReader r=new BufferedReader(new InputStreamReader(stream,StandardCharsets.UTF_8))){
-                StringBuilder b=new StringBuilder(); String line;
-                while((line=r.readLine())!=null)b.append(line);
+                StringBuilder b=new StringBuilder(); String line; int total=0;
+                while((line=r.readLine())!=null){
+                    total+=line.getBytes(StandardCharsets.UTF_8).length;
+                    if(total>MAX_JSON_RESPONSE_BYTES)throw new IOException("Respuesta demasiado grande.");
+                    b.append(line);
+                }
                 text=b.toString();
             }
         }
@@ -47,7 +65,9 @@ public final class MobileApiClient {
         String mime=context.getContentResolver().getType(uri);
         if(mime==null||mime.isBlank())mime="voice".equals(kind)||"music".equals(kind)?"audio/mpeg":"chat-file".equals(kind)?"application/octet-stream":"image/jpeg";
         String name=fileName(context,uri);
-        long length=fileSize(context,uri);
+        long length=fileSize(context,uri),limit=uploadLimit(kind);
+        if(limit<0)throw new IOException("Tipo de archivo no válido.");
+        if(length>limit)throw new IOException("El archivo supera el límite permitido.");
 
         HttpURLConnection c=(HttpURLConnection)new URL(BuildConfig.EDGE_URL).openConnection();
         c.setRequestMethod("POST");
@@ -78,6 +98,8 @@ public final class MobileApiClient {
     public static JSONObject uploadVoiceFile(Context context,String token,File file,String kind) throws Exception {
         if(!"voice".equals(kind)&&!"chat-audio".equals(kind))throw new IOException("Tipo de audio no válido.");
         String mime="audio/mp4",name=file.getName();
+        long limit=uploadLimit(kind);
+        if(file.length()<1||limit<0||file.length()>limit)throw new IOException("El audio supera el límite permitido.");
         HttpURLConnection c=(HttpURLConnection)new URL(BuildConfig.EDGE_URL).openConnection();
         c.setRequestMethod("POST");c.setConnectTimeout(20000);c.setReadTimeout(45000);c.setDoOutput(true);
         c.setRequestProperty("Content-Type",mime);c.setRequestProperty("apikey",BuildConfig.SUPABASE_PUBLISHABLE_KEY);
