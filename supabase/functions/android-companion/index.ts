@@ -183,8 +183,12 @@ async function contextMaybePush(d:any,eventRow:any,event:any,settings:any[]){
  if(event.type==="DESTINATION_REACHED"){
   const person=String(payload.person||""),pref=(settings||[]).find((x:any)=>String(x.person)===person);
   if(!pref?.arrived_safe_enabled||!["0","1"].includes(person))return;
-  const target=person==="0"?"1":"0";
-  await dispatchPushEvent(d,target,"arrived_safe",{title:"Llegó bien",body:(payload.label?"Llegó a "+String(payload.label)+".":"Llegó a su destino.")},{requireSubscription:false});
+  const target=person==="0"?"1":"0",sessionId=String(payload.sessionId||"");
+  const ref=uuidish(sessionId)?(await ok(db.from("galaxy_chat_entity_refs").select("message_id").eq("entity_kind","context_session").eq("entity_id",sessionId).in("card_type",["ETA","CHECK_IN"]).order("updated_at",{ascending:false}).limit(1)))?.[0]:null;
+  await dispatchPushEvent(d,target,"arrived_safe",{
+   title:"Llegó bien",body:(payload.label?"Llegó a "+String(payload.label)+".":"Llegó a su destino."),
+   ...(ref?.message_id?{action:"chat",entityType:"chat_message",entityId:String(ref.message_id)}:{})
+  },{requireSubscription:false});
  }
 }
 async function contextCreateSuggestions(eventRow:any,event:any,settings:any[]){
@@ -350,9 +354,14 @@ async function contextSessionAction(req:Request,body:any){
   return json({session,etaHistory:eta||[]});
  }
  if(operation==="stop"){
-  const now=new Date().toISOString();
+  const now=new Date().toISOString(),active=await ok(db.from("galaxy_context_sessions").select("id").eq("person",person).eq("status","active").limit(10));
   await ok(db.from("galaxy_context_sessions").update({status:"cancelled",ended_at:now,updated_at:now}).eq("person",person).eq("status","active"));
   await ok(db.from("galaxy_destinations").delete().eq("person",person));
+  const target=person==="0"?"1":"0";
+  for(const session of active||[]){
+   const refs=await ok(db.from("galaxy_chat_entity_refs").select("message_id").eq("entity_kind","context_session").eq("entity_id",String(session.id)).in("card_type",["ETA","CHECK_IN"]).limit(10));
+   for(const ref of refs||[])await chatSignal(d,target,String(ref.message_id));
+  }
   return json({ok:true,session:null});
  }
  if(operation!=="start")return json({error:"Operación de sesión no válida."},400);
@@ -647,7 +656,12 @@ async function dispatchPushEvent(sourceDevice:any,targetPerson:string,eventType:
 }
 
 const CHAT_REACTIONS=new Set(["❤️","😂","🥹","😮","😢","👍"]);
-const CHAT_MESSAGE_TYPES=new Set(["text","photo","video","video_message","audio","file","location","song","link","sticker","gif"]);
+const CHAT_MESSAGE_TYPES=new Set(["text","photo","video","video_message","audio","file","location","song","link","sticker","gif","card"]);
+const CHAT_CARD_TYPES=new Set(["MEMORY","PLAN","GOAL","PLACE","SONG","ETA","CHECK_IN","POLL","CHECKLIST","CAPSULE","DAILY_QUESTION","EVENT","STATUS"]);
+const CHAT_CARD_ENTITY_KIND:Record<string,string>={
+ MEMORY:"memory",PLAN:"plan",GOAL:"goal",PLACE:"place",SONG:"song",ETA:"context_session",CHECK_IN:"context_session",
+ POLL:"poll",CHECKLIST:"checklist",CAPSULE:"capsule",DAILY_QUESTION:"daily_question",EVENT:"event",STATUS:"status"
+};
 const CHAT_PRESENCE_STATES=new Set(["ONLINE","TYPING","RECORDING_AUDIO","UPLOADING_MEDIA"]);
 const CHAT_EDIT_MINUTES=Math.max(1,Math.min(1440,Number(Deno.env.get("GALAXY_CHAT_EDIT_WINDOW_MINUTES")||15)));
 const CHAT_DELETE_MINUTES=Math.max(1,Math.min(10080,Number(Deno.env.get("GALAXY_CHAT_DELETE_WINDOW_MINUTES")||120)));
@@ -700,6 +714,157 @@ async function chatSignal(source:any,target:string,entityId:string,event="chat_s
   await dispatchPushEvent(source,target,event,{action:"chat",entityType:"chat_message",entityId},{persistNotification:false,requireSubscription:false});
  }catch{}
 }
+function chatNormalizeEntityRef(value:any){
+ const cardType=String(value?.cardType||value?.card_type||"").toUpperCase();
+ const entityKind=String(value?.entityKind||value?.entity_kind||"").toLowerCase();
+ const entityId=text(value?.entityId||value?.entity_id||"",120);
+ if(!CHAT_CARD_TYPES.has(cardType)||CHAT_CARD_ENTITY_KIND[cardType]!==entityKind||!entityId)return null;
+ if(["memory","plan","song","capsule","event","goal","context_session","poll","checklist"].includes(entityKind)&&!uuidish(entityId))return null;
+ if(entityKind==="place"&&(!/^\d+$/.test(entityId)||Number(entityId)<=0))return null;
+ if(entityKind==="daily_question"&&!validDate(entityId))return null;
+ if(entityKind==="status"&&!["0","1"].includes(entityId))return null;
+ return {cardType,entityKind,entityId};
+}
+function chatCapsuleUnlockAt(data:any){
+ const direct=String(data?.unlockAt||data?.unlock_at||"");
+ if(direct&&Number.isFinite(Date.parse(direct)))return new Date(direct).toISOString();
+ const date=String(data?.unlockDate||data?.unlock_date||data?.date||"");
+ if(!validDate(date))return null;
+ const rawTime=String(data?.unlockTime||data?.unlock_time||"");
+ const time=/^\d{2}:\d{2}$/.test(rawTime)?rawTime:"00:00";
+ const iso=date+"T"+time+":00-05:00";
+ return Number.isFinite(Date.parse(iso))?new Date(iso).toISOString():null;
+}
+function chatCapsuleAccess(data:any,person:string,locations:any[]=[],now=Date.now()){
+ const unlockType=String(data?.unlockType||data?.unlock_type||"date")==="place"?"place":"date";
+ if(unlockType==="place"){
+  const lat=Number(data?.latitude),lon=Number(data?.longitude),radius=Math.max(50,Math.min(1000,Number(data?.radius)||150));
+  const own=(locations||[]).find((x:any)=>String(x.person)===String(person)&&x.sharing===true&&freshContextLocation(x,now));
+  const unlocked=!!own&&[lat,lon].every(Number.isFinite)&&meters(Number(own.latitude),Number(own.longitude),lat,lon)<=radius;
+  return {locked:!unlocked,unlockType,unlockAt:null};
+ }
+ const unlockAt=chatCapsuleUnlockAt(data);
+ return {locked:!!unlockAt&&Date.parse(unlockAt)>now,unlockType,unlockAt};
+}
+function chatCardUnavailable(ref:any){
+ return {available:false,type:String(ref?.card_type||"").toUpperCase(),entityKind:String(ref?.entity_kind||""),entityId:String(ref?.entity_id||""),message:"Este contenido ya no está disponible."};
+}
+function chatItemCard(type:string,row:any,capsuleAccess:any=null){
+ const data=row?.data||{},base={available:true,type,entityKind:String(row.kind),entityId:String(row.id),author:String(row.author),createdAt:row.created};
+ const fallback:Record<string,string>={MEMORY:"Recuerdo",PLAN:"Plan",SONG:"Canción",CAPSULE:"Cápsula",EVENT:"Evento"};
+ const title=text(data.title||data.name||fallback[type]||"Contenido",240);
+ if(type==="CAPSULE"){
+  const access=capsuleAccess||chatCapsuleAccess(data,String(row.author),[]);
+  if(access.locked)return {...base,title,locked:true,unlockType:access.unlockType,unlockAt:access.unlockAt};
+ }
+ const safe:any={...base,title,locked:false};
+ if(data.body)safe.body=text(data.body,1200);
+ if(data.date)safe.date=String(data.date).slice(0,10);
+ if(data.time)safe.time=text(data.time,12);
+ if(data.artist)safe.artist=text(data.artist,160);
+ if(data.platform||data.source)safe.source=text(data.platform||data.source,80);
+ if(data.url&&/^https:\/\//i.test(String(data.url)))safe.url=text(data.url,1000);
+ if(data.cover&&/^https:\/\//i.test(String(data.cover)))safe.cover=text(data.cover,1000);
+ if(data.placeName)safe.placeName=text(data.placeName,160);
+ if(data.category)safe.category=text(data.category,100);
+ if(type==="CAPSULE"){
+  safe.unlockAt=chatCapsuleUnlockAt(data);
+  safe.hasPhoto=!!(data.photo||data.photoPath||data.media);
+  safe.hasAudio=!!(data.audio||data.audioPath);
+  safe.hasSong=!!(data.song||data.songId);
+ }
+ return safe;
+}
+async function chatPollCard(id:string,person:string){
+ const poll=(await ok(db.from("galaxy_chat_polls").select("*").eq("id",id).limit(1)))?.[0];
+ if(!poll)return null;
+ const [options,votes]=await Promise.all([
+  ok(db.from("galaxy_chat_poll_options").select("id,label,position").eq("poll_id",id).order("position")),
+  ok(db.from("galaxy_chat_poll_votes").select("option_id,person,voted_at").eq("poll_id",id))
+ ]);
+ const totalPeople=new Set((votes||[]).map((v:any)=>String(v.person))).size,totalVotes=(votes||[]).length;
+ const closed=!!poll.closed_at||(poll.closes_at&&Date.parse(String(poll.closes_at))<=Date.now());
+ return {
+  available:true,type:"POLL",entityKind:"poll",entityId:id,title:text(poll.question,500),question:text(poll.question,500),
+  allowMultiple:!!poll.allow_multiple,closesAt:poll.closes_at,closedAt:poll.closed_at,closed,createdBy:String(poll.created_by),
+  totalPeople,totalVotes,
+  options:(options||[]).map((option:any)=>{
+   const optionVotes=(votes||[]).filter((v:any)=>String(v.option_id)===String(option.id));
+   return {id:String(option.id),label:text(option.label,240),position:Number(option.position),votes:optionVotes.length,percent:totalVotes?Math.round(optionVotes.length*100/totalVotes):0,selected:optionVotes.some((v:any)=>String(v.person)===person)};
+  })
+ };
+}
+async function chatChecklistCard(id:string){
+ const list=(await ok(db.from("galaxy_chat_checklists").select("*").eq("id",id).limit(1)))?.[0];
+ if(!list)return null;
+ const items=await ok(db.from("galaxy_chat_checklist_items").select("*").eq("checklist_id",id).order("position"));
+ const done=(items||[]).filter((x:any)=>x.checked).length;
+ return {available:true,type:"CHECKLIST",entityKind:"checklist",entityId:id,title:text(list.title,300),createdBy:String(list.created_by),version:Number(list.version),done,total:(items||[]).length,items:(items||[]).map((x:any)=>({id:String(x.id),label:text(x.label,300),position:Number(x.position),checked:!!x.checked,updatedBy:x.updated_by==null?null:String(x.updated_by),updatedAt:x.updated_at,version:Number(x.version)}))};
+}
+async function chatHydrateEntityRef(ref:any,person:string){
+ if(!ref)return null;
+ const type=String(ref.card_type||"").toUpperCase(),kind=String(ref.entity_kind||""),id=String(ref.entity_id||"");
+ try{
+  if(["memory","plan","song","capsule","event"].includes(kind)){
+   const row=(await ok(db.from("galaxy_items").select("id,kind,data,author,created").eq("id",id).eq("kind",kind).limit(1)))?.[0];
+   if(!row)return chatCardUnavailable(ref);
+   if(kind==="capsule"){
+    const locations=await ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude,updated_at").eq("person",person).limit(1)),access=chatCapsuleAccess(row.data||{},person,locations||[]);
+    const card:any=chatItemCard(type,row,access);
+    if(access.locked)return card;
+    if(row.data?.photoPath)try{card.photoUrl=await signed("galaxy-photos",String(row.data.photoPath),900);}catch{}
+    if(row.data?.audioPath)try{card.audioUrl=await signed("galaxy-voice",String(row.data.audioPath),900);}catch{}
+    if(row.data?.songId){
+      const song=(await ok(db.from("galaxy_items").select("id,data").eq("id",String(row.data.songId)).eq("kind","song").limit(1)))?.[0];
+      if(song)card.song={id:String(song.id),title:text(song.data?.title||"Canción",160),artist:text(song.data?.artist||"",160),source:text(song.data?.source||"",80),url:/^https:\/\//i.test(String(song.data?.url||""))?String(song.data.url):""};
+    }
+    return card;
+   }
+   return chatItemCard(type,row);
+  }
+  if(kind==="goal"){
+   const row=(await ok(db.from("galaxy_goals").select("id,kind,title,description,category,target_date,status,target_amount,created_by,version,completed_at,created_at,updated_at").eq("id",id).limit(1)))?.[0];
+   return row?{available:true,type:"GOAL",entityKind:"goal",entityId:id,title:text(row.title,300),body:text(row.description,1200),category:text(row.category,100),targetDate:row.target_date,status:row.status,targetAmount:row.target_amount,createdBy:String(row.created_by),version:Number(row.version),updatedAt:row.updated_at}:chatCardUnavailable(ref);
+  }
+  if(kind==="place"){
+   const row=(await ok(db.from("galaxy_places").select("id,owner,name,kind,latitude,longitude,note,created_at").eq("id",Number(id)).limit(1)))?.[0];
+   return row?{available:true,type:"PLACE",entityKind:"place",entityId:id,title:text(row.name,160),placeKind:text(row.kind,40),note:text(row.note,400),latitude:Number(row.latitude),longitude:Number(row.longitude),owner:String(row.owner),createdAt:row.created_at}:chatCardUnavailable(ref);
+  }
+  if(kind==="daily_question"){
+   const row=(await ok(db.from("galaxy_daily_questions").select("*").eq("day",id).limit(1)))?.[0];
+   if(!row)return chatCardUnavailable(ref);
+   const q=questionById(String(row.question_id));
+   if(!q)return chatCardUnavailable(ref);
+   const answers=await ok(db.from("galaxy_daily").select("person,answer").eq("day",id).order("person"));
+   const mine=(answers||[]).find((x:any)=>String(x.person)===person),partner=(answers||[]).find((x:any)=>String(x.person)!==person);
+   const both=!!text(mine?.answer,3000)&&!!text(partner?.answer,3000);
+   return {available:true,type:"DAILY_QUESTION",entityKind:"daily_question",entityId:id,title:text(q.text,600),questionId:q.id,deck:q.deck,day:id,favorite:!!row.favorite,answeredByMe:!!text(mine?.answer,3000),answeredByPartner:!!text(partner?.answer,3000),myAnswer:text(mine?.answer,3000),partnerAnswer:both?text(partner?.answer,3000):"",revealed:both};
+  }
+  if(kind==="context_session"){
+   const session=(await ok(db.from("galaxy_context_sessions").select("*").eq("id",id).limit(1)))?.[0];
+   if(!session)return chatCardUnavailable(ref);
+   const [eta,loc]=await Promise.all([
+    ok(db.from("galaxy_context_eta_history").select("captured_at,distance_m,eta_s,progress_pct").eq("session_id",id).order("captured_at",{ascending:false}).limit(1)).then((x:any)=>x?.[0]||null),
+    ok(db.from("galaxy_locations").select("person,transport_preference,updated_at").eq("person",String(session.person)).limit(1)).then((x:any)=>x?.[0]||null)
+   ]);
+   const raw=String(session.status||"active"),distanceM=Number(eta?.distance_m??session.last_distance_m);
+   const visual=raw==="arrived"?"LLEGÓ":raw==="cancelled"?"CANCELADO":raw==="finished"||raw==="completed"?"FINALIZADO":Number.isFinite(distanceM)&&distanceM<=300?"CERCA":"EN CAMINO";
+   return {available:true,type:type==="CHECK_IN"?"CHECK_IN":"ETA",entityKind:"context_session",entityId:id,title:text(session.label||"Acompáñame",120),person:String(session.person),destinationKind:session.destination_kind,targetPerson:session.target_person,placeId:session.place_id,transport:text(loc?.transport_preference||"auto",40),status:raw,visualStatus:visual,distanceM:Number.isFinite(distanceM)?distanceM:null,etaSeconds:eta?.eta_s??session.last_eta_s,progressPct:eta?.progress_pct??session.progress_pct,startedAt:session.started_at,arrivedAt:session.arrived_at,endedAt:session.ended_at,updatedAt:eta?.captured_at||session.updated_at};
+  }
+  if(kind==="poll"){const card=await chatPollCard(id,person);return card||chatCardUnavailable(ref);}
+  if(kind==="checklist"){const card=await chatChecklistCard(id);return card||chatCardUnavailable(ref);}
+  if(kind==="status"){
+   const row=(await ok(db.from("galaxy_locations").select("person,status,updated_at").eq("person",id).limit(1)))?.[0];
+   return row?{available:true,type:"STATUS",entityKind:"status",entityId:id,title:text(row.status||"Sin estado",160),person:id,updatedAt:row.updated_at}:chatCardUnavailable(ref);
+  }
+ }catch(error){console.warn("chat-card-hydrate",type,kind,error instanceof Error?error.message:"error");}
+ return chatCardUnavailable(ref);
+}
+function chatCardPushBody(ref:any){
+ const type=String(ref?.card_type||"").toUpperCase();
+ const labels:Record<string,string>={MEMORY:"compartió un recuerdo",PLAN:"compartió un plan",GOAL:"compartió un objetivo",PLACE:"compartió un lugar",SONG:"compartió una canción",ETA:"compartió su trayecto",CHECK_IN:"compartió un check-in",POLL:"creó una encuesta",CHECKLIST:"compartió una checklist",CAPSULE:"compartió una cápsula",DAILY_QUESTION:"compartió la pregunta del día",EVENT:"compartió un evento",STATUS:"compartió un estado"};
+ return labels[type]||"compartió algo de Nuestra Galaxia";
+}
 async function chatPartnerPresence(person:string){
  const partner=person==="0"?"1":"0";
  const [row,pref]=await Promise.all([
@@ -722,14 +887,15 @@ async function chatHydrate(rows:any[],person:string){
  if(!ids.length)return [];
  const stickerIds=[...new Set(list.map((r:any)=>String(r?.attachment?.stickerId||"")).filter(uuidish))];
  const liveIds=[...new Set(list.map((r:any)=>String(r?.attachment?.liveSessionId||"")).filter(uuidish))];
- const [reactions,pins,favorites,attachments,stickers,liveSessions,locations]=await Promise.all([
+ const [reactions,pins,favorites,attachments,stickers,liveSessions,locations,entityRefs]=await Promise.all([
   ok(db.from("galaxy_chat_reactions").select("message_id,person,emoji,updated_at").in("message_id",ids)),
   ok(db.from("galaxy_chat_pins").select("message_id,pinned_by,pinned_at").in("message_id",ids)),
   ok(db.from("galaxy_chat_favorites").select("message_id,person,saved_at").eq("person",person).in("message_id",ids)),
   ok(db.from("galaxy_chat_attachments").select("*").in("message_id",ids).order("created_at",{ascending:true})),
   stickerIds.length?ok(db.from("galaxy_chat_stickers").select("*").in("id",stickerIds)):Promise.resolve([]),
   liveIds.length?ok(db.from("galaxy_chat_live_locations").select("*").in("id",liveIds)):Promise.resolve([]),
-  liveIds.length?ok(db.from("galaxy_locations").select("person,latitude,longitude,accuracy,sharing,updated_at").order("person")):Promise.resolve([])
+  liveIds.length?ok(db.from("galaxy_locations").select("person,latitude,longitude,accuracy,sharing,updated_at").order("person")):Promise.resolve([]),
+  ok(db.from("galaxy_chat_entity_refs").select("*").in("message_id",ids))
  ]);
  const replyIds=[...new Set(list.map((x:any)=>x.reply_to).filter(Boolean).map(String))];
  const replies=replyIds.length?await ok(db.from("galaxy_chat_messages").select("id,sender_person,body,message_type,deleted_at,server_seq").in("id",replyIds)):[];
@@ -758,6 +924,9 @@ async function chatHydrate(rows:any[],person:string){
  }
  const sessionMap=new Map<string,any>((liveSessions||[]).map((x:any)=>[String(x.id),x] as [string,any]));
  const locationMap=new Map<string,any>((locations||[]).map((x:any)=>[String(x.person),x] as [string,any]));
+ const refMap=new Map((entityRefs||[]).map((x:any)=>[String(x.message_id),x]));
+ const cardEntries=await Promise.all([...refMap.entries()].map(async([messageId,ref]:any)=>[messageId,await chatHydrateEntityRef(ref,person)] as [string,any]));
+ const cardMap=new Map<string,any>(cardEntries);
  const now=Date.now();
  return list.map((row:any)=>{
   const stickerId=String(row?.attachment?.stickerId||""),liveId=String(row?.attachment?.liveSessionId||"");
@@ -781,6 +950,7 @@ async function chatHydrate(rows:any[],person:string){
    hasViewOnce:!!row.view_once,
    sticker:stickerMap.get(stickerId)||null,
    liveLocation,
+   card:cardMap.get(String(row.id))||null,
    attachments:(row.view_once&&String(row.sender_person)!==person)?[]:(attachmentMap.get(String(row.id))||[])
   };
  });
@@ -834,7 +1004,13 @@ async function chatSend(req:Request,body:any){
  const messageType=CHAT_MESSAGE_TYPES.has(String(body.messageType||"text"))?String(body.messageType||"text"):"text";
  const message=text(body.body,4000),attachmentMeta=chatSafeObject(body.attachment,4096);
  const files=Array.isArray(body.attachments)?body.attachments.slice(0,10):[];
+ const entityRef=messageType==="card"?chatNormalizeEntityRef(body.entityRef):null;
+ if(messageType==="card"&&!entityRef)return json({error:"Referencia de Nuestra Galaxia no válida."},400);
  if(!message&&messageType==="text"&&!files.length)return json({error:"Escribe un mensaje."},400);
+ if(entityRef){
+  const preview=await chatHydrateEntityRef({card_type:entityRef.cardType,entity_kind:entityRef.entityKind,entity_id:entityRef.entityId},person);
+  if(!preview?.available)return json({error:"Este contenido ya no está disponible."},404);
+ }
  if(messageType==="sticker"){
   const stickerId=String(attachmentMeta.stickerId||"");
   if(!uuidish(stickerId)||(await ok(db.from("galaxy_chat_stickers").select("id").eq("id",stickerId).limit(1)))?.length!==1)return json({error:"Sticker no disponible."},404);
@@ -895,16 +1071,135 @@ async function chatSend(req:Request,body:any){
   });
  }
  if(attachmentRows.length)await ok(db.from("galaxy_chat_attachments").upsert(attachmentRows,{onConflict:"message_id,path",ignoreDuplicates:true}));
+ if(entityRef)await ok(db.from("galaxy_chat_entity_refs").upsert({message_id:row.id,card_type:entityRef.cardType,entity_kind:entityRef.entityKind,entity_id:entityRef.entityId,snapshot:{label:text(body?.entityRef?.label||"",120)},created_by:person,updated_at:new Date().toISOString()},{onConflict:"message_id"}));
  if(isNew&&messageType==="location"&&String(attachmentMeta.mode||"")==="live"&&uuidish(attachmentMeta.liveSessionId))await ok(db.from("galaxy_chat_live_locations").update({message_id:row.id}).eq("id",String(attachmentMeta.liveSessionId)).eq("sender_person",person));
  if(isNew&&messageType==="sticker"&&uuidish(attachmentMeta.stickerId))await ok(db.from("galaxy_chat_sticker_recents").upsert({sticker_id:String(attachmentMeta.stickerId),person,last_used_at:new Date().toISOString()},{onConflict:"sticker_id,person"}));
  if(!scheduled)await ok(db.from("galaxy_chat_read_state").upsert({person,last_read_at:row.created_at,last_read_message_id:row.id,updated_at:new Date().toISOString()},{onConflict:"person"}));
  let push:any={sent:0,configured:false,scheduled};
  if(isNew&&!scheduled){
-  const names=await profileNames(),pushBody=message||({photo:"Foto",video:"Video",video_message:"Videomensaje",audio:"Nota de voz",file:"Archivo",location:"Ubicación",song:"Canción",link:"Enlace",sticker:"Sticker",gif:"GIF"}[messageType]||"Mensaje");
-  push=await dispatchPushEvent(d,target,"chat_message",{title:names[Number(person)]||"Tu persona",body:pushBody,action:"chat",senderName:names[Number(person)]||"Tu persona",entityType:"chat_message",entityId:String(row.id),silent:row.silent===true});
+  const names=await profileNames(),senderName=names[Number(person)]||"Tu persona";
+  const pushBody=entityRef?(senderName+" "+chatCardPushBody({card_type:entityRef.cardType})):message||({photo:"Foto",video:"Video",video_message:"Videomensaje",audio:"Nota de voz",file:"Archivo",location:"Ubicación",song:"Canción",link:"Enlace",sticker:"Sticker",gif:"GIF"}[messageType]||"Mensaje");
+  push=await dispatchPushEvent(d,target,"chat_message",{title:senderName,body:pushBody,action:"chat",senderName,entityType:"chat_message",entityId:String(row.id),silent:row.silent===true});
  }
  const hydrated=(await chatHydrate([row],person))[0];
  return json({message:hydrated,push,idempotent:!isNew,scheduled},isNew?201:200);
+}
+async function chatCreateNativeCardMessage(d:any,clientId:string,ref:{cardType:string,entityKind:string,entityId:string}){
+ const person=String(d.person),target=person==="0"?"1":"0";
+ if(!uuidish(clientId))throw new Error("Identificador de mensaje no válido.");
+ let row=(await ok(db.from("galaxy_chat_messages").select("*").eq("sender_person",person).eq("client_id",clientId).limit(1)))?.[0],created=false;
+ if(!row){
+  const now=new Date().toISOString();
+  row=await ok(db.from("galaxy_chat_messages").insert({
+   client_id:clientId,sender_person:person,body:"",message_type:"card",attachment:{},link_preview:{},
+   client_created_at:now,server_received_at:now,sent_at:now,schedule_state:"sent",silent:false
+  }).select("*").single());
+  created=true;
+ }
+ await ok(db.from("galaxy_chat_entity_refs").upsert({message_id:row.id,card_type:ref.cardType,entity_kind:ref.entityKind,entity_id:ref.entityId,snapshot:{},created_by:person,updated_at:new Date().toISOString()},{onConflict:"message_id"}));
+ await ok(db.from("galaxy_chat_read_state").upsert({person,last_read_at:row.created_at,last_read_message_id:row.id,updated_at:new Date().toISOString()},{onConflict:"person"}));
+ if(created){
+  const names=await profileNames(),senderName=names[Number(person)]||"Tu persona";
+  await dispatchPushEvent(d,target,"chat_message",{title:senderName,body:senderName+" "+chatCardPushBody({card_type:ref.cardType}),action:"chat",senderName,entityType:"chat_message",entityId:String(row.id)});
+  await ok(db.from("galaxy_chat_metrics").insert({message_id:row.id,event:"sent",send_latency_ms:0,server_latency_ms:0,retry_count:0}));
+ }
+ return {message:(await chatHydrate([row],person))[0],created};
+}
+async function chatPoll(req:Request,body:any={}){
+ const d=await device(req),person=String(d.person),target=person==="0"?"1":"0",operation=String(body.operation||"state");
+ if(operation==="create"){
+  const pollId=String(body.pollId||""),clientId=String(body.clientId||""),question=text(body.question,500);
+  const labels=(Array.isArray(body.options)?body.options:[]).map((x:any)=>text(x,240)).filter(Boolean).slice(0,10);
+  if(!uuidish(pollId)||!uuidish(clientId)||!question||labels.length<2||new Set(labels.map((x:string)=>x.toLocaleLowerCase("es"))).size!==labels.length)return json({error:"Completa la encuesta con 2 a 10 opciones distintas."},400);
+  let closesAt:null|string=null;
+  if(body.closesAt){
+   const ms=Date.parse(String(body.closesAt));if(!Number.isFinite(ms)||ms<=Date.now()+60000)return json({error:"El cierre debe ser una fecha futura."},400);
+   closesAt=new Date(ms).toISOString();
+  }
+  let poll=(await ok(db.from("galaxy_chat_polls").select("*").eq("id",pollId).limit(1)))?.[0];
+  if(poll&&String(poll.created_by)!==person)return json({error:"Encuesta no disponible."},403);
+  if(!poll){
+   poll=await ok(db.from("galaxy_chat_polls").insert({id:pollId,created_by:person,question,allow_multiple:body.allowMultiple===true,closes_at:closesAt}).select("*").single());
+   await ok(db.from("galaxy_chat_poll_options").insert(labels.map((label:string,position:number)=>({poll_id:pollId,label,position}))));
+  }
+  const shell=await chatCreateNativeCardMessage(d,clientId,{cardType:"POLL",entityKind:"poll",entityId:pollId});
+  if(!poll.message_id)await ok(db.from("galaxy_chat_polls").update({message_id:shell.message.id,updated_at:new Date().toISOString()}).eq("id",pollId).is("message_id",null));
+  return json({message:shell.message,poll:await chatPollCard(pollId,person),idempotent:!shell.created},shell.created?201:200);
+ }
+ const pollId=String(body.pollId||body.id||"");
+ if(!uuidish(pollId))return json({error:"Encuesta no válida."},400);
+ const poll=(await ok(db.from("galaxy_chat_polls").select("*").eq("id",pollId).limit(1)))?.[0];
+ if(!poll)return json({error:"Encuesta no disponible."},404);
+ if(operation==="state")return json({poll:await chatPollCard(pollId,person)});
+ if(operation==="close"){
+  if(String(poll.created_by)!==person)return json({error:"Solo quien creó la encuesta puede cerrarla."},403);
+  const now=new Date().toISOString();
+  await ok(db.from("galaxy_chat_polls").update({closed_at:poll.closed_at||now,updated_at:now}).eq("id",pollId));
+  if(poll.message_id)await chatSignal(d,target,String(poll.message_id));
+  return json({poll:await chatPollCard(pollId,person)});
+ }
+ if(operation==="vote"){
+  const optionId=String(body.optionId||"");
+  if(!uuidish(optionId))return json({error:"Opción no válida."},400);
+  const option=(await ok(db.from("galaxy_chat_poll_options").select("id,poll_id,label").eq("id",optionId).eq("poll_id",pollId).limit(1)))?.[0];
+  if(!option)return json({error:"Opción no disponible."},404);
+  const closed=!!poll.closed_at||(poll.closes_at&&Date.parse(String(poll.closes_at))<=Date.now());
+  if(closed)return json({error:"La encuesta está cerrada."},409);
+  const selected=body.selected!==false;
+  if(selected)await ok(db.from("galaxy_chat_poll_votes").upsert({poll_id:pollId,option_id:optionId,person,voted_at:new Date().toISOString()},{onConflict:"poll_id,option_id,person"}));
+  else await ok(db.from("galaxy_chat_poll_votes").delete().eq("poll_id",pollId).eq("option_id",optionId).eq("person",person));
+  const card=await chatPollCard(pollId,person);
+  if(poll.message_id){
+   const names=await profileNames(),senderName=names[Number(person)]||"Tu persona";
+   await dispatchPushEvent(d,target,"chat_message",{title:senderName,body:senderName+" votó en "+text(poll.question,120),action:"chat",senderName,entityType:"chat_message",entityId:String(poll.message_id)});
+   await chatSignal(d,target,String(poll.message_id));
+  }
+  return json({poll:card});
+ }
+ return json({error:"Operación de encuesta no válida."},400);
+}
+async function chatChecklist(req:Request,body:any={}){
+ const d=await device(req),person=String(d.person),target=person==="0"?"1":"0",operation=String(body.operation||"state");
+ if(operation==="create"){
+  const checklistId=String(body.checklistId||""),clientId=String(body.clientId||""),title=text(body.title,300);
+  const labels=(Array.isArray(body.items)?body.items:[]).map((x:any)=>text(x,300)).filter(Boolean).slice(0,50);
+  if(!uuidish(checklistId)||!uuidish(clientId)||!title||!labels.length)return json({error:"Ponle un título y al menos un elemento a la checklist."},400);
+  let list=(await ok(db.from("galaxy_chat_checklists").select("*").eq("id",checklistId).limit(1)))?.[0];
+  if(list&&String(list.created_by)!==person)return json({error:"Checklist no disponible."},403);
+  if(!list){
+   list=await ok(db.from("galaxy_chat_checklists").insert({id:checklistId,created_by:person,title}).select("*").single());
+   await ok(db.from("galaxy_chat_checklist_items").insert(labels.map((label:string,position:number)=>({checklist_id:checklistId,label,position,checked:false,updated_by:person}))));
+  }
+  const shell=await chatCreateNativeCardMessage(d,clientId,{cardType:"CHECKLIST",entityKind:"checklist",entityId:checklistId});
+  if(!list.message_id)await ok(db.from("galaxy_chat_checklists").update({message_id:shell.message.id,updated_at:new Date().toISOString()}).eq("id",checklistId).is("message_id",null));
+  return json({message:shell.message,checklist:await chatChecklistCard(checklistId),idempotent:!shell.created},shell.created?201:200);
+ }
+ const checklistId=String(body.checklistId||body.id||"");
+ if(!uuidish(checklistId))return json({error:"Checklist no válida."},400);
+ const list=(await ok(db.from("galaxy_chat_checklists").select("*").eq("id",checklistId).limit(1)))?.[0];
+ if(!list)return json({error:"Checklist no disponible."},404);
+ if(operation==="state")return json({checklist:await chatChecklistCard(checklistId)});
+ if(operation==="set"){
+  const itemId=String(body.itemId||""),checked=body.checked===true;
+  if(!uuidish(itemId))return json({error:"Elemento no válido."},400);
+  const item=(await ok(db.from("galaxy_chat_checklist_items").select("*").eq("id",itemId).eq("checklist_id",checklistId).limit(1)))?.[0];
+  if(!item)return json({error:"Elemento no disponible."},404);
+  if(!!item.checked!==checked){
+   const expected=Number(body.expectedVersion||item.version);
+   if(expected!==Number(item.version))return json({error:"La checklist cambió. Actualiza antes de intentarlo otra vez."},409);
+   const now=new Date().toISOString();
+   const updated=await ok(db.from("galaxy_chat_checklist_items").update({checked,updated_by:person,version:Number(item.version)+1,updated_at:now}).eq("id",itemId).eq("version",item.version).select("id").maybeSingle());
+   if(!updated)return json({error:"La checklist cambió. Actualiza antes de intentarlo otra vez."},409);
+   await ok(db.from("galaxy_chat_checklists").update({version:Number(list.version)+1,updated_at:now}).eq("id",checklistId));
+   if(list.message_id){
+    const names=await profileNames(),senderName=names[Number(person)]||"Tu persona";
+    await dispatchPushEvent(d,target,"chat_message",{title:senderName,body:senderName+(checked?" completó ":" reabrió ")+text(item.label,120),action:"chat",senderName,entityType:"chat_message",entityId:String(list.message_id)});
+    await chatSignal(d,target,String(list.message_id));
+   }
+  }
+  return json({checklist:await chatChecklistCard(checklistId)});
+ }
+ return json({error:"Operación de checklist no válida."},400);
 }
 async function chatRead(req:Request,body:any={}){
  const d=await device(req),person=String(d.person),target=person==="0"?"1":"0";
@@ -991,14 +1286,17 @@ async function chatCollection(req:Request,body:any,kind:"pins"|"saved"){
 }
 async function chatSearch(req:Request,body:any={}){
  const d=await device(req),person=String(d.person),q=text(body.query||"",160).toLocaleLowerCase("es"),sender=String(body.sender||"all"),type=String(body.type||"all"),date=String(body.date||"");
- let rows=await chatVisibleRows(person,db.from("galaxy_chat_messages").select("*").order("server_seq",{ascending:false}).limit(800));
- if(q)rows=rows.filter((x:any)=>String(x.body||"").toLocaleLowerCase("es").includes(q));
+ let rows=await chatVisibleRows(person,db.from("galaxy_chat_messages").select("*").order("server_seq",{ascending:false}).limit(500));
  if(sender==="me")rows=rows.filter((x:any)=>String(x.sender_person)===person);
  if(sender==="partner")rows=rows.filter((x:any)=>String(x.sender_person)!==person);
- if(["photo","video","audio","file","link"].includes(type))rows=rows.filter((x:any)=>String(x.message_type)===type||(type==="link"&&Object.keys(x.link_preview||{}).length>0));
  if(/^\d{4}-\d{2}-\d{2}$/.test(date))rows=rows.filter((x:any)=>String(x.created_at||"").slice(0,10)===date);
- rows=rows.slice(0,80);
- return json({messages:await chatHydrate(rows,person)});
+ if(["photo","video","audio","file","link"].includes(type))rows=rows.filter((x:any)=>String(x.message_type)===type||(type==="link"&&Object.keys(x.link_preview||{}).length>0));
+ let hydrated=await chatHydrate(rows.slice(0,240),person);
+ const cardTypes:Record<string,string>={memories:"MEMORY",plans:"PLAN",music:"SONG",places:"PLACE",goals:"GOAL",polls:"POLL",checklists:"CHECKLIST",capsules:"CAPSULE",events:"EVENT",eta:"ETA",daily:"DAILY_QUESTION",status:"STATUS"};
+ if(type==="messages")hydrated=hydrated.filter((x:any)=>x.message_type!=="card");
+ else if(cardTypes[type])hydrated=hydrated.filter((x:any)=>x.card?.available&&String(x.card.type)===cardTypes[type]);
+ if(q)hydrated=hydrated.filter((x:any)=>String(x.body||"").toLocaleLowerCase("es").includes(q)||(x.card?.available&&JSON.stringify(x.card).toLocaleLowerCase("es").includes(q)));
+ return json({messages:hydrated.slice(0,80)});
 }
 async function chatPresence(req:Request,body:any={}){
  const d=await device(req),person=String(d.person),state=String(body.state||"ONLINE"),now=new Date();
@@ -1127,9 +1425,10 @@ async function chatProcessDue(req:Request){
   if(!claimed)continue;
   const sentAt=new Date().toISOString();
   const updated=await ok(db.from("galaxy_chat_messages").update({schedule_state:"sent",sent_at:sentAt,server_received_at:sentAt}).eq("id",String(row.id)).select("*").single());
-  const sender=String(updated.sender_person),target=sender==="0"?"1":"0",names=await profileNames();
-  const pushBody=String(updated.body||"").trim()||({photo:"Foto",video:"Video",video_message:"Videomensaje",audio:"Nota de voz",file:"Archivo",location:"Ubicación",sticker:"Sticker",gif:"GIF"}[String(updated.message_type)]||"Mensaje");
-  await dispatchPushEvent({person:sender,id:null},target,"chat_message",{title:names[Number(sender)]||"Tu persona",body:pushBody,action:"chat",senderName:names[Number(sender)]||"Tu persona",entityType:"chat_message",entityId:String(updated.id),silent:updated.silent===true});
+  const sender=String(updated.sender_person),target=sender==="0"?"1":"0",names=await profileNames(),senderName=names[Number(sender)]||"Tu persona";
+  const ref=String(updated.message_type)==="card"?(await ok(db.from("galaxy_chat_entity_refs").select("card_type").eq("message_id",String(updated.id)).limit(1)))?.[0]:null;
+  const pushBody=ref?senderName+" "+chatCardPushBody(ref):String(updated.body||"").trim()||({photo:"Foto",video:"Video",video_message:"Videomensaje",audio:"Nota de voz",file:"Archivo",location:"Ubicación",song:"Canción",sticker:"Sticker",gif:"GIF"}[String(updated.message_type)]||"Mensaje");
+  await dispatchPushEvent({person:sender,id:null},target,"chat_message",{title:senderName,body:pushBody,action:"chat",senderName,entityType:"chat_message",entityId:String(updated.id),silent:updated.silent===true});
   sent++;
  }
  return json({ok:true,sent,expired:(expired||[]).length});
@@ -1388,7 +1687,10 @@ async function bondState(person:string){
       if(ref){
         const target=(await ok(db.from("galaxy_items").select("kind,data,author").eq("id",String(ref)).limit(1)))?.[0];
         if(target&&String(target.author)!==person){
-          if(target.kind==="capsule"&&target.data?.date&&target.data.date>today())reveal=false;
+          if(target.kind==="capsule"){
+            const locs=await ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude,updated_at").eq("person",person).limit(1));
+            reveal=!chatCapsuleAccess(target.data||{},person,locs||[]).locked;
+          }
           if(target.kind==="note"&&target.data?.surprise){
             if(target.data.unlockType==="date"&&target.data.unlockDate>today())reveal=false;
             if(target.data.unlockType==="place"){
@@ -1437,9 +1739,20 @@ async function mobileState(req:Request){
     ok(db.from("galaxy_presence").select("*").order("person"))
   ]);
   const day=today();
-  const safeItems=(items||[]).map((row:any)=>{
+  const safeItems=await Promise.all((items||[]).map(async(row:any)=>{
     const copy=structuredClone(row),data=copy.data||{};
-    if(copy.kind==="capsule"&&data.date&&data.date>day&&String(copy.author)!==person)copy.data={title:"Cápsula cerrada",date:data.date,locked:true};
+    if(copy.kind==="capsule"){
+      const access=chatCapsuleAccess(data,person,locations||[]);
+      if(access.locked)copy.data={title:text(data.title||"Cápsula cerrada",160)||"Cápsula cerrada",date:access.unlockType==="date"&&validDate(data.date)?data.date:"",unlockDate:access.unlockType==="date"&&validDate(data.unlockDate)?data.unlockDate:"",unlockTime:access.unlockType==="date"&&/^\d{2}:\d{2}$/.test(String(data.unlockTime||""))?String(data.unlockTime):"",unlockAt:access.unlockAt,unlockType:access.unlockType,locked:true};
+      else{
+        if(data.photoPath)try{copy.data.photoUrl=await signed("galaxy-photos",String(data.photoPath),900);}catch{}
+        if(data.audioPath)try{copy.data.audioUrl=await signed("galaxy-voice",String(data.audioPath),900);}catch{}
+        if(data.songId){
+          const song=(items||[]).find((x:any)=>x.kind==="song"&&String(x.id)===String(data.songId));
+          if(song)copy.data.song={id:String(song.id),title:text(song.data?.title||"Canción",160),artist:text(song.data?.artist||"",160),source:text(song.data?.source||"",80),url:/^https:\/\//i.test(String(song.data?.url||""))?String(song.data.url):""};
+        }
+      }
+    }
     if(copy.kind==="note"&&data.surprise&&String(copy.author)!==person){
       let unlocked=data.unlockType!=="date"||!data.unlockDate||data.unlockDate<=day;
       if(data.unlockType==="place"){
@@ -1449,7 +1762,26 @@ async function mobileState(req:Request){
       if(!unlocked)copy.data={title:"Sorpresa guardada",surprise:true,unlockType:data.unlockType,unlockDate:data.unlockType==="date"?data.unlockDate:"",placeName:data.unlockType==="place"?text(data.placeName,80):"",locked:true};
     }
     return copy;
-  });
+  }));
+  const albumMemoryItems=safeItems.filter((row:any)=>row.kind==="memory"&&row.data?.source?.type==="chat-album"&&Array.isArray(row.data?.source?.attachmentIds));
+  const albumAttachmentIds=[...new Set(albumMemoryItems.flatMap((row:any)=>row.data.source.attachmentIds.map((id:any)=>String(id)).filter(uuidish)))].slice(0,120);
+  if(albumAttachmentIds.length){
+    const attachments=await ok(db.from("galaxy_chat_attachments").select("id,bucket,path,kind,mime,name").in("id",albumAttachmentIds).limit(120));
+    const mediaMap=new Map<string,any>();
+    for(const attachment of attachments||[]){
+      if(!["photo","video"].includes(String(attachment.kind)))continue;
+      try{
+        mediaMap.set(String(attachment.id),{
+          id:String(attachment.id),kind:String(attachment.kind),mime:text(attachment.mime||"",100),
+          name:text(attachment.name||"",180),url:await signed(String(attachment.bucket||"galaxy-chat-media"),String(attachment.path),900)
+        });
+      }catch{}
+    }
+    for(const row of albumMemoryItems){
+      const media=(row.data.source.attachmentIds||[]).map((id:any)=>mediaMap.get(String(id))).filter(Boolean).slice(0,12);
+      if(media.length)row.data.sourceMedia=media;
+    }
+  }
   const safePresence=(presence||[]).map((row:any)=>{
     if(String(row.person)===person)return row;
     return {
@@ -1766,13 +2098,53 @@ function cleanItem(kind:string,data:any){
   if("body" in out)out.body=text(out.body,10000);
   if("category" in out)out.category=text(out.category,80);
   if("date" in out&&out.date!==""&&!validDate(out.date))throw new Error("Fecha no válida");
+  if(kind==="capsule"){
+    out.unlockType=String(out.unlockType||"date")==="place"?"place":"date";
+    if(out.unlockType==="place"){
+      const lat=Number(out.latitude),lon=Number(out.longitude),placeId=Number(out.placeId),radius=Math.max(50,Math.min(1000,Number(out.radius)||150));
+      if(!Number.isFinite(lat)||lat < -90||lat > 90||!Number.isFinite(lon)||lon < -180||lon > 180||!Number.isInteger(placeId)||placeId<=0)throw new Error("Lugar de desbloqueo no válido");
+      out.latitude=lat;out.longitude=lon;out.placeId=placeId;out.placeName=text(out.placeName||"Lugar",80)||"Lugar";out.radius=radius;
+      out.unlockDate="";out.unlockTime="";delete out.unlockAt;
+    }else{
+      const unlockDate=String(out.unlockDate||out.date||""),unlockTime=String(out.unlockTime||"00:00");
+      if(!validDate(unlockDate))throw new Error("Fecha de desbloqueo no válida");
+      if(!/^\d{2}:\d{2}$/.test(unlockTime))throw new Error("Hora de desbloqueo no válida");
+      const ms=out.unlockAt?Date.parse(String(out.unlockAt)):Date.parse(unlockDate+"T"+unlockTime+":00-05:00");
+      if(!Number.isFinite(ms))throw new Error("Momento de desbloqueo no válido");
+      out.unlockAt=new Date(ms).toISOString();out.unlockDate=unlockDate;out.unlockTime=unlockTime;
+    }
+  }
+  if(kind==="event"&&out.time){
+    out.time=String(out.time);
+    if(!/^\d{2}:\d{2}$/.test(out.time))throw new Error("Hora del evento no válida");
+  }
+  if(kind==="capsule"){
+    if(out.photoPath)out.photoPath=text(out.photoPath,400);
+    if(out.audioPath){out.audioPath=text(out.audioPath,400);out.audioMime=text(out.audioMime||"audio/mp4",100);}
+    if(out.songId){out.songId=String(out.songId);if(!uuidish(out.songId))throw new Error("Canción de cápsula no válida");}
+  }
   if("annual" in out)out.annual=!!out.annual;
   if("done" in out)out.done=!!out.done;
   return out;
 }
+async function validateCapsuleReferences(data:any){
+  if(data?.photoPath){
+    const row=(await ok(db.schema("storage").from("objects").select("name").eq("bucket_id","galaxy-photos").eq("name",String(data.photoPath)).limit(1)))?.[0];
+    if(!row)throw new Error("La foto de la cápsula ya no está disponible");
+  }
+  if(data?.audioPath){
+    const row=(await ok(db.schema("storage").from("objects").select("name").eq("bucket_id","galaxy-voice").eq("name",String(data.audioPath)).limit(1)))?.[0];
+    if(!row)throw new Error("El audio de la cápsula ya no está disponible");
+  }
+  if(data?.songId){
+    const row=(await ok(db.from("galaxy_items").select("id").eq("id",String(data.songId)).eq("kind","song").limit(1)))?.[0];
+    if(!row)throw new Error("La canción de la cápsula ya no está disponible");
+  }
+}
 
 async function itemSave(req:Request,body:any){
   const d=await device(req),kind=String(body.kind||""),data=cleanItem(kind,body.data);
+  if(kind==="capsule")await validateCapsuleReferences(data);
   if(body.id){
     const row=(await ok(db.from("galaxy_items").select("*").eq("id",String(body.id)).limit(1)))?.[0];
     if(!row)return json({error:"El contenido ya no existe"},404);
@@ -2177,8 +2549,8 @@ async function presenceSet(req:Request,body:any){
 }
 
 async function backupExport(req:Request){
-  await device(req);
-  const [settings,items,daily,bond,bondGestures,places,goals,goalParticipants,goalSteps,goalLinks,goalContributions,voiceTranscripts,photoContext,chatMessages,chatReactions,chatPins,chatFavorites,chatAttachments,chatPreferences,chatTranscripts,chatTranslations,chatAlbums,chatAlbumItems,chatStickers,chatStickerFavorites,chatStickerRecents,chatLiveLocations]=await Promise.all([
+  const d=await device(req),person=String(d.person);
+  const [settings,items,daily,bond,bondGestures,places,goals,goalParticipants,goalSteps,goalLinks,goalContributions,voiceTranscripts,photoContext,chatMessages,chatReactions,chatPins,chatFavorites,chatAttachments,chatPreferences,chatTranscripts,chatTranslations,chatAlbums,chatAlbumItems,chatStickers,chatStickerFavorites,chatStickerRecents,chatLiveLocations,chatEntityRefs,chatPolls,chatPollOptions,chatPollVotes,chatChecklists,chatChecklistItems]=await Promise.all([
     ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
     ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:true}).limit(2000)),
     ok(db.from("galaxy_daily").select("day,person,mood,answer").order("day",{ascending:true}).limit(1000)),
@@ -2205,9 +2577,21 @@ async function backupExport(req:Request){
     ok(db.from("galaxy_chat_stickers").select("*").order("created_at",{ascending:true}).limit(2000)),
     ok(db.from("galaxy_chat_sticker_favorites").select("*").limit(4000)),
     ok(db.from("galaxy_chat_sticker_recents").select("*").limit(4000)),
-    ok(db.from("galaxy_chat_live_locations").select("*").order("started_at",{ascending:true}).limit(5000))
+    ok(db.from("galaxy_chat_live_locations").select("*").order("started_at",{ascending:true}).limit(5000)),
+    ok(db.from("galaxy_chat_entity_refs").select("*").limit(10000)),
+    ok(db.from("galaxy_chat_polls").select("*").order("created_at",{ascending:true}).limit(2000)),
+    ok(db.from("galaxy_chat_poll_options").select("*").limit(20000)),
+    ok(db.from("galaxy_chat_poll_votes").select("*").limit(20000)),
+    ok(db.from("galaxy_chat_checklists").select("*").order("created_at",{ascending:true}).limit(2000)),
+    ok(db.from("galaxy_chat_checklist_items").select("*").limit(20000))
   ]);
-  return json({format:"nuestra-galaxia-backup",version:3,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:items||[],daily:daily||[],bond:bond||[],bondGestures:bondGestures||[],places:places||[],goals:goals||[],goalParticipants:goalParticipants||[],goalSteps:goalSteps||[],goalLinks:goalLinks||[],goalContributions:goalContributions||[],voiceTranscripts:voiceTranscripts||[],photoContext:photoContext||[],chat:{messages:chatMessages||[],reactions:chatReactions||[],pins:chatPins||[],favorites:chatFavorites||[],attachments:chatAttachments||[],preferences:chatPreferences||[],transcripts:chatTranscripts||[],translations:chatTranslations||[],albums:chatAlbums||[],albumItems:chatAlbumItems||[],stickers:chatStickers||[],stickerFavorites:chatStickerFavorites||[],stickerRecents:chatStickerRecents||[],liveLocations:chatLiveLocations||[]}});
+  const privacyLocations=await ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude,updated_at").order("person"));
+  const hiddenCapsules=new Set((items||[]).filter((row:any)=>row.kind==="capsule"&&String(row.author)!==person&&chatCapsuleAccess(row.data||{},person,privacyLocations||[]).locked).map((row:any)=>String(row.id)));
+  const safeItems=(items||[]).filter((row:any)=>!hiddenCapsules.has(String(row.id)));
+  const hiddenBondIds=new Set((bond||[]).filter((row:any)=>row.type==="voice"&&hiddenCapsules.has(String(row.data?.referenceId||""))).map((row:any)=>String(row.id)));
+  const safeBond=(bond||[]).filter((row:any)=>!hiddenBondIds.has(String(row.id)));
+  const safeVoiceTranscripts=(voiceTranscripts||[]).filter((row:any)=>!hiddenBondIds.has(String(row.bond_id||"")));
+  return json({format:"nuestra-galaxia-backup",version:4,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:safeItems,daily:daily||[],bond:safeBond,bondGestures:bondGestures||[],places:places||[],goals:goals||[],goalParticipants:goalParticipants||[],goalSteps:goalSteps||[],goalLinks:goalLinks||[],goalContributions:goalContributions||[],voiceTranscripts:safeVoiceTranscripts,photoContext:photoContext||[],chat:{messages:chatMessages||[],reactions:chatReactions||[],pins:chatPins||[],favorites:chatFavorites||[],attachments:chatAttachments||[],preferences:chatPreferences||[],transcripts:chatTranscripts||[],translations:chatTranslations||[],albums:chatAlbums||[],albumItems:chatAlbumItems||[],stickers:chatStickers||[],stickerFavorites:chatStickerFavorites||[],stickerRecents:chatStickerRecents||[],liveLocations:chatLiveLocations||[],entityRefs:chatEntityRefs||[],polls:chatPolls||[],pollOptions:chatPollOptions||[],pollVotes:chatPollVotes||[],checklists:chatChecklists||[],checklistItems:chatChecklistItems||[]}});
 }
 
 function uuidish(v:unknown){return /^[0-9a-f-]{36}$/i.test(String(v||""));}
@@ -2215,7 +2599,7 @@ function uuidish(v:unknown){return /^[0-9a-f-]{36}$/i.test(String(v||""));}
 async function backupRestore(req:Request,body:any){
   await device(req);
   const backup=body?.backup;
-  if(!backup||backup.format!=="nuestra-galaxia-backup"||![1,2,3].includes(Number(backup.version)))return json({error:"La copia no pertenece a Nuestra Galaxia."},400);
+  if(!backup||backup.format!=="nuestra-galaxia-backup"||![1,2,3,4].includes(Number(backup.version)))return json({error:"La copia no pertenece a Nuestra Galaxia."},400);
   const items=Array.isArray(backup.items)?backup.items.slice(0,2000):[];
   const daily=Array.isArray(backup.daily)?backup.daily.slice(0,1000):[];
   const bond=Array.isArray(backup.bond)?backup.bond.slice(0,2000):[];
@@ -2243,6 +2627,12 @@ async function backupRestore(req:Request,body:any){
   const chatStickerFavorites=Array.isArray(chat.stickerFavorites)?chat.stickerFavorites.slice(0,4000):[];
   const chatStickerRecents=Array.isArray(chat.stickerRecents)?chat.stickerRecents.slice(0,4000):[];
   const chatLiveLocations=Array.isArray(chat.liveLocations)?chat.liveLocations.slice(0,5000):[];
+  const chatEntityRefs=Array.isArray(chat.entityRefs)?chat.entityRefs.slice(0,10000):[];
+  const chatPolls=Array.isArray(chat.polls)?chat.polls.slice(0,2000):[];
+  const chatPollOptions=Array.isArray(chat.pollOptions)?chat.pollOptions.slice(0,20000):[];
+  const chatPollVotes=Array.isArray(chat.pollVotes)?chat.pollVotes.slice(0,20000):[];
+  const chatChecklists=Array.isArray(chat.checklists)?chat.checklists.slice(0,2000):[];
+  const chatChecklistItems=Array.isArray(chat.checklistItems)?chat.checklistItems.slice(0,20000):[];
   let restoredItems=0,restoredDaily=0,restoredBond=0,restoredBondGestures=0,restoredPlaces=0,restoredGoals=0,restoredGoalParticipants=0,restoredGoalSteps=0,restoredGoalLinks=0,restoredGoalContributions=0,restoredVoiceTranscripts=0,restoredPhotoContext=0,restoredChat=0;
 
   if(backup.settings&&typeof backup.settings==="object"&&!Array.isArray(backup.settings)){
@@ -2376,6 +2766,57 @@ async function backupRestore(req:Request,body:any){
     },{onConflict:"id",ignoreDuplicates:true}));
     restoredChat++;
   }
+  const pollClosedAt=new Map<string,string>();
+  for(const row of chatPolls){
+    const id=String(row?.id||""),createdBy=String(row?.created_by||""),question=text(row?.question,500);
+    if(!uuidish(id)||!["0","1"].includes(createdBy)||!question)continue;
+    const closesAt=row?.closes_at&&Number.isFinite(Date.parse(String(row.closes_at)))?new Date(String(row.closes_at)).toISOString():null;
+    await ok(db.from("galaxy_chat_polls").upsert({
+      id,message_id:uuidish(row?.message_id)?String(row.message_id):null,created_by:createdBy,question,
+      allow_multiple:row?.allow_multiple===true,closes_at:closesAt,closed_at:null,
+      created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()
+    },{onConflict:"id",ignoreDuplicates:true}));
+    if(row?.closed_at&&Number.isFinite(Date.parse(String(row.closed_at))))pollClosedAt.set(id,new Date(String(row.closed_at)).toISOString());
+  }
+  for(const row of chatPollOptions){
+    const id=String(row?.id||""),pollId=String(row?.poll_id||""),label=text(row?.label,240),position=Number(row?.position);
+    if(!uuidish(id)||!uuidish(pollId)||!label||!Number.isInteger(position)||position<0||position>9)continue;
+    await ok(db.from("galaxy_chat_poll_options").upsert({id,poll_id:pollId,label,position,created_at:row?.created_at||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
+  }
+  for(const row of chatPollVotes){
+    const pollId=String(row?.poll_id||""),optionId=String(row?.option_id||""),person=String(row?.person||"");
+    if(!uuidish(pollId)||!uuidish(optionId)||!["0","1"].includes(person))continue;
+    try{await ok(db.from("galaxy_chat_poll_votes").upsert({poll_id:pollId,option_id:optionId,person,voted_at:row?.voted_at||new Date().toISOString()},{onConflict:"poll_id,option_id,person",ignoreDuplicates:true}));}catch{}
+  }
+  for(const [id,closedAt] of pollClosedAt)await ok(db.from("galaxy_chat_polls").update({closed_at:closedAt}).eq("id",id).is("closed_at",null));
+
+  for(const row of chatChecklists){
+    const id=String(row?.id||""),createdBy=String(row?.created_by||""),title=text(row?.title,300);
+    if(!uuidish(id)||!["0","1"].includes(createdBy)||!title)continue;
+    await ok(db.from("galaxy_chat_checklists").upsert({
+      id,message_id:uuidish(row?.message_id)?String(row.message_id):null,created_by:createdBy,title,
+      version:Math.max(1,Number(row?.version)||1),created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()
+    },{onConflict:"id",ignoreDuplicates:true}));
+  }
+  for(const row of chatChecklistItems){
+    const id=String(row?.id||""),checklistId=String(row?.checklist_id||""),label=text(row?.label,300),position=Number(row?.position),updatedBy=row?.updated_by==null?null:String(row.updated_by);
+    if(!uuidish(id)||!uuidish(checklistId)||!label||!Number.isInteger(position)||position<0||position>99||(updatedBy!==null&&!["0","1"].includes(updatedBy)))continue;
+    await ok(db.from("galaxy_chat_checklist_items").upsert({
+      id,checklist_id:checklistId,label,position,checked:row?.checked===true,updated_by:updatedBy,version:Math.max(1,Number(row?.version)||1),
+      created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()
+    },{onConflict:"id",ignoreDuplicates:true}));
+  }
+  for(const row of chatEntityRefs){
+    const messageId=String(row?.message_id||"");
+    const normalized=chatNormalizeEntityRef({cardType:row?.card_type,entityKind:row?.entity_kind,entityId:row?.entity_id});
+    const createdBy=String(row?.created_by||"");
+    if(!uuidish(messageId)||!normalized||!["0","1"].includes(createdBy))continue;
+    await ok(db.from("galaxy_chat_entity_refs").upsert({
+      message_id:messageId,card_type:normalized.cardType,entity_kind:normalized.entityKind,entity_id:normalized.entityId,
+      snapshot:chatSafeObject(row?.snapshot,2048),created_by:createdBy,created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()
+    },{onConflict:"message_id",ignoreDuplicates:true}));
+  }
+
   for(const row of chatAttachments){
     const id=String(row?.id||""),messageId=String(row?.message_id||""),kind=String(row?.kind||"file");
     if(!uuidish(id)||!uuidish(messageId)||!["photo","video","audio","file"].includes(kind))continue;
@@ -2412,7 +2853,7 @@ async function backupRestore(req:Request,body:any){
   }
   for(const row of chatAlbumItems)if(uuidish(row?.album_id)&&uuidish(row?.attachment_id)&&["0","1"].includes(String(row?.added_by)))await ok(db.from("galaxy_chat_album_items").upsert({album_id:String(row.album_id),attachment_id:String(row.attachment_id),added_by:String(row.added_by),added_at:row?.added_at||new Date().toISOString()},{onConflict:"album_id,attachment_id",ignoreDuplicates:true}));
 
-  return json({ok:true,restored:{items:restoredItems,daily:restoredDaily,bond:restoredBond,bondGestures:restoredBondGestures,places:restoredPlaces,goals:restoredGoals,goalParticipants:restoredGoalParticipants,goalSteps:restoredGoalSteps,goalLinks:restoredGoalLinks,goalContributions:restoredGoalContributions,voiceTranscripts:restoredVoiceTranscripts,photoContext:restoredPhotoContext,chatMessages:restoredChat},restoredGoals});
+  return json({ok:true,restored:{items:restoredItems,daily:restoredDaily,bond:restoredBond,bondGestures:restoredBondGestures,places:restoredPlaces,goals:restoredGoals,goalParticipants:restoredGoalParticipants,goalSteps:restoredGoalSteps,goalLinks:restoredGoalLinks,goalContributions:restoredGoalContributions,voiceTranscripts:restoredVoiceTranscripts,photoContext:restoredPhotoContext,chatMessages:restoredChat,entityRefs:chatEntityRefs.length,polls:chatPolls.length,checklists:chatChecklists.length},restoredGoals});
 }
 
 async function recordParticipation(person:string){
@@ -2462,7 +2903,7 @@ async function validateVoice(person:string,payload:any){
   if(payload.referenceId){
     const item=(await ok(db.from("galaxy_items").select("kind,data").eq("id",payload.referenceId).limit(1)))?.[0];
     if(!item||!["memory","song","capsule","journey","note"].includes(item.kind)||item.kind==="note"&&!item.data?.surprise)throw new Error("Referencia no válida");
-    if(item.kind==="capsule"&&String(item.data?.date||"")>today())throw new Error("La cápsula aún está cerrada");
+    if(item.kind==="capsule"){const unlockAt=chatCapsuleUnlockAt(item.data);if(unlockAt&&Date.parse(unlockAt)>Date.now())throw new Error("La cápsula aún está cerrada");}
   }
 }
 
@@ -3186,6 +3627,8 @@ Deno.serve(async req=>{
     if(action==="mobile-state")return await mobileState(req);
     if(action==="chat-state")return await chatState(req,body);
     if(action==="chat-send")return await chatSend(req,body);
+    if(action==="chat-poll")return await chatPoll(req,body);
+    if(action==="chat-checklist")return await chatChecklist(req,body);
     if(action==="chat-read")return await chatRead(req,body);
     if(action==="chat-edit")return await chatEdit(req,body);
     if(action==="chat-delete")return await chatDelete(req,body);
