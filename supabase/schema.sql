@@ -709,22 +709,43 @@ grant select,insert,update,delete on public.galaxy_bond_gestures,public.galaxy_p
 commit;
 
 
--- Mega Update 3.1 · Galaxy Chat + Notification Center
+-- Mega Update 3.1 / Galaxy Chat Core 3.2 · private messenger + Notification Center
 begin;
+
+create sequence if not exists public.galaxy_chat_server_seq;
 
 create table if not exists public.galaxy_chat_messages (
  id uuid primary key default gen_random_uuid(),
  client_id uuid not null,
  sender_person text not null check(sender_person in ('0','1')),
- body text not null check(length(trim(body)) between 1 and 4000),
+ body text not null default '',
  reply_to uuid references public.galaxy_chat_messages(id) on delete set null,
  deleted_at timestamptz,
  created_at timestamptz not null default now(),
- unique(sender_person,client_id)
+ server_seq bigint not null default nextval('public.galaxy_chat_server_seq'),
+ client_created_at timestamptz not null default now(),
+ server_received_at timestamptz not null default now(),
+ sent_at timestamptz not null default now(),
+ delivered_at timestamptz,
+ read_at timestamptz,
+ edited_at timestamptz,
+ message_type text not null default 'text' check(message_type in ('text','photo','video','audio','file','location','song','link')),
+ attachment jsonb not null default '{}'::jsonb,
+ link_preview jsonb not null default '{}'::jsonb,
+ unique(sender_person,client_id),
+ constraint galaxy_chat_messages_body_check check (
+   deleted_at is not null
+   or (message_type='text' and length(trim(body)) between 1 and 4000)
+   or (message_type<>'text' and length(body)<=4000)
+ )
 );
+create unique index if not exists galaxy_chat_messages_server_seq_idx on public.galaxy_chat_messages(server_seq);
 create index if not exists galaxy_chat_messages_created_idx on public.galaxy_chat_messages(created_at desc,id desc);
 create index if not exists galaxy_chat_messages_sender_created_idx on public.galaxy_chat_messages(sender_person,created_at desc);
+create index if not exists galaxy_chat_messages_sender_seq_idx on public.galaxy_chat_messages(sender_person,server_seq desc);
+create index if not exists galaxy_chat_messages_type_seq_idx on public.galaxy_chat_messages(message_type,server_seq desc);
 create index if not exists galaxy_chat_messages_reply_to_idx on public.galaxy_chat_messages(reply_to) where reply_to is not null;
+create index if not exists galaxy_chat_messages_search_idx on public.galaxy_chat_messages using gin(to_tsvector('simple',coalesce(body,'')));
 
 create table if not exists public.galaxy_chat_read_state (
  person text primary key check(person in ('0','1')),
@@ -734,6 +755,89 @@ create table if not exists public.galaxy_chat_read_state (
 );
 insert into public.galaxy_chat_read_state(person) values('0'),('1') on conflict(person) do nothing;
 create index if not exists galaxy_chat_read_state_last_message_idx on public.galaxy_chat_read_state(last_read_message_id) where last_read_message_id is not null;
+
+create table if not exists public.galaxy_chat_reactions (
+ message_id uuid not null references public.galaxy_chat_messages(id) on delete cascade,
+ person text not null check(person in ('0','1')),
+ emoji text not null check(emoji in ('❤️','😂','🥹','😮','😢','👍')),
+ created_at timestamptz not null default now(),
+ updated_at timestamptz not null default now(),
+ primary key(message_id,person)
+);
+create index if not exists galaxy_chat_reactions_message_idx on public.galaxy_chat_reactions(message_id);
+
+create table if not exists public.galaxy_chat_hidden (
+ message_id uuid not null references public.galaxy_chat_messages(id) on delete cascade,
+ person text not null check(person in ('0','1')),
+ hidden_at timestamptz not null default now(),
+ primary key(message_id,person)
+);
+
+create table if not exists public.galaxy_chat_pins (
+ message_id uuid primary key references public.galaxy_chat_messages(id) on delete cascade,
+ pinned_by text not null check(pinned_by in ('0','1')),
+ pinned_at timestamptz not null default now()
+);
+create index if not exists galaxy_chat_pins_time_idx on public.galaxy_chat_pins(pinned_at desc);
+
+create table if not exists public.galaxy_chat_favorites (
+ message_id uuid not null references public.galaxy_chat_messages(id) on delete cascade,
+ person text not null check(person in ('0','1')),
+ saved_at timestamptz not null default now(),
+ primary key(message_id,person)
+);
+create index if not exists galaxy_chat_favorites_person_time_idx on public.galaxy_chat_favorites(person,saved_at desc);
+
+create table if not exists public.galaxy_chat_edits (
+ id bigint generated always as identity primary key,
+ message_id uuid not null references public.galaxy_chat_messages(id) on delete cascade,
+ editor_person text not null check(editor_person in ('0','1')),
+ previous_body text not null check(length(previous_body)<=4000),
+ edited_at timestamptz not null default now()
+);
+create index if not exists galaxy_chat_edits_message_time_idx on public.galaxy_chat_edits(message_id,edited_at desc);
+
+create table if not exists public.galaxy_chat_attachments (
+ id uuid primary key default gen_random_uuid(),
+ message_id uuid not null references public.galaxy_chat_messages(id) on delete cascade,
+ kind text not null check(kind in ('photo','video','audio','file')),
+ bucket text not null default 'galaxy-chat-media',
+ path text not null,
+ mime text not null,
+ name text not null default '',
+ size_bytes bigint not null default 0 check(size_bytes>=0),
+ duration_ms bigint check(duration_ms is null or duration_ms>=0),
+ width integer check(width is null or width>0),
+ height integer check(height is null or height>0),
+ thumbnail_path text,
+ caption text not null default '' check(length(caption)<=1000),
+ created_at timestamptz not null default now(),
+ unique(message_id,path)
+);
+create index if not exists galaxy_chat_attachments_message_idx on public.galaxy_chat_attachments(message_id);
+
+create table if not exists public.galaxy_chat_presence (
+ person text primary key check(person in ('0','1')),
+ state text not null default 'ONLINE' check(state in ('ONLINE','TYPING','RECORDING_AUDIO','UPLOADING_MEDIA')),
+ last_active_at timestamptz not null default now(),
+ expires_at timestamptz not null default (now()+interval '45 seconds'),
+ metadata jsonb not null default '{}'::jsonb check(jsonb_typeof(metadata)='object' and octet_length(metadata::text)<=2048),
+ updated_at timestamptz not null default now()
+);
+create index if not exists galaxy_chat_presence_expiry_idx on public.galaxy_chat_presence(expires_at);
+
+create table if not exists public.galaxy_chat_metrics (
+ id bigint generated always as identity primary key,
+ message_id uuid references public.galaxy_chat_messages(id) on delete set null,
+ event text not null check(length(event) between 2 and 40),
+ send_latency_ms integer check(send_latency_ms is null or send_latency_ms>=0),
+ server_latency_ms integer check(server_latency_ms is null or server_latency_ms>=0),
+ delivery_latency_ms integer check(delivery_latency_ms is null or delivery_latency_ms>=0),
+ retry_count integer not null default 0 check(retry_count between 0 and 100),
+ failure_code text check(failure_code is null or length(failure_code)<=80),
+ created_at timestamptz not null default now()
+);
+create index if not exists galaxy_chat_metrics_created_idx on public.galaxy_chat_metrics(created_at desc);
 
 create table if not exists public.galaxy_notifications (
  id uuid primary key default gen_random_uuid(),
@@ -753,11 +857,46 @@ create table if not exists public.galaxy_notifications (
 create index if not exists galaxy_notifications_target_created_idx on public.galaxy_notifications(target_person,created_at desc);
 create index if not exists galaxy_notifications_target_unread_idx on public.galaxy_notifications(target_person,created_at desc) where read_at is null;
 
+insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
+values(
+ 'galaxy-chat-media','galaxy-chat-media',false,62914560,
+ array[
+  'image/jpeg','image/png','image/webp','video/mp4','video/webm',
+  'audio/mpeg','audio/ogg','audio/webm','audio/mp4','application/pdf',
+  'application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain','application/zip'
+ ]::text[]
+)
+on conflict(id) do update set
+ public=false,file_size_limit=excluded.file_size_limit,allowed_mime_types=excluded.allowed_mime_types;
+
 alter table public.galaxy_chat_messages enable row level security;
 alter table public.galaxy_chat_read_state enable row level security;
+alter table public.galaxy_chat_reactions enable row level security;
+alter table public.galaxy_chat_hidden enable row level security;
+alter table public.galaxy_chat_pins enable row level security;
+alter table public.galaxy_chat_favorites enable row level security;
+alter table public.galaxy_chat_edits enable row level security;
+alter table public.galaxy_chat_attachments enable row level security;
+alter table public.galaxy_chat_presence enable row level security;
+alter table public.galaxy_chat_metrics enable row level security;
 alter table public.galaxy_notifications enable row level security;
-revoke all on public.galaxy_chat_messages,public.galaxy_chat_read_state,public.galaxy_notifications from public,anon,authenticated;
-grant select,insert,update,delete on public.galaxy_chat_messages,public.galaxy_chat_read_state,public.galaxy_notifications to service_role;
+
+revoke all on
+ public.galaxy_chat_messages,public.galaxy_chat_read_state,public.galaxy_chat_reactions,
+ public.galaxy_chat_hidden,public.galaxy_chat_pins,public.galaxy_chat_favorites,
+ public.galaxy_chat_edits,public.galaxy_chat_attachments,public.galaxy_chat_presence,
+ public.galaxy_chat_metrics,public.galaxy_notifications
+from public,anon,authenticated;
+
+grant select,insert,update,delete on
+ public.galaxy_chat_messages,public.galaxy_chat_read_state,public.galaxy_chat_reactions,
+ public.galaxy_chat_hidden,public.galaxy_chat_pins,public.galaxy_chat_favorites,
+ public.galaxy_chat_edits,public.galaxy_chat_attachments,public.galaxy_chat_presence,
+ public.galaxy_chat_metrics,public.galaxy_notifications
+to service_role;
+grant usage,select on sequence public.galaxy_chat_server_seq to service_role;
 
 commit;
 

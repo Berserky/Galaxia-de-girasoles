@@ -32,16 +32,22 @@ public final class GalaxyBridge {
         activity.pickMedia(requestId,kind);
     }
     @JavascriptInterface public void pickPhotos(String requestId){ activity.pickPhotos(requestId); }
+    @JavascriptInterface public void pickChatPhotos(String requestId){ activity.pickChatPhotos(requestId); }
     @JavascriptInterface public void capturePhoto(String requestId){ activity.capturePhoto(requestId); }
+    @JavascriptInterface public void captureChatPhoto(String requestId){ activity.captureChatPhoto(requestId); }
+    @JavascriptInterface public void captureChatVideo(String requestId){ activity.captureChatVideo(requestId); }
     @JavascriptInterface public void pickDriveFolder(String requestId){ activity.pickDriveFolder(requestId); }
     @JavascriptInterface public void syncDriveFolder(String requestId){ activity.syncDriveFolder(requestId); }
     @JavascriptInterface public void disconnectDriveFolder(String requestId){ activity.disconnectDriveFolder(requestId); }
 
     @JavascriptInterface public void startVoiceRecording(String requestId){ activity.startVoiceRecording(requestId); }
     @JavascriptInterface public void stopVoiceRecording(String requestId){ activity.stopVoiceRecording(requestId); }
+    @JavascriptInterface public void pauseVoiceRecording(String requestId){ activity.pauseVoiceRecording(requestId); }
+    @JavascriptInterface public void resumeVoiceRecording(String requestId){ activity.resumeVoiceRecording(requestId); }
     @JavascriptInterface public void playVoiceRecording(String requestId){ activity.playVoiceRecording(requestId); }
     @JavascriptInterface public void discardVoiceRecording(String requestId){ activity.discardVoiceRecording(requestId); }
     @JavascriptInterface public void saveVoiceRecording(String requestId){ activity.saveVoiceRecording(requestId); }
+    @JavascriptInterface public void saveChatVoiceRecording(String requestId){ activity.saveChatVoiceRecording(requestId); }
 
     @JavascriptInterface public void exportJson(String requestId,String fileName,String json){ activity.exportJson(requestId,fileName,json); }
     @JavascriptInterface public void importJson(String requestId){ activity.importJson(requestId); }
@@ -89,6 +95,10 @@ public final class GalaxyBridge {
 
     @JavascriptInterface public void openAppSettings(String requestId){
         activity.openAppSettings(requestId);
+    }
+
+    @JavascriptInterface public void clearChatNotifications(String requestId){
+        activity.clearChatNotifications(requestId);
     }
 
     @JavascriptInterface public void checkUpdate(String requestId){

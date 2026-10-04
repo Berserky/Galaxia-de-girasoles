@@ -1,6 +1,7 @@
 package com.nuestragalaxia.companion;
 
 import android.content.Context;
+import android.content.Intent;
 import android.os.*;
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
@@ -8,7 +9,7 @@ import java.util.Map;
 import java.util.Set;
 
 public final class GalaxyFirebaseService extends FirebaseMessagingService {
-    private static final Set<String> EVENTS=Set.of("gesture","arrived_safe","nearby","capsule","note","reminder","chat_message","status_changed","mood_changed","daily_answer","goal_update","memory_shared","plan_update");
+    private static final Set<String> EVENTS=Set.of("gesture","arrived_safe","nearby","capsule","note","reminder","chat_message","chat_sync","status_changed","mood_changed","daily_answer","goal_update","memory_shared","plan_update");
 
     @Override public void onNewToken(String token){
         super.onNewToken(token);
@@ -19,6 +20,12 @@ public final class GalaxyFirebaseService extends FirebaseMessagingService {
         Map<String,String> data=message.getData();
         String eventType=data.getOrDefault("eventType","");
         if(!EVENTS.contains(eventType))return;
+        if("chat_message".equals(eventType)||"chat_sync".equals(eventType)){
+            Intent sync=new Intent("com.nuestragalaxia.CHAT_SYNC").setPackage(getPackageName());
+            sync.putExtra("entityId",data.getOrDefault("entityId",""));
+            sendBroadcast(sync);
+            if("chat_sync".equals(eventType)){BondWidget.updateAll(this);return;}
+        }
 
         BondStore bond=new BondStore(this);
         String behavior=data.getOrDefault("behavior","message");

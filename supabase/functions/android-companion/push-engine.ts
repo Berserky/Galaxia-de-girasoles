@@ -1,6 +1,6 @@
 export const PUSH_EVENT_TYPES=[
  "gesture","arrived_safe","nearby","capsule","note","reminder",
- "chat_message","status_changed","mood_changed","daily_answer",
+ "chat_message","chat_sync","status_changed","mood_changed","daily_answer",
  "goal_update","memory_shared","plan_update"
 ];
 const MAX_TTL_SECONDS=86400;
