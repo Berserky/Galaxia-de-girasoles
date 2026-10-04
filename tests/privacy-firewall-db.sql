@@ -89,11 +89,22 @@ update public.galaxy_locations set sharing=false,latitude=null,longitude=null,ac
 set local role authenticated;
 select set_config('request.jwt.claim.sub','b0000000-0000-4000-8000-000000000002',true);
 do $qa$
+declare affected integer;
 begin
  if public.galaxy_person() is distinct from '1' then raise exception 'NG-QA profile 1 mapping failed'; end if;
  if exists(select 1 from public.galaxy_items where id='b1000000-0000-4000-8000-000000000001') then raise exception 'NG-QA-001 future capsule exposed to profile 1'; end if;
  if exists(select 1 from public.galaxy_items where id='b1000000-0000-4000-8000-000000000003') then raise exception 'NG-QA-001 own place capsule exposed while sharing false'; end if;
  if exists(select 1 from storage.objects where bucket_id='galaxy-photos' and name='0/qa-place.jpg') then raise exception 'NG-QA-001 place media exposed while sharing false'; end if;
+
+ update public.galaxy_items
+ set data=jsonb_set(data,'{unlockDate}','"2020-01-01"'::jsonb,true)
+ where id='b1000000-0000-4000-8000-000000000001';
+ get diagnostics affected=row_count;
+ if affected<>0 then raise exception 'NG-QA-001 partner changed locked capsule unlock date'; end if;
+
+ delete from public.galaxy_items where id='b1000000-0000-4000-8000-000000000001';
+ get diagnostics affected=row_count;
+ if affected<>0 then raise exception 'NG-QA-001 partner deleted locked capsule'; end if;
 end $qa$;
 reset role;
 
