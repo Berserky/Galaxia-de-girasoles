@@ -1679,7 +1679,10 @@ async function bondState(person:string){
       if(ref){
         const target=(await ok(db.from("galaxy_items").select("kind,data,author").eq("id",String(ref)).limit(1)))?.[0];
         if(target&&String(target.author)!==person){
-          if(target.kind==="capsule"&&target.data?.date&&target.data.date>today())reveal=false;
+          if(target.kind==="capsule"){
+            const locs=await ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude,updated_at").eq("person",person).limit(1));
+            reveal=!chatCapsuleAccess(target.data||{},person,locs||[]).locked;
+          }
           if(target.kind==="note"&&target.data?.surprise){
             if(target.data.unlockType==="date"&&target.data.unlockDate>today())reveal=false;
             if(target.data.unlockType==="place"){
