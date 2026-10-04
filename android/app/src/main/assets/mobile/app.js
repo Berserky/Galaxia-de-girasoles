@@ -1312,8 +1312,52 @@ function chatAttachmentMarkup(a,m=null){
  return '<button class="chat-file-card" type="button" data-action="chat-file-open" data-url="'+url+'" data-name="'+attr(a.name||'archivo')+'" data-mime="'+attr(a.mime||'application/octet-stream')+'">'+ico('file-text')+'<span><b>'+name+'</b><small>'+esc(String(a.mime||'Archivo'))+(a.sizeBytes?' · '+chatSize(a.sizeBytes):'')+' · Abrir</small></span></button>'+caption;
 }
 
+function chatCardMeta(card){
+ const labels={MEMORY:'Recuerdo',PLAN:'Plan',GOAL:'Objetivo',PLACE:'Lugar',SONG:'Canción',ETA:'ETA',CHECK_IN:'Check-in',POLL:'Encuesta',CHECKLIST:'Checklist',CAPSULE:'Cápsula',DAILY_QUESTION:'Pregunta del día',EVENT:'Evento',STATUS:'Estado'};
+ const icons={MEMORY:'images',PLAN:'calendar-days',GOAL:'target',PLACE:'map-pin',SONG:'music-2',ETA:'navigation',CHECK_IN:'map-pin-check',POLL:'list-checks',CHECKLIST:'list-todo',CAPSULE:'package',DAILY_QUESTION:'message-circle-question',EVENT:'calendar',STATUS:'activity'};
+ return {label:labels[card?.type]||'Nuestra Galaxia',icon:icons[card?.type]||'sparkles'};
+}
+function chatGalaxyCardMarkup(card,m){
+ if(!card)return'';
+ const meta=chatCardMeta(card);
+ if(card.available===false)return '<div class="chat-galaxy-card unavailable"><span>'+ico('circle-off')+'</span><div><p class="eyebrow">'+esc(meta.label)+'</p><h3>Contenido no disponible</h3><p>'+esc(card.message||'Este contenido ya no está disponible.')+'</p></div></div>';
+ if(card.type==='CAPSULE'&&card.locked)return '<div class="chat-galaxy-card locked"><span>'+ico('lock-keyhole')+'</span><div><p class="eyebrow">CÁPSULA BLOQUEADA</p><h3>'+esc(card.title||'Cápsula')+'</h3><p>Se desbloquea '+esc(fmtDateTime(card.unlockAt))+'.</p></div></div>';
+ if(card.type==='POLL'){
+  const options=(card.options||[]).map(o=>'<button type="button" class="chat-poll-option '+(o.selected?'selected':'')+'" data-action="chat-poll-vote" data-poll-id="'+attr(card.entityId)+'" data-option-id="'+attr(o.id)+'" data-selected="'+(o.selected?'true':'false')+'" '+(card.closed?'disabled':'')+'><span><b>'+esc(o.label)+'</b><small>'+Number(o.votes||0)+' voto'+(Number(o.votes||0)===1?'':'s')+' · '+Number(o.percent||0)+'%</small></span><i style="--p:'+Math.max(0,Math.min(100,Number(o.percent||0)))+'%"></i></button>').join('');
+  return '<div class="chat-galaxy-card poll"><div class="chat-card-head"><span>'+ico(meta.icon)+'</span><div><p class="eyebrow">'+(card.closed?'ENCUESTA CERRADA':'ENCUESTA')+'</p><h3>'+esc(card.question||card.title)+'</h3></div></div><div class="chat-poll-options">'+options+'</div><div class="chat-card-actions">'+(!card.closed&&String(card.createdBy)===String(cloud.person)?'<button type="button" data-action="chat-poll-close" data-id="'+attr(card.entityId)+'">'+ico('lock')+' Cerrar</button>':'')+(card.options||[]).map(o=>'<button type="button" data-action="chat-poll-plan" data-poll-id="'+attr(card.entityId)+'" data-option="'+attr(o.label)+'">'+ico('calendar-plus')+' Plan: '+esc(o.label)+'</button>').join('')+'</div></div>';
+ }
+ if(card.type==='CHECKLIST'){
+  const rows=(card.items||[]).map(x=>'<button type="button" class="chat-check-item '+(x.checked?'done':'')+'" data-action="chat-check-set" data-list-id="'+attr(card.entityId)+'" data-item-id="'+attr(x.id)+'" data-checked="'+(x.checked?'true':'false')+'" data-version="'+attr(x.version)+'">'+ico(x.checked?'square-check-big':'square')+'<span>'+esc(x.label)+'</span></button>').join('');
+  return '<div class="chat-galaxy-card checklist"><div class="chat-card-head"><span>'+ico(meta.icon)+'</span><div><p class="eyebrow">CHECKLIST · '+Number(card.done||0)+'/'+Number(card.total||0)+'</p><h3>'+esc(card.title)+'</h3></div></div><div class="chat-check-items">'+rows+'</div><div class="chat-card-actions"><button type="button" data-action="chat-check-convert" data-kind="plan" data-id="'+attr(card.entityId)+'">'+ico('calendar-plus')+' Convertir a plan</button><button type="button" data-action="chat-check-convert" data-kind="goal" data-id="'+attr(card.entityId)+'">'+ico('target')+' Convertir a objetivo</button></div></div>';
+ }
+ if(card.type==='DAILY_QUESTION'){
+  return '<div class="chat-galaxy-card daily"><div class="chat-card-head"><span>'+ico(meta.icon)+'</span><div><p class="eyebrow">PREGUNTA DEL DÍA</p><h3>'+esc(card.title)+'</h3></div></div>'+(card.myAnswer?'<p class="chat-card-answer"><b>Tú:</b> '+esc(card.myAnswer)+'</p>':'')+(card.revealed&&card.partnerAnswer?'<p class="chat-card-answer"><b>'+esc(partnerName())+':</b> '+esc(card.partnerAnswer)+'</p>':card.answeredByMe?'<small class="muted">La otra respuesta se revelará cuando ambos contesten.</small>':'')+(!card.answeredByMe?'<div class="chat-card-actions"><button type="button" data-action="chat-daily-answer" data-day="'+attr(card.day)+'">'+ico('message-square-reply')+' Responder</button></div>':'')+'</div>';
+ }
+ if(card.type==='ETA'||card.type==='CHECK_IN'){
+  const eta=Number.isFinite(Number(card.etaSeconds))?fmtDuration(Number(card.etaSeconds)):'ETA pendiente',distance=Number.isFinite(Number(card.distanceM))?fmtDistance(Number(card.distanceM)):'';
+  return '<button type="button" class="chat-galaxy-card eta" data-action="chat-card-eta-map" data-id="'+attr(card.entityId)+'"><div class="chat-card-head"><span>'+ico(meta.icon)+'</span><div><p class="eyebrow">'+esc(card.visualStatus||meta.label)+'</p><h3>'+esc(card.title||'Acompáñame')+'</h3><p>'+esc([distance,eta,card.transport].filter(Boolean).join(' · '))+'</p></div></div><div class="chat-card-progress"><i style="--p:'+Math.max(0,Math.min(100,Number(card.progressPct||0)))+'%"></i></div><small>Última actualización: '+esc(fmtDateTime(card.updatedAt))+'</small></button>';
+ }
+ const body=card.body?'<p>'+esc(card.body)+'</p>':'';
+ const details=[card.date?fmtDate(card.date):'',card.targetDate?fmtDate(card.targetDate):'',card.artist||'',card.category||'',card.note||'',card.status||''].filter(Boolean).join(' · ');
+ let actions='';
+ if(card.type==='PLACE')actions='<button type="button" data-action="chat-card-place-map" data-id="'+attr(card.entityId)+'" data-lat="'+attr(card.latitude)+'" data-lon="'+attr(card.longitude)+'">'+ico('map')+' Ver mapa</button><button type="button" data-action="chat-card-place-save" data-id="'+attr(card.entityId)+'">'+ico('bookmark-plus')+' Guardar</button>';
+ if(card.type==='SONG')actions='<button type="button" data-action="chat-card-song-play" data-id="'+attr(card.entityId)+'">'+ico('play')+' Play</button>'+(card.url?'<button type="button" data-action="chat-smart-link" data-url="'+attr(card.url)+'">'+ico('external-link')+' Abrir fuente</button>':'');
+ if(card.type==='EVENT')actions='<button type="button" data-action="chat-card-event-plan" data-id="'+attr(card.entityId)+'">'+ico('calendar-plus')+' Añadir a planes</button><button type="button" data-action="chat-card-event-remind" data-id="'+attr(card.entityId)+'">'+ico('bell')+' Recordarme</button>';
+ return '<div class="chat-galaxy-card '+String(card.type||'').toLowerCase()+'"><div class="chat-card-head"><span>'+ico(meta.icon)+'</span><div><p class="eyebrow">'+esc(meta.label.toUpperCase())+'</p><h3>'+esc(card.title||meta.label)+'</h3>'+body+(details?'<small>'+esc(details)+'</small>':'')+'</div></div>'+(actions?'<div class="chat-card-actions">'+actions+'</div>':'')+'</div>';
+}
+function chatSmartActionsMarkup(m){
+ if(m.deleted_at||m.message_type==='card')return'';
+ const actions=[];
+ const url=String(m.body||'').match(/https:\/\/[^\s<]{4,1000}/i)?.[0];
+ if(url)actions.push('<button type="button" data-action="chat-smart-link" data-url="'+attr(url)+'">'+ico('external-link')+' Abrir enlace</button>');
+ const date=String(m.body||'').match(/\b(20\d{2})-(\d{2})-(\d{2})\b/)?.[0];
+ if(date)actions.push('<button type="button" data-action="chat-smart-plan" data-id="'+attr(m.id)+'" data-date="'+attr(date)+'">'+ico('calendar-plus')+' Crear plan</button>');
+ if(m.message_type==='location'&&m.attachment?.latitude!=null)actions.push('<button type="button" data-action="chat-smart-place" data-id="'+attr(m.id)+'">'+ico('map-pin-plus')+' Guardar lugar</button>');
+ return actions.length?'<div class="chat-smart-actions">'+actions.join('')+'</div>':'';
+}
 function chatRichMessageMarkup(m){
  let out='';
+ if(m.message_type==='card'&&m.card)out+=chatGalaxyCardMarkup(m.card,m);
  if(m.view_once&&!chatOwn(m)){
   if(m.opened_at)out+='<div class="chat-view-once consumed">'+ico('eye-off')+'<span><b>Contenido visto</b><small>Era de una sola visualización.</small></span></div>';
   else out+='<button type="button" class="chat-view-once" data-action="chat-view-once" data-id="'+attr(m.id)+'">'+ico('eye')+'<span><b>Ver una vez</b><small>Foto, video o audio temporal.</small></span></button>';
@@ -1335,6 +1379,7 @@ function chatRichMessageMarkup(m){
   out+='<div class="chat-link-card">'+(lp.image?'<img loading="lazy" src="'+attr(lp.image)+'" alt="">':'<span>'+ico(lp.provider==='youtube'?'youtube':lp.provider==='spotify'?'music':'link')+'</span>')+'<div><b>'+esc(lp.title||lp.domain)+'</b><small>'+esc(lp.description||lp.domain||'')+'</small><em>'+esc(lp.domain||'')+'</em></div></div>';
  }
  if(m.deleted_at)out+='<p class="chat-deleted">'+ico('ban')+' Mensaje eliminado</p>';
+ if(!m.deleted_at)out+=chatSmartActionsMarkup(m);
  return out||'<p></p>';
 }
 function chatReactionMarkup(m){
@@ -1419,7 +1464,7 @@ function queueCurrentChat(extra={}){
  queueChatMessage({body,messageType,attachments,...extra});
 }
 function chatSignature(state){
- const messages=(state?.messages||[]).map(m=>[m.id,m.body,m.deleted_at,m.edited_at,m.delivered_at,m.read_at,m.reply_to,m.server_seq,m.schedule_state,m.expires_at,m.opened_at,m.effect,JSON.stringify(m.reactions||[]),!!m.pin,!!m.favorite,JSON.stringify(m.attachments||[]),JSON.stringify(m.sticker||null),JSON.stringify(m.liveLocation||null)]);
+ const messages=(state?.messages||[]).map(m=>[m.id,m.body,m.deleted_at,m.edited_at,m.delivered_at,m.read_at,m.reply_to,m.server_seq,m.schedule_state,m.expires_at,m.opened_at,m.effect,JSON.stringify(m.reactions||[]),!!m.pin,!!m.favorite,JSON.stringify(m.attachments||[]),JSON.stringify(m.sticker||null),JSON.stringify(m.liveLocation||null),JSON.stringify(m.card||null)]);
  return JSON.stringify([messages,state?.unread||0,state?.partnerLastReadAt||'',state?.nextBeforeSeq||'',state?.partnerPresence||{},state?.pinnedIds||[]]);
 }
 function chatCapturePlayback(){
