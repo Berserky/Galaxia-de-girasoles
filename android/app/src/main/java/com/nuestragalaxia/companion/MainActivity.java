@@ -45,13 +45,14 @@ public final class MainActivity extends ComponentActivity {
     private static final int REQ_BACKUP_IMPORT=203;
     private static final int REQ_DRIVE_FOLDER=204;
     private static final int REQ_CAMERA=205;
+    private static final int REQ_VIDEO=206;
     private static final Set<String> MOBILE_ACTIONS=Set.of(
         "mobile-state","item-save","item-delete","settings-save","daily-save",
         "bond-save","bond-update","bond-guess","bond-delete","bond-widget","bond-send-gesture","bond-gesture-list","bond-gesture-save","bond-gesture-delete",
         "map-state","place-save","place-delete","status-set","transport-set","destination-save","trip","context-state","context-settings","context-session","context-events","context-suggestion","context-recap",
         "intelligence-search","intelligence-ask","intelligence-connections","intelligence-narrate","intelligence-book","intelligence-transcribe","intelligence-transcript-delete","intelligence-index",
         "media-list","media-delete","presence-set","backup-export","backup-import",
-        "pair-code-create","profile-repair","device-revoke","push-token-register","push-token-unregister","push-preferences","chat-state","chat-send","chat-read","chat-delete","notifications-list","notifications-read","goals-engine","date-engine","insights-summary","monthly-summary","today-history","encounter-stats","frequent-places","gps-history-export","gps-history-delete"
+        "pair-code-create","profile-repair","device-revoke","push-token-register","push-token-unregister","push-preferences","chat-state","chat-send","chat-read","chat-edit","chat-delete","chat-react","chat-pin","chat-favorite","chat-pins","chat-saved","chat-search","chat-presence","chat-metric","notifications-list","notifications-read","goals-engine","date-engine","insights-summary","monthly-summary","today-history","encounter-stats","frequent-places","gps-history-export","gps-history-delete"
     );
 
     private DeviceStore store;
@@ -72,15 +73,23 @@ public final class MainActivity extends ComponentActivity {
     private String pendingBackupImportRequest;
     private String pendingDriveFolderRequest;
     private String pendingPhotoPickerRequest;
+    private String pendingPhotoPickerKind="photo";
     private String pendingCameraRequest;
+    private String pendingCameraKind="photo";
     private File pendingCameraFile;
     private Uri pendingCameraUri;
+    private String pendingVideoRequest;
+    private File pendingVideoFile;
+    private Uri pendingVideoUri;
     private ActivityResultLauncher<PickVisualMediaRequest> photoPickerLauncher;
     private CloudMediaStore cloudMedia;
     private MediaRecorder voiceRecorder;
     private MediaPlayer voicePlayer;
     private File voiceFile;
     private long voiceStartedAt;
+    private long voicePausedAt;
+    private long voicePausedTotal;
+    private BroadcastReceiver chatSyncReceiver;
 
     @Override protected void onCreate(Bundle savedInstanceState){
         super.onCreate(savedInstanceState);
@@ -102,6 +111,16 @@ public final class MainActivity extends ComponentActivity {
         bootstrapPush();
         web=findViewById(R.id.webView);
         setupWeb();
+        chatSyncReceiver=new BroadcastReceiver(){
+            @Override public void onReceive(Context context,Intent intent){
+                JSONObject payload=new JSONObject();
+                try{payload.put("entityId",intent.getStringExtra("entityId"));}catch(Exception ignored){}
+                event("chat-sync",payload);
+            }
+        };
+        IntentFilter chatSyncFilter=new IntentFilter("com.nuestragalaxia.CHAT_SYNC");
+        if(Build.VERSION.SDK_INT>=33)registerReceiver(chatSyncReceiver,chatSyncFilter,Context.RECEIVER_NOT_EXPORTED);
+        else registerReceiver(chatSyncReceiver,chatSyncFilter);
 
         updater=new UpdateManager(this,(text,progress,busy)->{
             JSONObject payload=new JSONObject();
@@ -265,68 +284,109 @@ public final class MainActivity extends ComponentActivity {
 
     void pickMedia(String requestId,String kind){
         if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
-        if(!Set.of("photo","music","voice").contains(kind)){reject(requestId,"Tipo de archivo no válido.");return;}
+        Set<String> allowed=Set.of("photo","music","voice","chat-photo","chat-video","chat-audio","chat-file");
+        if(!allowed.contains(kind)){reject(requestId,"Tipo de archivo no válido.");return;}
         runOnUiThread(()->{
             if(pendingMediaRequest!=null){reject(requestId,"Ya hay un selector de archivo abierto.");return;}
             pendingMediaRequest=requestId;pendingMediaKind=kind;
             Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
             intent.addCategory(Intent.CATEGORY_OPENABLE);
-            intent.setType("photo".equals(kind)?"image/*":"music".equals(kind)?"audio/mpeg":"audio/*");
+            String mime;
+            if("photo".equals(kind)||"chat-photo".equals(kind))mime="image/*";
+            else if("chat-video".equals(kind))mime="video/*";
+            else if("music".equals(kind))mime="audio/mpeg";
+            else if("voice".equals(kind)||"chat-audio".equals(kind))mime="audio/*";
+            else mime="*/*";
+            intent.setType(mime);
+            if("chat-file".equals(kind))intent.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{
+                "application/pdf","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "application/vnd.ms-excel","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","text/plain","application/zip"
+            });
             try{startActivityForResult(intent,REQ_MEDIA);}
             catch(Exception e){pendingMediaRequest=null;pendingMediaKind=null;reject(requestId,"No hay un selector compatible en este teléfono.");}
         });
     }
 
-    void capturePhoto(String requestId){
+    void capturePhoto(String requestId){ capturePhotoWithKind(requestId,"photo"); }
+    void captureChatPhoto(String requestId){ capturePhotoWithKind(requestId,"chat-photo"); }
+
+    private void capturePhotoWithKind(String requestId,String kind){
         if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
         runOnUiThread(()->{
             if(pendingCameraRequest!=null){reject(requestId,"Ya hay una cámara abierta.");return;}
             try{
-                File dir=new File(getCacheDir(),"date-photos");
+                File dir=new File(getCacheDir(),"camera-media");
                 if(!dir.exists()&&!dir.mkdirs())throw new IOException("No se pudo preparar la cámara.");
-                File file=File.createTempFile("date-", ".jpg", dir);
+                File file=File.createTempFile("galaxy-", ".jpg", dir);
                 Uri uri=FileProvider.getUriForFile(this,getPackageName()+".files",file);
                 Intent intent=new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
                 intent.putExtra(MediaStore.EXTRA_OUTPUT,uri);
                 intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 if(intent.resolveActivity(getPackageManager())==null){file.delete();throw new IOException("No hay una cámara compatible en este teléfono.");}
-                pendingCameraRequest=requestId;pendingCameraFile=file;pendingCameraUri=uri;
+                pendingCameraRequest=requestId;pendingCameraFile=file;pendingCameraUri=uri;pendingCameraKind=kind;
                 startActivityForResult(intent,REQ_CAMERA);
             }catch(Exception e){
-                pendingCameraRequest=null;pendingCameraFile=null;pendingCameraUri=null;
+                pendingCameraRequest=null;pendingCameraFile=null;pendingCameraUri=null;pendingCameraKind="photo";
                 reject(requestId,e.getMessage()==null?"No pudimos abrir la cámara.":e.getMessage());
             }
         });
     }
 
-    void pickPhotos(String requestId){
+    void captureChatVideo(String requestId){
+        if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+        runOnUiThread(()->{
+            if(pendingVideoRequest!=null){reject(requestId,"Ya hay una cámara de video abierta.");return;}
+            try{
+                File dir=new File(getCacheDir(),"camera-media");
+                if(!dir.exists()&&!dir.mkdirs())throw new IOException("No se pudo preparar la cámara.");
+                File file=File.createTempFile("galaxy-video-", ".mp4", dir);
+                Uri uri=FileProvider.getUriForFile(this,getPackageName()+".files",file);
+                Intent intent=new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
+                intent.putExtra(MediaStore.EXTRA_OUTPUT,uri);
+                intent.putExtra(MediaStore.EXTRA_DURATION_LIMIT,120);
+                intent.putExtra(MediaStore.EXTRA_VIDEO_QUALITY,1);
+                intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                if(intent.resolveActivity(getPackageManager())==null){file.delete();throw new IOException("No hay una cámara de video compatible.");}
+                pendingVideoRequest=requestId;pendingVideoFile=file;pendingVideoUri=uri;
+                startActivityForResult(intent,REQ_VIDEO);
+            }catch(Exception e){
+                pendingVideoRequest=null;pendingVideoFile=null;pendingVideoUri=null;
+                reject(requestId,e.getMessage()==null?"No pudimos abrir la cámara de video.":e.getMessage());
+            }
+        });
+    }
+
+    void pickPhotos(String requestId){ pickPhotosWithKind(requestId,"photo"); }
+    void pickChatPhotos(String requestId){ pickPhotosWithKind(requestId,"chat-photo"); }
+
+    private void pickPhotosWithKind(String requestId,String kind){
         if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
         runOnUiThread(()->{
             if(pendingPhotoPickerRequest!=null){reject(requestId,"Ya hay un selector de fotos abierto.");return;}
-            pendingPhotoPickerRequest=requestId;
+            pendingPhotoPickerRequest=requestId;pendingPhotoPickerKind=kind;
             try{
                 photoPickerLauncher.launch(new PickVisualMediaRequest.Builder().setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly.INSTANCE).build());
             }catch(Exception e){
-                pendingPhotoPickerRequest=null;
+                pendingPhotoPickerRequest=null;pendingPhotoPickerKind="photo";
                 reject(requestId,"Android no pudo abrir el selector de fotos.");
             }
         });
     }
 
     private void handlePhotoPickerResult(java.util.List<Uri> uris){
-        String request=pendingPhotoPickerRequest;pendingPhotoPickerRequest=null;
+        String request=pendingPhotoPickerRequest,kind=pendingPhotoPickerKind;pendingPhotoPickerRequest=null;pendingPhotoPickerKind="photo";
         if(request==null)return;
         if(uris==null||uris.isEmpty()){reject(request,"Selección cancelada.");return;}
         io.execute(()->{
-            int imported=0,skipped=0;String lastError="";
+            int imported=0,skipped=0;String lastError="";org.json.JSONArray items=new org.json.JSONArray();
             try{
                 String token=store.token();
                 if(token==null)throw new ApiClient.ApiException(401,"El vínculo del dispositivo ya no es válido.");
                 for(Uri uri:uris.subList(0,Math.min(30,uris.size()))){
-                    try{MobileApiClient.upload(this,token,uri,"photo");imported++;}
+                    try{JSONObject uploaded=MobileApiClient.upload(this,token,uri,kind);items.put(uploaded);imported++;}
                     catch(Exception e){skipped++;lastError=e.getMessage()==null?"Formato no compatible.":e.getMessage();}
                 }
-                JSONObject out=new JSONObject().put("imported",imported).put("skipped",skipped);
+                JSONObject out=new JSONObject().put("imported",imported).put("skipped",skipped).put("items",items);
                 if(!lastError.isBlank())out.put("lastError",lastError);
                 resolve(request,out);
             }catch(Exception e){reject(request,e.getMessage()==null?"No pudimos importar las fotos seleccionadas.":e.getMessage());}
@@ -431,17 +491,33 @@ public final class MainActivity extends ComponentActivity {
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
         if(requestCode==REQ_CAMERA){
-            String request=pendingCameraRequest;File file=pendingCameraFile;Uri uri=pendingCameraUri;
-            pendingCameraRequest=null;pendingCameraFile=null;pendingCameraUri=null;
+            String request=pendingCameraRequest,kind=pendingCameraKind;File file=pendingCameraFile;Uri uri=pendingCameraUri;
+            pendingCameraRequest=null;pendingCameraFile=null;pendingCameraUri=null;pendingCameraKind="photo";
             if(request==null)return;
             if(resultCode!=RESULT_OK||file==null||uri==null){if(file!=null)file.delete();reject(request,"Foto cancelada.");return;}
             io.execute(()->{
                 try{
                     String token=store.token();
                     if(token==null)throw new ApiClient.ApiException(401,"El vínculo del dispositivo ya no es válido.");
-                    JSONObject uploaded=MobileApiClient.upload(this,token,uri,"photo");
+                    JSONObject uploaded=MobileApiClient.upload(this,token,uri,kind);
                     resolve(request,uploaded);
                 }catch(Exception e){reject(request,e.getMessage()==null?"No pudimos guardar la foto.":e.getMessage());}
+                finally{file.delete();}
+            });
+            return;
+        }
+        if(requestCode==REQ_VIDEO){
+            String request=pendingVideoRequest;File file=pendingVideoFile;Uri uri=pendingVideoUri;
+            pendingVideoRequest=null;pendingVideoFile=null;pendingVideoUri=null;
+            if(request==null)return;
+            if(resultCode!=RESULT_OK||file==null||uri==null){if(file!=null)file.delete();reject(request,"Video cancelado.");return;}
+            io.execute(()->{
+                try{
+                    if(file.length()>60L*1024L*1024L)throw new IOException("El video supera 60 MB.");
+                    String token=store.token();
+                    if(token==null)throw new ApiClient.ApiException(401,"El vínculo del dispositivo ya no es válido.");
+                    resolve(request,MobileApiClient.upload(this,token,uri,"chat-video"));
+                }catch(Exception e){reject(request,e.getMessage()==null?"No pudimos guardar el video.":e.getMessage());}
                 finally{file.delete();}
             });
             return;
@@ -572,7 +648,7 @@ public final class MainActivity extends ComponentActivity {
             voiceRecorder.setMaxDuration(60000);voiceRecorder.setMaxFileSize(5L*1024L*1024L);
             voiceRecorder.setOutputFile(voiceFile.getAbsolutePath());
             voiceRecorder.setOnInfoListener((r,what,extra)->{if(what==MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED||what==MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED)stopVoiceRecording(null);});
-            voiceRecorder.prepare();voiceRecorder.start();voiceStartedAt=System.currentTimeMillis();
+            voiceRecorder.prepare();voiceRecorder.start();voiceStartedAt=System.currentTimeMillis();voicePausedAt=0;voicePausedTotal=0;
             resolve(requestId,new JSONObject().put("recording",true));
         }catch(Exception e){cleanupVoice(true);reject(requestId,"No pudimos iniciar el micrófono.");}
     }
@@ -582,9 +658,26 @@ public final class MainActivity extends ComponentActivity {
             if(voiceRecorder==null){if(requestId!=null)reject(requestId,"No hay una grabación activa.");return;}
             try{voiceRecorder.stop();}catch(Exception e){cleanupVoice(true);if(requestId!=null)reject(requestId,"La grabación fue demasiado corta.");return;}
             try{voiceRecorder.release();}catch(Exception ignored){} voiceRecorder=null;
-            long duration=Math.max(0,System.currentTimeMillis()-voiceStartedAt);
+            if(voicePausedAt>0){voicePausedTotal+=Math.max(0,System.currentTimeMillis()-voicePausedAt);voicePausedAt=0;}
+            long duration=Math.max(0,System.currentTimeMillis()-voiceStartedAt-voicePausedTotal);
             if(voiceFile==null||!voiceFile.exists()||voiceFile.length()<512){cleanupVoice(true);if(requestId!=null)reject(requestId,"No se recibió audio. Inténtalo otra vez.");return;}
             try{JSONObject out=new JSONObject().put("ready",true).put("durationMs",duration).put("size",voiceFile.length());if(requestId!=null)resolve(requestId,out);else event("voice",out);}catch(Exception ignored){}
+        });
+    }
+
+    void pauseVoiceRecording(String requestId){
+        runOnUiThread(()->{
+            if(voiceRecorder==null||voicePausedAt>0){reject(requestId,"No hay una grabación activa para pausar.");return;}
+            try{voiceRecorder.pause();voicePausedAt=System.currentTimeMillis();resolve(requestId,new JSONObject().put("paused",true));}
+            catch(Exception e){reject(requestId,"No pudimos pausar la grabación.");}
+        });
+    }
+
+    void resumeVoiceRecording(String requestId){
+        runOnUiThread(()->{
+            if(voiceRecorder==null||voicePausedAt<=0){reject(requestId,"La grabación no está pausada.");return;}
+            try{voiceRecorder.resume();voicePausedTotal+=Math.max(0,System.currentTimeMillis()-voicePausedAt);voicePausedAt=0;resolve(requestId,new JSONObject().put("recording",true));}
+            catch(Exception e){reject(requestId,"No pudimos reanudar la grabación.");}
         });
     }
 
@@ -605,14 +698,17 @@ public final class MainActivity extends ComponentActivity {
         runOnUiThread(()->{cleanupVoice(true);try{resolve(requestId,new JSONObject().put("ready",false));}catch(Exception e){reject(requestId,"No pudimos descartar la grabación.");}});
     }
 
-    void saveVoiceRecording(String requestId){
+    void saveVoiceRecording(String requestId){ saveVoiceRecordingAs(requestId,"voice"); }
+    void saveChatVoiceRecording(String requestId){ saveVoiceRecordingAs(requestId,"chat-audio"); }
+
+    private void saveVoiceRecordingAs(String requestId,String kind){
         if(voiceRecorder!=null){reject(requestId,"Detén la grabación antes de guardarla.");return;}
         File file=voiceFile;
         if(file==null||!file.exists()){reject(requestId,"Primero graba un audio.");return;}
         io.execute(()->{
             try{
                 String token=store.token();if(token==null)throw new ApiClient.ApiException(401,"El vínculo del dispositivo ya no es válido.");
-                JSONObject uploaded=MobileApiClient.uploadVoiceFile(this,token,file);
+                JSONObject uploaded=MobileApiClient.uploadVoiceFile(this,token,file,kind);
                 if(file.delete())voiceFile=null;resolve(requestId,uploaded);
             }catch(Exception e){reject(requestId,e.getMessage()==null?"No pudimos subir la grabación.":e.getMessage());}
         });
@@ -622,6 +718,7 @@ public final class MainActivity extends ComponentActivity {
         if(voicePlayer!=null){try{voicePlayer.stop();}catch(Exception ignored){}try{voicePlayer.release();}catch(Exception ignored){}voicePlayer=null;}
         if(voiceRecorder!=null){try{voiceRecorder.stop();}catch(Exception ignored){}try{voiceRecorder.release();}catch(Exception ignored){}voiceRecorder=null;}
         if(delete&&voiceFile!=null){try{voiceFile.delete();}catch(Exception ignored){}voiceFile=null;}
+        voicePausedAt=0;voicePausedTotal=0;
     }
 
     void startLocation(String requestId){
@@ -961,6 +1058,7 @@ public final class MainActivity extends ComponentActivity {
 
     @Override protected void onDestroy(){
         cleanupVoice(true);
+        if(chatSyncReceiver!=null){try{unregisterReceiver(chatSyncReceiver);}catch(Exception ignored){}chatSyncReceiver=null;}
         if(updater!=null)updater.close();
         io.shutdownNow();
         if(web!=null){web.removeJavascriptInterface("GalaxyAndroid");web.destroy();}
