@@ -724,6 +724,7 @@ create table if not exists public.galaxy_chat_messages (
 );
 create index if not exists galaxy_chat_messages_created_idx on public.galaxy_chat_messages(created_at desc,id desc);
 create index if not exists galaxy_chat_messages_sender_created_idx on public.galaxy_chat_messages(sender_person,created_at desc);
+create index if not exists galaxy_chat_messages_reply_to_idx on public.galaxy_chat_messages(reply_to) where reply_to is not null;
 
 create table if not exists public.galaxy_chat_read_state (
  person text primary key check(person in ('0','1')),
@@ -732,6 +733,7 @@ create table if not exists public.galaxy_chat_read_state (
  updated_at timestamptz not null default now()
 );
 insert into public.galaxy_chat_read_state(person) values('0'),('1') on conflict(person) do nothing;
+create index if not exists galaxy_chat_read_state_last_message_idx on public.galaxy_chat_read_state(last_read_message_id) where last_read_message_id is not null;
 
 create table if not exists public.galaxy_notifications (
  id uuid primary key default gen_random_uuid(),
