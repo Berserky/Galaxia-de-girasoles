@@ -26,6 +26,7 @@ jobs:
       FIREBASE_APPLICATION_ID: ${{ secrets.FIREBASE_APPLICATION_ID || vars.FIREBASE_APPLICATION_ID }}
       FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY || vars.FIREBASE_API_KEY }}
       FIREBASE_SENDER_ID: ${{ secrets.FIREBASE_SENDER_ID || vars.FIREBASE_SENDER_ID }}
+      GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY || vars.GIPHY_API_KEY }}
     steps:
       - uses: actions/checkout@v5
       - uses: denoland/setup-deno@v2
@@ -80,6 +81,7 @@ jobs:
       FIREBASE_APPLICATION_ID: ${{ secrets.FIREBASE_APPLICATION_ID || vars.FIREBASE_APPLICATION_ID }}
       FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY || vars.FIREBASE_API_KEY }}
       FIREBASE_SENDER_ID: ${{ secrets.FIREBASE_SENDER_ID || vars.FIREBASE_SENDER_ID }}
+      GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY || vars.GIPHY_API_KEY }}
       KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
       STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
       KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
