@@ -4,7 +4,7 @@
 -- albums and reusable stickers. No client role receives direct table access.
 begin;
 
-create extension if not exists pg_cron with schema pg_catalog;
+create extension if not exists pg_cron;
 create extension if not exists pg_net with schema extensions;
 
 alter table public.galaxy_chat_messages
