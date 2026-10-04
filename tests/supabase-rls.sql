@@ -5,6 +5,7 @@ insert into auth.users(id,email,email_confirmed_at) values
  ('a0000000-0000-4000-8000-000000000002','partner@example.invalid',now()),
  ('a0000000-0000-4000-8000-000000000003','outsider@example.invalid',now());
 update public.galaxy_members set email='owner@example.invalid' where person='0';
+insert into public.galaxy_members(person,email) values('0','owner@example.invalid') on conflict(person) do nothing;
 set local role authenticated;
 select set_config('request.jwt.claim.sub','a0000000-0000-4000-8000-000000000003',true);
 do $$ begin
