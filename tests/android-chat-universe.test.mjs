@@ -157,3 +157,28 @@ test('backup v4 includes new Chat-native Universe state by reference',()=>{
 test('Android native allowlist exposes new Chat APIs',()=>{
  for(const action of ['chat-poll','chat-checklist','chat-search'])assert.ok(main.includes('"'+action+'"'),action);
 });
+
+
+test('Smart Actions detects deterministic date/time and routes reminders through the existing event flow',()=>{
+ assert.ok(app.includes('function chatSmartDateTime('));
+ assert.ok(app.includes('chat-smart-remind'));
+ assert.ok(app.includes("chatOpenItemDraft('event'"));
+ assert.ok(app.includes('Confirma el evento para activar su recordatorio.'));
+ const block=app.slice(app.indexOf('function chatSmartDateTime('),app.indexOf('function chatGalaxyCardMarkup(')>app.indexOf('function chatSmartDateTime(')?app.indexOf('function chatGalaxyCardMarkup('):app.length);
+ assert.equal(/intelligence|openai|embedding/i.test(block),false);
+});
+
+test('events preserve optional time and render it through native cards',()=>{
+ assert.ok(app.includes('name="eventTime"'));
+ assert.ok(edge.includes('if(kind==="event"&&out.time)'));
+ assert.ok(edge.includes('safe.time=text(data.time,12)'));
+});
+
+test('album to memory keeps binary media by reference and signs previews only at read time',()=>{
+ assert.ok(app.includes("type:'chat-album'"));
+ assert.ok(app.includes('attachmentIds'));
+ assert.ok(edge.includes('albumMemoryItems'));
+ assert.ok(edge.includes('galaxy_chat_attachments'));
+ assert.ok(edge.includes('row.data.sourceMedia=media'));
+ assert.ok(app.includes('memory-source-media'));
+});
