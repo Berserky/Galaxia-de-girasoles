@@ -1298,21 +1298,33 @@ function chatPresenceLabel(){
 }
 function chatAttachmentMarkup(a,m=null){
  const kind=String(a.kind||'file'),url=attr(a.url||''),name=esc(a.name||'archivo'),caption=a.caption?'<small class="chat-media-caption">'+esc(a.caption)+'</small>':'';
- if(kind==='photo')return '<button class="chat-photo-card" type="button" data-action="chat-media-view" data-url="'+url+'" aria-label="Abrir foto"><img loading="lazy" src="'+url+'" alt="'+name+'"></button>'+caption;
- if(kind==='video')return '<div class="chat-video-card"><video controls preload="metadata" playsinline src="'+url+'" aria-label="'+name+'"></video><small>'+name+(a.sizeBytes?' · '+chatSize(a.sizeBytes):'')+'</small></div>'+caption;
+ if(kind==='photo')return '<button class="chat-photo-card '+(m?.message_type==='gif'?'chat-gif-card':'')+'" type="button" data-action="chat-media-view" data-url="'+url+'" aria-label="Abrir '+(m?.message_type==='gif'?'GIF':'foto')+'"><img loading="lazy" src="'+url+'" alt="'+name+'"></button>'+caption;
+ if(kind==='video'){
+  const video='<video controls preload="metadata" playsinline src="'+url+'" aria-label="'+name+'"></video>';
+  if(m?.message_type==='video_message')return '<div class="chat-video-message-card">'+video+'<small>Videomensaje'+(a.durationMs?' · '+Math.max(1,Math.round(a.durationMs/1000))+' s':'')+'</small></div>';
+  return '<div class="chat-video-card">'+video+'<small>'+name+(a.sizeBytes?' · '+chatSize(a.sizeBytes):'')+'</small></div>'+caption;
+ }
  if(kind==='audio'){
-  const bars=Array.from({length:22},(_,i)=>'<i style="--h:'+(18+((i*17)%62))+'%"></i>').join('');
-  return '<div class="chat-audio-card"><div class="chat-waveform" aria-hidden="true">'+bars+'</div><audio preload="metadata" src="'+url+'"></audio><div class="chat-audio-controls"><button type="button" data-action="chat-audio-toggle">'+ico('play')+'</button><button type="button" data-action="chat-audio-speed" data-speed="1">1×</button><span>'+(a.durationMs?Math.max(1,Math.round(a.durationMs/1000))+' s':'Nota de voz')+'</span>'+(a.id?'<button type="button" class="chat-audio-transcript" data-action="chat-audio-transcript" data-attachment-id="'+attr(a.id)+'">Texto</button>':'')+'</div></div>';
+  const values=Array.isArray(a.waveform)&&a.waveform.length?a.waveform.slice(0,64):Array.from({length:32},(_,i)=>(18+((i*17)%62))/100);
+  const bars=values.map(v=>'<i style="--h:'+Math.max(10,Math.round(Number(v||0)*100))+'%"></i>').join('');
+  return '<div class="chat-audio-card"><div class="chat-waveform" aria-hidden="true">'+bars+'</div><audio preload="metadata" src="'+url+'"></audio><input class="chat-audio-scrub" type="range" min="0" max="100" value="0" aria-label="Posición del audio"><div class="chat-audio-controls"><button type="button" data-action="chat-audio-toggle">'+ico('play')+'</button><button type="button" data-action="chat-audio-speed" data-speed="1">1×</button><span>'+(a.durationMs?Math.max(1,Math.round(a.durationMs/1000))+' s':'Nota de voz')+'</span>'+(a.id?'<button type="button" class="chat-audio-transcript" data-action="chat-audio-transcript" data-attachment-id="'+attr(a.id)+'">Texto</button>':'')+'</div></div>';
  }
  return '<button class="chat-file-card" type="button" data-action="chat-file-open" data-url="'+url+'" data-name="'+attr(a.name||'archivo')+'" data-mime="'+attr(a.mime||'application/octet-stream')+'">'+ico('file-text')+'<span><b>'+name+'</b><small>'+esc(String(a.mime||'Archivo'))+(a.sizeBytes?' · '+chatSize(a.sizeBytes):'')+' · Abrir</small></span></button>'+caption;
 }
+
 function chatRichMessageMarkup(m){
  let out='';
  if(m.view_once&&!chatOwn(m)){
   if(m.opened_at)out+='<div class="chat-view-once consumed">'+ico('eye-off')+'<span><b>Contenido visto</b><small>Era de una sola visualización.</small></span></div>';
-  else out+='<button type="button" class="chat-view-once" data-action="chat-view-once" data-id="'+attr(m.id)+'">'+ico('eye')+'<span><b>Ver una vez</b><small>Foto o video temporal.</small></span></button>';
- }else if(Array.isArray(m.attachments)&&m.attachments.length)out+='<div class="chat-media-grid">'+m.attachments.map(a=>chatAttachmentMarkup(a,m)).join('')+'</div>';
- if(m.message_type==='location'&&m.attachment?.latitude!=null)out+='<button class="chat-location-card" type="button" data-action="chat-location-open" data-lat="'+attr(m.attachment.latitude)+'" data-lon="'+attr(m.attachment.longitude)+'">'+ico('map-pin')+'<span><b>Ubicación compartida</b><small>Ver en el mapa</small></span></button>';
+  else out+='<button type="button" class="chat-view-once" data-action="chat-view-once" data-id="'+attr(m.id)+'">'+ico('eye')+'<span><b>Ver una vez</b><small>Foto, video o audio temporal.</small></span></button>';
+ }else if(m.message_type==='sticker'&&m.sticker?.url)out+='<button class="chat-sticker-message" type="button" data-action="chat-stickers-open"><img loading="lazy" src="'+attr(m.sticker.url)+'" alt="'+attr(m.sticker.name||'Sticker')+'"></button>';
+ else if(Array.isArray(m.attachments)&&m.attachments.length)out+='<div class="chat-media-grid">'+m.attachments.map(a=>chatAttachmentMarkup(a,m)).join('')+'</div>';
+ if(m.message_type==='location'){
+  if(m.attachment?.mode==='live'){
+   const live=m.liveLocation||{},hasPoint=live.latitude!=null&&live.longitude!=null;
+   out+='<div class="chat-location-card chat-live-location '+(live.active?'active':'ended')+'">'+ico(live.active?'radio':'map-pin')+'<span><b>'+(live.active?'Ubicación en vivo':'Ubicación en vivo finalizada')+'</b><small>'+(hasPoint?'Actualizada '+esc(fmtDateTime(live.updatedAt||m.created_at)):'Sin posición compartida ahora')+(live.endsAt?' · termina '+esc(fmtDateTime(live.endsAt)):'')+'</small></span>'+(hasPoint?'<button type="button" data-action="chat-location-open" data-lat="'+attr(live.latitude)+'" data-lon="'+attr(live.longitude)+'" aria-label="Ver mapa">'+ico('map')+'</button>':'')+(chatOwn(m)&&live.active?'<button type="button" data-action="chat-location-live-stop" data-id="'+attr(live.id)+'" aria-label="Detener">'+ico('square')+'</button>':'')+'</div>';
+  }else if(m.attachment?.latitude!=null)out+='<button class="chat-location-card" type="button" data-action="chat-location-open" data-lat="'+attr(m.attachment.latitude)+'" data-lon="'+attr(m.attachment.longitude)+'">'+ico('map-pin')+'<span><b>'+esc(m.attachment.label||'Ubicación compartida')+'</b><small>Ver en el mapa</small></span></button>';
+ }
  if(m.message_type==='song'&&m.attachment?.title)out+='<div class="chat-song-card">'+ico('music-2')+'<span><b>'+esc(m.attachment.title)+'</b><small>'+esc(m.attachment.platform||'Canción')+'</small></span></div>';
  if(m.body&&!m.deleted_at)out+='<div class="chat-formatted">'+chatFormatText(m.body)+'</div>';
  if(m.schedule_state==='pending'&&chatOwn(m))out+='<small class="chat-scheduled-note">'+ico('calendar-clock')+' Se enviará '+esc(fmtDateTime(m.scheduled_at))+(m.silent?' · en silencio':'')+'</small>';
@@ -1406,7 +1418,7 @@ function queueCurrentChat(extra={}){
  queueChatMessage({body,messageType,attachments,...extra});
 }
 function chatSignature(state){
- const messages=(state?.messages||[]).map(m=>[m.id,m.body,m.deleted_at,m.edited_at,m.delivered_at,m.read_at,m.reply_to,m.server_seq,JSON.stringify(m.reactions||[]),!!m.pin,!!m.favorite,JSON.stringify(m.attachments||[])]);
+ const messages=(state?.messages||[]).map(m=>[m.id,m.body,m.deleted_at,m.edited_at,m.delivered_at,m.read_at,m.reply_to,m.server_seq,m.schedule_state,m.expires_at,m.opened_at,m.effect,JSON.stringify(m.reactions||[]),!!m.pin,!!m.favorite,JSON.stringify(m.attachments||[]),JSON.stringify(m.sticker||null),JSON.stringify(m.liveLocation||null)]);
  return JSON.stringify([messages,state?.unread||0,state?.partnerLastReadAt||'',state?.nextBeforeSeq||'',state?.partnerPresence||{},state?.pinnedIds||[]]);
 }
 function chatCapturePlayback(){
@@ -1522,6 +1534,7 @@ function openChatMessageMenu(id){
  const own=chatOwn(m),mine=(m.reactions||[]).find(r=>String(r.person)===String(cloud.person))?.emoji||'';
  const reactions=CHAT_REACTIONS.map(e=>'<button type="button" class="'+(mine===e?'active':'')+'" data-action="chat-react-menu" data-id="'+attr(m.id)+'" data-emoji="'+attr(e)+'">'+e+'</button>').join('');
  const canEdit=own&&!m.deleted_at&&m.message_type==='text'&&(m.schedule_state==='pending'||Date.now()-Date.parse(m.created_at)<15*60000);
+ const photoAttachment=(m.attachments||[]).find(a=>a.kind==='photo');
  showModal('Mensaje','<div class="chat-reaction-picker">'+reactions+'</div><div class="chat-menu-list">'+
  '<button type="button" data-action="chat-reply-menu" data-id="'+attr(m.id)+'">'+ico('reply')+' Responder</button>'+
  (canEdit?'<button type="button" data-action="chat-edit-open" data-id="'+attr(m.id)+'">'+ico('pencil')+' Editar</button>':'')+
@@ -1529,6 +1542,7 @@ function openChatMessageMenu(id){
  '<button type="button" data-action="chat-favorite-toggle" data-id="'+attr(m.id)+'" data-saved="'+(m.favorite?'true':'false')+'">'+ico('bookmark')+' '+(m.favorite?'Quitar de guardados':'Guardar mensaje')+'</button>'+
  (m.body&&!m.deleted_at?'<button type="button" data-action="chat-translate" data-id="'+attr(m.id)+'">'+ico('languages')+' Traducir</button>':'')+
  (own&&m.schedule_state==='pending'?'<button type="button" data-action="chat-schedule-edit" data-id="'+attr(m.id)+'">'+ico('calendar-clock')+' Cambiar programación</button>':'')+
+ (photoAttachment?'<button type="button" data-action="chat-sticker-create" data-attachment-id="'+attr(photoAttachment.id)+'">'+ico('sticker')+' Crear sticker</button><button type="button" data-action="chat-album-add-open" data-attachment-id="'+attr(photoAttachment.id)+'">'+ico('images')+' Añadir a álbum</button>':'')+
  '<button type="button" data-action="chat-delete-open" data-id="'+attr(m.id)+'">'+ico('trash-2')+' Eliminar</button></div>','chat-message-menu');
 }
 function openChatEdit(id){
