@@ -809,8 +809,16 @@ async function chatHydrateEntityRef(ref:any,person:string){
    const row=(await ok(db.from("galaxy_items").select("id,kind,data,author,created").eq("id",id).eq("kind",kind).limit(1)))?.[0];
    if(!row)return chatCardUnavailable(ref);
    if(kind==="capsule"){
-    const locations=await ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude,updated_at").eq("person",person).limit(1));
-    return chatItemCard(type,row,chatCapsuleAccess(row.data||{},person,locations||[]));
+    const locations=await ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude,updated_at").eq("person",person).limit(1)),access=chatCapsuleAccess(row.data||{},person,locations||[]);
+    const card:any=chatItemCard(type,row,access);
+    if(access.locked)return card;
+    if(row.data?.photoPath)try{card.photoUrl=await signed("galaxy-photos",String(row.data.photoPath),900);}catch{}
+    if(row.data?.audioPath)try{card.audioUrl=await signed("galaxy-voice",String(row.data.audioPath),900);}catch{}
+    if(row.data?.songId){
+      const song=(await ok(db.from("galaxy_items").select("id,data").eq("id",String(row.data.songId)).eq("kind","song").limit(1)))?.[0];
+      if(song)card.song={id:String(song.id),title:text(song.data?.title||"Canción",160),artist:text(song.data?.artist||"",160),source:text(song.data?.source||"",80),url:/^https:\/\//i.test(String(song.data?.url||""))?String(song.data.url):""};
+    }
+    return card;
    }
    return chatItemCard(type,row);
   }
@@ -1731,11 +1739,19 @@ async function mobileState(req:Request){
     ok(db.from("galaxy_presence").select("*").order("person"))
   ]);
   const day=today();
-  const safeItems=(items||[]).map((row:any)=>{
+  const safeItems=await Promise.all((items||[]).map(async(row:any)=>{
     const copy=structuredClone(row),data=copy.data||{};
     if(copy.kind==="capsule"){
       const access=chatCapsuleAccess(data,person,locations||[]);
       if(access.locked)copy.data={title:text(data.title||"Cápsula cerrada",160)||"Cápsula cerrada",date:access.unlockType==="date"&&validDate(data.date)?data.date:"",unlockDate:access.unlockType==="date"&&validDate(data.unlockDate)?data.unlockDate:"",unlockTime:access.unlockType==="date"&&/^\d{2}:\d{2}$/.test(String(data.unlockTime||""))?String(data.unlockTime):"",unlockAt:access.unlockAt,unlockType:access.unlockType,locked:true};
+      else{
+        if(data.photoPath)try{copy.data.photoUrl=await signed("galaxy-photos",String(data.photoPath),900);}catch{}
+        if(data.audioPath)try{copy.data.audioUrl=await signed("galaxy-voice",String(data.audioPath),900);}catch{}
+        if(data.songId){
+          const song=(items||[]).find((x:any)=>x.kind==="song"&&String(x.id)===String(data.songId));
+          if(song)copy.data.song={id:String(song.id),title:text(song.data?.title||"Canción",160),artist:text(song.data?.artist||"",160),source:text(song.data?.source||"",80),url:/^https:\/\//i.test(String(song.data?.url||""))?String(song.data.url):""};
+        }
+      }
     }
     if(copy.kind==="note"&&data.surprise&&String(copy.author)!==person){
       let unlocked=data.unlockType!=="date"||!data.unlockDate||data.unlockDate<=day;
@@ -1746,7 +1762,7 @@ async function mobileState(req:Request){
       if(!unlocked)copy.data={title:"Sorpresa guardada",surprise:true,unlockType:data.unlockType,unlockDate:data.unlockType==="date"?data.unlockDate:"",placeName:data.unlockType==="place"?text(data.placeName,80):"",locked:true};
     }
     return copy;
-  });
+  }));
   const safePresence=(presence||[]).map((row:any)=>{
     if(String(row.person)===person)return row;
     return {
@@ -2079,13 +2095,33 @@ function cleanItem(kind:string,data:any){
       out.unlockAt=new Date(ms).toISOString();out.unlockDate=unlockDate;out.unlockTime=unlockTime;
     }
   }
+  if(kind==="capsule"){
+    if(out.photoPath)out.photoPath=text(out.photoPath,400);
+    if(out.audioPath){out.audioPath=text(out.audioPath,400);out.audioMime=text(out.audioMime||"audio/mp4",100);}
+    if(out.songId){out.songId=String(out.songId);if(!uuidish(out.songId))throw new Error("Canción de cápsula no válida");}
+  }
   if("annual" in out)out.annual=!!out.annual;
   if("done" in out)out.done=!!out.done;
   return out;
 }
+async function validateCapsuleReferences(data:any){
+  if(data?.photoPath){
+    const row=(await ok(db.schema("storage").from("objects").select("name").eq("bucket_id","galaxy-photos").eq("name",String(data.photoPath)).limit(1)))?.[0];
+    if(!row)throw new Error("La foto de la cápsula ya no está disponible");
+  }
+  if(data?.audioPath){
+    const row=(await ok(db.schema("storage").from("objects").select("name").eq("bucket_id","galaxy-voice").eq("name",String(data.audioPath)).limit(1)))?.[0];
+    if(!row)throw new Error("El audio de la cápsula ya no está disponible");
+  }
+  if(data?.songId){
+    const row=(await ok(db.from("galaxy_items").select("id").eq("id",String(data.songId)).eq("kind","song").limit(1)))?.[0];
+    if(!row)throw new Error("La canción de la cápsula ya no está disponible");
+  }
+}
 
 async function itemSave(req:Request,body:any){
   const d=await device(req),kind=String(body.kind||""),data=cleanItem(kind,body.data);
+  if(kind==="capsule")await validateCapsuleReferences(data);
   if(body.id){
     const row=(await ok(db.from("galaxy_items").select("*").eq("id",String(body.id)).limit(1)))?.[0];
     if(!row)return json({error:"El contenido ya no existe"},404);
