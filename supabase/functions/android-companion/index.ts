@@ -613,8 +613,8 @@ async function dispatchPushEvent(sourceDevice:any,targetPerson:string,eventType:
   ok(db.from("galaxy_push_tokens").select("device_id,token").limit(50)),
   ok(db.from("galaxy_push_subscriptions").select("device_id,event_type,enabled").eq("event_type",eventType).eq("enabled",true).limit(50))
  ]);
- const allowed=new Set((subscriptions||[]).map((row:any)=>String(row.device_id)));
- const tokenByDevice=new Map((tokens||[]).map((row:any)=>[String(row.device_id),String(row.token)]));
+ const allowed=new Set<string>((subscriptions||[]).map((row:any)=>String(row.device_id)));
+ const tokenByDevice=new Map<string,string>((tokens||[]).map((row:any)=>[String(row.device_id),String(row.token)] as [string,string]));
  const credentials=fcmCredentials(),deliveries:any[]=[],requireSubscription=options?.requireSubscription!==false;
  for(const target of devices||[]){
   const deviceId=String(target.id),token=tokenByDevice.get(deviceId);
@@ -902,7 +902,7 @@ async function chatCollection(req:Request,body:any,kind:"pins"|"saved"){
  const ids=(links||[]).map((x:any)=>String(x.message_id));if(!ids.length)return json({messages:[]});
  const rows=await chatVisibleRows(person,db.from("galaxy_chat_messages").select("*").in("id",ids).limit(200));
  const byId=new Map(rows.map((x:any)=>[String(x.id),x]));
- return json({messages:await chatHydrate(ids.map(id=>byId.get(id)).filter(Boolean),person)});
+ return json({messages:await chatHydrate(ids.map((id:string)=>byId.get(id)).filter((x:any)=>Boolean(x)),person)});
 }
 async function chatSearch(req:Request,body:any={}){
  const d=await device(req),person=String(d.person),q=text(body.query||"",160).toLocaleLowerCase("es"),sender=String(body.sender||"all"),type=String(body.type||"all"),date=String(body.date||"");
@@ -1291,7 +1291,7 @@ async function intelligenceNarrate(req:Request,body:any){
    "Escribe un capítulo en español usando EXCLUSIVAMENTE las fuentes entregadas. No inventes hechos, lugares, diálogos ni emociones. Devuelve solo JSON con {title,paragraphs:[{text,sourceIds:[...]}]}. Cada párrafo debe citar al menos una fuente por su sourceId.",
    JSON.stringify({sources}),1400);
   const narrative=validateNarrative(extractJsonObject(raw),sources);
-  return json({available:true,narrative,sources:sources.map(x=>({sourceId:x.sourceId,title:x.title,date:x.date}))});
+  return json({available:true,narrative,sources:sources.map((x:any)=>({sourceId:x.sourceId,title:x.title,date:x.date}))});
  }catch{
   return json({available:false,error:"La narración no pudo validarse contra las fuentes. No se guardó contenido inventado.",sources:sources.map(x=>({sourceId:x.sourceId,title:x.title,date:x.date}))});
  }
@@ -1382,7 +1382,7 @@ async function intelligenceIndexAction(req:Request,body:any){
  let ready=0,errors=0;for(const doc of sources){const result=await syncIntelligenceDocument(doc);if(result.status==="ready"||result.status==="unchanged")ready++;if(result.status==="embedding-error")errors++;}
  if(offset===0){
   const days=await ok(db.from("galaxy_daily").select("day").not("answer","is",null).order("day",{ascending:false}).limit(120));
-  for(const day of [...new Set((days||[]).map((x:any)=>String(x.day)))])await syncIntelligenceDaily(day);
+  for(const day of [...new Set<string>((days||[]).map((x:any)=>String(x.day)))])await syncIntelligenceDaily(day);
   const transcripts=await ok(db.from("galaxy_voice_transcripts").select("bond_id").limit(limit));for(const tr of transcripts||[])await syncIntelligenceVoiceTranscript(String(tr.bond_id));
  }
   return json({ok:true,processed:sources.length,ready,errors,nextOffset:(items||[]).length===limit?offset+limit:null});
