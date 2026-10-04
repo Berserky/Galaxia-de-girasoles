@@ -32,7 +32,11 @@ jobs:
           if [ ! -f supabase/config.toml ]; then
             supabase init
           fi
+          mv supabase/migrations /tmp/galaxy-migrations
+          mkdir -p supabase/migrations
           supabase start
+          rm -rf supabase/migrations
+          mv /tmp/galaxy-migrations supabase/migrations
 
       - name: Load stable main baseline
         run: |
