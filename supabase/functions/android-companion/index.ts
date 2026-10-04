@@ -726,7 +726,7 @@ async function chatVisibleRows(person:string,query:any){
 }
 
 async function chatState(req:Request,body:any={}){
- const d=await device(req),person=String(d.person),limit=clampInt(body.limit,20,100,60),beforeSeq=Number(body.beforeSeq||0),aroundId=text(body.aroundId||"",80);
+ const d=await device(req),person=String(d.person),target=person==="0"?"1":"0",limit=clampInt(body.limit,20,100,60),beforeSeq=Number(body.beforeSeq||0),aroundId=text(body.aroundId||"",80);
  let query:any;
  if(aroundId){
   const anchor=(await ok(db.from("galaxy_chat_messages").select("server_seq").eq("id",aroundId).limit(1)))?.[0];
@@ -744,6 +744,7 @@ async function chatState(req:Request,body:any={}){
  if(incoming.length){
   await ok(db.from("galaxy_chat_messages").update({delivered_at:deliveredAt}).in("id",incoming).is("delivered_at",null));
   rows=rows.map((x:any)=>incoming.includes(String(x.id))?{...x,delivered_at:deliveredAt}:x);
+  await chatSignal(d,target,String(incoming[incoming.length-1]||""));
  }
  const messages=await chatHydrate(rows,person);
  const {count,error}=await db.from("galaxy_chat_messages").select("id",{count:"exact",head:true}).neq("sender_person",person).is("read_at",null).is("deleted_at",null);
@@ -899,11 +900,13 @@ async function chatPresence(req:Request,body:any={}){
  if(state==="OFFLINE"){
   const current=(await ok(db.from("galaxy_chat_presence").select("last_active_at").eq("person",person).limit(1)))?.[0];
   await ok(db.from("galaxy_chat_presence").upsert({person,state:"ONLINE",last_active_at:now.toISOString(),expires_at:now.toISOString(),metadata:{},updated_at:now.toISOString()},{onConflict:"person"}));
+  await chatSignal(d,person==="0"?"1":"0","","chat_sync");
   return json({ok:true,partner:await chatPartnerPresence(person),lastActiveAt:current?.last_active_at||now.toISOString()});
  }
  if(!CHAT_PRESENCE_STATES.has(state))return json({error:"Estado de presencia no válido."},400);
  const ttl=state==="TYPING"?8:state==="ONLINE"?45:30,expires=new Date(now.getTime()+ttl*1000).toISOString();
  await ok(db.from("galaxy_chat_presence").upsert({person,state,last_active_at:now.toISOString(),expires_at:expires,metadata:chatSafeObject(body.metadata,1024),updated_at:now.toISOString()},{onConflict:"person"}));
+ await chatSignal(d,person==="0"?"1":"0","", "chat_sync");
  return json({ok:true,state,expiresAt:expires,partner:await chatPartnerPresence(person)});
 }
 async function chatMetric(req:Request,body:any={}){
