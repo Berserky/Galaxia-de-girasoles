@@ -116,8 +116,7 @@ begin
  set data=jsonb_set(data,'{unlockedFor}','["1"]'::jsonb,true)
  where id='b1000000-0000-4000-8000-000000000003';
  get diagnostics affected=row_count;
- if affected<>1 then raise exception 'Capsule author update probe did not execute'; end if;
- if exists(select 1 from public.galaxy_items where id='b1000000-0000-4000-8000-000000000003') then raise exception 'NG-QA-001 client forged server-owned place unlock state'; end if;
+ if affected<>0 then raise exception 'NG-QA-001 authenticated client updated a locked capsule through RLS'; end if;
 
  update public.galaxy_items
  set data=jsonb_set(data,'{unlockDate}','"2020-01-01"'::jsonb,true)
@@ -130,6 +129,20 @@ begin
  if affected<>0 then raise exception 'NG-QA-001 partner deleted locked capsule'; end if;
 end $qa$;
 reset role;
+
+-- Incluso service_role (android-companion) no puede falsificar unlockedFor mediante item-save/update.
+set local role service_role;
+update public.galaxy_items
+set data=jsonb_set(data,'{unlockedFor}','["1"]'::jsonb,true)
+where id='b1000000-0000-4000-8000-000000000003';
+reset role;
+
+do $qa$
+begin
+ if coalesce((select (data->'unlockedFor') @> '["1"]'::jsonb from public.galaxy_items where id='b1000000-0000-4000-8000-000000000003'),false) then
+  raise exception 'NG-QA-001 service_role forged server-owned place unlock state';
+ end if;
+end $qa$;
 
 -- Un cliente no puede falsificar el estado server-owned unlockedFor al crear una cápsula.
 set local role authenticated;
