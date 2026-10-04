@@ -57,6 +57,7 @@ public final class GalaxyBridge {
                 case "setContextPushPrefs" -> setContextPushPrefs(requestId,args.optBoolean(0,false),args.optBoolean(1,false));
                 case "addWidget" -> addWidget(requestId);
                 case "setSystemTheme" -> setSystemTheme(requestId,args.optString(0,"daylight"));
+                case "openChatFile" -> openChatFile(requestId,args.optString(0,""),args.optString(1,"archivo"),args.optString(2,"application/octet-stream"));
                 case "openAppSettings" -> openAppSettings(requestId);
                 case "clearChatNotifications" -> clearChatNotifications(requestId);
                 case "checkUpdate" -> checkUpdate(requestId);
@@ -153,6 +154,8 @@ public final class GalaxyBridge {
     @JavascriptInterface public void setSystemTheme(String requestId,String theme){
         activity.setSystemTheme(requestId,theme);
     }
+
+    @JavascriptInterface public void openChatFile(String requestId,String url,String name,String mime){ activity.openChatFile(requestId,url,name,mime); }
 
     @JavascriptInterface public void openAppSettings(String requestId){
         activity.openAppSettings(requestId);
