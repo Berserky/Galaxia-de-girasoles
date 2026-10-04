@@ -391,3 +391,6 @@ assert.ok(updater.includes('GET_SIGNING_CERTIFICATES')&&updater.includes('signer
 assert.ok(updater.includes('Collections.disjoint(currentSigners,updateSigners)'),'Una actualización con firma distinta debe rechazarse');
 assert.ok(galaxyNotifications.includes('AndroidKeyStore')&&galaxyNotifications.includes('AES/GCM/NoPadding')&&galaxyNotifications.includes('HISTORY_CIPHER'),'El historial local de notificaciones de chat debe estar cifrado');
 assert.ok(galaxyNotifications.includes('.remove(LEGACY_HISTORY)'),'La app debe eliminar el historial de chat legado en texto plano');
+
+assert.ok(trackingService.includes('uploadEvery=still?30000:10000')&&trackingService.includes('shouldUpload=history||tripPoint||now-lastUpload>=uploadEvery'),'GPS debe desacoplar muestreo local de escrituras de red');
+assert.ok(trackingService.includes('contextEvery=still?30000:15000'),'Contexto GPS debe reducir frecuencia cuando el dispositivo está quieto');
