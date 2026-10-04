@@ -1704,7 +1704,10 @@ async function mobileState(req:Request){
   const day=today();
   const safeItems=(items||[]).map((row:any)=>{
     const copy=structuredClone(row),data=copy.data||{};
-    if(copy.kind==="capsule"&&data.date&&data.date>day&&String(copy.author)!==person)copy.data={title:"Cápsula cerrada",date:data.date,locked:true};
+    if(copy.kind==="capsule"){
+      const unlockAt=chatCapsuleUnlockAt(data),locked=!!unlockAt&&Date.parse(unlockAt)>Date.now();
+      if(locked)copy.data={title:text(data.title||"Cápsula cerrada",160)||"Cápsula cerrada",date:validDate(data.date)?data.date:"",unlockDate:validDate(data.unlockDate)?data.unlockDate:"",unlockTime:/^\d{2}:\d{2}$/.test(String(data.unlockTime||""))?String(data.unlockTime):"",unlockAt,locked:true};
+    }
     if(copy.kind==="note"&&data.surprise&&String(copy.author)!==person){
       let unlocked=data.unlockType!=="date"||!data.unlockDate||data.unlockDate<=day;
       if(data.unlockType==="place"){
@@ -2031,6 +2034,22 @@ function cleanItem(kind:string,data:any){
   if("body" in out)out.body=text(out.body,10000);
   if("category" in out)out.category=text(out.category,80);
   if("date" in out&&out.date!==""&&!validDate(out.date))throw new Error("Fecha no válida");
+  if(kind==="capsule"){
+    const unlockDate=String(out.unlockDate||out.date||"");
+    const unlockTime=String(out.unlockTime||"");
+    if(unlockDate&&!validDate(unlockDate))throw new Error("Fecha de desbloqueo no válida");
+    if(unlockTime&&!/^\d{2}:\d{2}$/.test(unlockTime))throw new Error("Hora de desbloqueo no válida");
+    if(out.unlockAt){
+      const ms=Date.parse(String(out.unlockAt));if(!Number.isFinite(ms))throw new Error("Momento de desbloqueo no válido");
+      out.unlockAt=new Date(ms).toISOString();
+    }else if(unlockDate){
+      const local=unlockDate+"T"+(unlockTime||"00:00")+":00-05:00",ms=Date.parse(local);
+      if(!Number.isFinite(ms))throw new Error("Momento de desbloqueo no válido");
+      out.unlockAt=new Date(ms).toISOString();
+    }
+    out.unlockDate=unlockDate;
+    out.unlockTime=unlockTime||"00:00";
+  }
   if("annual" in out)out.annual=!!out.annual;
   if("done" in out)out.done=!!out.done;
   return out;
@@ -2790,7 +2809,7 @@ async function validateVoice(person:string,payload:any){
   if(payload.referenceId){
     const item=(await ok(db.from("galaxy_items").select("kind,data").eq("id",payload.referenceId).limit(1)))?.[0];
     if(!item||!["memory","song","capsule","journey","note"].includes(item.kind)||item.kind==="note"&&!item.data?.surprise)throw new Error("Referencia no válida");
-    if(item.kind==="capsule"&&String(item.data?.date||"")>today())throw new Error("La cápsula aún está cerrada");
+    if(item.kind==="capsule"){const unlockAt=chatCapsuleUnlockAt(item.data);if(unlockAt&&Date.parse(unlockAt)>Date.now())throw new Error("La cápsula aún está cerrada");}
   }
 }
 
