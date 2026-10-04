@@ -169,11 +169,14 @@ end $qa$;
 create trigger qa_force_cleanup_failure before delete on public.galaxy_intelligence_documents
 for each row execute function public.qa_force_cleanup_failure();
 
+set local role authenticated;
+select set_config('request.jwt.claim.sub','b0000000-0000-4000-8000-000000000001',true);
 delete from public.galaxy_items where id='b3000000-0000-4000-8000-000000000001';
+reset role;
 
 do $qa$
 begin
- if not exists(select 1 from public.galaxy_intelligence_cleanup_queue where source_type='memory' and source_id='b3000000-0000-4000-8000-000000000001') then raise exception 'NG-QA-013 source delete did not enqueue cleanup'; end if;
+ if not exists(select 1 from public.galaxy_intelligence_cleanup_queue where source_type='memory' and source_id='b3000000-0000-4000-8000-000000000001') then raise exception 'NG-QA-013 authenticated source delete did not enqueue cleanup'; end if;
 end $qa$;
 
 set local role service_role;
