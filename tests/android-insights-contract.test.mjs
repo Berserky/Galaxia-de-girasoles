@@ -48,6 +48,11 @@ test('open encounters are clipped to now and to requested range',()=>{
  assert.equal(clipIntervalSeconds('2026-09-01T00:00:00Z','2026-09-01T01:00:00Z','2026-10-03T05:00:00Z','2026-10-04T05:00:00Z',Date.now()),0);
 });
 
+test('insights never expose capsules, including capsules authored by the caller',()=>{
+ assert.equal(isInsightVisibleItem({kind:'capsule',author:'0',data:{date:'2026-01-01',body:'own-secret'}},'0','2026-10-03'),false);
+ assert.equal(isInsightVisibleItem({kind:'capsule',author:'1',data:{date:'2026-01-01',body:'partner-secret'}},'0','2026-10-03'),false);
+});
+
 test('insights never expose unopened partner capsules or surprise notes',()=>{
  assert.equal(isInsightVisibleItem({kind:'capsule',author:'1',data:{date:'2026-12-01'}},'0','2026-10-03'),false);
  assert.equal(isInsightVisibleItem({kind:'note',author:'1',data:{surprise:true,unlockType:'date',unlockDate:'2026-01-01'}},'0','2026-10-03'),false);
