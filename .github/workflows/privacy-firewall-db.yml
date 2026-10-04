@@ -1,0 +1,79 @@
+name: Privacy Firewall DB
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'supabase/**'
+      - 'tests/privacy-firewall-db.sql'
+      - 'tests/privacy-firewall-pre-migration.sql'
+      - 'tests/privacy-firewall-stable-fixtures.sql'
+      - 'tests/privacy-firewall-chat-e2e.sh'
+      - 'tests/supabase-rls.sql'
+      - '.github/workflows/privacy-firewall-db.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: privacy-firewall-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  privacy-db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Initialize isolated Supabase
+        run: |
+          if [ ! -f supabase/config.toml ]; then
+            supabase init
+          fi
+          mv supabase/migrations /tmp/galaxy-migrations
+          mkdir -p supabase/migrations
+          supabase start
+          rm -rf supabase/migrations
+          mv /tmp/galaxy-migrations supabase/migrations
+
+      - name: Load stable main baseline
+        run: |
+          git fetch origin main --depth=1
+          git show origin/main:supabase/schema.sql > /tmp/main-schema.sql
+          git show origin/main:supabase/migrations/20261004060000_galaxy_chat_premium_340.sql > /tmp/main-chat-premium.sql
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f /tmp/main-schema.sql
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f /tmp/main-chat-premium.sql
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/privacy-firewall-stable-fixtures.sql
+
+      - name: Seed pre-migration orphan
+        run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/privacy-firewall-pre-migration.sql
+
+      - name: Apply Phase 0 migration
+        run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f supabase/migrations/20261004212500_qa_phase0_privacy_firewall.sql
+
+      - name: Run existing RLS regression
+        run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/supabase-rls.sql
+
+      - name: Run Phase 0 two-profile attack probes
+        run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/privacy-firewall-db.sql
+
+      - name: Run delete-for-both signed URL E2E
+        run: bash tests/privacy-firewall-chat-e2e.sh
+
+      - name: Validate rollback and re-apply
+        run: |
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f supabase/rollbacks/20261004212500_qa_phase0_privacy_firewall_rollback.sql
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f supabase/migrations/20261004212500_qa_phase0_privacy_firewall.sql
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/privacy-firewall-db.sql
+
+      - name: Stop isolated Supabase
+        if: always()
+        run: supabase stop --no-backup
