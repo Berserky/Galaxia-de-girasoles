@@ -132,6 +132,17 @@ test('NG-QA-002 unlocked place capsule is indexed only for profiles that actuall
   assert.equal(both.ownerPerson,null);
 });
 
+test('NG-QA-002 capsule-derived Intelligence preserves the unlocked audience',()=>{
+  const photo=intelligence.buildIntelligenceDocument('photo-context',{
+    path:'0/private.jpg',caption:'Foto desbloqueada',context:'Contexto privado',ownerPerson:'0',created_at:'2026-10-04T12:00:00Z'
+  },{today:'2026-10-04'});
+  assert.equal(photo.ownerPerson,'0');
+  const voice=block(edge,'async function intelligenceVoicePrivacy(','async function syncIntelligenceVoiceTranscript(');
+  assert.match(voice,/intelligenceCapsuleAudience/);
+  const photoSync=block(edge,'async function syncIntelligencePhotoContext(','async function reconcileIntelligenceCapsules(');
+  assert.match(photoSync,/ownerPerson:privacy\.ownerPerson/);
+});
+
 test('NG-QA-003 direct location policies expose own rows or actively shared partner rows only',()=>{
   const current=block(firewall,'create policy locations_read','drop policy if exists trip_points_read');
   const points=block(firewall,'create policy trip_points_read','drop policy if exists location_history_read');
