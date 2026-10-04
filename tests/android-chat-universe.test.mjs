@@ -71,6 +71,8 @@ test('ETA and check-in reuse Context Engine and expose lifecycle states',()=>{
  assert.ok(edge.includes('db.from("galaxy_context_eta_history")'));
  for(const state of ['EN CAMINO','CERCA','LLEGÓ','CANCELADO','FINALIZADO'])assert.ok(edge.includes('"'+state+'"'),state);
  assert.ok(app.includes('chat-card-eta-map'));
+ assert.ok(edge.includes('.in("card_type",["ETA","CHECK_IN"])'));
+ assert.ok(edge.includes('entityType:"chat_message",entityId:String(ref.message_id)'));
 });
 
 test('Daily Question replies stay in the existing Daily system',()=>{
