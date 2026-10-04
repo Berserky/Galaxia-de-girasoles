@@ -3052,8 +3052,8 @@ function validateBond(type:string,data:any){
 
 async function validateVoice(person:string,payload:any){
   if(!payload.audioPath.startsWith(person+"/"))throw new Error("El audio no pertenece a tu perfil");
-  const test=await signed("galaxy-voice",payload.audioPath,60);
-  if(!test)throw new Error("Audio no encontrado");
+  const test=await signedForPerson("galaxy-voice",payload.audioPath,person,60);
+  if(!test)throw new Error("Audio no disponible");
   if(payload.referenceId){
     const item=(await ok(db.from("galaxy_items").select("kind,data").eq("id",payload.referenceId).limit(1)))?.[0];
     if(!item||!["memory","song","capsule","journey","note"].includes(item.kind)||item.kind==="note"&&!item.data?.surprise)throw new Error("Referencia no válida");
@@ -3116,9 +3116,9 @@ async function bondDelete(req:Request,body:any){
 }
 
 async function bondWidget(req:Request,body:any){
-  await device(req);
+  const d=await device(req),person=String(d.person);
   const path=text(body.photoPath,300);
-  if(path&&!(await signed("galaxy-photos",path,60)))return json({error:"Elige una foto válida del álbum."},400);
+  if(path&&!(await signedForPerson("galaxy-photos",path,person,60)))return json({error:"Elige una foto válida del álbum."},400);
   await ok(db.from("galaxy_bond_config").update({photo_path:path}).eq("id",1));
   return json({photoPath:path});
 }
