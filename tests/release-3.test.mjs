@@ -68,5 +68,5 @@ test('encounter stats defines deterministic Bogotá month boundaries',()=>{
 test('Android CI typechecks the Supabase Edge Function',()=>{
  const workflow=read('.github/workflows/android-companion.yml');
  assert.match(workflow,/denoland\/setup-deno@v2/);
- assert.match(workflow,/deno check supabase\/functions\/android-companion\/index\.ts/);
+ assert.match(workflow,/deno check(?: --[^\n]+)? supabase\/functions\/android-companion\/index\.ts/);
 });
