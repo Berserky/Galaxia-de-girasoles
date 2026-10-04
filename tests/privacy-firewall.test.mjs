@@ -140,6 +140,14 @@ test('NG-QA-013 Intelligence source cleanup is queued and idempotently reconcila
   assert.match(edge,/reconcileIntelligenceCleanup/i);
 });
 
+test('NG-QA-014 chat media paths are single-owner and cannot be reused across messages',()=>{
+  assert.match(firewall,/galaxy_chat_attachments_bucket_path_uidx/);
+  assert.match(firewall,/galaxy_chat_attachment_path_guard/);
+  const send=block(edge,'async function chatAttachmentClaimProblem(','async function chatCreateNativeCardMessage(');
+  assert.match(send,/already associated|ya está asociado|galaxy_chat_attachments/);
+  assert.match(send,/thumbnail_path/);
+});
+
 test('NG-QA-014 delete-for-both removes attachment rows and Storage objects before media can be re-signed',()=>{
   const del=block(edge,'async function chatDelete(','async function chatReact(');
   assert.match(del,/chatDeleteAttachments/);
