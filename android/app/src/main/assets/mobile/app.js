@@ -1659,7 +1659,7 @@ async function openChatAlbums(){
 }
 async function openChatAlbum(id){
  const result=await api('chat-albums',{operation:'list'}),album=(result.albums||[]).find(x=>String(x.id)===String(id));if(!album)return;
- showModal(album.name,'<div class="chat-album-view">'+((album.items||[]).length?(album.items||[]).map(x=>x.kind==='video'?'<video controls playsinline preload="metadata" src="'+attr(x.url)+'"></video>':'<img loading="lazy" src="'+attr(x.url)+'" alt="'+attr(x.name||'Foto')+'">').join(''):'<div class="empty">Este álbum aún está vacío.</div>')+'</div><button class="btn danger small" type="button" data-action="chat-album-delete" data-id="'+attr(album.id)+'">'+ico('trash-2')+' Eliminar álbum</button>','chat-album');
+ showModal(album.name,'<div class="chat-album-view">'+((album.items||[]).length?(album.items||[]).map(x=>x.kind==='video'?'<video controls playsinline preload="metadata" src="'+attr(x.url)+'"></video>':'<img loading="lazy" src="'+attr(x.url)+'" alt="'+attr(x.name||'Foto')+'">').join(''):'<div class="empty">Este álbum aún está vacío.</div>')+'</div><div class="form-actions"><button class="btn" type="button" data-action="chat-album-memory" data-id="'+attr(album.id)+'">'+ico('images')+' Convertir en recuerdo</button><button class="btn danger small" type="button" data-action="chat-album-delete" data-id="'+attr(album.id)+'">'+ico('trash-2')+' Eliminar álbum</button></div>','chat-album');
 }
 function openChatAlbumCreate(){
  showModal('Nuevo álbum','<form id="chatAlbumCreateForm" class="stack"><div class="field"><label>Nombre</label><input class="input" name="name" maxlength="80" required placeholder="Ej. Útica"></div><div class="field"><label>Fecha opcional</label><input class="input" type="date" name="albumDate"></div><button class="btn" type="submit">Crear álbum</button></form>','chat-album-create');
@@ -1685,8 +1685,49 @@ async function openChatLocationMenu(){
  showModal('Compartir ubicación','<div class="chat-location-options"><button class="card" type="button" data-action="chat-location-current">'+ico('locate-fixed')+'<span><b>Ubicación actual</b><small>Una posición puntual obtenida ahora.</small></span></button><div class="chat-live-options"><b>Ubicación en vivo</b><small>Reutiliza el GPS de Nuestra Galaxia. Android mantendrá una notificación visible mientras esté activa.</small><div><button class="btn small secondary" type="button" data-action="chat-location-live" data-duration="900">15 min</button><button class="btn small secondary" type="button" data-action="chat-location-live" data-duration="3600">1 h</button><button class="btn small secondary" type="button" data-action="chat-location-live" data-duration="28800">8 h</button><button class="btn small secondary" type="button" data-action="chat-location-live" data-duration="">Hasta detener</button></div></div>'+(places.length?'<div class="chat-place-list"><b>Lugares guardados</b>'+places.slice(0,30).map(p=>'<button type="button" data-action="chat-location-place" data-lat="'+attr(p.latitude)+'" data-lon="'+attr(p.longitude)+'" data-label="'+attr(p.name)+'">'+ico('map-pin')+'<span>'+esc(p.name)+'</span></button>').join('')+'</div>':'')+'</div>','chat-location');
 }
 function openChatAttachMenu(){
- showModal('Adjuntar','<div class="chat-attach-grid"><button type="button" data-action="chat-attach-file">'+ico('paperclip')+'<span>Archivos</span></button><button type="button" data-action="chat-attach-location">'+ico('map-pin')+'<span>Ubicación</span></button><button type="button" data-action="chat-attach-song">'+ico('music-2')+'<span>Canción</span></button><button type="button" data-action="chat-stickers-open">'+ico('sticker')+'<span>GIF / stickers</span></button></div>','chat-attach');
+ showModal('Adjuntar','<div class="chat-attach-grid"><button type="button" data-action="chat-attach-file">'+ico('paperclip')+'<span>Archivos</span></button><button type="button" data-action="chat-attach-location">'+ico('map-pin')+'<span>Ubicación</span></button><button type="button" data-action="chat-galaxy-open">'+ico('orbit')+'<span>Nuestra Galaxia</span></button><button type="button" data-action="chat-poll-open">'+ico('list-checks')+'<span>Encuesta</span></button><button type="button" data-action="chat-check-open">'+ico('list-todo')+'<span>Checklist</span></button><button type="button" data-action="chat-stickers-open">'+ico('sticker')+'<span>GIF / stickers</span></button></div>','chat-attach');
 }
+async function openChatGalaxyPicker(){
+ if(!mapData)await refreshMap({quiet:true,detail:true}).catch(()=>{});
+ await loadGoals().catch(()=>{});
+ await loadDateContext().catch(()=>{});
+ const rows=[];
+ for(const item of cloud?.items||[]){
+  const map={memory:['MEMORY','memory','Recuerdo'],plan:['PLAN','plan','Plan'],song:['SONG','song','Canción'],capsule:['CAPSULE','capsule','Cápsula'],event:['EVENT','event','Evento']},spec=map[item.kind];
+  if(spec)rows.push({cardType:spec[0],kind:spec[1],id:item.id,label:spec[2],title:item.data?.title||spec[2],icon:kindMeta[item.kind]?.[0]||'sparkles'});
+ }
+ for(const goal of goalsState?.goals||[])rows.push({cardType:'GOAL',kind:'goal',id:goal.id,label:'Objetivo',title:goal.title,icon:'target'});
+ for(const place of mapData?.places||[])rows.push({cardType:'PLACE',kind:'place',id:place.id,label:'Lugar',title:place.name,icon:'map-pin'});
+ const session=contextSession();if(session?.id)rows.unshift({cardType:'ETA',kind:'context_session',id:session.id,label:'ETA',title:session.label||'Acompáñame',icon:'navigation'});
+ if(dateContext?.question&&cloud?.today)rows.unshift({cardType:'DAILY_QUESTION',kind:'daily_question',id:cloud.today,label:'Pregunta del día',title:dailyQuestion(),icon:'message-circle-question'});
+ showModal('Compartir de Nuestra Galaxia','<div class="chat-galaxy-picker">'+(rows.length?rows.slice(0,120).map(x=>'<button type="button" class="card" data-action="chat-galaxy-pick" data-card-type="'+attr(x.cardType)+'" data-kind="'+attr(x.kind)+'" data-id="'+attr(x.id)+'" data-title="'+attr(x.title)+'"><span>'+ico(x.icon)+'</span><div><small>'+esc(x.label)+'</small><b>'+esc(x.title)+'</b></div>'+ico('send')+'</button>').join(''):'<div class="empty">Todavía no hay contenido para compartir.</div>')+'</div>','chat-galaxy-picker');
+}
+function openChatPollForm(){
+ showModal('Nueva encuesta','<form id="chatPollForm" class="stack"><div class="field"><label>Pregunta</label><input class="input" name="question" maxlength="500" required placeholder="¿Qué hacemos el sábado?"></div><div class="field"><label>Opciones, una por línea</label><textarea name="options" rows="6" required placeholder="Cine\nMuseo"></textarea><small>Entre 2 y 10 opciones.</small></div><label class="chat-setting-toggle"><input type="checkbox" name="allowMultiple"> Permitir varias respuestas</label><div class="field"><label>Cierre opcional</label><input class="input" type="datetime-local" name="closesAt"></div><button class="btn" type="submit">'+ico('send')+' Crear encuesta</button></form>','chat-poll-create');
+}
+function openChatChecklistForm(){
+ showModal('Nueva checklist','<form id="chatChecklistForm" class="stack"><div class="field"><label>Título</label><input class="input" name="title" maxlength="300" required placeholder="Viaje a Boyacá"></div><div class="field"><label>Elementos, uno por línea</label><textarea name="items" rows="8" required placeholder="Gasolina\nHotel\nCargadores"></textarea></div><button class="btn" type="submit">'+ico('send')+' Compartir checklist</button></form>','chat-check-create');
+}
+function chatMessageById(id){return mergeChatOutbox(chatState?.messages||[]).find(x=>String(x.id)===String(id));}
+function prefillGoalFromChat(title,description=''){
+ openGoalForm('goal');
+ const t=modal.querySelector('[name="title"]'),d=modal.querySelector('[name="description"]');if(t)t.value=title||'';if(d)d.value=description||'';
+}
+function openChatSaveAs(id){
+ const m=chatMessageById(id);if(!m)return;
+ const body=String(m.body||m.card?.title||'').trim();
+ showModal('Guardar como','<div class="chat-save-as"><p>Se abrirá el editor normal y tú confirmarás antes de guardar.</p><div class="chat-attach-grid">'+[['memory','images','Recuerdo'],['plan','calendar-days','Plan'],['goal','target','Objetivo'],['place','map-pin','Lugar'],['song','music-2','Canción'],['note','file-text','Nota'],['wish','star','Deseo']].map(x=>'<button type="button" data-action="chat-save-as-kind" data-id="'+attr(id)+'" data-kind="'+x[0]+'">'+ico(x[1])+'<span>'+x[2]+'</span></button>').join('')+'</div><small class="muted">No se creará nada automáticamente.</small></div>','chat-save-as');
+}
+function chatOpenItemDraft(kind,title='',body='',extra={}){
+ openItemForm(kind,{data:{title,body,...extra}});
+ modal.dataset.editId='';modal.dataset.version='';
+}
+async function openChatAlbumAsMemory(id){
+ const result=await api('chat-albums',{operation:'list'}),album=(result.albums||[]).find(x=>String(x.id)===String(id));if(!album)return;
+ closeModal();
+ chatOpenItemDraft('memory',album.name||'Álbum del chat','',{date:album.album_date||'',source:{type:'chat-album',albumId:String(album.id),attachmentIds:(album.items||[]).map(x=>String(x.id)).filter(Boolean)}});
+}
+
 function openChatCameraMenu(){
  showModal('Cámara','<div class="chat-camera-grid"><button type="button" data-action="chat-attach-camera">'+ico('camera')+'<span><b>Tomar foto</b><small>Usar la cámara ahora</small></span></button><button type="button" data-action="chat-attach-video-camera">'+ico('video')+'<span><b>Grabar video</b><small>Video normal de hasta 2 min</small></span></button><button type="button" data-action="chat-video-message-open">'+ico('circle-play')+'<span><b>Videomensaje</b><small>Corto y circular · 15, 30 o 60 s</small></span></button></div>','chat-camera');
 }
@@ -1714,8 +1755,8 @@ async function addChatNativeMedia(method,args,kind){
  }
 }
 function openChatSongPicker(){
- rebuildMusicQueue();
- showModal('Compartir canción','<div class="chat-song-picker">'+(musicQueue.length?musicQueue.map((x,i)=>'<button type="button" data-action="chat-song-pick" data-index="'+i+'">'+ico('music')+'<span><b>'+esc(x.title)+'</b><small>'+esc(x.platform)+'</small></span></button>').join(''):'<div class="empty">Agrega una canción primero en Recuerdos.</div>')+'</div>','chat-song');
+ const songs=songItems();
+ showModal('Compartir canción','<div class="chat-song-picker">'+(songs.length?songs.map((x,i)=>'<button type="button" data-action="chat-song-pick" data-id="'+attr(x.id)+'" data-index="'+i+'">'+ico('music')+'<span><b>'+esc(x.title)+'</b><small>'+esc(x.platform)+'</small></span></button>').join(''):'<div class="empty">Agrega una canción primero en Nuestra Música.</div>')+'</div>','chat-song');
 }
 function chatComposerRightMode(textarea){
  const row=textarea?.closest('.chat-compose-row'),button=row?.querySelector('.chat-send');if(!button)return;
