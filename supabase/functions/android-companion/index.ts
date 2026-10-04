@@ -2061,20 +2061,20 @@ function cleanItem(kind:string,data:any){
   if("category" in out)out.category=text(out.category,80);
   if("date" in out&&out.date!==""&&!validDate(out.date))throw new Error("Fecha no válida");
   if(kind==="capsule"){
-    const unlockDate=String(out.unlockDate||out.date||"");
-    const unlockTime=String(out.unlockTime||"");
-    if(unlockDate&&!validDate(unlockDate))throw new Error("Fecha de desbloqueo no válida");
-    if(unlockTime&&!/^\d{2}:\d{2}$/.test(unlockTime))throw new Error("Hora de desbloqueo no válida");
-    if(out.unlockAt){
-      const ms=Date.parse(String(out.unlockAt));if(!Number.isFinite(ms))throw new Error("Momento de desbloqueo no válido");
-      out.unlockAt=new Date(ms).toISOString();
-    }else if(unlockDate){
-      const local=unlockDate+"T"+(unlockTime||"00:00")+":00-05:00",ms=Date.parse(local);
+    out.unlockType=String(out.unlockType||"date")==="place"?"place":"date";
+    if(out.unlockType==="place"){
+      const lat=Number(out.latitude),lon=Number(out.longitude),placeId=Number(out.placeId),radius=Math.max(50,Math.min(1000,Number(out.radius)||150));
+      if(!Number.isFinite(lat)||lat < -90||lat > 90||!Number.isFinite(lon)||lon < -180||lon > 180||!Number.isInteger(placeId)||placeId<=0)throw new Error("Lugar de desbloqueo no válido");
+      out.latitude=lat;out.longitude=lon;out.placeId=placeId;out.placeName=text(out.placeName||"Lugar",80)||"Lugar";out.radius=radius;
+      out.unlockDate="";out.unlockTime="";delete out.unlockAt;
+    }else{
+      const unlockDate=String(out.unlockDate||out.date||""),unlockTime=String(out.unlockTime||"00:00");
+      if(!validDate(unlockDate))throw new Error("Fecha de desbloqueo no válida");
+      if(!/^\d{2}:\d{2}$/.test(unlockTime))throw new Error("Hora de desbloqueo no válida");
+      const ms=out.unlockAt?Date.parse(String(out.unlockAt)):Date.parse(unlockDate+"T"+unlockTime+":00-05:00");
       if(!Number.isFinite(ms))throw new Error("Momento de desbloqueo no válido");
-      out.unlockAt=new Date(ms).toISOString();
+      out.unlockAt=new Date(ms).toISOString();out.unlockDate=unlockDate;out.unlockTime=unlockTime;
     }
-    out.unlockDate=unlockDate;
-    out.unlockTime=unlockTime||"00:00";
   }
   if("annual" in out)out.annual=!!out.annual;
   if("done" in out)out.done=!!out.done;
