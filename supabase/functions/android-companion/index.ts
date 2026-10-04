@@ -1080,17 +1080,21 @@ async function chatTranscript(req:Request,body:any={}){
  }catch{return json({error:"No se pudo transcribir este audio."},503);}
 }
 async function chatTranslate(req:Request,body:any={}){
- const d=await device(req),person=String(d.person),id=String(body.id||""),targetLanguage=text(body.targetLanguage||"es",24);
+ const d=await device(req),person=String(d.person),id=String(body.id||""),targetLanguage=text(body.targetLanguage||"es",24),persist=body.persist===true;
  const row=(await ok(db.from("galaxy_chat_messages").select("id,body,deleted_at").eq("id",id).limit(1)))?.[0];
  if(!row||row.deleted_at||!String(row.body||"").trim())return json({error:"Mensaje no disponible para traducir."},404);
- const cached=(await ok(db.from("galaxy_chat_translations").select("*").eq("message_id",id).eq("person",person).eq("target_language",targetLanguage).limit(1)))?.[0];
- if(cached)return json({translation:cached});
+ if(persist){
+  const cached=(await ok(db.from("galaxy_chat_translations").select("*").eq("message_id",id).eq("person",person).eq("target_language",targetLanguage).limit(1)))?.[0];
+  if(cached)return json({translation:cached,persisted:true});
+ }
  if(!aiProviderConfig().configured)return json({error:"La traducción requiere el proveedor de IA configurado."},503);
  await intelligenceUsage(person,"ask",30);
  try{
   const translated=text(await generateGroundedResponse("Traduce fielmente el texto al idioma solicitado. Devuelve únicamente la traducción, sin explicaciones ni contenido adicional.","IDIOMA: "+targetLanguage+"\nTEXTO:\n"+String(row.body),800),8000);
-  const saved=await ok(db.from("galaxy_chat_translations").insert({message_id:id,person,target_language:targetLanguage,translated_text:translated,provider:"openai-compatible",model:aiProviderConfig().model||"configured"}).select("*").single());
-  return json({translation:saved});
+  const result={message_id:id,person,target_language:targetLanguage,translated_text:translated,provider:"openai-compatible",model:aiProviderConfig().model||"configured"};
+  if(!persist)return json({translation:result,persisted:false});
+  const saved=await ok(db.from("galaxy_chat_translations").upsert(result,{onConflict:"message_id,person,target_language"}).select("*").single());
+  return json({translation:saved,persisted:true});
  }catch{return json({error:"No se pudo traducir el mensaje."},503);}
 }
 async function chatExpireRow(row:any){
@@ -1185,14 +1189,17 @@ async function chatAlbums(req:Request,body:any={}){
   return json({album});
  }
  const id=String(body.id||"");if(!uuidish(id))return json({error:"Álbum no válido."},400);
- const album=(await ok(db.from("galaxy_chat_albums").select("id").eq("id",id).limit(1)))?.[0];
+ const album=(await ok(db.from("galaxy_chat_albums").select("id,cover_attachment_id").eq("id",id).limit(1)))?.[0];
  if(!album)return json({error:"Álbum no encontrado."},404);
  if(operation==="add"){
   const attachmentIds=(Array.isArray(body.attachmentIds)?body.attachmentIds:[]).map(String).filter(uuidish).slice(0,80);
   if(!attachmentIds.length)return json({error:"Elige fotos o videos."},400);
   const valid=await ok(db.from("galaxy_chat_attachments").select("id,kind").in("id",attachmentIds).in("kind",["photo","video"]));
   const rows=(valid||[]).map((a:any)=>({album_id:id,attachment_id:a.id,added_by:person}));
-  if(rows.length)await ok(db.from("galaxy_chat_album_items").upsert(rows,{onConflict:"album_id,attachment_id",ignoreDuplicates:true}));
+  if(rows.length){
+   await ok(db.from("galaxy_chat_album_items").upsert(rows,{onConflict:"album_id,attachment_id",ignoreDuplicates:true}));
+   if(!album.cover_attachment_id)await ok(db.from("galaxy_chat_albums").update({cover_attachment_id:rows[0].attachment_id,updated_at:new Date().toISOString()}).eq("id",id).is("cover_attachment_id",null));
+  }
   return json({ok:true,added:rows.length});
  }
  if(operation==="remove"){
@@ -2171,7 +2178,7 @@ async function presenceSet(req:Request,body:any){
 
 async function backupExport(req:Request){
   await device(req);
-  const [settings,items,daily,bond,bondGestures,places,goals,goalParticipants,goalSteps,goalLinks,goalContributions,voiceTranscripts,photoContext,chatMessages,chatReactions,chatPins,chatFavorites,chatAttachments,chatPreferences,chatTranscripts,chatTranslations,chatAlbums,chatAlbumItems,chatStickers,chatStickerFavorites]=await Promise.all([
+  const [settings,items,daily,bond,bondGestures,places,goals,goalParticipants,goalSteps,goalLinks,goalContributions,voiceTranscripts,photoContext,chatMessages,chatReactions,chatPins,chatFavorites,chatAttachments,chatPreferences,chatTranscripts,chatTranslations,chatAlbums,chatAlbumItems,chatStickers,chatStickerFavorites,chatStickerRecents,chatLiveLocations]=await Promise.all([
     ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
     ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:true}).limit(2000)),
     ok(db.from("galaxy_daily").select("day,person,mood,answer").order("day",{ascending:true}).limit(1000)),
@@ -2196,9 +2203,11 @@ async function backupExport(req:Request){
     ok(db.from("galaxy_chat_albums").select("*").order("created_at",{ascending:true}).limit(1000)),
     ok(db.from("galaxy_chat_album_items").select("*").limit(20000)),
     ok(db.from("galaxy_chat_stickers").select("*").order("created_at",{ascending:true}).limit(2000)),
-    ok(db.from("galaxy_chat_sticker_favorites").select("*").limit(4000))
+    ok(db.from("galaxy_chat_sticker_favorites").select("*").limit(4000)),
+    ok(db.from("galaxy_chat_sticker_recents").select("*").limit(4000)),
+    ok(db.from("galaxy_chat_live_locations").select("*").order("started_at",{ascending:true}).limit(5000))
   ]);
-  return json({format:"nuestra-galaxia-backup",version:3,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:items||[],daily:daily||[],bond:bond||[],bondGestures:bondGestures||[],places:places||[],goals:goals||[],goalParticipants:goalParticipants||[],goalSteps:goalSteps||[],goalLinks:goalLinks||[],goalContributions:goalContributions||[],voiceTranscripts:voiceTranscripts||[],photoContext:photoContext||[],chat:{messages:chatMessages||[],reactions:chatReactions||[],pins:chatPins||[],favorites:chatFavorites||[],attachments:chatAttachments||[],preferences:chatPreferences||[],transcripts:chatTranscripts||[],translations:chatTranslations||[],albums:chatAlbums||[],albumItems:chatAlbumItems||[],stickers:chatStickers||[],stickerFavorites:chatStickerFavorites||[]}});
+  return json({format:"nuestra-galaxia-backup",version:3,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:items||[],daily:daily||[],bond:bond||[],bondGestures:bondGestures||[],places:places||[],goals:goals||[],goalParticipants:goalParticipants||[],goalSteps:goalSteps||[],goalLinks:goalLinks||[],goalContributions:goalContributions||[],voiceTranscripts:voiceTranscripts||[],photoContext:photoContext||[],chat:{messages:chatMessages||[],reactions:chatReactions||[],pins:chatPins||[],favorites:chatFavorites||[],attachments:chatAttachments||[],preferences:chatPreferences||[],transcripts:chatTranscripts||[],translations:chatTranslations||[],albums:chatAlbums||[],albumItems:chatAlbumItems||[],stickers:chatStickers||[],stickerFavorites:chatStickerFavorites||[],stickerRecents:chatStickerRecents||[],liveLocations:chatLiveLocations||[]}});
 }
 
 function uuidish(v:unknown){return /^[0-9a-f-]{36}$/i.test(String(v||""));}
@@ -2232,6 +2241,8 @@ async function backupRestore(req:Request,body:any){
   const chatAlbumItems=Array.isArray(chat.albumItems)?chat.albumItems.slice(0,20000):[];
   const chatStickers=Array.isArray(chat.stickers)?chat.stickers.slice(0,2000):[];
   const chatStickerFavorites=Array.isArray(chat.stickerFavorites)?chat.stickerFavorites.slice(0,4000):[];
+  const chatStickerRecents=Array.isArray(chat.stickerRecents)?chat.stickerRecents.slice(0,4000):[];
+  const chatLiveLocations=Array.isArray(chat.liveLocations)?chat.liveLocations.slice(0,5000):[];
   let restoredItems=0,restoredDaily=0,restoredBond=0,restoredBondGestures=0,restoredPlaces=0,restoredGoals=0,restoredGoalParticipants=0,restoredGoalSteps=0,restoredGoalLinks=0,restoredGoalContributions=0,restoredVoiceTranscripts=0,restoredPhotoContext=0,restoredChat=0;
 
   if(backup.settings&&typeof backup.settings==="object"&&!Array.isArray(backup.settings)){
@@ -2384,6 +2395,17 @@ async function backupRestore(req:Request,body:any){
     await ok(db.from("galaxy_chat_stickers").upsert({id:String(row.id),created_by:String(row.created_by),bucket:text(row?.bucket||"galaxy-chat-media",80)||"galaxy-chat-media",path:text(row.path,400),name:text(row?.name||"Sticker",80)||"Sticker",created_at:row?.created_at||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
   }
   for(const row of chatStickerFavorites)if(uuidish(row?.sticker_id)&&["0","1"].includes(String(row?.person)))await ok(db.from("galaxy_chat_sticker_favorites").upsert({sticker_id:String(row.sticker_id),person:String(row.person),last_used_at:row?.last_used_at||null,saved_at:row?.saved_at||new Date().toISOString()},{onConflict:"sticker_id,person",ignoreDuplicates:true}));
+  for(const row of chatStickerRecents)if(uuidish(row?.sticker_id)&&["0","1"].includes(String(row?.person)))await ok(db.from("galaxy_chat_sticker_recents").upsert({sticker_id:String(row.sticker_id),person:String(row.person),last_used_at:row?.last_used_at||new Date().toISOString()},{onConflict:"sticker_id,person",ignoreDuplicates:true}));
+  for(const row of chatLiveLocations){
+    const id=String(row?.id||""),sender=String(row?.sender_person||"");
+    if(!uuidish(id)||!["0","1"].includes(sender))continue;
+    const duration=row?.duration_seconds==null?null:Number(row.duration_seconds);
+    if(duration!==null&&![900,3600,28800].includes(duration))continue;
+    await ok(db.from("galaxy_chat_live_locations").upsert({
+      id,sender_person:sender,message_id:uuidish(row?.message_id)?String(row.message_id):null,duration_seconds:duration,
+      started_at:row?.started_at||new Date().toISOString(),ends_at:row?.ends_at||null,stopped_at:row?.stopped_at||null,created_at:row?.created_at||new Date().toISOString()
+    },{onConflict:"id",ignoreDuplicates:true}));
+  }
   for(const row of chatAlbums){
     if(!uuidish(row?.id)||!["0","1"].includes(String(row?.created_by))||!text(row?.name,80))continue;
     await ok(db.from("galaxy_chat_albums").upsert({id:String(row.id),name:text(row.name,80),cover_attachment_id:uuidish(row?.cover_attachment_id)?String(row.cover_attachment_id):null,album_date:validDate(row?.album_date)?String(row.album_date):null,created_by:String(row.created_by),created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
