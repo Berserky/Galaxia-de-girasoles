@@ -178,6 +178,20 @@ send_resp=$(curl -fsS \
 message_id=$(jq -r '.message.id // empty' <<<"$send_resp")
 [ -n "$message_id" ] || { echo "chat message id missing: $send_resp"; exit 1; }
 
+reuse_json=$(jq -nc --arg cid 'b4000000-0000-4000-8000-000000000002' --arg p "$path" '{
+  action:"chat-send",
+  clientId:$cid,
+  messageType:"photo",
+  body:"",
+  attachments:[{kind:"photo",bucket:"galaxy-chat-media",path:$p,mime:"image/jpeg",name:"qa-chat-photo.jpg",size:4}]
+}')
+reuse_status=$(curl -sS -o /tmp/reuse.json -w '%{http_code}' \
+  -X POST "$FUNCTION_URL" \
+  -H "x-device-token: $DEVICE_TOKEN" \
+  -H 'content-type: application/json' \
+  --data "$reuse_json")
+[ "$reuse_status" = "409" ] || { echo "NG-QA-014: reused Storage path was accepted ($reuse_status)"; cat /tmp/reuse.json; exit 1; }
+
 pin_json=$(jq -nc --arg id "$message_id" '{action:"chat-pin",id:$id,pinned:true}')
 fav_json=$(jq -nc --arg id "$message_id" '{action:"chat-favorite",id:$id,saved:true}')
 curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $DEVICE_TOKEN" -H 'content-type: application/json' --data "$pin_json" >/dev/null
