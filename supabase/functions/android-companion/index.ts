@@ -183,8 +183,12 @@ async function contextMaybePush(d:any,eventRow:any,event:any,settings:any[]){
  if(event.type==="DESTINATION_REACHED"){
   const person=String(payload.person||""),pref=(settings||[]).find((x:any)=>String(x.person)===person);
   if(!pref?.arrived_safe_enabled||!["0","1"].includes(person))return;
-  const target=person==="0"?"1":"0";
-  await dispatchPushEvent(d,target,"arrived_safe",{title:"Llegó bien",body:(payload.label?"Llegó a "+String(payload.label)+".":"Llegó a su destino.")},{requireSubscription:false});
+  const target=person==="0"?"1":"0",sessionId=String(payload.sessionId||"");
+  const ref=uuidish(sessionId)?(await ok(db.from("galaxy_chat_entity_refs").select("message_id").eq("entity_kind","context_session").eq("entity_id",sessionId).in("card_type",["ETA","CHECK_IN"]).order("updated_at",{ascending:false}).limit(1)))?.[0]:null;
+  await dispatchPushEvent(d,target,"arrived_safe",{
+   title:"Llegó bien",body:(payload.label?"Llegó a "+String(payload.label)+".":"Llegó a su destino."),
+   ...(ref?.message_id?{action:"chat",entityType:"chat_message",entityId:String(ref.message_id)}:{})
+  },{requireSubscription:false});
  }
 }
 async function contextCreateSuggestions(eventRow:any,event:any,settings:any[]){
@@ -350,9 +354,14 @@ async function contextSessionAction(req:Request,body:any){
   return json({session,etaHistory:eta||[]});
  }
  if(operation==="stop"){
-  const now=new Date().toISOString();
+  const now=new Date().toISOString(),active=await ok(db.from("galaxy_context_sessions").select("id").eq("person",person).eq("status","active").limit(10));
   await ok(db.from("galaxy_context_sessions").update({status:"cancelled",ended_at:now,updated_at:now}).eq("person",person).eq("status","active"));
   await ok(db.from("galaxy_destinations").delete().eq("person",person));
+  const target=person==="0"?"1":"0";
+  for(const session of active||[]){
+   const refs=await ok(db.from("galaxy_chat_entity_refs").select("message_id").eq("entity_kind","context_session").eq("entity_id",String(session.id)).in("card_type",["ETA","CHECK_IN"]).limit(10));
+   for(const ref of refs||[])await chatSignal(d,target,String(ref.message_id));
+  }
   return json({ok:true,session:null});
  }
  if(operation!=="start")return json({error:"Operación de sesión no válida."},400);
