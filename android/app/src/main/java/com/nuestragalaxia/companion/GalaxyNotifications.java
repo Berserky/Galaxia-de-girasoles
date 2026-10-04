@@ -152,7 +152,7 @@ public final class GalaxyNotifications {
 
     public static void show(
         Context context,String eventType,String id,String title,String body,
-        String action,String entityId,String senderName
+        String action,String entityId,String senderName,boolean silent
     ){
         if(!allowed(context))return;
         prepare(context);
@@ -169,6 +169,7 @@ public final class GalaxyNotifications {
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPriority("chat_message".equals(eventType)?NotificationCompat.PRIORITY_HIGH:NotificationCompat.PRIORITY_DEFAULT)
             .setCategory("chat_message".equals(eventType)?NotificationCompat.CATEGORY_MESSAGE:NotificationCompat.CATEGORY_SOCIAL);
+        if(silent)builder.setSilent(true).setOnlyAlertOnce(true);
 
         if("chat_message".equals(eventType)){
             String sender=senderName==null||senderName.isEmpty()?title:senderName;
