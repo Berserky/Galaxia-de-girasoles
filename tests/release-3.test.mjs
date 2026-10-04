@@ -14,10 +14,10 @@ test('Mega 3.0 release migration is canonical and non-destructive',()=>{
  assert.equal(new Set(tables).size,tables.length,'migration must not repeat table blocks');
 });
 
-test('Android stable metadata is aligned to QA hardening 3.3.0',()=>{
+test('Android stable metadata is aligned to Galaxy Chat Premium 3.4.0',()=>{
  const gradle=read('android/app/build.gradle.kts'),workflow=read('.github/workflows/android-companion.yml');
- assert.match(gradle,/versionCode = 32/);
- assert.match(gradle,/versionName = "3\.3\.0"/);
+ assert.match(gradle,/versionCode = 33/);
+ assert.match(gradle,/versionName = "3\.4\.0"/);
  assert.match(workflow,/VERSION_CODE=.*versionCode/);
  assert.match(workflow,/VERSION_NAME=.*versionName/);
  assert.match(workflow,/"versionCode":%s/);

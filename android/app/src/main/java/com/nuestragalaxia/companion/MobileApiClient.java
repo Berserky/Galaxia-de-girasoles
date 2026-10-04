@@ -5,6 +5,7 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.provider.OpenableColumns;
 import org.json.JSONObject;
+import org.json.JSONArray;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
@@ -44,6 +45,39 @@ public final class MobileApiClient {
         JSONObject result=text.trim().isEmpty()?new JSONObject():new JSONObject(text);
         if(code<200||code>=300)throw new ApiClient.ApiException(code,result.optString("error","Error de red "+code));
         return result;
+    }
+
+    public static JSONObject giphySearch(String apiKey,String query,boolean stickers) throws Exception {
+        if(apiKey==null||apiKey.isBlank())throw new IOException("La búsqueda de GIF necesita GIPHY_API_KEY configurada.");
+        String q=query==null?"":query.trim();
+        if(q.length()>50)q=q.substring(0,50);
+        String endpoint="https://api.giphy.com/v1/"+(stickers?"stickers":"gifs")+(q.isEmpty()?"/trending":"/search")
+            +"?api_key="+URLEncoder.encode(apiKey,"UTF-8")
+            +(q.isEmpty()?"":"&q="+URLEncoder.encode(q,"UTF-8"))
+            +"&limit=20&rating=pg-13&lang=es";
+        HttpURLConnection c=(HttpURLConnection)new URL(endpoint).openConnection();
+        c.setRequestMethod("GET");c.setConnectTimeout(10000);c.setReadTimeout(15000);
+        c.setRequestProperty("Accept","application/json");
+        try{
+            JSONObject raw=response(c),out=new JSONObject();JSONArray result=new JSONArray(),data=raw.optJSONArray("data");
+            if(data!=null)for(int i=0;i<data.length();i++){
+                JSONObject item=data.optJSONObject(i);if(item==null)continue;
+                JSONObject images=item.optJSONObject("images");if(images==null)continue;
+                JSONObject preview=images.optJSONObject("fixed_width_small");
+                if(preview==null)preview=images.optJSONObject("fixed_width");
+                JSONObject original=images.optJSONObject("downsized_medium");
+                if(original==null)original=images.optJSONObject("original");
+                String previewUrl=preview==null?"":preview.optString("webp",preview.optString("url",""));
+                String originalUrl=original==null?"":original.optString("url","");
+                if(!previewUrl.startsWith("https://")||!originalUrl.startsWith("https://"))continue;
+                result.put(new JSONObject()
+                    .put("id",item.optString("id",""))
+                    .put("title",item.optString("title",stickers?"Sticker":"GIF"))
+                    .put("previewUrl",previewUrl)
+                    .put("url",originalUrl));
+            }
+            return out.put("provider","giphy").put("configured",true).put("items",result);
+        }finally{c.disconnect();}
     }
 
     public static JSONObject post(String token,JSONObject body) throws Exception {

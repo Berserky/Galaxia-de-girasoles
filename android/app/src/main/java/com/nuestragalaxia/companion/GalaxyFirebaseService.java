@@ -43,10 +43,10 @@ public final class GalaxyFirebaseService extends FirebaseMessagingService {
         if(messageAllowed){
             if("gesture".equals(eventType)){
                 if(bond.enabled()&&GalaxyNotifications.allowed(this)){
-                    GalaxyNotifications.show(this,eventType,id,title,body,data.getOrDefault("action","moments"),data.getOrDefault("entityId",""),data.getOrDefault("senderName",title));
+                    GalaxyNotifications.show(this,eventType,id,title,body,data.getOrDefault("action","moments"),data.getOrDefault("entityId",""),data.getOrDefault("senderName",title),"true".equalsIgnoreCase(data.getOrDefault("silent","false")));
                 }
             }else if(GalaxyNotifications.allowed(this)){
-                GalaxyNotifications.show(this,eventType,id,title,body,data.getOrDefault("action","home"),data.getOrDefault("entityId",""),data.getOrDefault("senderName",title));
+                GalaxyNotifications.show(this,eventType,id,title,body,data.getOrDefault("action","home"),data.getOrDefault("entityId",""),data.getOrDefault("senderName",title),"true".equalsIgnoreCase(data.getOrDefault("silent","false")));
             }
         }
         BondWidget.updateAll(this);

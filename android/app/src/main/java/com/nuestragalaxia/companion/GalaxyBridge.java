@@ -32,6 +32,9 @@ public final class GalaxyBridge {
                 case "capturePhoto" -> capturePhoto(requestId);
                 case "captureChatPhoto" -> captureChatPhoto(requestId);
                 case "captureChatVideo" -> captureChatVideo(requestId);
+                case "captureChatVideoMessage" -> captureChatVideoMessage(requestId,args.optInt(0,30));
+                case "searchGiphy" -> searchGiphy(requestId,args.optString(0,""),args.optBoolean(1,false));
+                case "getChatLocation" -> getChatLocation(requestId);
                 case "pickDriveFolder" -> pickDriveFolder(requestId);
                 case "syncDriveFolder" -> syncDriveFolder(requestId);
                 case "disconnectDriveFolder" -> disconnectDriveFolder(requestId);
@@ -59,6 +62,8 @@ public final class GalaxyBridge {
                 case "openChatFile" -> openChatFile(requestId,args.optString(0,""),args.optString(1,"archivo"),args.optString(2,"application/octet-stream"));
                 case "openAppSettings" -> openAppSettings(requestId);
                 case "clearChatNotifications" -> clearChatNotifications(requestId);
+                case "setChatLock" -> setChatLock(requestId,args.optBoolean(0,false));
+                case "unlockChat" -> unlockChat(requestId);
                 case "checkUpdate" -> checkUpdate(requestId);
                 case "refreshMoments" -> refreshMoments(requestId);
                 case "closeApp" -> closeApp();
@@ -97,6 +102,9 @@ public final class GalaxyBridge {
     public void capturePhoto(String requestId){ activity.capturePhoto(requestId); }
     public void captureChatPhoto(String requestId){ activity.captureChatPhoto(requestId); }
     public void captureChatVideo(String requestId){ activity.captureChatVideo(requestId); }
+    public void captureChatVideoMessage(String requestId,int seconds){ activity.captureChatVideoMessage(requestId,seconds); }
+    public void searchGiphy(String requestId,String query,boolean stickers){ activity.searchGiphy(requestId,query,stickers); }
+    public void getChatLocation(String requestId){ activity.getChatLocation(requestId); }
     public void pickDriveFolder(String requestId){ activity.pickDriveFolder(requestId); }
     public void syncDriveFolder(String requestId){ activity.syncDriveFolder(requestId); }
     public void disconnectDriveFolder(String requestId){ activity.disconnectDriveFolder(requestId); }
@@ -163,6 +171,9 @@ public final class GalaxyBridge {
     public void clearChatNotifications(String requestId){
         activity.clearChatNotifications(requestId);
     }
+
+    public void setChatLock(String requestId,boolean enabled){ activity.setChatLock(requestId,enabled); }
+    public void unlockChat(String requestId){ activity.unlockChat(requestId); }
 
     public void checkUpdate(String requestId){
         activity.checkUpdate(requestId);
