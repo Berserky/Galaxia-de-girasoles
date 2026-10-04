@@ -41,10 +41,12 @@ test('NG-QA-001 Storage SELECT checks capsule lock before exposing linked media'
 
 test('NG-QA-001 service-role media browser filters locked capsule objects for the caller',()=>{
   const media=block(edge,'async function mediaList(','async function mediaDelete(');
-  assert.match(media,/person/i);
-  assert.match(media,/capsule/i);
+  assert.match(media,/listBucket\("galaxy-photos",person\)/);
+  assert.match(media,/listBucket\("galaxy-voice",person\)/);
   const list=block(edge,'async function listBucket(','async function mediaList(');
-  assert.match(list,/capsule/i);
+  assert.match(list,/capsuleObjectVisible/);
+  const guard=block(edge,'function capsuleObjectVisible(','async function signedForPerson(');
+  assert.match(guard,/chatCapsuleAccess/);
 });
 
 test('NG-QA-002 future date-time capsule is not searchable or semantically indexed',()=>{
@@ -100,8 +102,10 @@ test('NG-QA-013 Intelligence source cleanup is queued and idempotently reconcila
 
 test('NG-QA-014 delete-for-both removes attachment rows and Storage objects before media can be re-signed',()=>{
   const del=block(edge,'async function chatDelete(','async function chatReact(');
-  assert.match(del,/galaxy_chat_attachments/);
-  assert.match(del,/storage\.from|remove\(/);
+  assert.match(del,/chatDeleteAttachments/);
+  const cleanup=block(edge,'async function chatDeleteAttachments(','async function chatReconcileDeletedMedia(');
+  assert.match(cleanup,/galaxy_chat_attachments/);
+  assert.match(cleanup,/storage\.from|\.remove\(/);
   const hydrate=block(edge,'async function chatHydrate(','async function chatVisibleRows(');
   assert.match(hydrate,/deleted_at|deletedAt/);
 });
