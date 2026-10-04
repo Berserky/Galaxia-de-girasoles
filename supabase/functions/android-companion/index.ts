@@ -785,6 +785,42 @@ async function signedForPerson(bucket:string,path:string,person:string,seconds=9
  return await signed(bucket,path,seconds);
 }
 
+async function privacyItemResponse(row:any,person:string){
+ if(!row||row.kind!=="capsule")return row;
+ const copy=structuredClone(row),data=copy.data||{};
+ const locations=await ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude,updated_at").eq("person",person).limit(1));
+ const access=chatCapsuleAccess(data,person,locations||[]);
+ if(access.locked){
+  copy.data={
+   title:text(data.title||"Cápsula cerrada",160)||"Cápsula cerrada",
+   date:access.unlockType==="date"&&validDate(data.date)?data.date:"",
+   unlockDate:access.unlockType==="date"&&validDate(data.unlockDate)?data.unlockDate:"",
+   unlockTime:access.unlockType==="date"&&/^\d{2}:\d{2}$/.test(String(data.unlockTime||""))?String(data.unlockTime):"",
+   unlockAt:access.unlockAt,unlockType:access.unlockType,locked:true
+  };
+  return copy;
+ }
+ if(data.photoPath)copy.data.photoUrl=await signed("galaxy-photos",String(data.photoPath),900);
+ if(data.audioPath)copy.data.audioUrl=await signed("galaxy-voice",String(data.audioPath),900);
+ if(data.songId){
+  const song=(await ok(db.from("galaxy_items").select("id,data").eq("kind","song").eq("id",String(data.songId)).limit(1)))?.[0];
+  if(song)copy.data.song={id:String(song.id),title:text(song.data?.title||"Canción",160),artist:text(song.data?.artist||"",160),source:text(song.data?.source||"",80),url:/^https:\/\//i.test(String(song.data?.url||""))?String(song.data.url):""};
+ }
+ return copy;
+}
+async function intelligenceCapsuleDependencyLocked(bucket:string,path:string){
+ if(!path)return false;
+ const capsules=await ok(db.from("galaxy_items").select("data").eq("kind","capsule").limit(1000));
+ for(const row of capsules||[]){
+  const data=row?.data||{};
+  const linked=(bucket==="galaxy-photos"&&String(data.photoPath||"")===path)||(bucket==="galaxy-voice"&&String(data.audioPath||"")===path);
+  if(!linked)continue;
+  const unlockType=String(data.unlockType||"date")==="place"?"place":"date";
+  if(unlockType==="place"||chatCapsuleAccess(data,"0",[]).locked)return true;
+ }
+ return false;
+}
+
 function chatCardUnavailable(ref:any){
  return {available:false,type:String(ref?.card_type||"").toUpperCase(),entityKind:String(ref?.entity_kind||""),entityId:String(ref?.entity_id||""),message:"Este contenido ya no está disponible."};
 }
@@ -1929,7 +1965,7 @@ async function deleteIntelligenceSource(type:string,id:string){
  }
  await reconcileIntelligenceCleanup();
 }
-async function syncIntelligenceItem(row:any){if(row)await syncIntelligenceDocument(buildIntelligenceDocument("item",row,{today:today()}));}
+async function syncIntelligenceItem(row:any){if(row)await syncIntelligenceDocument(buildIntelligenceDocument("item",row,{today:today(),now:new Date().toISOString()}));}
 async function syncIntelligencePlace(row:any){if(row)await syncIntelligenceDocument(buildIntelligenceDocument("place",row,{today:today()}));}
 async function syncIntelligenceTrip(row:any){if(row)await syncIntelligenceDocument(buildIntelligenceDocument("trip",row,{today:today()}));}
 async function syncIntelligenceGoal(idOrRow:any){
@@ -1953,15 +1989,18 @@ async function syncIntelligenceDaily(day:string){
 }
 async function intelligenceVoicePrivacy(voice:any){
  const data=voice?.data||{},author=String(voice?.author||""),ref=String(data.referenceId||"");
- if(!ref)return {ownerPerson:null,visibleAfter:null};
+ if(!ref)return {ownerPerson:null,visibleAfter:null,locked:false};
  const target=(await ok(db.from("galaxy_items").select("kind,data,author").eq("id",ref).limit(1)))?.[0];
- if(!target)return {ownerPerson:null,visibleAfter:null};
- if(target.kind==="capsule"&&target.data?.date)return {ownerPerson:author,visibleAfter:String(target.data.date)};
- if(target.kind==="note"&&target.data?.surprise){
-  if(target.data.unlockType==="date")return {ownerPerson:author,visibleAfter:String(target.data.unlockDate||"")||null};
-  if(target.data.unlockType==="place")return {ownerPerson:author,visibleAfter:null};
+ if(!target)return {ownerPerson:null,visibleAfter:null,locked:false};
+ if(target.kind==="capsule"){
+  const unlockType=String(target.data?.unlockType||"date")==="place"?"place":"date";
+  return {ownerPerson:null,visibleAfter:null,locked:unlockType==="place"||chatCapsuleAccess(target.data||{},"0",[]).locked};
  }
- return {ownerPerson:null,visibleAfter:null};
+ if(target.kind==="note"&&target.data?.surprise){
+  if(target.data.unlockType==="date")return {ownerPerson:author,visibleAfter:String(target.data.unlockDate||"")||null,locked:false};
+  if(target.data.unlockType==="place")return {ownerPerson:author,visibleAfter:null,locked:false};
+ }
+ return {ownerPerson:null,visibleAfter:null,locked:false};
 }
 async function syncIntelligenceVoiceTranscript(bondId:string){
  const [voice,transcript]=await Promise.all([
@@ -1971,6 +2010,7 @@ async function syncIntelligenceVoiceTranscript(bondId:string){
  const row=voice?.[0],tr=transcript?.[0];
  if(!row||!tr){await deleteIntelligenceSource("voice-transcript",bondId);return;}
  const privacy=await intelligenceVoicePrivacy(row),data=row.data||{};
+ if(privacy.locked){await deleteIntelligenceSource("voice-transcript",bondId);return;}
  await syncIntelligenceDocument(buildIntelligenceDocument("voice-transcript",{
   bondId,author:row.author,title:data.title||"Mensaje de voz",text:tr.transcript,segments:tr.segments,
   created_at:row.created,mime:data.mime,referenceId:data.referenceId,...privacy
@@ -1979,7 +2019,16 @@ async function syncIntelligenceVoiceTranscript(bondId:string){
 async function syncIntelligencePhotoContext(path:string){
  const row=(await ok(db.from("galaxy_photo_context").select("*").eq("path",path).limit(1)))?.[0];
  if(!row){await deleteIntelligenceSource("photo",path);return;}
+ if(await intelligenceCapsuleDependencyLocked("galaxy-photos",path)){await deleteIntelligenceSource("photo",path);return;}
  await syncIntelligenceDocument(buildIntelligenceDocument("photo-context",row,{today:today()}));
+}
+async function reconcileIntelligenceCapsules(){
+ const capsules=await ok(db.from("galaxy_items").select("*").eq("kind","capsule").limit(1000));
+ for(const row of capsules||[])await syncIntelligenceItem(row);
+ const voices=await ok(db.from("galaxy_bond").select("id,data").eq("type","voice").limit(500));
+ for(const voice of voices||[])if(voice?.data?.referenceId)await syncIntelligenceVoiceTranscript(String(voice.id));
+ const photos=await ok(db.from("galaxy_photo_context").select("path").limit(1000));
+ for(const photo of photos||[])await syncIntelligencePhotoContext(String(photo.path));
 }
 async function classicIntelligenceFallback(person:string,query:string,limit=20){
  const q=normalizeSearchText(query);if(!q)return[];
@@ -1990,6 +2039,7 @@ async function classicIntelligenceFallback(person:string,query:string,limit=20){
 }
 async function intelligenceSearchRows(person:string,query:string,limit=20){
  await reconcileIntelligenceCleanup();
+ await reconcileIntelligenceCapsules();
  const q=text(query,500);if(!q)return {results:[],mode:"empty",embeddingStatus:"skipped"};
  let vector:any=null,embeddingStatus="ready";
  try{vector=await gteSmallEmbedding(q);}catch{embeddingStatus="fallback";}
@@ -2037,6 +2087,8 @@ async function intelligenceAsk(req:Request,body:any){
 }
 async function intelligenceConnections(req:Request,body:any){
  const d=await device(req),person=String(d.person),sourceType=text(body.sourceType,40),sourceId=text(body.sourceId,300);
+ await reconcileIntelligenceCleanup();
+ await reconcileIntelligenceCapsules();
  const source=(await ok(db.from("galaxy_intelligence_documents").select("*").eq("source_type",sourceType).eq("source_id",sourceId).limit(1)))?.[0];
  if(!source||!intelligenceVisible(source,person))return json({error:"Fuente no disponible."},404);
  const related=await intelligenceSearchRows(person,(source.title+" "+source.content).slice(0,800),12);
@@ -2048,6 +2100,8 @@ async function intelligenceConnections(req:Request,body:any){
 }
 async function intelligenceNarrate(req:Request,body:any){
  const d=await device(req),person=String(d.person),requested=Array.isArray(body.sourceIds)?body.sourceIds.map(String).slice(0,10):[];
+ await reconcileIntelligenceCleanup();
+ await reconcileIntelligenceCapsules();
  let query=db.from("galaxy_intelligence_documents").select("*").in("source_type",["memory","journey","trip"]).order("occurred_on",{ascending:true}).limit(10);
  if(requested.length)query=query.in("source_id",requested);
  const rows=(await ok(query)||[]).filter((r:any)=>intelligenceVisible(r,person)).slice(0,10);
@@ -2097,6 +2151,7 @@ async function intelligenceTranscribe(req:Request,body:any){
 async function intelligenceBook(req:Request,body:any){
  const d=await device(req),person=String(d.person);
  await reconcileIntelligenceCleanup();
+ await reconcileIntelligenceCapsules();
  const rows=(await ok(db.from("galaxy_intelligence_documents").select("source_type,source_id,title,content,occurred_on,metadata,owner_person,visible_after,searchable").order("occurred_on",{ascending:true}).limit(1000))||[]).filter((r:any)=>intelligenceVisible(r,person));
  const sections=bookSections().map(section=>({id:section.id,title:section.title,items:[] as any[]}));
  const byId=Object.fromEntries(sections.map((x:any)=>[x.id,x]));
@@ -2143,7 +2198,7 @@ async function intelligenceIndexAction(req:Request,body:any){
   offset===0?ok(db.from("galaxy_bond").select("*").in("type",["sharednote","ritual"]).order("created").limit(limit)):Promise.resolve([]),
   offset===0?ok(db.from("galaxy_photo_context").select("*").order("created_at").limit(limit)):Promise.resolve([])
  ]);
- for(const row of items||[])sources.push(buildIntelligenceDocument("item",row,{today:today()}));
+ for(const row of items||[])sources.push(buildIntelligenceDocument("item",row,{today:today(),now:new Date().toISOString()}));
  for(const row of places||[])sources.push(buildIntelligenceDocument("place",row,{today:today()}));
  for(const row of trips||[])sources.push(buildIntelligenceDocument("trip",row,{today:today()}));
  for(const row of goals||[])sources.push(buildIntelligenceDocument("goal",row,{today:today()}));
@@ -2215,7 +2270,7 @@ async function validateCapsuleReferences(data:any){
 }
 
 async function itemSave(req:Request,body:any){
-  const d=await device(req),kind=String(body.kind||""),data=cleanItem(kind,body.data);
+  const d=await device(req),person=String(d.person),kind=String(body.kind||""),data=cleanItem(kind,body.data);
   if(kind==="capsule")await validateCapsuleReferences(data);
   if(body.id){
     const row=(await ok(db.from("galaxy_items").select("*").eq("id",String(body.id)).limit(1)))?.[0];
@@ -2223,10 +2278,9 @@ async function itemSave(req:Request,body:any){
     if(Number(body.version)!==Number(row.version))return json({error:"Este contenido cambió. Actualiza antes de guardar otra vez."},409);
     const updated=await ok(db.from("galaxy_items").update({data}).eq("id",row.id).eq("version",row.version).select("*").single());
     await intelligenceBestEffort("item-update",()=>syncIntelligenceItem(updated));
-    return json({item:updated});
+    return json({item:await privacyItemResponse(updated,person)});
   }
   const created=await ok(db.from("galaxy_items").insert({kind,data,author:String(d.person)}).select("*").single());
-  const person=String(d.person);
   await recordParticipation(person);
   await intelligenceBestEffort("item-create",()=>syncIntelligenceItem(created));
   if(kind==="memory"||kind==="plan"){
@@ -2237,7 +2291,7 @@ async function itemSave(req:Request,body:any){
       action:"memories",senderName:name,entityType:kind,entityId:String(created.id)
     });
   }
-  return json({item:created},201);
+  return json({item:await privacyItemResponse(created,person)},201);
 }
 
 async function itemDelete(req:Request,body:any){
