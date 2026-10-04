@@ -59,6 +59,12 @@ jobs:
       - name: Run delete-for-both signed URL E2E
         run: bash tests/privacy-firewall-chat-e2e.sh
 
+      - name: Validate rollback and re-apply
+        run: |
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f supabase/rollbacks/20261004212500_qa_phase0_privacy_firewall_rollback.sql
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f supabase/migrations/20261004212500_qa_phase0_privacy_firewall.sql
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/privacy-firewall-db.sql
+
       - name: Stop isolated Supabase
         if: always()
         run: supabase stop --no-backup
