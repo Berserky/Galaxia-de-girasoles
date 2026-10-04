@@ -815,12 +815,13 @@ async function chatSend(req:Request,body:any){
   replyTo=String(reply.id);
  }
  let row=(await ok(db.from("galaxy_chat_messages").select("*").eq("sender_person",person).eq("client_id",clientId).limit(1)))?.[0],isNew=false;
+ let scheduled=String(row?.schedule_state||"")==="pending";
  if(!row){
   const now=new Date().toISOString(),clientRaw=String(body.clientCreatedAt||"");
   const clientCreatedAt=Number.isFinite(Date.parse(clientRaw))&&Math.abs(Date.now()-Date.parse(clientRaw))<7*86400000?new Date(clientRaw).toISOString():now;
   const scheduleRaw=String(body.scheduledAt||"");
   const scheduleMs=Date.parse(scheduleRaw);
-  const scheduled=Number.isFinite(scheduleMs)&&scheduleMs>Date.now()+15000;
+  scheduled=Number.isFinite(scheduleMs)&&scheduleMs>Date.now()+15000;
   const scheduledAt=scheduled?new Date(scheduleMs).toISOString():null;
   const ttlSeconds=Number(body.ttlSeconds||0);
   const baseMs=scheduled?scheduleMs:Date.now();
