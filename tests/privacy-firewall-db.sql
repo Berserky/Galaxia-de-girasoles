@@ -72,6 +72,10 @@ update public.galaxy_locations
 set sharing=true,latitude=4.6200,longitude=-74.1200,accuracy=5,motion='still',updated_at=now()
 where person='1';
 
+set local role service_role;
+select public.galaxy_capsule_mark_place_unlocks('0',now());
+reset role;
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub','b0000000-0000-4000-8000-000000000001',true);
 do $qa$
@@ -81,6 +85,18 @@ begin
  if not exists(select 1 from public.galaxy_locations where person='1' and sharing=true) then raise exception 'Shared partner location hidden'; end if;
  if not exists(select 1 from public.galaxy_trip_points where person='1') then raise exception 'Shared partner trip point hidden'; end if;
  if not exists(select 1 from public.galaxy_location_history where person='1') then raise exception 'Shared partner history hidden'; end if;
+end $qa$;
+
+-- Llegar desbloquea una sola vez: pausar después no vuelve a bloquear el contenido
+-- ni deja un signed URL autorizado apuntando a un estado que luego sería privado.
+reset role;
+update public.galaxy_locations set sharing=false,latitude=null,longitude=null,accuracy=null,motion=null,updated_at=now() where person='0';
+set local role authenticated;
+select set_config('request.jwt.claim.sub','b0000000-0000-4000-8000-000000000001',true);
+do $qa$
+begin
+ if not exists(select 1 from public.galaxy_items where id='b1000000-0000-4000-8000-000000000003' and data->>'body'='SECRET-PLACE') then raise exception 'Place capsule relocked after valid arrival'; end if;
+ if not exists(select 1 from storage.objects where bucket_id='galaxy-photos' and name='0/qa-place.jpg') then raise exception 'Place media relocked after valid arrival'; end if;
 end $qa$;
 
 -- Perfil 1 también debe respetar el mismo firewall.
@@ -95,6 +111,13 @@ begin
  if exists(select 1 from public.galaxy_items where id='b1000000-0000-4000-8000-000000000001') then raise exception 'NG-QA-001 future capsule exposed to profile 1'; end if;
  if exists(select 1 from public.galaxy_items where id='b1000000-0000-4000-8000-000000000003') then raise exception 'NG-QA-001 own place capsule exposed while sharing false'; end if;
  if exists(select 1 from storage.objects where bucket_id='galaxy-photos' and name='0/qa-place.jpg') then raise exception 'NG-QA-001 place media exposed while sharing false'; end if;
+
+ update public.galaxy_items
+ set data=jsonb_set(data,'{unlockedFor}','["1"]'::jsonb,true)
+ where id='b1000000-0000-4000-8000-000000000003';
+ get diagnostics affected=row_count;
+ if affected<>1 then raise exception 'Capsule author update probe did not execute'; end if;
+ if exists(select 1 from public.galaxy_items where id='b1000000-0000-4000-8000-000000000003') then raise exception 'NG-QA-001 client forged server-owned place unlock state'; end if;
 
  update public.galaxy_items
  set data=jsonb_set(data,'{unlockDate}','"2020-01-01"'::jsonb,true)
