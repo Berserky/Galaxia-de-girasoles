@@ -31,14 +31,14 @@ public final class MobileApiClient {
         InputStream stream=code>=200&&code<300?c.getInputStream():c.getErrorStream();
         String text="";
         if(stream!=null){
-            try(BufferedReader r=new BufferedReader(new InputStreamReader(stream,StandardCharsets.UTF_8))){
-                StringBuilder b=new StringBuilder(); String line; int total=0;
-                while((line=r.readLine())!=null){
-                    total+=line.getBytes(StandardCharsets.UTF_8).length;
+            try(InputStream in=stream;ByteArrayOutputStream out=new ByteArrayOutputStream()){
+                byte[] buffer=new byte[8192];int read,total=0;
+                while((read=in.read(buffer))!=-1){
+                    total+=read;
                     if(total>MAX_JSON_RESPONSE_BYTES)throw new IOException("Respuesta demasiado grande.");
-                    b.append(line);
+                    out.write(buffer,0,read);
                 }
-                text=b.toString();
+                text=out.toString(StandardCharsets.UTF_8);
             }
         }
         JSONObject result=text.trim().isEmpty()?new JSONObject():new JSONObject(text);
@@ -85,8 +85,12 @@ public final class MobileApiClient {
 
         try(InputStream in=context.getContentResolver().openInputStream(uri);OutputStream out=c.getOutputStream()){
             if(in==null)throw new IOException("No se pudo leer el archivo.");
-            byte[] buffer=new byte[8192]; int read;
-            while((read=in.read(buffer))!=-1)out.write(buffer,0,read);
+            byte[] buffer=new byte[8192];int read;long sent=0;
+            while((read=in.read(buffer))!=-1){
+                sent+=read;
+                if(sent>limit)throw new IOException("El archivo supera el límite permitido.");
+                out.write(buffer,0,read);
+            }
         }
         try{return response(c);}finally{c.disconnect();}
     }
