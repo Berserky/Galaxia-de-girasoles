@@ -24,6 +24,7 @@ import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.webkit.WebViewAssetLoader;
 import androidx.core.content.FileProvider;
+import androidx.core.content.ContextCompat;
 import com.google.android.gms.location.CurrentLocationRequest;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
@@ -119,8 +120,7 @@ public final class MainActivity extends ComponentActivity {
             }
         };
         IntentFilter chatSyncFilter=new IntentFilter("com.nuestragalaxia.CHAT_SYNC");
-        if(Build.VERSION.SDK_INT>=33)registerReceiver(chatSyncReceiver,chatSyncFilter,Context.RECEIVER_NOT_EXPORTED);
-        else registerReceiver(chatSyncReceiver,chatSyncFilter);
+        ContextCompat.registerReceiver(this,chatSyncReceiver,chatSyncFilter,ContextCompat.RECEIVER_NOT_EXPORTED);
 
         updater=new UpdateManager(this,(text,progress,busy)->{
             JSONObject payload=new JSONObject();
