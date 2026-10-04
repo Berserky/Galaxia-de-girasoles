@@ -1549,7 +1549,7 @@ create or replace function public.galaxy_chat_attachment_path_guard()
 returns trigger
 language plpgsql security invoker
 set search_path=''
-as $
+as $chat_path_guard$
 declare
   sender text;
   p text;
@@ -1586,7 +1586,7 @@ begin
   end if;
 
   return new;
-end $;
+end $chat_path_guard$;
 revoke all on function public.galaxy_chat_attachment_path_guard() from public,anon,authenticated;
 
 drop trigger if exists galaxy_chat_attachment_path_guard_trigger on public.galaxy_chat_attachments;
