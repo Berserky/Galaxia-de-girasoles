@@ -48,7 +48,7 @@ const schema=read('supabase/schema.sql');
 const build=read('android/app/build.gradle.kts');
 const manifest=read('android/app/src/main/AndroidManifest.xml');
 const workflow=read('.github/workflows/android-companion.yml');
-const chatMigration=read('supabase/migrations/20261003235000_galaxy_chat_notifications_31.sql');
+const chatMigration=read('supabase/migrations/20261004002624_galaxy_chat_notifications_31.sql');
 const widget=read('android/app/src/main/res/layout/widget_bond.xml')+read('android/app/src/main/java/com/nuestragalaxia/companion/BondWidget.java');
 const motionTest=read('android/app/src/test/java/com/nuestragalaxia/companion/MotionClassifierThresholdTest.java');
 
