@@ -38,6 +38,7 @@ public final class MainActivity extends ComponentActivity {
     private static final int REQ_LOCATION=100;
     private static final int REQ_TRACKING_NOTIFICATIONS=101;
     private static final int REQ_BOND_NOTIFICATIONS=102;
+    private static final int REQ_GALAXY_NOTIFICATIONS=103;
     private static final int REQ_MEDIA=200;
     private static final int REQ_MICROPHONE=201;
     private static final int REQ_BACKUP_EXPORT=202;
@@ -50,7 +51,7 @@ public final class MainActivity extends ComponentActivity {
         "map-state","place-save","place-delete","status-set","transport-set","destination-save","trip","context-state","context-settings","context-session","context-events","context-suggestion","context-recap",
         "intelligence-search","intelligence-ask","intelligence-connections","intelligence-narrate","intelligence-book","intelligence-transcribe","intelligence-transcript-delete","intelligence-index",
         "media-list","media-delete","presence-set","backup-export","backup-import",
-        "pair-code-create","profile-repair","device-revoke","push-token-register","push-token-unregister","push-preferences","goals-engine","date-engine","insights-summary","monthly-summary","today-history","encounter-stats","frequent-places","gps-history-export","gps-history-delete"
+        "pair-code-create","profile-repair","device-revoke","push-token-register","push-token-unregister","push-preferences","chat-state","chat-send","chat-read","chat-delete","notifications-list","notifications-read","goals-engine","date-engine","insights-summary","monthly-summary","today-history","encounter-stats","frequent-places","gps-history-export","gps-history-delete"
     );
 
     private DeviceStore store;
@@ -61,6 +62,8 @@ public final class MainActivity extends ComponentActivity {
     private WebViewAssetLoader assetLoader;
     private String pendingLocationRequest;
     private String pendingBondRequest;
+    private String pendingGalaxyNotificationRequest;
+    private String pendingDeepLinkAction="",pendingDeepLinkEntity="",pendingDeepLinkEvent="";
     private String pendingMediaRequest;
     private String pendingMediaKind;
     private String pendingVoiceStartRequest;
@@ -92,6 +95,7 @@ public final class MainActivity extends ComponentActivity {
         });
         photoPickerLauncher=registerForActivityResult(new ActivityResultContracts.PickMultipleVisualMedia(30),this::handlePhotoPickerResult);
         setContentView(R.layout.activity_main);
+        captureDeepLink(getIntent());
         store=new DeviceStore(this);
         cloudMedia=new CloudMediaStore(this);
         PushManager.initialize(this);
@@ -137,6 +141,7 @@ public final class MainActivity extends ComponentActivity {
                     pageReady=true;
                     nativeChanged();
                     refreshMomentsInternal();
+                    emitPendingDeepLink();
                     updater.check(false);
                 }
             }
@@ -694,6 +699,21 @@ public final class MainActivity extends ComponentActivity {
         });
     }
 
+    void requestGalaxyNotifications(String requestId){
+        runOnUiThread(()->{
+            if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+            if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED){
+                pendingGalaxyNotificationRequest=requestId;
+                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},REQ_GALAXY_NOTIFICATIONS);
+                return;
+            }
+            GalaxyNotifications.prepare(this);
+            PushManager.schedule(this);
+            resolve(requestId,nativeState());
+            nativeChanged();
+        });
+    }
+
     void setMomentNotifications(String requestId,boolean enabled){
         runOnUiThread(()->{
             if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
@@ -838,6 +858,11 @@ public final class MainActivity extends ComponentActivity {
             String request=pendingBondRequest;pendingBondRequest=null;
             boolean granted=results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED;
             if(request!=null)applyMomentNotifications(request,granted);
+        }else if(requestCode==REQ_GALAXY_NOTIFICATIONS){
+            String request=pendingGalaxyNotificationRequest;pendingGalaxyNotificationRequest=null;
+            boolean granted=results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED;
+            if(granted){GalaxyNotifications.prepare(this);PushManager.schedule(this);}
+            if(request!=null){if(granted)resolve(request,nativeState());else reject(request,"Android no permitió mostrar notificaciones.");}
         }
         nativeChanged();
     }
@@ -882,11 +907,35 @@ public final class MainActivity extends ComponentActivity {
         catch(Exception ignored){}
     }
 
+    private void captureDeepLink(Intent intent){
+        if(intent==null)return;
+        String action=intent.getStringExtra("galaxy_action"),entity=intent.getStringExtra("galaxy_entity_id"),eventType=intent.getStringExtra("galaxy_event_type");
+        if(action!=null&&!action.isBlank())pendingDeepLinkAction=action;
+        if(entity!=null)pendingDeepLinkEntity=entity;
+        if(eventType!=null)pendingDeepLinkEvent=eventType;
+    }
+
+    private void emitPendingDeepLink(){
+        if(!pageReady||pendingDeepLinkAction==null||pendingDeepLinkAction.isBlank())return;
+        JSONObject payload=new JSONObject();
+        try{payload.put("action",pendingDeepLinkAction);payload.put("entityId",pendingDeepLinkEntity);payload.put("eventType",pendingDeepLinkEvent);}catch(Exception ignored){}
+        pendingDeepLinkAction="";pendingDeepLinkEntity="";pendingDeepLinkEvent="";
+        event("deep-link",payload);
+    }
+
+    @Override protected void onNewIntent(Intent intent){
+        super.onNewIntent(intent);
+        setIntent(intent);
+        captureDeepLink(intent);
+        emitPendingDeepLink();
+    }
+
     @Override protected void onResume(){
         super.onResume();
         ensureTrackingService();
+        if(store!=null&&store.pairedFast())PushManager.schedule(this);
         if(updater!=null)updater.resumePendingInstall();
-        if(pageReady){nativeChanged();refreshMomentsInternal();}
+        if(pageReady){nativeChanged();refreshMomentsInternal();emitPendingDeepLink();}
     }
 
     @Override protected void onPause(){
