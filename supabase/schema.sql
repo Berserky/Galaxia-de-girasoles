@@ -167,6 +167,7 @@ create table public.galaxy_trip_points (
  latitude double precision not null check(latitude between -90 and 90), longitude double precision not null check(longitude between -180 and 180),
  created_at timestamptz not null default now()
 );
+create index if not exists galaxy_trip_points_created_idx on public.galaxy_trip_points(created_at desc);
 alter table public.galaxy_trip_points enable row level security;
 create policy trip_points_read on public.galaxy_trip_points for select to authenticated using(public.galaxy_person() is not null);
 create policy trip_points_insert_own on public.galaxy_trip_points for insert to authenticated with check(person=public.galaxy_person());
@@ -183,7 +184,7 @@ create table public.galaxy_location_history (
  source_device_id uuid, client_sample_id uuid
 );
 create index galaxy_location_history_person_time_idx on public.galaxy_location_history(person,captured_at desc);
-create unique index galaxy_location_history_device_sample_uidx on public.galaxy_location_history(source_device_id,client_sample_id) where source_device_id is not null and client_sample_id is not null;
+create unique index galaxy_location_history_device_sample_uidx on public.galaxy_location_history(source_device_id,client_sample_id);
 alter table public.galaxy_location_history enable row level security;
 create policy location_history_read on public.galaxy_location_history for select to authenticated using(public.galaxy_person() is not null);
 create policy location_history_insert_own on public.galaxy_location_history for insert to authenticated with check(person=public.galaxy_person());
@@ -230,7 +231,9 @@ create table public.galaxy_destinations (
 );
 alter table public.galaxy_destinations enable row level security;
 create policy destinations_read on public.galaxy_destinations for select to authenticated using(public.galaxy_person() is not null);
-create policy destinations_write_own on public.galaxy_destinations for all to authenticated using(person=public.galaxy_person()) with check(person=public.galaxy_person());
+create policy destinations_insert_own on public.galaxy_destinations for insert to authenticated with check(person=public.galaxy_person());
+create policy destinations_update_own on public.galaxy_destinations for update to authenticated using(person=public.galaxy_person()) with check(person=public.galaxy_person());
+create policy destinations_delete_own on public.galaxy_destinations for delete to authenticated using(person=public.galaxy_person());
 revoke all on public.galaxy_destinations from anon,authenticated;
 grant select,insert,update,delete on public.galaxy_destinations to authenticated;
 create index galaxy_destinations_place_id_idx on public.galaxy_destinations(place_id);
@@ -528,6 +531,7 @@ create table if not exists public.galaxy_daily_questions (
 );
 create index if not exists galaxy_daily_questions_created_idx on public.galaxy_daily_questions(created_at desc);
 alter table public.galaxy_daily_questions enable row level security;
+revoke all on public.galaxy_daily_questions from public,anon,authenticated;
 
 
 -- Mega Update 3.0 · Galaxy Goals Engine
@@ -669,7 +673,7 @@ create table if not exists public.galaxy_push_tokens (
 
 create table if not exists public.galaxy_push_subscriptions (
  device_id uuid not null references public.galaxy_devices(id) on delete cascade,
- event_type text not null check(event_type in ('gesture','arrived_safe','nearby','capsule','note','reminder','chat_message','status_changed','mood_changed','daily_answer','goal_update','memory_shared','plan_update')),
+ event_type text not null check(event_type in ('gesture','arrived_safe','nearby','capsule','note','reminder','chat_message','chat_sync','status_changed','mood_changed','daily_answer','goal_update','memory_shared','plan_update')),
  enabled boolean not null default false,
  updated_at timestamptz not null default now(),
  primary key(device_id,event_type)
@@ -680,7 +684,7 @@ create table if not exists public.galaxy_push_events (
  source_device_id uuid references public.galaxy_devices(id) on delete set null,
  source_person text not null check(source_person in ('0','1')),
  target_person text not null check(target_person in ('0','1')),
- event_type text not null check(event_type in ('gesture','arrived_safe','nearby','capsule','note','reminder','chat_message','status_changed','mood_changed','daily_answer','goal_update','memory_shared','plan_update')),
+ event_type text not null check(event_type in ('gesture','arrived_safe','nearby','capsule','note','reminder','chat_message','chat_sync','status_changed','mood_changed','daily_answer','goal_update','memory_shared','plan_update')),
  payload jsonb not null default '{}'::jsonb check(jsonb_typeof(payload)='object' and octet_length(payload::text)<=4096),
  created_at timestamptz not null default now(),
  expires_at timestamptz not null default (now()+interval '1 day')
@@ -838,6 +842,7 @@ create table if not exists public.galaxy_chat_metrics (
  created_at timestamptz not null default now()
 );
 create index if not exists galaxy_chat_metrics_created_idx on public.galaxy_chat_metrics(created_at desc);
+create index if not exists galaxy_chat_metrics_message_idx on public.galaxy_chat_metrics(message_id);
 
 create table if not exists public.galaxy_notifications (
  id uuid primary key default gen_random_uuid(),

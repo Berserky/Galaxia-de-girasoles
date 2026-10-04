@@ -5,6 +5,8 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.Signature;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
@@ -17,6 +19,8 @@ import java.io.*;
 import java.net.*;
 import java.security.MessageDigest;
 import java.util.Locale;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -105,11 +109,38 @@ public final class UpdateManager {
     }
 
     private void validatePackage(File apk)throws Exception{
-        PackageInfo info=activity.getPackageManager().getPackageArchiveInfo(apk.getAbsolutePath(),0);
+        PackageManager pm=activity.getPackageManager();
+        int flags=Build.VERSION.SDK_INT>=28?PackageManager.GET_SIGNING_CERTIFICATES:PackageManager.GET_SIGNATURES;
+        PackageInfo info=pm.getPackageArchiveInfo(apk.getAbsolutePath(),flags);
         if(info==null)throw new SecurityException("El archivo descargado no es un APK válido");
         if(!BuildConfig.APPLICATION_ID.equals(info.packageName))throw new SecurityException("El paquete no pertenece a Nuestra Galaxia");
         long version=Build.VERSION.SDK_INT>=28?info.getLongVersionCode():info.versionCode;
         if(version<=BuildConfig.VERSION_CODE)throw new SecurityException("La actualización no contiene una versión superior");
+        PackageInfo installed=pm.getPackageInfo(BuildConfig.APPLICATION_ID,flags);
+        Set<String> currentSigners=signerDigests(installed),updateSigners=signerDigests(info);
+        if(currentSigners.isEmpty()||updateSigners.isEmpty()||java.util.Collections.disjoint(currentSigners,updateSigners)){
+            throw new SecurityException("La actualización no está firmada por Nuestra Galaxia");
+        }
+    }
+
+    private static Set<String> signerDigests(PackageInfo info)throws Exception{
+        Set<String> out=new HashSet<>();
+        Signature[] signatures;
+        if(Build.VERSION.SDK_INT>=28){
+            if(info.signingInfo==null)return out;
+            signatures=info.signingInfo.hasMultipleSigners()
+                ?info.signingInfo.getApkContentsSigners()
+                :info.signingInfo.getSigningCertificateHistory();
+        }else signatures=info.signatures;
+        if(signatures==null)return out;
+        for(Signature signature:signatures){
+            MessageDigest md=MessageDigest.getInstance("SHA-256");
+            md.update(signature.toByteArray());
+            StringBuilder value=new StringBuilder();
+            for(byte b:md.digest())value.append(String.format(Locale.US,"%02x",b));
+            out.add(value.toString());
+        }
+        return out;
     }
 
     private void install(File apk){

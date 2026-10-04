@@ -1,6 +1,7 @@
 package com.nuestragalaxia.companion;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.*;
 import android.appwidget.AppWidgetManager;
 import android.content.*;
@@ -23,6 +24,8 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.webkit.WebViewAssetLoader;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
 import androidx.core.content.FileProvider;
 import androidx.core.content.ContextCompat;
 import com.google.android.gms.location.CurrentLocationRequest;
@@ -33,6 +36,8 @@ import org.json.JSONObject;
 import java.time.Instant;
 import java.util.*;
 import java.io.*;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.concurrent.*;
 
 public final class MainActivity extends ComponentActivity {
@@ -142,13 +147,14 @@ public final class MainActivity extends ComponentActivity {
     }
 
     @SuppressWarnings("SetJavaScriptEnabled")
+    @SuppressLint("RequiresFeature")
     private void setupWeb(){
         assetLoader=new WebViewAssetLoader.Builder().addPathHandler("/assets/",new WebViewAssetLoader.AssetsPathHandler(this)).build();
         WebSettings settings=web.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(false);
-        settings.setAllowFileAccess(true);
+        settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
         settings.setAllowFileAccessFromFileURLs(false);
         settings.setAllowUniversalAccessFromFileURLs(false);
@@ -158,7 +164,16 @@ public final class MainActivity extends ComponentActivity {
         settings.setDisplayZoomControls(false);
         if(Build.VERSION.SDK_INT>=26)settings.setSafeBrowsingEnabled(true);
 
-        web.addJavascriptInterface(new GalaxyBridge(this),"GalaxyAndroid");
+        GalaxyBridge secureBridge=new GalaxyBridge(this);
+        if(!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)){
+            throw new IllegalStateException("Android System WebView necesita actualizarse para abrir Nuestra Galaxia de forma segura.");
+        }
+        WebViewCompat.addWebMessageListener(
+            web,
+            "GalaxyAndroid",
+            java.util.Set.of("https://appassets.androidplatform.net"),
+            (view,message,sourceOrigin,isMainFrame,replyProxy)->secureBridge.dispatchMessage(message.getData(),sourceOrigin,isMainFrame)
+        );
         web.setWebChromeClient(new WebChromeClient());
         web.setWebViewClient(new WebViewClient(){
             @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){ return assetLoader.shouldInterceptRequest(request.getUrl()); }
@@ -205,7 +220,6 @@ public final class MainActivity extends ComponentActivity {
             state.put("notificationsGranted",Build.VERSION.SDK_INT<33||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED);
             state.put("notificationsEnabled",GalaxyNotifications.allowed(this));
             state.put("locationGranted",checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED);
-            state.put("backgroundLocationGranted",Build.VERSION.SDK_INT<29||checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION)==PackageManager.PERMISSION_GRANTED);
             state.put("canPinWidget",Build.VERSION.SDK_INT>=26&&getSystemService(AppWidgetManager.class).isRequestPinAppWidgetSupported());
             state.put("driveFolderConnected",cloudMedia!=null&&cloudMedia.connected());
             state.put("driveFolderName",cloudMedia==null?"":cloudMedia.driveName());
@@ -953,6 +967,82 @@ public final class MainActivity extends ComponentActivity {
         });
     }
 
+    private static void pruneChatFileCache(File dir){
+        File[] files=dir.listFiles();
+        if(files==null||files.length==0)return;
+        Arrays.sort(files,(a,b)->Long.compare(b.lastModified(),a.lastModified()));
+        long cutoff=System.currentTimeMillis()-24L*60L*60L*1000L;
+        for(int i=0;i<files.length;i++){
+            File file=files[i];
+            if(!file.isFile())continue;
+            if(file.lastModified()<cutoff||i>=20)try{file.delete();}catch(Exception ignored){}
+        }
+    }
+
+    void openChatFile(String requestId,String rawUrl,String rawName,String rawMime){
+        if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+        io.execute(()->{
+            File target=null;
+            HttpURLConnection connection=null;
+            try{
+                Uri source=Uri.parse(rawUrl==null?"":rawUrl);
+                Uri backend=Uri.parse(BuildConfig.SUPABASE_URL);
+                String path=source.getPath()==null?"":source.getPath();
+                if(!"https".equalsIgnoreCase(source.getScheme())
+                    ||source.getHost()==null||!source.getHost().equalsIgnoreCase(backend.getHost())
+                    ||!path.startsWith("/storage/v1/object/sign/galaxy-chat-media/")){
+                    throw new SecurityException("El archivo no pertenece al almacenamiento privado del chat.");
+                }
+                String safeName=(rawName==null?"archivo":rawName).replaceAll("[^A-Za-z0-9._() -]","_").trim();
+                if(safeName.isEmpty())safeName="archivo";
+                if(safeName.length()>120)safeName=safeName.substring(safeName.length()-120);
+                File dir=new File(getCacheDir(),"chat-files");
+                if(!dir.exists()&&!dir.mkdirs())throw new IOException("No se pudo preparar el archivo.");
+                pruneChatFileCache(dir);
+                target=new File(dir,UUID.randomUUID()+"-"+safeName);
+                connection=(HttpURLConnection)new URL(source.toString()).openConnection();
+                connection.setConnectTimeout(15000);
+                connection.setReadTimeout(30000);
+                connection.setInstanceFollowRedirects(false);
+                int code=connection.getResponseCode();
+                if(code<200||code>=300)throw new IOException("No pudimos descargar el archivo ("+code+").");
+                long declared=connection.getContentLengthLong();
+                if(declared>32L*1024L*1024L)throw new IOException("El archivo supera 32 MB.");
+                long total=0;
+                try(InputStream in=connection.getInputStream();OutputStream out=new FileOutputStream(target)){
+                    byte[] buffer=new byte[32768];int read;
+                    while((read=in.read(buffer))!=-1){
+                        total+=read;
+                        if(total>32L*1024L*1024L)throw new IOException("El archivo supera 32 MB.");
+                        out.write(buffer,0,read);
+                    }
+                }
+                if(total<1)throw new IOException("El archivo está vacío.");
+                File ready=target;
+                String mime=rawMime==null||rawMime.isBlank()?"application/octet-stream":rawMime;
+                runOnUiThread(()->{
+                    try{
+                        Uri content=FileProvider.getUriForFile(this,getPackageName()+".files",ready);
+                        Intent open=new Intent(Intent.ACTION_VIEW)
+                            .setDataAndType(content,mime)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        startActivity(open);
+                        resolve(requestId,new JSONObject().put("opened",true));
+                    }catch(ActivityNotFoundException e){
+                        reject(requestId,"No hay una aplicación instalada que pueda abrir este tipo de archivo.");
+                    }catch(Exception e){
+                        reject(requestId,"No pudimos abrir el archivo.");
+                    }
+                });
+            }catch(Exception e){
+                if(target!=null&&target.exists())target.delete();
+                reject(requestId,e.getMessage()==null?"No pudimos descargar el archivo.":e.getMessage());
+            }finally{
+                if(connection!=null)connection.disconnect();
+            }
+        });
+    }
+
     void openAppSettings(String requestId){
         runOnUiThread(()->{
             try{
@@ -1114,7 +1204,7 @@ public final class MainActivity extends ComponentActivity {
         if(chatSyncReceiver!=null){try{unregisterReceiver(chatSyncReceiver);}catch(Exception ignored){}chatSyncReceiver=null;}
         if(updater!=null)updater.close();
         io.shutdownNow();
-        if(web!=null){web.removeJavascriptInterface("GalaxyAndroid");web.destroy();}
+        if(web!=null){web.destroy();}
         super.onDestroy();
     }
 }

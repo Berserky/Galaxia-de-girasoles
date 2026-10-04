@@ -32,6 +32,18 @@ const sha=async(value:string)=>Array.from(new Uint8Array(await crypto.subtle.dig
 const dist=(a:any,b:any)=>{const R=6371000,rad=(x:number)=>x*Math.PI/180,dLat=rad(Number(b.latitude)-Number(a.latitude)),dLon=rad(Number(b.longitude)-Number(a.longitude)),h=Math.sin(dLat/2)**2+Math.cos(rad(Number(a.latitude)))*Math.cos(rad(Number(b.latitude)))*Math.sin(dLon/2)**2;return R*2*Math.atan2(Math.sqrt(h),Math.sqrt(1-h));};
 const ok=async(q:PromiseLike<any>)=>{const {data,error}=await q;if(error)throw error;return data;};
 const today=()=>new Intl.DateTimeFormat("en-CA",{timeZone:"America/Bogota",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+function monthBounds(month:string){
+  if(!/^\d{4}-\d{2}$/.test(month))throw new Error("Mes no válido");
+  const [yearValue,monthValue]=month.split("-").map(Number);
+  if(!Number.isInteger(yearValue)||monthValue<1||monthValue>12)throw new Error("Mes no válido");
+  // Bogotá is UTC-05:00 year-round. These instants represent local month boundaries.
+  const start=new Date(Date.UTC(yearValue,monthValue-1,1,5,0,0,0));
+  const nextYear=monthValue===12?yearValue+1:yearValue;
+  const nextMonth=monthValue===12?0:monthValue;
+  const end=new Date(Date.UTC(nextYear,nextMonth,1,5,0,0,0));
+  return {start:start.toISOString(),end:end.toISOString()};
+}
+
 const text=(v:unknown,max:number)=>String(v??"").trim().slice(0,max);
 const validDate=(v:unknown)=>{
   if(typeof v!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(v))return false;
@@ -51,10 +63,12 @@ const questions:Record<string,string[]>={
 async function device(req:Request){
   const token=req.headers.get("x-device-token")||"";
   if(token.length<40)throw new Error("Dispositivo no vinculado");
-  const hash=await sha(token),rows=await ok(db.from("galaxy_devices").select("id,person,name,revoked_at").eq("token_hash",hash).is("revoked_at",null).limit(1));
+  const hash=await sha(token),rows=await ok(db.from("galaxy_devices").select("id,person,name,revoked_at,last_seen_at").eq("token_hash",hash).is("revoked_at",null).limit(1));
   if(!rows?.length)throw new Error("Dispositivo revocado o no válido");
-  const d=rows[0];
-  await ok(db.from("galaxy_devices").update({last_seen_at:new Date().toISOString()}).eq("id",d.id));
+  const d=rows[0],lastSeen=Date.parse(String(d.last_seen_at||""));
+  if(!Number.isFinite(lastSeen)||Date.now()-lastSeen>5*60*1000){
+    await ok(db.from("galaxy_devices").update({last_seen_at:new Date().toISOString()}).eq("id",d.id));
+  }
   return d;
 }
 
@@ -451,8 +465,7 @@ async function history(req:Request,body:any){
   const d=await device(req),p=point(body),sample=String(body.sample_id||"");
   if(!/^[0-9a-f-]{36}$/i.test(sample))throw new Error("Muestra no válida");
   const row={person:d.person,latitude:p.lat,longitude:p.lon,accuracy:p.accuracy,speed:p.speed,heading:p.heading,motion:p.motion,captured_at:body.captured_at||new Date().toISOString(),source_device_id:d.id,client_sample_id:sample};
-  const {error}=await db.from("galaxy_location_history").insert(row);
-  if(error&&error.code!=="23505")throw error;
+  await ok(db.from("galaxy_location_history").upsert(row,{onConflict:"source_device_id,client_sample_id",ignoreDuplicates:true}));
   return json({ok:true});
 }
 
@@ -599,8 +612,8 @@ async function dispatchPushEvent(sourceDevice:any,targetPerson:string,eventType:
   ok(db.from("galaxy_push_tokens").select("device_id,token").limit(50)),
   ok(db.from("galaxy_push_subscriptions").select("device_id,event_type,enabled").eq("event_type",eventType).eq("enabled",true).limit(50))
  ]);
- const allowed=new Set((subscriptions||[]).map((row:any)=>String(row.device_id)));
- const tokenByDevice=new Map((tokens||[]).map((row:any)=>[String(row.device_id),String(row.token)]));
+ const allowed=new Set<string>((subscriptions||[]).map((row:any)=>String(row.device_id)));
+ const tokenByDevice=new Map<string,string>((tokens||[]).map((row:any)=>[String(row.device_id),String(row.token)] as [string,string]));
  const credentials=fcmCredentials(),deliveries:any[]=[],requireSubscription=options?.requireSubscription!==false;
  for(const target of devices||[]){
   const deviceId=String(target.id),token=tokenByDevice.get(deviceId);
@@ -701,10 +714,16 @@ async function chatHydrate(rows:any[],person:string){
  const pinMap=new Map((pins||[]).map((x:any)=>[String(x.message_id),x]));
  const favSet=new Set((favorites||[]).map((x:any)=>String(x.message_id)));
  const attachmentMap=new Map<string,any[]>();
- for(const a of attachments||[]){
+ const hydratedAttachments=await Promise.all((attachments||[]).map(async(a:any)=>{
   const bucket=String(a.bucket||"galaxy-chat-media"),path=String(a.path||"");
-  const url=await signed(bucket,path,1800),thumbnailUrl=a.thumbnail_path?await signed(bucket,String(a.thumbnail_path),1800):null;
-  const safe={id:a.id,kind:a.kind,mime:a.mime,name:a.name,sizeBytes:a.size_bytes,durationMs:a.duration_ms,width:a.width,height:a.height,caption:a.caption,url,thumbnailUrl};
+  const [url,thumbnailUrl]=await Promise.all([
+   signed(bucket,path,1800),
+   a.thumbnail_path?signed(bucket,String(a.thumbnail_path),1800):Promise.resolve(null)
+  ]);
+  return {...a,url,thumbnailUrl};
+ }));
+ for(const a of hydratedAttachments){
+  const safe={id:a.id,kind:a.kind,mime:a.mime,name:a.name,sizeBytes:a.size_bytes,durationMs:a.duration_ms,width:a.width,height:a.height,caption:a.caption,url:a.url,thumbnailUrl:a.thumbnailUrl};
   const k=String(a.message_id),v=attachmentMap.get(k)||[];v.push(safe);attachmentMap.set(k,v);
  }
  return list.map((row:any)=>({
@@ -882,7 +901,7 @@ async function chatCollection(req:Request,body:any,kind:"pins"|"saved"){
  const ids=(links||[]).map((x:any)=>String(x.message_id));if(!ids.length)return json({messages:[]});
  const rows=await chatVisibleRows(person,db.from("galaxy_chat_messages").select("*").in("id",ids).limit(200));
  const byId=new Map(rows.map((x:any)=>[String(x.id),x]));
- return json({messages:await chatHydrate(ids.map(id=>byId.get(id)).filter(Boolean),person)});
+ return json({messages:await chatHydrate(ids.map((id:string)=>byId.get(id)).filter((x:any)=>Boolean(x)),person)});
 }
 async function chatSearch(req:Request,body:any={}){
  const d=await device(req),person=String(d.person),q=text(body.query||"",160).toLocaleLowerCase("es"),sender=String(body.sender||"all"),type=String(body.type||"all"),date=String(body.date||"");
@@ -1271,9 +1290,9 @@ async function intelligenceNarrate(req:Request,body:any){
    "Escribe un capítulo en español usando EXCLUSIVAMENTE las fuentes entregadas. No inventes hechos, lugares, diálogos ni emociones. Devuelve solo JSON con {title,paragraphs:[{text,sourceIds:[...]}]}. Cada párrafo debe citar al menos una fuente por su sourceId.",
    JSON.stringify({sources}),1400);
   const narrative=validateNarrative(extractJsonObject(raw),sources);
-  return json({available:true,narrative,sources:sources.map(x=>({sourceId:x.sourceId,title:x.title,date:x.date}))});
+  return json({available:true,narrative,sources:sources.map((x:any)=>({sourceId:x.sourceId,title:x.title,date:x.date}))});
  }catch{
-  return json({available:false,error:"La narración no pudo validarse contra las fuentes. No se guardó contenido inventado.",sources:sources.map(x=>({sourceId:x.sourceId,title:x.title,date:x.date}))});
+  return json({available:false,error:"La narración no pudo validarse contra las fuentes. No se guardó contenido inventado.",sources:sources.map((x:any)=>({sourceId:x.sourceId,title:x.title,date:x.date}))});
  }
 }
 async function intelligenceTranscriptDelete(req:Request,body:any){
@@ -1362,7 +1381,7 @@ async function intelligenceIndexAction(req:Request,body:any){
  let ready=0,errors=0;for(const doc of sources){const result=await syncIntelligenceDocument(doc);if(result.status==="ready"||result.status==="unchanged")ready++;if(result.status==="embedding-error")errors++;}
  if(offset===0){
   const days=await ok(db.from("galaxy_daily").select("day").not("answer","is",null).order("day",{ascending:false}).limit(120));
-  for(const day of [...new Set((days||[]).map((x:any)=>String(x.day)))])await syncIntelligenceDaily(day);
+  for(const day of [...new Set<string>((days||[]).map((x:any)=>String(x.day)))])await syncIntelligenceDaily(day);
   const transcripts=await ok(db.from("galaxy_voice_transcripts").select("bond_id").limit(limit));for(const tr of transcripts||[])await syncIntelligenceVoiceTranscript(String(tr.bond_id));
  }
   return json({ok:true,processed:sources.length,ready,errors,nextOffset:(items||[]).length===limit?offset+limit:null});
@@ -2695,7 +2714,13 @@ Deno.serve(async req=>{
   if(req.method!=="POST")return json({error:"Método no permitido"},405);
   try{
     if(req.headers.get("x-mobile-action")==="upload")return await upload(req);
-    const body=await req.json(),action=String(body.action||"");
+    const declaredBody=Number(req.headers.get("content-length")||0);
+    if(declaredBody>3*1024*1024)return json({error:"Solicitud demasiado grande"},413);
+    const rawBody=await req.text();
+    if(new TextEncoder().encode(rawBody).length>3*1024*1024)return json({error:"Solicitud demasiado grande"},413);
+    let body:any;
+    try{body=JSON.parse(rawBody||"{}");}catch{return json({error:"JSON no válido"},400);}
+    const action=String(body.action||"");
     if(action==="pair")return await pair(body);
     if(action==="pair-code-create")return await pairCodeCreate(req,body);
     if(action==="profile-repair")return await profileRepair(req,body);

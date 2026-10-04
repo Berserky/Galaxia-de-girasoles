@@ -8,16 +8,16 @@ public final class BondStore {
  public BondStore(Context c){context=c.getApplicationContext();prefs=context.getSharedPreferences("galaxy_moments",Context.MODE_PRIVATE);}
  public boolean enabled(){return prefs.getBoolean("enabled",false);}
  public boolean hapticEnabled(){return prefs.getBoolean("hapticEnabled",false);}
- public void hapticEnabled(boolean enabled){prefs.edit().putBoolean("hapticEnabled",enabled).commit();}
- public void enabled(boolean enabled){prefs.edit().putBoolean("enabled",enabled).putBoolean("initialized",false).remove("seen").remove("latestCreated").commit();if(!enabled){android.app.NotificationManager manager=context.getSystemService(android.app.NotificationManager.class);for(android.service.notification.StatusBarNotification n:manager.getActiveNotifications())if(n.getNotification().getChannelId()!=null&&n.getNotification().getChannelId().startsWith("galaxy-moments"))manager.cancel(n.getTag(),n.getId());}}
+ public void hapticEnabled(boolean enabled){prefs.edit().putBoolean("hapticEnabled",enabled).apply();}
+ public void enabled(boolean enabled){prefs.edit().putBoolean("enabled",enabled).putBoolean("initialized",false).remove("seen").remove("latestCreated").apply();if(!enabled){android.app.NotificationManager manager=context.getSystemService(android.app.NotificationManager.class);for(android.service.notification.StatusBarNotification n:manager.getActiveNotifications())if(n.getNotification().getChannelId()!=null&&n.getNotification().getChannelId().startsWith("galaxy-moments"))manager.cancel(n.getTag(),n.getId());}}
  public JSONObject snapshot(){try{return new JSONObject(prefs.getString("snapshot","{}"));}catch(Exception e){return new JSONObject();}}
- public void snapshot(JSONObject data){JSONObject safe=new JSONObject();try{safe.put("names",data.optJSONArray("names"));safe.put("nextEvent",data.optJSONObject("nextEvent"));safe.put("nextPlan",data.optJSONObject("nextPlan"));safe.put("now",data.optJSONObject("now"));safe.put("distanceM",data.has("distanceM")?data.opt("distanceM"):JSONObject.NULL);safe.put("etaMinutes",data.has("etaMinutes")?data.opt("etaMinutes"):JSONObject.NULL);safe.put("garden",data.optJSONObject("garden"));}catch(Exception ignored){}prefs.edit().putString("snapshot",safe.toString()).commit();}
+ public void snapshot(JSONObject data){JSONObject safe=new JSONObject();try{safe.put("names",data.optJSONArray("names"));safe.put("nextEvent",data.optJSONObject("nextEvent"));safe.put("nextPlan",data.optJSONObject("nextPlan"));safe.put("now",data.optJSONObject("now"));safe.put("distanceM",data.has("distanceM")?data.opt("distanceM"):JSONObject.NULL);safe.put("etaMinutes",data.has("etaMinutes")?data.opt("etaMinutes"):JSONObject.NULL);safe.put("garden",data.optJSONObject("garden"));}catch(Exception ignored){}prefs.edit().putString("snapshot",safe.toString()).apply();}
  public File photo(){return new File(context.getFilesDir(),"widget-photo.jpg");}
  public String feedback(){return prefs.getString("feedback","");}
- public void feedback(String text){prefs.edit().putString("feedback",text).commit();}
+ public void feedback(String text){prefs.edit().putString("feedback",text).apply();}
  public boolean consumeDate(String key){if(key.equals(prefs.getString("dateSeen","")))return false;return prefs.edit().putString("dateSeen",key).commit();}
  public boolean hasSeen(String id){return id!=null&&prefs.getStringSet("seen",Collections.emptySet()).contains(id);}
- public void markSeen(String id){if(id==null||id.trim().isEmpty())return;Set<String> seen=new HashSet<>(prefs.getStringSet("seen",Collections.emptySet()));seen.add(id);prefs.edit().putStringSet("seen",seen).commit();}
+ public void markSeen(String id){if(id==null||id.trim().isEmpty())return;Set<String> seen=new HashSet<>(prefs.getStringSet("seen",Collections.emptySet()));seen.add(id);prefs.edit().putStringSet("seen",seen).apply();}
  public List<String> consume(JSONArray gestures){
   List<String> ids=new ArrayList<>();for(int i=0;i<gestures.length();i++){JSONObject g=gestures.optJSONObject(i);if(g!=null)ids.add(g.optString("id"));}
   Set<String> seen=prefs.getStringSet("seen",Collections.emptySet());List<String> fresh=GestureLedger.fresh(prefs.getBoolean("initialized",false),seen,ids);
@@ -28,5 +28,5 @@ public final class BondStore {
   if(!prefs.edit().putStringSet("seen",retained).putString("latestCreated",latest).putBoolean("initialized",true).commit())return Collections.emptyList();
   return fresh;
  }
- public void clear(){prefs.edit().clear().commit();photo().delete();new File(context.getFilesDir(),"widget-photo.tmp").delete();}
+ public void clear(){prefs.edit().clear().apply();photo().delete();new File(context.getFilesDir(),"widget-photo.tmp").delete();}
 }

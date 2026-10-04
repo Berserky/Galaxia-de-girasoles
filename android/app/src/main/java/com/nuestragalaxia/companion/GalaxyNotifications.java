@@ -5,10 +5,19 @@ import android.app.*;
 import android.content.*;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
+import android.util.Base64;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.RemoteInput;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import java.nio.charset.StandardCharsets;
+import java.security.KeyStore;
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.GCMParameterSpec;
 
 public final class GalaxyNotifications {
     public static final String CHANNEL_MESSAGES="galaxy-chat-v1";
@@ -18,7 +27,10 @@ public final class GalaxyNotifications {
     public static final String ACTION_REPLY="com.nuestragalaxia.NOTIFICATION_REPLY";
     public static final String REMOTE_REPLY="galaxy_reply_text";
     private static final String PREFS="galaxy-chat-notification-state";
-    private static final String HISTORY="history";
+    private static final String LEGACY_HISTORY="history";
+    private static final String HISTORY_CIPHER="history_cipher";
+    private static final String HISTORY_IV="history_iv";
+    private static final String HISTORY_KEY_ALIAS="galaxy_chat_notification_history";
     private static final String COUNT="count";
     private static final int CHAT_NOTIFICATION_ID=320;
 
@@ -33,6 +45,8 @@ public final class GalaxyNotifications {
     public static void prepare(Context context){
         NotificationManager manager=context.getSystemService(NotificationManager.class);
         if(manager==null)return;
+        // Remove the legacy plaintext history key from versions prior to 3.3.0.
+        context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit().remove(LEGACY_HISTORY).apply();
 
         NotificationChannel messages=new NotificationChannel(
             CHANNEL_MESSAGES,"Mensajes",NotificationManager.IMPORTANCE_HIGH
@@ -76,20 +90,62 @@ public final class GalaxyNotifications {
         return PendingIntent.getBroadcast(context,Math.abs((action+"|"+entityId).hashCode()),intent,flags);
     }
 
+    private static SecretKey historyKey() throws Exception {
+        KeyStore ks=KeyStore.getInstance("AndroidKeyStore");ks.load(null);
+        if(!ks.containsAlias(HISTORY_KEY_ALIAS)){
+            KeyGenerator generator=KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES,"AndroidKeyStore");
+            generator.init(new KeyGenParameterSpec.Builder(
+                HISTORY_KEY_ALIAS,KeyProperties.PURPOSE_ENCRYPT|KeyProperties.PURPOSE_DECRYPT
+            ).setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build());
+            generator.generateKey();
+        }
+        return ((KeyStore.SecretKeyEntry)ks.getEntry(HISTORY_KEY_ALIAS,null)).getSecretKey();
+    }
+
+    private static JSONArray readHistory(Context context){
+        android.content.SharedPreferences prefs=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE);
+        try{
+            String encrypted=prefs.getString(HISTORY_CIPHER,null),iv=prefs.getString(HISTORY_IV,null);
+            if(encrypted==null||iv==null)return new JSONArray();
+            Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.DECRYPT_MODE,historyKey(),new GCMParameterSpec(128,Base64.decode(iv,Base64.NO_WRAP)));
+            byte[] plain=cipher.doFinal(Base64.decode(encrypted,Base64.NO_WRAP));
+            return new JSONArray(new String(plain,StandardCharsets.UTF_8));
+        }catch(Exception e){
+            prefs.edit().remove(HISTORY_CIPHER).remove(HISTORY_IV).apply();
+            return new JSONArray();
+        }
+    }
+
+    private static void writeHistory(Context context,JSONArray history){
+        android.content.SharedPreferences prefs=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE);
+        try{
+            Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.ENCRYPT_MODE,historyKey());
+            byte[] encrypted=cipher.doFinal(history.toString().getBytes(StandardCharsets.UTF_8));
+            prefs.edit()
+                .remove(LEGACY_HISTORY)
+                .putString(HISTORY_CIPHER,Base64.encodeToString(encrypted,Base64.NO_WRAP))
+                .putString(HISTORY_IV,Base64.encodeToString(cipher.getIV(),Base64.NO_WRAP))
+                .apply();
+        }catch(Exception e){
+            prefs.edit().remove(LEGACY_HISTORY).remove(HISTORY_CIPHER).remove(HISTORY_IV).apply();
+        }
+    }
+
     private static JSONArray appendHistory(Context context,String sender,String body){
         android.content.SharedPreferences prefs=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE);
-        JSONArray old;
-        try{old=new JSONArray(prefs.getString(HISTORY,"[]"));}catch(Exception e){old=new JSONArray();}
-        JSONArray next=new JSONArray();
+        JSONArray old=readHistory(context),next=new JSONArray();
         int start=Math.max(0,old.length()-4);
         for(int i=start;i<old.length();i++)try{next.put(old.getJSONObject(i));}catch(Exception ignored){}
         try{next.put(new JSONObject().put("sender",sender).put("body",body).put("time",System.currentTimeMillis()));}catch(Exception ignored){}
-        prefs.edit().putString(HISTORY,next.toString()).putInt(COUNT,Math.min(99,prefs.getInt(COUNT,0)+1)).apply();
+        writeHistory(context,next);
+        prefs.edit().putInt(COUNT,Math.min(99,prefs.getInt(COUNT,0)+1)).apply();
         return next;
     }
 
     public static void resetChat(Context context){
-        context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit().remove(HISTORY).putInt(COUNT,0).apply();
+        context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit().remove(LEGACY_HISTORY).remove(HISTORY_CIPHER).remove(HISTORY_IV).putInt(COUNT,0).apply();
         NotificationManager manager=context.getSystemService(NotificationManager.class);
         if(manager!=null)manager.cancel("galaxy-chat",CHAT_NOTIFICATION_ID);
     }

@@ -20,7 +20,7 @@ public final class TrackingService extends Service {
     private MotionClassifier classifier;
     private PendingPointStore pending;
     private DeviceStore store;
-    private long lastHistory=0,lastTrip=0,lastMoments=0;
+    private long lastHistory=0,lastTrip=0,lastMoments=0,lastUpload=0;
 
     @Override public void onCreate(){
         super.onCreate(); fused=LocationServices.getFusedLocationProviderClient(this); classifier=new MotionClassifier(); pending=new PendingPointStore(this); store=new DeviceStore(this); createChannel();
@@ -61,13 +61,17 @@ public final class TrackingService extends Service {
     }
     private void handle(Location loc){
         MotionClassifier.Result m=classifier.classify(loc);
-        long now=System.currentTimeMillis(),historyEvery="still".equals(m.motion)?60000:15000;
-        boolean history=now-lastHistory>=historyEvery,tripPoint=now-lastTrip>=15000;
-        if(history)lastHistory=now;if(tripPoint)lastTrip=now;
+        long now=System.currentTimeMillis();
+        boolean still="still".equals(m.motion);
+        long historyEvery=still?60000:15000,contextEvery=still?30000:15000,uploadEvery=still?30000:10000;
+        boolean history=now-lastHistory>=historyEvery,tripPoint=now-lastTrip>=contextEvery;
         if(now-lastMoments>=120000&&new BondStore(this).enabled()){lastMoments=now;BondWorker.refresh(getApplicationContext());}
+        updateNotification(label(m.motion,m.speedMs,pending.count()));
+        boolean shouldUpload=history||tripPoint||now-lastUpload>=uploadEvery;
+        if(!shouldUpload)return;
+        lastUpload=now;if(history)lastHistory=now;if(tripPoint)lastTrip=now;
         double heading=loc.hasBearing()?loc.getBearing():-1,accuracy=loc.hasAccuracy()?loc.getAccuracy():-1;
         String captured=Instant.ofEpochMilli(loc.getTime()>0?loc.getTime():now).toString(),sampleId=UUID.randomUUID().toString();
-        updateNotification(label(m.motion,m.speedMs,pending.count()));
         io.execute(()->{
             String token=store.token(); if(token==null)return;
             try{

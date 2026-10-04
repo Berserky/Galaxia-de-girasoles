@@ -34,6 +34,7 @@ const pushManager=read('android/app/src/main/java/com/nuestragalaxia/companion/P
 const widgetPrefs=read('android/app/src/main/java/com/nuestragalaxia/companion/WidgetPrefs.java');
 const trackingService=read('android/app/src/main/java/com/nuestragalaxia/companion/TrackingService.java');
 const updater=read('android/app/src/main/java/com/nuestragalaxia/companion/UpdateManager.java');
+const apiClient=read('android/app/src/main/java/com/nuestragalaxia/companion/MobileApiClient.java');
 const edge=read('supabase/functions/android-companion/index.ts');
 const serverInsights=read('supabase/functions/android-companion/insights.ts');
 const dateEngine=read('supabase/functions/android-companion/date-engine.ts');
@@ -61,8 +62,20 @@ assert.equal(emoji.test(widget),false,'El widget no debe usar emojis/dingbats co
 assert.ok(existsSync(resolve(root,'android/app/src/main/assets/mobile/lucide.js')),'Falta Lucide local');
 assert.ok(existsSync(resolve(root,'android/app/src/main/assets/mobile/LICENSE-lucide')),'Falta licencia de Lucide');
 assert.ok(manifest.includes('android.permission.CAMERA'),'Android debe declarar permiso de cámara');
+assert.equal(manifest.includes('ACCESS_BACKGROUND_LOCATION'),false,'La app no debe solicitar ubicación permanente: el tracking usa foreground service visible');
+assert.ok(manifest.includes('FOREGROUND_SERVICE_LOCATION')&&manifest.includes('android:foregroundServiceType="location"'),'El seguimiento en segundo plano debe mantenerse mediante foreground service explícito');
 assert.ok(manifest.includes('androidx.core.content.FileProvider'),'Android debe usar FileProvider para capturas');
+assert.ok(main.includes('WebViewCompat.addWebMessageListener')&&main.includes('https://appassets.androidplatform.net'),'El puente nativo debe limitarse al origen local confiable');
+assert.equal(main.includes('addJavascriptInterface'),false,'No se debe exponer addJavascriptInterface a iframes externos');
+assert.equal(bridge.includes('JavascriptInterface'),false,'El puente seguro no debe conservar anotaciones del bridge JavaScript legado');
+assert.ok(main.includes('settings.setAllowFileAccess(false)'),'WebView no debe permitir acceso directo al sistema de archivos');
+assert.equal(index.includes("default-src 'self' file:"),false,'La CSP móvil no debe permitir el esquema file');
+assert.ok(app.includes('GalaxyAndroid.postMessage(JSON.stringify({id,method,args}))'),'La UI debe usar el puente nativo basado en mensajes');
 assert.ok(filePaths.includes('name="camera-media"')&&filePaths.includes('path="camera-media/"'),'FileProvider debe exponer la caché camera-media usada por foto y video');
+assert.ok(filePaths.includes('name="chat-files"')&&filePaths.includes('path="chat-files/"'),'FileProvider debe exponer solo la caché temporal de archivos del chat');
+assert.ok(app.includes("data-action=\"chat-file-open\"")&&app.includes("GalaxyNative.call('openChatFile'"),'Los archivos genéricos del chat deben poder abrirse');
+assert.ok(main.includes('path.startsWith("/storage/v1/object/sign/galaxy-chat-media/")')&&main.includes('32L*1024L*1024L'),'La apertura de archivos debe limitar host/ruta privada y tamaño');
+assert.ok(main.includes('pruneChatFileCache(dir)')&&main.includes('24L*60L*60L*1000L')&&main.includes('i>=20'),'La caché temporal de archivos del chat debe limpiarse y quedar acotada');
 assert.ok(main.includes('FileProvider.getUriForFile(this,getPackageName()+".files",file)'),'Foto/video deben generar content URI mediante FileProvider');
 assert.ok(main.includes('ClipData.newUri(getContentResolver(),"galaxy-camera",uri)')&&main.includes('ClipData.newUri(getContentResolver(),"galaxy-video",uri)'),'Foto/video deben conceder acceso al URI a la app de cámara');
 assert.equal(main.includes('resolveActivity(getPackageManager())'),false,'La captura no debe depender de resolveActivity: Android moderno puede ocultar handlers instalados');
@@ -255,15 +268,17 @@ assert.ok(!backupSection.includes('galaxy_presence')&&!backupSection.includes('s
 const nativeCalls=new Set([...app.matchAll(/GalaxyNative\.call\(['"]([^'"]+)['"]/g)].map(m=>m[1]));
 const bridgeMethods=new Set([...bridge.matchAll(/public void (\w+)\(/g)].map(m=>m[1]));
 for(const method of nativeCalls)assert.ok(bridgeMethods.has(method),'Método nativo sin bridge: '+method);
-assert.ok(bridgeMethods.has('closeApp')&&app.includes('GalaxyAndroid.closeApp()'),'El botón Atrás debe poder cerrar la app desde Inicio');
+assert.ok(bridgeMethods.has('closeApp')&&app.includes("this.call('closeApp')"),'El botón Atrás debe poder cerrar la app desde Inicio mediante el puente seguro');
 assert.ok(bridgeMethods.has('exportJson')&&bridgeMethods.has('importJson'),'Faltan puentes nativos de backup');
 assert.ok(main.includes('REQ_BACKUP_EXPORT')&&main.includes('REQ_BACKUP_IMPORT'),'Falta Storage Access Framework para backups');
 
 const version=build.match(/versionCode\s*=\s*(\d+);\s*versionName\s*=\s*"([^"]+)"/);
 assert.ok(version,'No se pudo leer la versión Android');
 const [,versionCode,versionName]=version;
-assert.ok(workflow.includes('"versionCode":'+versionCode),'versionCode desalineado en update.json');
-assert.ok(workflow.includes('"versionName":"'+versionName+'"'),'versionName desalineado en update.json');
+assert.ok(workflow.includes("VERSION_CODE=$(printf '%s'")&&workflow.includes('versionCode = ([0-9]+)'),'El release debe derivar versionCode desde Gradle');
+assert.ok(workflow.includes('VERSION_NAME=$(printf')&&workflow.includes('versionName = "([^"]+)"'),'El release debe derivar versionName desde Gradle');
+assert.ok(workflow.includes('"versionCode":%s')&&workflow.includes('"versionName":"%s'),'update.json debe usar los valores derivados');
+assert.ok(workflow.includes('contents: read')&&workflow.includes('contents: write'),'CI debe separar permisos de QA y publicación');
 assert.ok(workflow.includes('NuestraGalaxia.apk'),'El release debe usar el nombre final NuestraGalaxia.apk');
 assert.ok(workflow.includes('lintDebug'),'El pipeline debe ejecutar Android Lint');
 assert.ok(workflow.includes('qa-android-mobile.mjs'),'El pipeline debe ejecutar esta auditoría');
@@ -276,6 +291,11 @@ assert.ok(widget.includes('widgetModules')&&widget.includes('moduleValue')&&widg
 assert.ok(edge.includes('p.share_battery?p.battery:null')&&edge.includes('p.share_song?text(p.song_title,160):""'),'El widget no debe exponer batería o música sin opt-in');
 assert.ok(edge.includes('sharing:!!loc?.sharing')&&edge.includes('listening'),'El widget debe conservar el contrato sharing/listening');
 
+assert.ok(edge.includes('3*1024*1024')&&edge.includes('Solicitud demasiado grande')&&edge.includes('JSON no válido'),'El backend móvil debe limitar y validar el JSON antes de procesarlo');
+assert.ok(apiClient.includes('MAX_JSON_RESPONSE_BYTES')&&apiClient.includes('Respuesta demasiado grande.'),'Android debe limitar respuestas JSON anómalas');
+assert.ok(apiClient.includes('uploadLimit(String kind)')&&apiClient.includes('if(length>limit)'),'Android debe rechazar archivos demasiado grandes antes de subirlos');
+assert.ok(edge.includes('Date.now()-lastSeen>5*60*1000'),'La autenticación del dispositivo debe limitar escrituras de last_seen');
+assert.ok(edge.includes('const hydratedAttachments=await Promise.all'),'La firma de adjuntos del chat debe paralelizarse');
 assert.ok(edge.includes('body.detail!==true'),'El mapa debe tener refresco ligero');
 assert.ok(app.includes("refreshMap({quiet:true,detail:false})"),'El polling del mapa debe usar refresco ligero');
 assert.ok(app.includes("document.visibilityState!=='visible'"),'La app debe pausar polling fuera de primer plano');
@@ -372,3 +392,11 @@ assert.ok(schema.includes('galaxy_voice_transcripts')&&edge.includes('audioPrese
 assert.ok(css.includes('/* Mega Update 3.0 · Galaxy Intelligence Engine */'),'Faltan estilos de Galaxy Intelligence Engine');
 
 console.log('QA móvil Nuestra Galaxia: OK');
+
+assert.ok(updater.includes('GET_SIGNING_CERTIFICATES')&&updater.includes('signerDigests'),'El actualizador debe verificar el certificado de firma del APK');
+assert.ok(updater.includes('Collections.disjoint(currentSigners,updateSigners)'),'Una actualización con firma distinta debe rechazarse');
+assert.ok(galaxyNotifications.includes('AndroidKeyStore')&&galaxyNotifications.includes('AES/GCM/NoPadding')&&galaxyNotifications.includes('HISTORY_CIPHER'),'El historial local de notificaciones de chat debe estar cifrado');
+assert.ok(galaxyNotifications.includes('.remove(LEGACY_HISTORY)'),'La app debe eliminar el historial de chat legado en texto plano');
+
+assert.ok(trackingService.includes('uploadEvery=still?30000:10000')&&trackingService.includes('shouldUpload=history||tripPoint||now-lastUpload>=uploadEvery'),'GPS debe desacoplar muestreo local de escrituras de red');
+assert.ok(trackingService.includes('contextEvery=still?30000:15000'),'Contexto GPS debe reducir frecuencia cuando el dispositivo está quieto');

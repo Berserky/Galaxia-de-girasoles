@@ -92,8 +92,10 @@ window.GalaxyNative={
    const id=(Date.now().toString(36)+Math.random().toString(36).slice(2));
    return new Promise((resolve,reject)=>{
      this.pending.set(id,{resolve,reject});
-     try{GalaxyAndroid[method](id,...args);}
-     catch(e){this.pending.delete(id);reject(e);}
+     try{
+       if(!window.GalaxyAndroid?.postMessage)throw new Error('Puente Android no disponible.');
+       GalaxyAndroid.postMessage(JSON.stringify({id,method,args}));
+     }catch(e){this.pending.delete(id);reject(e);}
    });
  },
  receive(id,json,error){
@@ -112,14 +114,12 @@ window.GalaxyNative={
  back(){
    if(modal.open){closeModal();return;}
    if(view!=='home'){go('home');return;}
-   try{GalaxyAndroid.closeApp();}catch{}
+   this.call('closeApp').catch(()=>{});
  }
 };
 
-function nativeState(){
- try{return JSON.parse(GalaxyAndroid.nativeState()||'{}');}catch{return {paired:false};}
-}
-native=nativeState();
+function nativeState(){return native&&typeof native==='object'?native:{paired:false};}
+native={paired:false};
 
 const api=(action,payload={})=>GalaxyNative.call('api',JSON.stringify({action,...payload}));
 const toast=message=>{toastEl.textContent=message;toastEl.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toastEl.classList.remove('show'),3500);};
@@ -1300,7 +1300,7 @@ function chatAttachmentMarkup(a){
   const bars=Array.from({length:22},(_,i)=>'<i style="--h:'+(18+((i*17)%62))+'%"></i>').join('');
   return '<div class="chat-audio-card"><div class="chat-waveform" aria-hidden="true">'+bars+'</div><audio preload="metadata" src="'+url+'"></audio><div class="chat-audio-controls"><button type="button" data-action="chat-audio-toggle">'+ico('play')+'</button><button type="button" data-action="chat-audio-speed" data-speed="1">1×</button><span>'+(a.durationMs?Math.max(1,Math.round(a.durationMs/1000))+' s':'Nota de voz')+'</span></div></div>';
  }
- return '<div class="chat-file-card">'+ico('file-text')+'<span><b>'+name+'</b><small>'+esc(String(a.mime||'Archivo'))+(a.sizeBytes?' · '+chatSize(a.sizeBytes):'')+'</small></span></div>'+caption;
+ return '<button class="chat-file-card" type="button" data-action="chat-file-open" data-url="'+url+'" data-name="'+attr(a.name||'archivo')+'" data-mime="'+attr(a.mime||'application/octet-stream')+'">'+ico('file-text')+'<span><b>'+name+'</b><small>'+esc(String(a.mime||'Archivo'))+(a.sizeBytes?' · '+chatSize(a.sizeBytes):'')+' · Abrir</small></span></button>'+caption;
 }
 function chatRichMessageMarkup(m){
  let out='';
@@ -2003,6 +2003,7 @@ document.addEventListener('click',async e=>{
   if(a==='chat-attach-song'){openChatSongPicker();return;}
   if(a==='chat-song-pick'){rebuildMusicQueue();const song=musicQueue[Number(btn.dataset.index)];if(song){closeModal();queueChatMessage({messageType:'song',attachment:{title:song.title,url:song.url,platform:song.platform}});}return;}
   if(a==='chat-media-view'){showModal('Foto','<img class="chat-photo-full" src="'+attr(btn.dataset.url)+'" alt="Foto compartida">','chat-photo-view');return;}
+  if(a==='chat-file-open'){await GalaxyNative.call('openChatFile',btn.dataset.url||'',btn.dataset.name||'archivo',btn.dataset.mime||'application/octet-stream');return;}
   if(a==='chat-location-open'){go('map');await refreshMap({quiet:true,detail:false});setTimeout(()=>map?.setView([Number(btn.dataset.lat),Number(btn.dataset.lon)],16),120);return;}
   if(a==='chat-audio-toggle'){const card=btn.closest('.chat-audio-card'),audio=card?.querySelector('audio');if(!audio)return;if(audio.paused){document.querySelectorAll('.chat-audio-card audio').forEach(x=>{if(x!==audio)x.pause();});await audio.play();btn.innerHTML=ico('pause');}else{audio.pause();btn.innerHTML=ico('play');}refreshIcons();return;}
   if(a==='chat-audio-speed'){const card=btn.closest('.chat-audio-card'),audio=card?.querySelector('audio');if(!audio)return;const current=Number(btn.dataset.speed||1),next=current===1?1.5:current===1.5?2:1;audio.playbackRate=next;btn.dataset.speed=String(next);btn.textContent=next+'×';return;}

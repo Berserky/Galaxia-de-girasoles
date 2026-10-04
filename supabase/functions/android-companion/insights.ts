@@ -214,7 +214,7 @@ export function aggregateInsightRows(input:any){
     calendar.push({day,people:rows.map((row:any)=>({person:String(row.person),mood:row.mood||null,answered:!!row.answer}))});
   }
   const bond=(input.bond||[]).filter((row:any)=>inside(bogotaDay(row.created),period));
-  const placeNames=new Map((input.places||[]).map((p:any)=>[String(p.id),safeTitle(p.name)]));
+  const placeNames=new Map<string,string>((input.places||[]).map((p:any)=>[String(p.id),safeTitle(p.name)] as [string,string]));
   const visitCounts=new Map<string,number>();
   for(const event of input.placeEvents||[]){
     if(event.event!=="arrived"||!inside(bogotaDay(event.happened_at),period))continue;
