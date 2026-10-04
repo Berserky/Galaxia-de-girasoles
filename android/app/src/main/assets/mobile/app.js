@@ -1912,12 +1912,48 @@ document.addEventListener('click',async e=>{
   if(a==='welcome-skip'){finishAdriWelcome();return;}
   if(a==='welcome-replay'){welcomePreview=true;welcomeStep=0;welcomeGift=true;welcomeEntering=false;tourStep=-1;render();window.scrollTo(0,0);return;}
   if(a==='modal-close'){closeModal();return;}
-  if(a==='chat-open'){chatState=null;go('chat');await loadChat({quiet:true});return;}
-  if(a==='chat-close'){chatReply=null;go('home');return;}
+  if(a==='chat-open'){chatState=null;chatInitialScroll=true;go('chat');setChatPresence('ONLINE');await loadChat({quiet:true,force:true});flushChatOutbox({retryFailed:true}).catch(()=>{});return;}
+  if(a==='chat-close'){chatReply=null;setChatPresence('OFFLINE');go('home');return;}
   if(a==='chat-load-more'){await loadChat({older:true});return;}
-  if(a==='chat-reply'){chatReply=(chatState?.messages||[]).find(m=>String(m.id)===String(btn.dataset.id))||null;render();return;}
-  if(a==='chat-delete'){if(confirm('¿Eliminar este mensaje?')){await api('chat-delete',{id:btn.dataset.id});await loadChat({quiet:true});}return;}
+  if(a==='chat-reply'||a==='chat-reply-menu'){const id=btn.dataset.id;chatReply=(chatState?.messages||[]).find(m=>String(m.id)===String(id))||null;closeModal();render();requestAnimationFrame(()=>document.querySelector('#chatForm textarea')?.focus());return;}
   if(a==='chat-reply-cancel'){chatReply=null;render();return;}
+  if(a==='chat-jump'||a==='chat-pin-jump'){await jumpToChatMessage(btn.dataset.id);return;}
+  if(a==='chat-jump-present'){chatNewCount=0;const el=document.querySelector('#chatMessages');if(el)el.scrollTo({top:el.scrollHeight,behavior:'smooth'});btn.remove();setTimeout(()=>markChatReadIfVisible(),250);return;}
+  if(a==='chat-search-open'){openChatSearch();return;}
+  if(a==='chat-saved-open'){await openChatCollection('saved');return;}
+  if(a==='chat-pins-open'){await openChatCollection('pins');return;}
+  if(a==='chat-pin-prev'||a==='chat-pin-next'){const ids=chatState?.pinnedIds||[];if(ids.length){chatPinIndex=(chatPinIndex+(a==='chat-pin-next'?1:-1)+ids.length)%ids.length;render();}return;}
+  if(a==='chat-result-jump'){const id=btn.dataset.id;closeModal();await jumpToChatMessage(id);return;}
+  if(a==='chat-edit-open'){openChatEdit(btn.dataset.id);return;}
+  if(a==='chat-delete-open'){openChatDelete(btn.dataset.id);return;}
+  if(a==='chat-delete-scope'){await api('chat-delete',{id:btn.dataset.id,scope:btn.dataset.scope});closeModal();await loadChat({quiet:true,force:true});return;}
+  if(a==='chat-pin-toggle'){await api('chat-pin',{id:btn.dataset.id,pinned:btn.dataset.pinned!=='true'});closeModal();await loadChat({quiet:true,force:true});return;}
+  if(a==='chat-favorite-toggle'){await api('chat-favorite',{id:btn.dataset.id,saved:btn.dataset.saved!=='true'});closeModal();await loadChat({quiet:true,force:true});return;}
+  if(a==='chat-react-menu'||a==='chat-react-quick'){const m=(chatState?.messages||[]).find(x=>String(x.id)===String(btn.dataset.id)),mine=(m?.reactions||[]).find(r=>String(r.person)===String(cloud.person))?.emoji||'',emoji=mine===btn.dataset.emoji?'':btn.dataset.emoji;await api('chat-react',{id:btn.dataset.id,emoji});if(modal.open)closeModal();await loadChat({quiet:true,force:true});return;}
+  if(a==='chat-retry'){const rows=readChatOutbox(),i=rows.findIndex(x=>String(x.client_id)===String(btn.dataset.clientId));if(i>=0){rows[i]._localState='PENDING';writeChatOutbox(rows);render();await flushChatOutbox({retryFailed:true});await loadChat({quiet:true,force:true});}return;}
+  if(a==='chat-local-delete'){writeChatOutbox(readChatOutbox().filter(x=>String(x.client_id)!==String(btn.dataset.clientId)));render();return;}
+  if(a==='chat-attach-open'){openChatAttachMenu();return;}
+  if(a==='chat-attachment-remove'){chatAttachmentsDraft.splice(Number(btn.dataset.index),1);render();return;}
+  if(a==='chat-attach-photo'){await addChatNativeMedia('pickChatPhotos',[],'photo');return;}
+  if(a==='chat-attach-camera'){await addChatNativeMedia('captureChatPhoto',[],'photo');return;}
+  if(a==='chat-attach-video'){await addChatNativeMedia('pickMedia',['chat-video'],'video');return;}
+  if(a==='chat-attach-video-camera'){await addChatNativeMedia('captureChatVideo',[],'video');return;}
+  if(a==='chat-attach-file'){await addChatNativeMedia('pickMedia',['chat-file'],'file');return;}
+  if(a==='chat-attach-location'){const own=(cloud.locations||[]).find(l=>String(l.person)===String(cloud.person)&&l.sharing);if(!own){toast('Activa tu ubicación para compartirla.');return;}closeModal();queueChatMessage({messageType:'location',attachment:{latitude:Number(own.latitude),longitude:Number(own.longitude),accuracy:Number(own.accuracy||0)}});return;}
+  if(a==='chat-attach-song'){openChatSongPicker();return;}
+  if(a==='chat-song-pick'){rebuildMusicQueue();const song=musicQueue[Number(btn.dataset.index)];if(song){closeModal();queueChatMessage({messageType:'song',attachment:{title:song.title,url:song.url,platform:song.platform}});}return;}
+  if(a==='chat-media-view'){showModal('Foto','<img class="chat-photo-full" src="'+attr(btn.dataset.url)+'" alt="Foto compartida">','chat-photo-view');return;}
+  if(a==='chat-location-open'){go('map');await refreshMap({quiet:true,detail:false});setTimeout(()=>map?.setView([Number(btn.dataset.lat),Number(btn.dataset.lon)],16),120);return;}
+  if(a==='chat-audio-toggle'){const card=btn.closest('.chat-audio-card'),audio=card?.querySelector('audio');if(!audio)return;if(audio.paused){document.querySelectorAll('.chat-audio-card audio').forEach(x=>{if(x!==audio)x.pause();});await audio.play();btn.innerHTML=ico('pause');}else{audio.pause();btn.innerHTML=ico('play');}refreshIcons();return;}
+  if(a==='chat-audio-speed'){const card=btn.closest('.chat-audio-card'),audio=card?.querySelector('audio');if(!audio)return;const current=Number(btn.dataset.speed||1),next=current===1?1.5:current===1.5?2:1;audio.playbackRate=next;btn.dataset.speed=String(next);btn.textContent=next+'×';return;}
+  if(a==='chat-voice-open'){openChatVoice();return;}
+  if(a==='chat-voice-start'){await GalaxyNative.call('startVoiceRecording');chatVoiceState={recording:true,paused:false,ready:false,durationMs:0};setChatPresence('RECORDING_AUDIO');updateChatVoiceUi();return;}
+  if(a==='chat-voice-pause'){await GalaxyNative.call('pauseVoiceRecording');chatVoiceState.paused=true;updateChatVoiceUi();return;}
+  if(a==='chat-voice-resume'){await GalaxyNative.call('resumeVoiceRecording');chatVoiceState.paused=false;updateChatVoiceUi();return;}
+  if(a==='chat-voice-stop'){const info=await GalaxyNative.call('stopVoiceRecording');chatVoiceState={recording:false,paused:false,ready:true,durationMs:Number(info.durationMs||0)};setChatPresence('ONLINE');updateChatVoiceUi();return;}
+  if(a==='chat-voice-preview'){await GalaxyNative.call('playVoiceRecording');return;}
+  if(a==='chat-voice-discard'){await GalaxyNative.call('discardVoiceRecording');chatVoiceState={recording:false,paused:false,ready:false,durationMs:0};setChatPresence('ONLINE');updateChatVoiceUi();return;}
+  if(a==='chat-voice-send'){const duration=chatVoiceState.durationMs,upload=await GalaxyNative.call('saveChatVoiceRecording');closeModal();setChatPresence('ONLINE');queueChatMessage({messageType:'audio',attachments:[normalizeChatUpload(upload,'audio',duration)]});chatVoiceState={recording:false,paused:false,ready:false,durationMs:0};return;}
   if(a==='notifications-open'){await openNotificationCenter();return;}
   if(a==='notifications-read-all'){await api('notifications-read');if(cloud?.notifications)cloud.notifications.unread=0;await openNotificationCenter();return;}
   if(a==='notification-open'){await api('notifications-read',{id:btn.dataset.id});if(cloud?.notifications)cloud.notifications.unread=Math.max(0,Number(cloud.notifications.unread||0)-1);const target=btn.dataset.target||'home',entity=btn.dataset.entityId||'';closeModal();await routeGalaxyAction(target,entity);return;}
@@ -2094,6 +2130,11 @@ document.addEventListener('click',async e=>{
 
 document.addEventListener('input',e=>{
  if(e.target.id==='universalSearchInput')renderUniversalSearchResults(e.target.value);
+ if(e.target.matches('#chatForm textarea')){
+   writeChatDraft(e.target.value);
+   e.target.style.height='auto';e.target.style.height=Math.min(120,e.target.scrollHeight)+'px';
+   chatTyping();
+ }
 });
 
 document.addEventListener('change',e=>{
@@ -2107,7 +2148,9 @@ document.addEventListener('change',e=>{
 document.addEventListener('submit',async e=>{
  e.preventDefault();
  try{
-  if(e.target.id==='chatForm'){const fd=new FormData(e.target),body=String(fd.get('body')||'').trim();if(!body)return;const replyTo=chatReply?.id||'';const textarea=e.target.querySelector('textarea');if(textarea)textarea.value='';await api('chat-send',{clientId:crypto.randomUUID(),body,...(replyTo?{replyTo}:{})});chatReply=null;await loadChat({quiet:false});return;}
+  if(e.target.id==='chatForm'){const fd=new FormData(e.target),body=String(fd.get('body')||'').trim();if(!body&&!chatAttachmentsDraft.length)return;const attachments=chatAttachmentsDraft.slice(),messageType=attachments.length?(attachments[0].kind||'file'):'text';queueChatMessage({body,messageType,attachments});return;}
+  if(e.target.id==='chatEditForm'){const fd=new FormData(e.target);await api('chat-edit',{id:String(fd.get('id')||''),body:String(fd.get('body')||'')});closeModal();await loadChat({quiet:true,force:true});return;}
+  if(e.target.id==='chatSearchForm'){await runChatSearch(e.target);return;}
   if(e.target.id==='ourAiForm'){const q=String(new FormData(e.target).get('question')||'');await showAiAnswer(q);return;}
   if(e.target.id==='intelligenceNarratorForm'){const ids=new FormData(e.target).getAll('sourceId').map(String);if(ids.length<5||ids.length>10)throw new Error('Selecciona entre 5 y 10 recuerdos.');const box=modal.querySelector('[data-role="narrative-result"]');if(box)box.innerHTML='<div class="monthly-loading">'+loading('Escribiendo solo con fuentes reales')+'<p>Validaremos cada párrafo antes de mostrarlo…</p></div>';const result=await api('intelligence-narrate',{sourceIds:ids});if(box)box.innerHTML=narrativeMarkup(result);refreshIcons();return;}
   if(e.target.id==='gpsHistoryDeleteForm'){const value=new FormData(e.target).get('confirmation');if(!window.GalaxyGpsHistory?.validDeleteConfirmation(value))throw new Error('Escribe BORRAR exactamente para confirmar.');const submit=e.target.querySelector('button[type="submit"]');if(submit)submit.disabled=true;await deleteGpsHistory();return;}
@@ -2159,17 +2202,34 @@ setInterval(()=>{
 },12000);
 setInterval(()=>{
  if(native.paired&&view==='chat'&&document.visibilityState==='visible'&&!editingNow())loadChat({quiet:true}).catch(()=>{});
-},4000);
+},25000);
 document.addEventListener('visibilitychange',()=>{
  if(document.visibilityState==='visible'&&native.paired){
    refreshStateIfChanged().catch(()=>{});
    if(view==='map')refreshMap({quiet:true,detail:false}).catch(()=>{});
-   if(view==='chat')loadChat({quiet:true}).catch(()=>{});
+   if(view==='chat'){setChatPresence('ONLINE');loadChat({quiet:true,force:true}).catch(()=>{});flushChatOutbox({retryFailed:true}).catch(()=>{});}
    if(native.momentNotifications)GalaxyNative.call('refreshMoments').catch(()=>{});
  }
 });
 
+window.addEventListener('online',()=>{if(native.paired){flushChatOutbox({retryFailed:true}).then(()=>view==='chat'&&loadChat({quiet:true,force:true})).catch(()=>{});}});
+window.addEventListener('offline',()=>{if(view==='chat')toast('Sin conexión. Tus mensajes quedarán pendientes.');});
+document.addEventListener('scroll',e=>{
+ if(e.target?.id==='chatMessages'&&chatNearBottom(e.target)){chatNewCount=0;document.querySelector('.chat-new-button')?.remove();markChatReadIfVisible().catch(()=>{});}
+},true);
+let chatPress=null,chatSwipe=null;
+document.addEventListener('pointerdown',e=>{
+ const row=e.target.closest?.('.chat-message[data-id]');if(!row||!row.dataset.id)return;
+ chatPress={id:row.dataset.id,x:e.clientX,y:e.clientY,timer:setTimeout(()=>{openChatMessageMenu(row.dataset.id);chatPress=null;},520)};
+});
+document.addEventListener('pointermove',e=>{if(chatPress&&Math.hypot(e.clientX-chatPress.x,e.clientY-chatPress.y)>12){clearTimeout(chatPress.timer);chatPress=null;}});
+document.addEventListener('pointerup',()=>{if(chatPress){clearTimeout(chatPress.timer);chatPress=null;}});
+document.addEventListener('pointercancel',()=>{if(chatPress){clearTimeout(chatPress.timer);chatPress=null;}});
+document.addEventListener('touchstart',e=>{const row=e.target.closest?.('.chat-message[data-id]'),t=e.touches?.[0];if(row&&row.dataset.id&&t)chatSwipe={id:row.dataset.id,x:t.clientX,y:t.clientY};},{passive:true});
+document.addEventListener('touchend',e=>{if(!chatSwipe)return;const t=e.changedTouches?.[0],swipe=chatSwipe;chatSwipe=null;if(!t)return;const dx=t.clientX-swipe.x,dy=Math.abs(t.clientY-swipe.y);if(dx>58&&dy<45){const m=(chatState?.messages||[]).find(x=>String(x.id)===String(swipe.id));if(m){chatReply=m;render();requestAnimationFrame(()=>document.querySelector('#chatForm textarea')?.focus());}}},{passive:true});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&view==='chat')setChatPresence('OFFLINE');});
+
 render();
-if(native.paired)refreshState().then(()=>syncPresence()).catch(()=>{});
+if(native.paired)refreshState().then(()=>{syncPresence();flushChatOutbox({retryFailed:true}).catch(()=>{});}).catch(()=>{});
 setInterval(()=>{if(native.paired&&cloud&&document.visibilityState==='visible')syncPresence().catch(()=>{});},300000);
 setInterval(()=>{if(native.paired&&native.momentNotifications&&document.visibilityState==='visible')GalaxyNative.call('refreshMoments').catch(()=>{});},120000);
