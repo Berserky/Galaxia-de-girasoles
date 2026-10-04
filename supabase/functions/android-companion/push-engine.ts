@@ -57,7 +57,7 @@ export async function serviceAccountAccessToken(credentials:any,scope="https://w
  const response=await fetch("https://oauth2.googleapis.com/token",{
   method:"POST",
   headers:{"content-type":"application/x-www-form-urlencoded"},
-  body:new URLSearchParams({grant_type:"urn:ietf:params:oauth2:grant-type:jwt-bearer",assertion})
+  body:new URLSearchParams({grant_type:"urn:ietf:params:oauth:grant-type:jwt-bearer",assertion})
  });
  const json=await response.json().catch(()=>({}));
  if(!response.ok||!json.access_token)throw new Error("Firebase OAuth "+response.status);
