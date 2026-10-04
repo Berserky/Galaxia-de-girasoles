@@ -3902,8 +3902,15 @@ Deno.serve(async req=>{
     if(action==="media-delete")return await mediaDelete(req,body);
     return json({error:"Acción no válida"},400);
   }catch(e){
-    const message=e instanceof Error?e.message:"";
-    console.error("android-companion",message);
+    const err:any=e;
+    const message=e instanceof Error?e.message:String(err?.message||"");
+    console.error("android-companion",{
+      name:e instanceof Error?e.name:String(err?.name||""),
+      message,
+      code:String(err?.code||"").slice(0,80),
+      details:String(err?.details||"").slice(0,600),
+      hint:String(err?.hint||"").slice(0,600)
+    });
     if(/Dispositivo|vinculado|revocado/i.test(message))return json({error:"Dispositivo revocado o no válido"},401);
     if(/límite|limite|espera/i.test(message))return json({error:message||"Espera un momento"},429);
     if(/no válido|no válida|Completa|Elige|Escribe|Ponle|Fecha|contenido/i.test(message))return json({error:message},400);
