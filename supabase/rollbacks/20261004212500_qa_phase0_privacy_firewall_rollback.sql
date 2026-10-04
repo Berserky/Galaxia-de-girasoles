@@ -4,6 +4,11 @@ begin;
 -- WARNING: this intentionally restores the pre-Phase-0 privacy model and is
 -- only for operational rollback if the hotfix itself causes a production outage.
 
+drop trigger if exists galaxy_chat_attachment_path_guard_trigger on public.galaxy_chat_attachments;
+drop function if exists public.galaxy_chat_attachment_path_guard();
+drop index if exists public.galaxy_chat_attachments_bucket_thumbnail_uidx;
+drop index if exists public.galaxy_chat_attachments_bucket_path_uidx;
+
 drop trigger if exists galaxy_intelligence_cleanup_item on public.galaxy_items;
 drop trigger if exists galaxy_intelligence_cleanup_place on public.galaxy_places;
 drop trigger if exists galaxy_intelligence_cleanup_trip on public.galaxy_trip_history;
