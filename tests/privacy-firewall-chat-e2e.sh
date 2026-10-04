@@ -76,6 +76,34 @@ for backup in "$owner_backup" "$partner_backup"; do
   fi
 done
 
+partner_location_on='{"action":"location","sharing":true,"latitude":4.8101,"longitude":-74.1201,"accuracy":5,"motion":"still"}'
+curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $PARTNER_TOKEN" -H 'content-type: application/json' --data "$partner_location_on" >/dev/null
+
+map_shared=$(curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $DEVICE_TOKEN" -H 'content-type: application/json' --data '{"action":"map-state"}')
+jq -e '.locations[] | select(.person=="1" and .sharing==true and (.latitude != null) and (.longitude != null))' >/dev/null <<<"$map_shared" || {
+  echo "NG-QA-003: actively shared partner coordinates missing"; exit 1;
+}
+
+live_start=$(curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $PARTNER_TOKEN" -H 'content-type: application/json' --data '{"action":"chat-live-location","operation":"start","durationSeconds":900}')
+live_id=$(jq -r '.session.id // empty' <<<"$live_start")
+[ -n "$live_id" ] || { echo "NG-QA-003: live location session did not start"; echo "$live_start"; exit 1; }
+live_state_payload=$(jq -nc --arg id "$live_id" '{action:"chat-live-location",operation:"state",id:$id}')
+live_shared=$(curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $DEVICE_TOKEN" -H 'content-type: application/json' --data "$live_state_payload")
+jq -e '.location.latitude != null and .location.longitude != null' >/dev/null <<<"$live_shared" || {
+  echo "NG-QA-003: shared live coordinates missing"; exit 1;
+}
+
+curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $PARTNER_TOKEN" -H 'content-type: application/json' --data '{"action":"location","sharing":false}' >/dev/null
+
+map_paused=$(curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $DEVICE_TOKEN" -H 'content-type: application/json' --data '{"action":"map-state"}')
+jq -e '.locations[] | select(.person=="1" and .sharing==false and .latitude==null and .longitude==null)' >/dev/null <<<"$map_paused" || {
+  echo "NG-QA-003: paused partner coordinates leaked through map-state"; echo "$map_paused"; exit 1;
+}
+live_paused=$(curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $DEVICE_TOKEN" -H 'content-type: application/json' --data "$live_state_payload")
+jq -e '.location == null' >/dev/null <<<"$live_paused" || {
+  echo "NG-QA-003: paused partner coordinates leaked through live location"; echo "$live_paused"; exit 1;
+}
+
 location_on='{"action":"location","sharing":true,"latitude":4.7001,"longitude":-74.1001,"accuracy":5,"motion":"still"}'
 curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $DEVICE_TOKEN" -H 'content-type: application/json' --data "$location_on" >/dev/null
 owner_after_arrival=$(curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $DEVICE_TOKEN" -H 'content-type: application/json' --data '{"action":"mobile-state"}')
