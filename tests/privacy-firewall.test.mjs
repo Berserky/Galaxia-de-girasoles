@@ -6,6 +6,7 @@ import {stripTypeScriptTypes} from 'node:module';
 
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const schema=read('supabase/schema.sql');
+const firewall=schema.slice(schema.lastIndexOf('-- Phase 0 Privacy Firewall'));
 const edge=read('supabase/functions/android-companion/index.ts');
 const intelligenceSource=read('supabase/functions/android-companion/intelligence-engine.ts');
 
@@ -25,17 +26,17 @@ function block(source,start,end){
 }
 
 test('NG-QA-001 direct galaxy_items access cannot reveal locked capsule payload',()=>{
-  const itemsPolicy=block(schema,'create policy items_read','create policy items_insert');
+  const itemsPolicy=block(firewall,'create policy items_read','create or replace function public.galaxy_capsule_object_access');
   assert.match(itemsPolicy,/capsule/i);
   assert.match(itemsPolicy,/galaxy_capsule/i);
 });
 
 test('NG-QA-001 Storage SELECT checks capsule lock before exposing linked media',()=>{
-  const photoPolicy=block(schema,'create policy galaxy_photos_read','create policy galaxy_photos_add');
-  const voicePolicy=block(schema,'create policy galaxy_voice_read','create policy galaxy_voice_add');
+  const photoPolicy=block(firewall,'create policy galaxy_photos_read','drop policy if exists galaxy_voice_read');
+  const voicePolicy=block(firewall,'create policy galaxy_voice_read','drop policy if exists locations_read');
   assert.match(photoPolicy,/capsule/i);
   assert.match(voicePolicy,/capsule/i);
-  assert.match(schema,/galaxy_capsule_object_access/i);
+  assert.match(firewall,/galaxy_capsule_object_access/i);
 });
 
 test('NG-QA-001 service-role media browser filters locked capsule objects for the caller',()=>{
@@ -73,9 +74,9 @@ test('NG-QA-002 place capsule is denied from Intelligence while lock is unresolv
 });
 
 test('NG-QA-003 direct location policies expose own rows or actively shared partner rows only',()=>{
-  const current=block(schema,'create policy locations_read','create policy locations_insert_own');
-  const points=block(schema,'create policy trip_points_read','create policy trip_points_insert_own');
-  const history=block(schema,'create policy location_history_read','create policy location_history_insert_own');
+  const current=block(firewall,'create policy locations_read','drop policy if exists trip_points_read');
+  const points=block(firewall,'create policy trip_points_read','drop policy if exists location_history_read');
+  const history=block(firewall,'create policy location_history_read','drop policy if exists trip_history_read');
   for(const policy of [current,points,history]){
     assert.match(policy,/galaxy_person/i);
     assert.match(policy,/sharing/i);
@@ -91,9 +92,9 @@ test('NG-QA-003 service-role map and mobile state sanitize paused partner GPS',(
 });
 
 test('NG-QA-013 Intelligence source cleanup is queued and idempotently reconcilable',()=>{
-  assert.match(schema,/galaxy_intelligence_cleanup_queue/i);
-  assert.match(schema,/galaxy_intelligence_reconcile_cleanup/i);
-  assert.match(schema,/on conflict/i);
+  assert.match(firewall,/galaxy_intelligence_cleanup_queue/i);
+  assert.match(firewall,/galaxy_intelligence_reconcile_cleanup/i);
+  assert.match(firewall,/on conflict/i);
   assert.match(edge,/reconcileIntelligenceCleanup/i);
 });
 
