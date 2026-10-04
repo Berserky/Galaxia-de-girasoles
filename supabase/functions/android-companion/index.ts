@@ -2685,6 +2685,7 @@ async function presenceSet(req:Request,body:any){
 
 async function backupExport(req:Request){
   const d=await device(req),person=String(d.person);
+  await chatReconcileDeletedMedia();
   const [settings,items,daily,bond,bondGestures,places,goals,goalParticipants,goalSteps,goalLinks,goalContributions,voiceTranscripts,photoContext,chatMessages,chatReactions,chatPins,chatFavorites,chatAttachments,chatPreferences,chatTranscripts,chatTranslations,chatAlbums,chatAlbumItems,chatStickers,chatStickerFavorites,chatStickerRecents,chatLiveLocations,chatEntityRefs,chatPolls,chatPollOptions,chatPollVotes,chatChecklists,chatChecklistItems]=await Promise.all([
     ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
     ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:true}).limit(2000)),
@@ -2721,12 +2722,22 @@ async function backupExport(req:Request){
     ok(db.from("galaxy_chat_checklist_items").select("*").limit(20000))
   ]);
   const privacyLocations=await ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude,updated_at").order("person"));
-  const hiddenCapsules=new Set((items||[]).filter((row:any)=>row.kind==="capsule"&&String(row.author)!==person&&chatCapsuleAccess(row.data||{},person,privacyLocations||[]).locked).map((row:any)=>String(row.id)));
-  const safeItems=(items||[]).filter((row:any)=>!hiddenCapsules.has(String(row.id)));
+  const hiddenCapsules=new Set((items||[]).filter((row:any)=>row.kind==="capsule"&&chatCapsuleAccess(row.data||{},person,privacyLocations||[]).locked).map((row:any)=>String(row.id)));
+  const safeItems=await Promise.all((items||[]).map(async(row:any)=>{
+    if(row.kind!=="capsule")return row;
+    const safe=await privacyItemResponse(row,person);
+    if(safe?.data){delete safe.data.photoUrl;delete safe.data.audioUrl;delete safe.data.song;}
+    return safe;
+  }));
   const hiddenBondIds=new Set((bond||[]).filter((row:any)=>row.type==="voice"&&hiddenCapsules.has(String(row.data?.referenceId||""))).map((row:any)=>String(row.id)));
   const safeBond=(bond||[]).filter((row:any)=>!hiddenBondIds.has(String(row.id)));
   const safeVoiceTranscripts=(voiceTranscripts||[]).filter((row:any)=>!hiddenBondIds.has(String(row.bond_id||"")));
-  return json({format:"nuestra-galaxia-backup",version:4,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:safeItems,daily:daily||[],bond:safeBond,bondGestures:bondGestures||[],places:places||[],goals:goals||[],goalParticipants:goalParticipants||[],goalSteps:goalSteps||[],goalLinks:goalLinks||[],goalContributions:goalContributions||[],voiceTranscripts:safeVoiceTranscripts,photoContext:photoContext||[],chat:{messages:chatMessages||[],reactions:chatReactions||[],pins:chatPins||[],favorites:chatFavorites||[],attachments:chatAttachments||[],preferences:chatPreferences||[],transcripts:chatTranscripts||[],translations:chatTranslations||[],albums:chatAlbums||[],albumItems:chatAlbumItems||[],stickers:chatStickers||[],stickerFavorites:chatStickerFavorites||[],stickerRecents:chatStickerRecents||[],liveLocations:chatLiveLocations||[],entityRefs:chatEntityRefs||[],polls:chatPolls||[],pollOptions:chatPollOptions||[],pollVotes:chatPollVotes||[],checklists:chatChecklists||[],checklistItems:chatChecklistItems||[]}});
+  const capsuleContext={capsules:(items||[]).filter((row:any)=>row.kind==="capsule"),locations:(privacyLocations||[]).filter((row:any)=>String(row.person)===person)};
+  const safePhotoContext=(photoContext||[]).filter((row:any)=>capsuleObjectVisible("galaxy-photos",String(row.path||""),person,capsuleContext));
+  const safeChatMessages=(chatMessages||[]).filter((row:any)=>!row.deleted_at);
+  const safeChatIds=new Set(safeChatMessages.map((row:any)=>String(row.id)));
+  const safeChatAttachments=(chatAttachments||[]).filter((row:any)=>safeChatIds.has(String(row.message_id)));
+  return json({format:"nuestra-galaxia-backup",version:4,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:safeItems,daily:daily||[],bond:safeBond,bondGestures:bondGestures||[],places:places||[],goals:goals||[],goalParticipants:goalParticipants||[],goalSteps:goalSteps||[],goalLinks:goalLinks||[],goalContributions:goalContributions||[],voiceTranscripts:safeVoiceTranscripts,photoContext:safePhotoContext,chat:{messages:safeChatMessages,reactions:chatReactions||[],pins:chatPins||[],favorites:chatFavorites||[],attachments:safeChatAttachments,preferences:chatPreferences||[],transcripts:chatTranscripts||[],translations:chatTranslations||[],albums:chatAlbums||[],albumItems:chatAlbumItems||[],stickers:chatStickers||[],stickerFavorites:chatStickerFavorites||[],stickerRecents:chatStickerRecents||[],liveLocations:chatLiveLocations||[],entityRefs:chatEntityRefs||[],polls:chatPolls||[],pollOptions:chatPollOptions||[],pollVotes:chatPollVotes||[],checklists:chatChecklists||[],checklistItems:chatChecklistItems||[]}});
 }
 
 function uuidish(v:unknown){return /^[0-9a-f-]{36}$/i.test(String(v||""));}
@@ -3255,7 +3266,7 @@ async function todayHistory(req:Request,body:any){
     ok(db.from("galaxy_daily").select("day,person,mood,answer").order("day",{ascending:false}).limit(5000)),
     ok(db.from("galaxy_place_events").select("id,person,place_id,event,happened_at").order("happened_at",{ascending:false}).limit(5000)),
     ok(db.from("galaxy_places").select("id,name").limit(1000)),
-    ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude"))
+    ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude,updated_at"))
   ]);
   const buckets=new Map<string,any>();
   const bucket=(year:string)=>{
@@ -3271,6 +3282,7 @@ async function todayHistory(req:Request,body:any){
     const data=row.data||{},explicit=validDate(data.date)?String(data.date):(validDate(data.unlockDate)?String(data.unlockDate):"");
     const eventDay=explicit||bogotaDay(row.created);
     if(!sameHistoryDay(eventDay,day))continue;
+    if(row.kind==="capsule"&&chatCapsuleAccess(data,person,locations||[]).locked)continue;
     if(row.kind==="note"&&data.surprise&&String(row.author)!==person){
       let unlocked=data.unlockType==="date"&&(!data.unlockDate||String(data.unlockDate)<=day);
       if(data.unlockType==="place"&&own)unlocked=meters(Number(own.latitude),Number(own.longitude),Number(data.latitude),Number(data.longitude))<=Number(data.radius||150);
