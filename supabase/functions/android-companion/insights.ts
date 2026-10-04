@@ -95,9 +95,10 @@ export function clipIntervalSeconds(startValue:unknown,endValue:unknown,rangeSta
 }
 
 export function isInsightVisibleItem(item:any,person:string,today:string){
-  if(!item||String(item.author)===String(person))return true;
+  if(!item)return false;
+  if(item.kind==="capsule")return false;
+  if(String(item.author)===String(person))return true;
   const data=item.data||{};
-  if(item.kind==="capsule"&&validDay(data.date)&&String(data.date)>today)return false;
   if(item.kind==="note"&&data.surprise===true)return false;
   return true;
 }
