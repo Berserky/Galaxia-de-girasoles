@@ -71,10 +71,15 @@ test('notification taps deep-link back into the relevant product surface',()=>{
  assert.ok(app.includes('routeGalaxyAction'));
 });
 
-test('Android build consumes Firebase client identifiers from GitHub environment',()=>{
+test('Firebase client config supports GitHub inputs plus safe runtime bootstrap',()=>{
  for(const key of ['FIREBASE_PROJECT_ID','FIREBASE_APPLICATION_ID','FIREBASE_API_KEY','FIREBASE_SENDER_ID'])assert.ok(workflow.includes(key),key);
  assert.ok(workflow.includes('secrets.FIREBASE_PROJECT_ID'));
  assert.ok(workflow.includes('vars.FIREBASE_PROJECT_ID'));
+ assert.ok(edge.includes('push-client-config'));
+ assert.ok(push.includes('firebaseAndroidClientConfig'));
+ assert.ok(main.includes('bootstrapPush'));
+ assert.ok(main.includes('push-client-config'));
+ assert.ok(read('android/app/src/main/java/com/nuestragalaxia/companion/PushManager.java').includes('galaxy-push-config'));
 });
 
 test('system notification permission is independent from legacy moment opt-in',()=>{
