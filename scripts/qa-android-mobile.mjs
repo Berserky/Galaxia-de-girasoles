@@ -68,6 +68,9 @@ assert.ok(main.includes('settings.setAllowFileAccess(false)'),'WebView no debe p
 assert.equal(index.includes("default-src 'self' file:"),false,'La CSP móvil no debe permitir el esquema file');
 assert.ok(app.includes('GalaxyAndroid.postMessage(JSON.stringify({id,method,args}))'),'La UI debe usar el puente nativo basado en mensajes');
 assert.ok(filePaths.includes('name="camera-media"')&&filePaths.includes('path="camera-media/"'),'FileProvider debe exponer la caché camera-media usada por foto y video');
+assert.ok(filePaths.includes('name="chat-files"')&&filePaths.includes('path="chat-files/"'),'FileProvider debe exponer solo la caché temporal de archivos del chat');
+assert.ok(app.includes("data-action=\"chat-file-open\"")&&app.includes("GalaxyNative.call('openChatFile'"),'Los archivos genéricos del chat deben poder abrirse');
+assert.ok(main.includes('path.startsWith("/storage/v1/object/sign/galaxy-chat-media/")')&&main.includes('32L*1024L*1024L'),'La apertura de archivos debe limitar host/ruta privada y tamaño');
 assert.ok(main.includes('FileProvider.getUriForFile(this,getPackageName()+".files",file)'),'Foto/video deben generar content URI mediante FileProvider');
 assert.ok(main.includes('ClipData.newUri(getContentResolver(),"galaxy-camera",uri)')&&main.includes('ClipData.newUri(getContentResolver(),"galaxy-video",uri)'),'Foto/video deben conceder acceso al URI a la app de cámara');
 assert.equal(main.includes('resolveActivity(getPackageManager())'),false,'La captura no debe depender de resolveActivity: Android moderno puede ocultar handlers instalados');
