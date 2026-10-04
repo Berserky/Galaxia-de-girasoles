@@ -70,3 +70,10 @@ test('Android CI typechecks the Supabase Edge Function',()=>{
  assert.match(workflow,/denoland\/setup-deno@v2/);
  assert.match(workflow,/deno check(?: --[^\n]+)? supabase\/functions\/android-companion\/index\.ts/);
 });
+
+
+test('GPS history writes are idempotent without raising duplicate-key errors',()=>{
+ const edge=read('supabase/functions/android-companion/index.ts');
+ assert.match(edge,/galaxy_location_history"\)\.upsert\(row,\{onConflict:"source_device_id,client_sample_id",ignoreDuplicates:true\}\)/);
+ assert.equal(edge.includes('error.code!=="23505"'),false);
+});
