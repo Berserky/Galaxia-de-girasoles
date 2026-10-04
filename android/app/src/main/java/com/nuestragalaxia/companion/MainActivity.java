@@ -18,7 +18,9 @@ import android.provider.Settings;
 import android.view.View;
 import android.webkit.*;
 import android.widget.Toast;
-import androidx.activity.ComponentActivity;
+import androidx.fragment.app.FragmentActivity;
+import androidx.biometric.BiometricManager;
+import androidx.biometric.BiometricPrompt;
 import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.PickVisualMediaRequest;
@@ -40,7 +42,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.concurrent.*;
 
-public final class MainActivity extends ComponentActivity {
+public final class MainActivity extends FragmentActivity {
     private static final int REQ_LOCATION=100;
     private static final int REQ_TRACKING_NOTIFICATIONS=101;
     private static final int REQ_BOND_NOTIFICATIONS=102;
@@ -54,6 +56,8 @@ public final class MainActivity extends ComponentActivity {
     private static final int REQ_VIDEO=206;
     private static final int REQ_CHAT_CAMERA_PERMISSION=207;
     private static final int REQ_CHAT_VIDEO_PERMISSION=208;
+    private static final String CHAT_SECURITY_PREFS="galaxy-chat-security";
+    private static final String CHAT_LOCK_ENABLED="enabled";
     private static final Set<String> MOBILE_ACTIONS=Set.of(
         "mobile-state","item-save","item-delete","settings-save","daily-save",
         "bond-save","bond-update","bond-guess","bond-delete","bond-widget","bond-send-gesture","bond-gesture-list","bond-gesture-save","bond-gesture-delete",
@@ -223,11 +227,52 @@ public final class MainActivity extends ComponentActivity {
             state.put("canPinWidget",Build.VERSION.SDK_INT>=26&&getSystemService(AppWidgetManager.class).isRequestPinAppWidgetSupported());
             state.put("driveFolderConnected",cloudMedia!=null&&cloudMedia.connected());
             state.put("driveFolderName",cloudMedia==null?"":cloudMedia.driveName());
+            state.put("chatLockEnabled",getSharedPreferences(CHAT_SECURITY_PREFS,MODE_PRIVATE).getBoolean(CHAT_LOCK_ENABLED,false));
             BatteryManager battery=getSystemService(BatteryManager.class);
             int batteryPct=battery==null?-1:battery.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
             state.put("battery",batteryPct>=0&&batteryPct<=100?batteryPct:JSONObject.NULL);
         }catch(Exception ignored){}
         return state;
+    }
+
+    void setChatLock(String requestId,boolean enabled){
+        runOnUiThread(()->{
+            try{
+                if(enabled){
+                    int available=BiometricManager.from(this).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK|BiometricManager.Authenticators.DEVICE_CREDENTIAL);
+                    if(available!=BiometricManager.BIOMETRIC_SUCCESS){reject(requestId,"Configura biometría o bloqueo de pantalla en Android primero.");return;}
+                }
+                getSharedPreferences(CHAT_SECURITY_PREFS,MODE_PRIVATE).edit().putBoolean(CHAT_LOCK_ENABLED,enabled).apply();
+                resolve(requestId,nativeState());
+                nativeChanged();
+            }catch(Exception e){reject(requestId,"No pudimos cambiar el bloqueo del chat.");}
+        });
+    }
+
+    void unlockChat(String requestId){
+        runOnUiThread(()->{
+            boolean enabled=getSharedPreferences(CHAT_SECURITY_PREFS,MODE_PRIVATE).getBoolean(CHAT_LOCK_ENABLED,false);
+            if(!enabled){try{resolve(requestId,new JSONObject().put("unlocked",true).put("required",false));}catch(Exception e){reject(requestId,"No pudimos abrir el chat.");}return;}
+            int authenticators=BiometricManager.Authenticators.BIOMETRIC_WEAK|BiometricManager.Authenticators.DEVICE_CREDENTIAL;
+            int available=BiometricManager.from(this).canAuthenticate(authenticators);
+            if(available!=BiometricManager.BIOMETRIC_SUCCESS){reject(requestId,"Android no tiene un método de desbloqueo disponible.");return;}
+            BiometricPrompt prompt=new BiometricPrompt(this,ContextCompat.getMainExecutor(this),new BiometricPrompt.AuthenticationCallback(){
+                @Override public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result){
+                    super.onAuthenticationSucceeded(result);
+                    try{resolve(requestId,new JSONObject().put("unlocked",true).put("required",true));}catch(Exception e){reject(requestId,"No pudimos abrir el chat.");}
+                }
+                @Override public void onAuthenticationError(int errorCode,CharSequence errString){
+                    super.onAuthenticationError(errorCode,errString);
+                    reject(requestId,"Chat bloqueado.");
+                }
+            });
+            BiometricPrompt.PromptInfo info=new BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Abrir Galaxy Chat")
+                .setSubtitle("Confirma tu identidad para ver la conversación")
+                .setAllowedAuthenticators(authenticators)
+                .build();
+            prompt.authenticate(info);
+        });
     }
 
     void api(String requestId,String payload){
