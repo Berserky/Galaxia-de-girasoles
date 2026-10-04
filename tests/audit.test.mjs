@@ -98,6 +98,6 @@ test('Android companion is explicit, foreground, revocable and reproducible',()=
  assert.match(manifest,/FOREGROUND_SERVICE_LOCATION/);assert.doesNotMatch(manifest,/ACCESS_BACKGROUND_LOCATION/);assert.match(manifest,/foregroundServiceType="location"/);
  assert.match(service,/startForeground/);assert.match(service,/ACTION_STOP/);assert.match(service,/PendingPointStore/);assert.match(service,/START_STICKY/);
  assert.match(store,/AndroidKeyStore/);assert.match(cloud,/galaxy_device_pair_start/);assert.match(cloud,/galaxy_device_pair_start_for/);assert.match(cloud,/\/api\/devices\//);
- assert.match(schema,/create table public\.galaxy_devices/);assert.match(schema,/devices_read_own/);assert.match(schema,/galaxy_device_pair_start_for/);assert.match(schema,/target_person<>caller_person and caller_person<>'0'/);assert.match(schema,/galaxy_location_history_device_sample_uidx/);
+ assert.match(schema,/create table public\.galaxy_devices/);assert.match(schema,/devices_read_own/);assert.match(schema,/galaxy_device_pair_start_for/);assert.match(schema,/target_person<>caller_person and caller_person<>'0'/);assert.match(schema,/create unique index galaxy_location_history_device_sample_uidx on public\.galaxy_location_history\(source_device_id,client_sample_id\);/);
  assert.match(edge,/x-device-token/);assert.match(edge,/action===\"history\"/);assert.match(edge,/source_device_id/);
 });
