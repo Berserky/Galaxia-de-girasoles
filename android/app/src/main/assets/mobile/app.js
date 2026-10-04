@@ -1520,7 +1520,7 @@ async function runChatSearch(form){
  refreshIcons();
 }
 function openChatAttachMenu(){
- showModal('Compartir','<div class="chat-attach-grid"><button type="button" data-action="chat-attach-photo">'+ico('images')+'<span>Fotos</span></button><button type="button" data-action="chat-attach-video">'+ico('video')+'<span>Video</span></button><button type="button" data-action="chat-attach-file">'+ico('file-text')+'<span>Documento</span></button><button type="button" data-action="chat-attach-location">'+ico('map-pin')+'<span>Ubicación</span></button><button type="button" data-action="chat-attach-song">'+ico('music-2')+'<span>Canción</span></button><button type="button" data-action="chat-voice-open">'+ico('mic')+'<span>Audio</span></button></div>','chat-attach');
+ showModal('Adjuntar','<div class="chat-attach-grid"><button type="button" data-action="chat-attach-file">'+ico('paperclip')+'<span>Archivos</span></button><button type="button" data-action="chat-attach-location">'+ico('map-pin')+'<span>Ubicación</span></button><button type="button" data-action="chat-attach-song">'+ico('music-2')+'<span>Canción</span></button></div>','chat-attach');
 }
 function openChatCameraMenu(){
  showModal('Cámara','<div class="chat-camera-grid"><button type="button" data-action="chat-attach-camera">'+ico('camera')+'<span><b>Tomar foto</b><small>Usar la cámara ahora</small></span></button><button type="button" data-action="chat-attach-video-camera">'+ico('video')+'<span><b>Grabar video</b><small>Usar cámara y micrófono</small></span></button></div>','chat-camera');
@@ -1530,7 +1530,9 @@ function openChatPermissionHelp(kind){
  showModal('Permiso necesario','<div class="chat-permission-help">'+ico(video?'video':'camera')+'<h3>Autoriza '+label+'</h3><p>Nuestra Galaxia necesita este permiso solo cuando quieras '+(video?'grabar un video':'tomar una foto')+'. Puedes volver a solicitarlo o abrir los ajustes de Android.</p><div class="chat-permission-actions"><button class="btn" type="button" data-action="chat-permission-retry" data-kind="'+kind+'">Volver a pedir permiso</button><button class="btn secondary" type="button" data-action="chat-open-app-settings">Abrir ajustes</button></div></div>','chat-permission');
 }
 function normalizeChatUpload(upload,kind,durationMs=null){
- return {kind,bucket:'galaxy-chat-media',path:upload.path,mime:upload.mime||'',name:upload.name||upload.originalName||kind,size:Number(upload.size||0),durationMs:durationMs||upload.durationMs||null,url:upload.url||''};
+ const mime=String(upload?.mime||'').toLowerCase();
+ const resolvedKind=kind==='file'?(mime.startsWith('image/')?'photo':mime.startsWith('video/')?'video':mime.startsWith('audio/')?'audio':'file'):kind;
+ return {kind:resolvedKind,bucket:'galaxy-chat-media',path:upload.path,mime,name:upload.name||upload.originalName||resolvedKind,size:Number(upload.size||0),durationMs:durationMs||upload.durationMs||null,url:upload.url||''};
 }
 async function addChatNativeMedia(method,args,kind){
  try{
@@ -1994,9 +1996,7 @@ document.addEventListener('click',async e=>{
   if(a==='chat-permission-retry'){const kind=btn.dataset.kind==='video'?'video':'photo';closeModal();await addChatNativeMedia(kind==='video'?'captureChatVideo':'captureChatPhoto',[],kind);return;}
   if(a==='chat-open-app-settings'){await GalaxyNative.call('openAppSettings');return;}
   if(a==='chat-attachment-remove'){chatAttachmentsDraft.splice(Number(btn.dataset.index),1);render();return;}
-  if(a==='chat-attach-photo'){await addChatNativeMedia('pickChatPhotos',[],'photo');return;}
   if(a==='chat-attach-camera'){await addChatNativeMedia('captureChatPhoto',[],'photo');return;}
-  if(a==='chat-attach-video'){await addChatNativeMedia('pickMedia',['chat-video'],'video');return;}
   if(a==='chat-attach-video-camera'){await addChatNativeMedia('captureChatVideo',[],'video');return;}
   if(a==='chat-attach-file'){await addChatNativeMedia('pickMedia',['chat-file'],'file');return;}
   if(a==='chat-attach-location'){const own=(cloud.locations||[]).find(l=>String(l.person)===String(cloud.person)&&l.sharing);if(!own){toast('Activa tu ubicación para compartirla.');return;}closeModal();queueChatMessage({messageType:'location',attachment:{latitude:Number(own.latitude),longitude:Number(own.longitude),accuracy:Number(own.accuracy||0)}});return;}
@@ -2008,7 +2008,6 @@ document.addEventListener('click',async e=>{
   if(a==='chat-audio-speed'){const card=btn.closest('.chat-audio-card'),audio=card?.querySelector('audio');if(!audio)return;const current=Number(btn.dataset.speed||1),next=current===1?1.5:current===1.5?2:1;audio.playbackRate=next;btn.dataset.speed=String(next);btn.textContent=next+'×';return;}
   if(a==='chat-hold-record'){return;}
   if(a==='chat-hold-stop'){await finishChatHoldRecording();return;}
-  if(a==='chat-voice-open'){openChatVoice();return;}
   if(a==='chat-voice-start'){await GalaxyNative.call('startVoiceRecording');chatVoiceState={recording:true,paused:false,ready:false,durationMs:0};setChatPresence('RECORDING_AUDIO');updateChatVoiceUi();return;}
   if(a==='chat-voice-pause'){await GalaxyNative.call('pauseVoiceRecording');chatVoiceState.paused=true;updateChatVoiceUi();return;}
   if(a==='chat-voice-resume'){await GalaxyNative.call('resumeVoiceRecording');chatVoiceState.paused=false;updateChatVoiceUi();return;}
