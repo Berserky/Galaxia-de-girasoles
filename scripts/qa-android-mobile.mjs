@@ -291,6 +291,8 @@ assert.ok(edge.includes('p.share_battery?p.battery:null')&&edge.includes('p.shar
 assert.ok(edge.includes('sharing:!!loc?.sharing')&&edge.includes('listening'),'El widget debe conservar el contrato sharing/listening');
 
 assert.ok(edge.includes('3*1024*1024')&&edge.includes('Solicitud demasiado grande')&&edge.includes('JSON no válido'),'El backend móvil debe limitar y validar el JSON antes de procesarlo');
+assert.ok(apiClient.includes('MAX_JSON_RESPONSE_BYTES')&&apiClient.includes('Respuesta demasiado grande.'),'Android debe limitar respuestas JSON anómalas');
+assert.ok(apiClient.includes('uploadLimit(String kind)')&&apiClient.includes('if(length>limit)'),'Android debe rechazar archivos demasiado grandes antes de subirlos');
 assert.ok(edge.includes('Date.now()-lastSeen>5*60*1000'),'La autenticación del dispositivo debe limitar escrituras de last_seen');
 assert.ok(edge.includes('const hydratedAttachments=await Promise.all'),'La firma de adjuntos del chat debe paralelizarse');
 assert.ok(edge.includes('body.detail!==true'),'El mapa debe tener refresco ligero');
