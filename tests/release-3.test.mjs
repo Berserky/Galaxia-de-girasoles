@@ -80,6 +80,6 @@ test('GPS history writes are idempotent without raising duplicate-key errors',()
 
 
 test('trip point map reads have a recent-first index',()=>{
- const sql=read('supabase/migrations/20261004052000_trip_points_map_index.sql');
+ const sql=read('supabase/migrations/20261004052203_trip_points_map_index.sql');
  assert.match(sql,/create index if not exists galaxy_trip_points_created_idx\s+on public\.galaxy_trip_points\(created_at desc\)/i);
 });
