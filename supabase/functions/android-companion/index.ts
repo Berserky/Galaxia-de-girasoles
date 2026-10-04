@@ -756,8 +756,8 @@ async function chatHydrate(rows:any[],person:string){
   const id=String(x.id),url=await signed(String(x.bucket),String(x.path),1800);
   stickerMap.set(id,{id,name:x.name,url,createdBy:x.created_by});
  }
- const sessionMap=new Map((liveSessions||[]).map((x:any)=>[String(x.id),x]));
- const locationMap=new Map((locations||[]).map((x:any)=>[String(x.person),x]));
+ const sessionMap=new Map<string,any>((liveSessions||[]).map((x:any)=>[String(x.id),x] as [string,any]));
+ const locationMap=new Map<string,any>((locations||[]).map((x:any)=>[String(x.person),x] as [string,any]));
  const now=Date.now();
  return list.map((row:any)=>{
   const stickerId=String(row?.attachment?.stickerId||""),liveId=String(row?.attachment?.liveSessionId||"");
