@@ -1293,7 +1293,7 @@ async function intelligenceNarrate(req:Request,body:any){
   const narrative=validateNarrative(extractJsonObject(raw),sources);
   return json({available:true,narrative,sources:sources.map((x:any)=>({sourceId:x.sourceId,title:x.title,date:x.date}))});
  }catch{
-  return json({available:false,error:"La narración no pudo validarse contra las fuentes. No se guardó contenido inventado.",sources:sources.map(x=>({sourceId:x.sourceId,title:x.title,date:x.date}))});
+  return json({available:false,error:"La narración no pudo validarse contra las fuentes. No se guardó contenido inventado.",sources:sources.map((x:any)=>({sourceId:x.sourceId,title:x.title,date:x.date}))});
  }
 }
 async function intelligenceTranscriptDelete(req:Request,body:any){
