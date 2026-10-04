@@ -1,5 +1,5 @@
 const $=s=>document.querySelector(s);
-const app=$('#app'),navEl=$('#bottomNav'),modal=$('#modal'),toastEl=$('#toast');
+const app=$('#app'),navEl=$('#bottomNav'),chatFab=$('#chatFab'),modal=$('#modal'),toastEl=$('#toast');
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const attr=esc;
 const ico=(name,cls='')=>'<i data-lucide="'+attr(name)+'" class="ui-icon '+attr(cls)+'" aria-hidden="true"></i>';
@@ -302,6 +302,15 @@ function header(){
 function renderNav(){
  navEl.style.display=native.paired&&!shouldShowAdriWelcome()?'grid':'none';
  navEl.innerHTML=nav.map(([id,label])=>'<button class="nav-btn '+(view===id?'active':'')+'" data-view="'+id+'">'+ico(icons[id],'nav-icon')+'<span>'+label+'</span></button>').join('');
+}
+function renderChatFab(){
+ if(!chatFab)return;
+ const enabled=!!(native.paired&&cloud?.capabilities?.chat&&!shouldShowAdriWelcome());
+ const unread=Math.max(0,Number(cloud?.chat?.unread||0));
+ chatFab.classList.toggle('hidden',!enabled||view==='chat');
+ if(!enabled||view==='chat'){chatFab.innerHTML='';return;}
+ chatFab.innerHTML=ico('message-circle')+(unread?'<span class="chat-fab-badge">'+(unread>99?'99+':unread)+'</span>':'');
+ chatFab.classList.toggle('has-unread',unread>0);
 }
 function go(next){
  const hadMap=!!mapData;
@@ -1237,10 +1246,9 @@ function intelligenceHubView(){
 
 function moreView(){
  const settings=cloud.settings||{data:{},version:1},data=settings.data||{},presence=ownPresence();
- return '<section><div class="section-head"><div><p class="eyebrow">NUESTRA APP</p><h2>Más</h2><p>Privacidad, respaldo, nuestra historia inteligente y ajustes.</p></div></div>'+
+ return '<section><div class="section-head"><div><p class="eyebrow">CONFIGURACIÓN</p><h2>Más</h2><p>Privacidad, permisos, respaldo, dispositivos, apariencia y mantenimiento de la app.</p></div></div>'+
  '<div class="card"><div class="row between"><div><h3>Privacidad de “Ahora”</h3><p>Tu ubicación sigue teniendo su propio interruptor. Aquí decides si compartes batería y la canción que estás escuchando.</p></div>'+ico('shield-check')+'</div><div class="privacy-grid"><button class="privacy-toggle '+(presence.shareBattery?'active':'')+'" data-action="presence-battery">'+ico('battery-charging')+'<span><b>Batería</b><small>'+(presence.shareBattery?'Compartida':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(presence.shareListening?'active':'')+'" data-action="presence-listening">'+ico('music')+'<span><b>Escuchando</b><small>'+(presence.shareListening?'Compartido':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(native.tracking?'active':'')+'" data-action="map">'+ico('map-pin')+'<span><b>Ubicación</b><small>'+(native.tracking?'Compartiendo':'Pausada')+'</small></span></button></div></div>'+gpsHistoryPrivacyCard()+
  themeSettingsCard()+
- '<div class="card"><div class="row between"><div><h3>Galaxy Goals</h3><p>Objetivos compartidos, pasos y metas de ahorro registradas manualmente.</p></div>'+ico('target')+'</div><button class="btn small" style="margin-top:14px" data-action="goals-open">Abrir nuestros objetivos</button></div>'+'<div class="card"><div class="row between"><div><h3>Nuestra IA 2.0</h3><p>Búsqueda híbrida, conexiones, narración y Libro de Nuestra Galaxia con fuentes privadas y fallback clásico.</p></div>'+ico('sparkles')+'</div><button class="btn small" style="margin-top:14px" data-action="our-ai">Abrir Galaxy Intelligence</button></div>'+
  '<div class="card"><div class="row between"><div><h3>Copia de nuestra galaxia</h3><p>Exporta los datos a un archivo JSON o restaura una copia. Fotos, música y audios permanecen en su almacenamiento privado y se conservan por referencia.</p></div>'+ico('archive')+'</div><div class="row wrap" style="margin-top:14px"><button class="btn small secondary" data-action="backup-export">'+ico('download')+' Exportar</button><button class="btn small ghost" data-action="backup-import">'+ico('upload')+' Restaurar</button></div></div>'+
  '<div class="card"><div class="row between"><div><h3>Widget “Nuestra Galaxia” 2.0</h3><p>Foto, fecha, mood, distancia, ETA, canción, próximo plan, jardín y gesto rápido. Elige módulos al añadir cada widget.</p></div><span class="badge '+(native.canPinWidget?'good':'')+'">'+(native.canPinWidget?'Disponible':'Manual')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small" data-action="widget-add">Añadir widget</button><button class="btn small secondary" data-action="widget-photo">Elegir foto</button><button class="btn small ghost" data-action="widget-photo-clear">Quitar foto</button></div></div>'+
  '<div class="card"><div class="row between"><div><h3>Notificaciones de momentos</h3><p>Gestos y fechas especiales. Android revisa en segundo plano y también al abrir la app.</p></div><span class="badge '+(native.momentNotifications&&native.notificationsGranted&&native.notificationsEnabled?'good':'')+'">'+(native.momentNotifications?(native.notificationsGranted&&native.notificationsEnabled?'Listas':'Requieren ajuste'):'Pausadas')+'</span></div><div class="notification-health"><span class="'+(native.notificationsGranted?'good':'')+'">'+ico(native.notificationsGranted?'check':'circle-alert')+' Permiso '+(native.notificationsGranted?'concedido':'pendiente')+'</span><span class="'+(native.notificationsEnabled?'good':'')+'">'+ico(native.notificationsEnabled?'bell-ring':'bell-off')+' Sistema '+(native.notificationsEnabled?'habilitado':'bloqueado')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small secondary" data-action="moment-notifications">'+(native.momentNotifications?'Desactivar':'Activar')+'</button><button class="btn small '+(native.bondHaptics?'secondary':'ghost')+'" data-action="bond-haptics">'+ico('smartphone')+' Hápticos '+(native.bondHaptics?'activos':'apagados')+'</button>'+(native.momentNotifications?'<button class="btn small ghost" data-action="moment-notification-test">'+ico('bell-ring')+' Probar ahora</button>':'')+(!native.notificationsEnabled?'<button class="btn small ghost" data-action="app-settings">'+ico('settings')+' Ajustes</button>':'')+'</div><p class="muted" style="margin-top:10px">Push instantáneo: '+(native.pushConfigured?'configurado':'pendiente de Firebase')+'. Notificaciones y vibración se controlan por separado.</p></div>'+
