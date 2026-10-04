@@ -267,8 +267,10 @@ assert.ok(main.includes('REQ_BACKUP_EXPORT')&&main.includes('REQ_BACKUP_IMPORT')
 const version=build.match(/versionCode\s*=\s*(\d+);\s*versionName\s*=\s*"([^"]+)"/);
 assert.ok(version,'No se pudo leer la versión Android');
 const [,versionCode,versionName]=version;
-assert.ok(workflow.includes('"versionCode":'+versionCode),'versionCode desalineado en update.json');
-assert.ok(workflow.includes('"versionName":"'+versionName+'"'),'versionName desalineado en update.json');
+assert.ok(workflow.includes("VERSION_CODE=$(printf '%s'")&&workflow.includes('versionCode = ([0-9]+)'),'El release debe derivar versionCode desde Gradle');
+assert.ok(workflow.includes('VERSION_NAME=$(printf')&&workflow.includes('versionName = "([^"]+)"'),'El release debe derivar versionName desde Gradle');
+assert.ok(workflow.includes('"versionCode":%s')&&workflow.includes('"versionName":"%s'),'update.json debe usar los valores derivados');
+assert.ok(workflow.includes('contents: read')&&workflow.includes('contents: write'),'CI debe separar permisos de QA y publicación');
 assert.ok(workflow.includes('NuestraGalaxia.apk'),'El release debe usar el nombre final NuestraGalaxia.apk');
 assert.ok(workflow.includes('lintDebug'),'El pipeline debe ejecutar Android Lint');
 assert.ok(workflow.includes('qa-android-mobile.mjs'),'El pipeline debe ejecutar esta auditoría');
