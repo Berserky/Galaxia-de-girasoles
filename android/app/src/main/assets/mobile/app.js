@@ -1402,7 +1402,7 @@ function openChatSendMenu(){
 }
 function queueCurrentChat(extra={}){
  const body=readChatDraft().trim(),attachments=chatAttachmentsDraft.slice();if(!body&&!attachments.length)return;
- const messageType=attachments.length?(attachments[0].kind||'file'):'text';
+ const messageType=attachments.length?(attachments[0].videoMessage?'video_message':attachments[0].gif?'gif':(attachments[0].kind||'file')):'text';
  queueChatMessage({body,messageType,attachments,...extra});
 }
 function chatSignature(state){
@@ -1588,20 +1588,51 @@ async function openChatShared(category='media',query=''){
  showModal('Compartido','<div class="chat-shared"><div class="chat-shared-tabs">'+categories.map(([id,label])=>'<button type="button" class="'+(id===category?'active':'')+'" data-action="chat-shared-tab" data-category="'+id+'">'+esc(label)+'</button>').join('')+'<button type="button" data-action="chat-albums-open">Álbumes</button></div><form id="chatSharedSearchForm" class="chat-shared-search"><input type="hidden" name="category" value="'+attr(category)+'"><input class="input" name="query" value="'+attr(query)+'" placeholder="Buscar en '+attr(categories.find(x=>x[0]===category)?.[1]||'Compartido')+'"><button class="btn small" type="submit">'+ico('search')+'</button></form><div class="chat-shared-list">'+((result.messages||[]).length?(result.messages||[]).map(chatSharedItemMarkup).join(''):'<div class="empty">Todavía no hay contenido aquí.</div>')+'</div></div>','chat-shared');
  refreshIcons();
 }
+async function openChatAlbums(){
+ const result=await api('chat-albums',{operation:'list'}),albums=result.albums||[];
+ showModal('Álbumes del chat','<div class="chat-albums-head"><button class="btn small" type="button" data-action="chat-album-create">'+ico('plus')+' Nuevo álbum</button></div><div class="chat-album-grid">'+(albums.length?albums.map(a=>'<article class="chat-album-card"><button type="button" data-action="chat-album-open" data-id="'+attr(a.id)+'">'+((a.items||[])[0]?.url?'<img loading="lazy" src="'+attr((a.items||[])[0].url)+'" alt="">':'<span>'+ico('images')+'</span>')+'<div><b>'+esc(a.name)+'</b><small>'+((a.items||[]).length)+' elemento'+((a.items||[]).length===1?'':'s')+(a.album_date?' · '+esc(a.album_date):'')+'</small></div></button></article>').join(''):'<div class="empty">Crea un álbum para reunir fotos y videos del chat sin duplicar archivos.</div>')+'</div>','chat-albums');
+}
+async function openChatAlbum(id){
+ const result=await api('chat-albums',{operation:'list'}),album=(result.albums||[]).find(x=>String(x.id)===String(id));if(!album)return;
+ showModal(album.name,'<div class="chat-album-view">'+((album.items||[]).length?(album.items||[]).map(x=>x.kind==='video'?'<video controls playsinline preload="metadata" src="'+attr(x.url)+'"></video>':'<img loading="lazy" src="'+attr(x.url)+'" alt="'+attr(x.name||'Foto')+'">').join(''):'<div class="empty">Este álbum aún está vacío.</div>')+'</div><button class="btn danger small" type="button" data-action="chat-album-delete" data-id="'+attr(album.id)+'">'+ico('trash-2')+' Eliminar álbum</button>','chat-album');
+}
+function openChatAlbumCreate(){
+ showModal('Nuevo álbum','<form id="chatAlbumCreateForm" class="stack"><div class="field"><label>Nombre</label><input class="input" name="name" maxlength="80" required placeholder="Ej. Útica"></div><div class="field"><label>Fecha opcional</label><input class="input" type="date" name="albumDate"></div><button class="btn" type="submit">Crear álbum</button></form>','chat-album-create');
+}
+async function openChatAlbumPicker(attachmentId){
+ const result=await api('chat-albums',{operation:'list'}),albums=result.albums||[];
+ showModal('Añadir a álbum','<div class="chat-album-picker">'+(albums.length?albums.map(a=>'<button class="card" type="button" data-action="chat-album-add" data-album-id="'+attr(a.id)+'" data-attachment-id="'+attr(attachmentId)+'">'+ico('images')+'<span><b>'+esc(a.name)+'</b><small>'+((a.items||[]).length)+' elementos</small></span></button>').join(''):'<div class="empty">Primero crea un álbum.</div>')+'</div><button class="btn small secondary" type="button" data-action="chat-album-create">'+ico('plus')+' Nuevo álbum</button>','chat-album-picker');
+}
+async function openChatStickerPicker(){
+ const result=await api('chat-stickers',{operation:'list'}),stickers=result.stickers||[];
+ showModal('Stickers y GIFs','<div class="chat-sticker-tools"><form id="chatGifSearchForm"><input class="input" name="query" maxlength="50" placeholder="Buscar GIF en GIPHY"><button class="btn small" type="submit">'+ico('search')+'</button></form><small>Powered by GIPHY</small></div><div id="chatGifResults"></div><div class="chat-sticker-grid">'+(stickers.length?stickers.map(x=>'<div class="chat-sticker-cell"><button type="button" data-action="chat-sticker-send" data-id="'+attr(x.id)+'"><img loading="lazy" src="'+attr(x.url)+'" alt="'+attr(x.name||'Sticker')+'"></button><button type="button" class="chat-sticker-fav '+(x.favorite?'active':'')+'" data-action="chat-sticker-favorite" data-id="'+attr(x.id)+'" data-favorite="'+(x.favorite?'true':'false')+'" aria-label="Favorito">'+ico('star')+'</button></div>').join(''):'<div class="empty">Todavía no han creado stickers. Mantén pulsada una foto del chat y elige “Crear sticker”.</div>')+'</div>','chat-stickers');
+ refreshIcons();
+}
+async function runChatGifSearch(form){
+ const query=String(new FormData(form).get('query')||'');
+ const result=await GalaxyNative.call('searchGiphy',query,false),box=modal.querySelector('#chatGifResults');
+ if(box)box.innerHTML='<div class="chat-gif-grid">'+((result.items||[]).length?(result.items||[]).map(x=>'<button type="button" data-action="chat-gif-pick" data-url="'+attr(x.url)+'" data-title="'+attr(x.title||'GIF')+'"><img loading="lazy" src="'+attr(x.previewUrl)+'" alt="'+attr(x.title||'GIF')+'"></button>').join(''):'<div class="empty">Sin GIFs para esa búsqueda.</div>')+'</div><small class="chat-giphy-credit">Powered by GIPHY</small>';
+ refreshIcons();
+}
+async function openChatLocationMenu(){
+ if(!mapData)await refreshMap({quiet:true,detail:true}).catch(()=>{});
+ const places=mapData?.places||[];
+ showModal('Compartir ubicación','<div class="chat-location-options"><button class="card" type="button" data-action="chat-location-current">'+ico('locate-fixed')+'<span><b>Ubicación actual</b><small>Una posición puntual obtenida ahora.</small></span></button><div class="chat-live-options"><b>Ubicación en vivo</b><small>Reutiliza el GPS de Nuestra Galaxia. Android mantendrá una notificación visible mientras esté activa.</small><div><button class="btn small secondary" type="button" data-action="chat-location-live" data-duration="900">15 min</button><button class="btn small secondary" type="button" data-action="chat-location-live" data-duration="3600">1 h</button><button class="btn small secondary" type="button" data-action="chat-location-live" data-duration="28800">8 h</button><button class="btn small secondary" type="button" data-action="chat-location-live" data-duration="">Hasta detener</button></div></div>'+(places.length?'<div class="chat-place-list"><b>Lugares guardados</b>'+places.slice(0,30).map(p=>'<button type="button" data-action="chat-location-place" data-lat="'+attr(p.latitude)+'" data-lon="'+attr(p.longitude)+'" data-label="'+attr(p.name)+'">'+ico('map-pin')+'<span>'+esc(p.name)+'</span></button>').join('')+'</div>':'')+'</div>','chat-location');
+}
 function openChatAttachMenu(){
- showModal('Adjuntar','<div class="chat-attach-grid"><button type="button" data-action="chat-attach-file">'+ico('paperclip')+'<span>Archivos</span></button><button type="button" data-action="chat-attach-location">'+ico('map-pin')+'<span>Ubicación</span></button><button type="button" data-action="chat-attach-song">'+ico('music-2')+'<span>Canción</span></button></div>','chat-attach');
+ showModal('Adjuntar','<div class="chat-attach-grid"><button type="button" data-action="chat-attach-file">'+ico('paperclip')+'<span>Archivos</span></button><button type="button" data-action="chat-attach-location">'+ico('map-pin')+'<span>Ubicación</span></button><button type="button" data-action="chat-attach-song">'+ico('music-2')+'<span>Canción</span></button><button type="button" data-action="chat-stickers-open">'+ico('sticker')+'<span>GIF / stickers</span></button></div>','chat-attach');
 }
 function openChatCameraMenu(){
- showModal('Cámara','<div class="chat-camera-grid"><button type="button" data-action="chat-attach-camera">'+ico('camera')+'<span><b>Tomar foto</b><small>Usar la cámara ahora</small></span></button><button type="button" data-action="chat-attach-video-camera">'+ico('video')+'<span><b>Grabar video</b><small>Usar cámara y micrófono</small></span></button></div>','chat-camera');
+ showModal('Cámara','<div class="chat-camera-grid"><button type="button" data-action="chat-attach-camera">'+ico('camera')+'<span><b>Tomar foto</b><small>Usar la cámara ahora</small></span></button><button type="button" data-action="chat-attach-video-camera">'+ico('video')+'<span><b>Grabar video</b><small>Video normal de hasta 2 min</small></span></button><button type="button" data-action="chat-video-message-open">'+ico('circle-play')+'<span><b>Videomensaje</b><small>Corto y circular · 15, 30 o 60 s</small></span></button></div>','chat-camera');
 }
 function openChatPermissionHelp(kind){
  const video=kind==='video',label=video?'cámara y micrófono':'cámara';
  showModal('Permiso necesario','<div class="chat-permission-help">'+ico(video?'video':'camera')+'<h3>Autoriza '+label+'</h3><p>Nuestra Galaxia necesita este permiso solo cuando quieras '+(video?'grabar un video':'tomar una foto')+'. Puedes volver a solicitarlo o abrir los ajustes de Android.</p><div class="chat-permission-actions"><button class="btn" type="button" data-action="chat-permission-retry" data-kind="'+kind+'">Volver a pedir permiso</button><button class="btn secondary" type="button" data-action="chat-open-app-settings">Abrir ajustes</button></div></div>','chat-permission');
 }
-function normalizeChatUpload(upload,kind,durationMs=null){
+function normalizeChatUpload(upload,kind,durationMs=null,mediaQuality='optimized'){
  const mime=String(upload?.mime||'').toLowerCase();
  const resolvedKind=kind==='file'?(mime.startsWith('image/')?'photo':mime.startsWith('video/')?'video':mime.startsWith('audio/')?'audio':'file'):kind;
- return {kind:resolvedKind,bucket:'galaxy-chat-media',path:upload.path,mime,name:upload.name||upload.originalName||resolvedKind,size:Number(upload.size||0),durationMs:durationMs||upload.durationMs||null,url:upload.url||''};
+ return {kind:resolvedKind,bucket:upload?.bucket||'galaxy-chat-media',path:upload.path,mime,name:upload.name||upload.originalName||resolvedKind,size:Number(upload.size||0),durationMs:durationMs||upload.durationMs||null,url:upload.url||'',waveform:Array.isArray(upload?.waveform)?upload.waveform:[],mediaQuality,videoMessage:upload?.videoMessage===true,gif:upload?.gif===true,thumbnailPath:upload?.thumbnailPath||null};
 }
 async function addChatNativeMedia(method,args,kind){
  try{
