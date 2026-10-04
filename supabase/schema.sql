@@ -167,6 +167,7 @@ create table public.galaxy_trip_points (
  latitude double precision not null check(latitude between -90 and 90), longitude double precision not null check(longitude between -180 and 180),
  created_at timestamptz not null default now()
 );
+create index if not exists galaxy_trip_points_created_idx on public.galaxy_trip_points(created_at desc);
 alter table public.galaxy_trip_points enable row level security;
 create policy trip_points_read on public.galaxy_trip_points for select to authenticated using(public.galaxy_person() is not null);
 create policy trip_points_insert_own on public.galaxy_trip_points for insert to authenticated with check(person=public.galaxy_person());
