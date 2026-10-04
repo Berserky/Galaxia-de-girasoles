@@ -672,7 +672,7 @@ create table if not exists public.galaxy_push_tokens (
 
 create table if not exists public.galaxy_push_subscriptions (
  device_id uuid not null references public.galaxy_devices(id) on delete cascade,
- event_type text not null check(event_type in ('gesture','arrived_safe','nearby','capsule','note','reminder','chat_message','status_changed','mood_changed','daily_answer','goal_update','memory_shared','plan_update')),
+ event_type text not null check(event_type in ('gesture','arrived_safe','nearby','capsule','note','reminder','chat_message','chat_sync','status_changed','mood_changed','daily_answer','goal_update','memory_shared','plan_update')),
  enabled boolean not null default false,
  updated_at timestamptz not null default now(),
  primary key(device_id,event_type)
@@ -683,7 +683,7 @@ create table if not exists public.galaxy_push_events (
  source_device_id uuid references public.galaxy_devices(id) on delete set null,
  source_person text not null check(source_person in ('0','1')),
  target_person text not null check(target_person in ('0','1')),
- event_type text not null check(event_type in ('gesture','arrived_safe','nearby','capsule','note','reminder','chat_message','status_changed','mood_changed','daily_answer','goal_update','memory_shared','plan_update')),
+ event_type text not null check(event_type in ('gesture','arrived_safe','nearby','capsule','note','reminder','chat_message','chat_sync','status_changed','mood_changed','daily_answer','goal_update','memory_shared','plan_update')),
  payload jsonb not null default '{}'::jsonb check(jsonb_typeof(payload)='object' and octet_length(payload::text)<=4096),
  created_at timestamptz not null default now(),
  expires_at timestamptz not null default (now()+interval '1 day')
