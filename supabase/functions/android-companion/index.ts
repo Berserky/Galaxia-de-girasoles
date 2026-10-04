@@ -2609,28 +2609,24 @@ function uploadRules(kind:string){
   if(kind==="chat-photo")return {bucket:"galaxy-chat-media",limit:15*1024*1024,mimes:new Set(Object.keys(image)),ext:image,pathKind:"photo"};
   if(kind==="chat-video")return {bucket:"galaxy-chat-media",limit:60*1024*1024,mimes:new Set(["video/mp4","video/webm"]),ext:{"video/mp4":"mp4","video/webm":"webm"} as Record<string,string>,pathKind:"video"};
   if(kind==="chat-audio")return {bucket:"galaxy-chat-media",limit:15*1024*1024,mimes:new Set(Object.keys(audio)),ext:audio,pathKind:"audio"};
-  if(kind==="chat-file")return {bucket:"galaxy-chat-media",limit:30*1024*1024,mimes:new Set([
-    "application/pdf","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.ms-excel","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","text/plain","application/zip"
-  ]),ext:{
-    "application/pdf":"pdf","application/msword":"doc","application/vnd.openxmlformats-officedocument.wordprocessingml.document":"docx",
-    "application/vnd.ms-excel":"xls","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":"xlsx","text/plain":"txt","application/zip":"zip"
-  } as Record<string,string>,pathKind:"file"};
+  if(kind==="chat-file")return {bucket:"galaxy-chat-media",limit:30*1024*1024,mimes:null,ext:null,pathKind:"file",allowAnyMime:true};
   return null;
 }
 
 async function upload(req:Request){
   const d=await device(req),kind=String(req.headers.get("x-media-kind")||""),rules=uploadRules(kind);
   if(!rules)return json({error:"Tipo de archivo no válido."},400);
-  const mime=String(req.headers.get("content-type")||"").split(";")[0].trim().toLowerCase();
-  if(!rules.mimes.has(mime))return json({error:"Formato de archivo no permitido."},415);
+  const mime=String(req.headers.get("content-type")||"application/octet-stream").split(";")[0].trim().toLowerCase()||"application/octet-stream";
+  if(rules.mimes&&!rules.mimes.has(mime))return json({error:"Formato de archivo no permitido."},415);
   const declared=Number(req.headers.get("content-length")||0);
   if(declared>rules.limit)return json({error:"El archivo supera el límite permitido."},413);
   const bytes=new Uint8Array(await req.arrayBuffer());
   if(bytes.length<1||bytes.length>rules.limit)return json({error:"El archivo supera el límite permitido."},413);
   let originalName="archivo";
   try{originalName=decodeURIComponent(String(req.headers.get("x-file-name")||"archivo")).slice(0,300)||"archivo";}catch{}
-  const path=String(d.person)+"/"+String(rules.pathKind||kind).replace(/[^a-z0-9_-]/gi,"")+"-"+crypto.randomUUID()+"."+rules.ext[mime];
+  const originalExt=originalName.includes(".")?String(originalName.split(".").pop()||"").toLowerCase().replace(/[^a-z0-9]/g,"").slice(0,12):"";
+  const extension=rules.ext?.[mime]||originalExt||"bin";
+  const path=String(d.person)+"/"+String(rules.pathKind||kind).replace(/[^a-z0-9_-]/gi,"")+"-"+crypto.randomUUID()+"."+extension;
   const {error}=await db.storage.from(rules.bucket).upload(path,bytes,{contentType:mime,upsert:false,cacheControl:"3600",metadata:{originalName}});
   if(error)throw error;
   const signedUrl=await signed(rules.bucket,path,3600);
