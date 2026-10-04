@@ -838,9 +838,10 @@ function dailyQuestionCard(own,partner){
 }
 
 function personCard(l){
- const name=names()[Number(l.person)]||'Nosotros',sharing=!!l.sharing,fresh=locationFreshState(l),motion=transportLabel(l),kmh=Math.max(0,Number(l.speed||0)*3.6);
+ const name=names()[Number(l.person)]||'Nosotros',sharing=!!l.sharing,fresh=locationFreshState(l),motion=transportLabel(l),kmh=Math.max(0,Number(l.speed||0)*3.6),mine=String(l.person)===String(cloud.person);
  const state=!sharing?'Ubicación pausada':fresh?(esc(motion)+(l.status?' · '+esc(l.status):'')):'Sin actualizar · hace '+ageDurationLabel(locationAgeMs(l));
- return '<div class="card person-card '+(sharing&&!fresh?'stale':'')+'"><div class="bubble">'+esc(name.slice(0,1))+'</div><div><b><span class="status-dot '+(fresh?'live':sharing?'stale':'')+'"></span>'+esc(name)+'</b><p>'+state+'</p></div><div class="speed">'+(fresh?kmh.toFixed(kmh<10?1:0):'—')+'<small>km/h</small></div></div>';
+ const statusAction=l.status?'<button class="btn small secondary" data-action="'+(mine?'galaxy-share':'status-chat-reply')+'" '+(mine?'data-card-type="STATUS" data-kind="status" ':'')+'data-id="'+attr(l.person)+'" data-title="'+attr(l.status)+'">'+ico(mine?'send':'message-circle-reply')+' '+(mine?'Compartir estado':'Responder en Galaxy Chat')+'</button>':'';
+ return '<div class="card person-card '+(sharing&&!fresh?'stale':'')+'"><div class="bubble">'+esc(name.slice(0,1))+'</div><div><b><span class="status-dot '+(fresh?'live':sharing?'stale':'')+'"></span>'+esc(name)+'</b><p>'+state+'</p>'+statusAction+'</div><div class="speed">'+(fresh?kmh.toFixed(kmh<10?1:0):'—')+'<small>km/h</small></div></div>';
 }
 function transportLabel(l){
  if(!l.sharing)return'Ubicación pausada';
@@ -1341,8 +1342,9 @@ function chatGalaxyCardMarkup(card,m){
  const details=[card.date?fmtDate(card.date):'',card.targetDate?fmtDate(card.targetDate):'',card.artist||'',card.category||'',card.note||'',card.status||''].filter(Boolean).join(' · ');
  let actions='';
  if(card.type==='PLACE')actions='<button type="button" data-action="chat-card-place-map" data-id="'+attr(card.entityId)+'" data-lat="'+attr(card.latitude)+'" data-lon="'+attr(card.longitude)+'">'+ico('map')+' Ver mapa</button><button type="button" data-action="chat-card-place-go" data-id="'+attr(card.entityId)+'">'+ico('navigation')+' Ir</button><button type="button" data-action="chat-card-place-save" data-id="'+attr(card.entityId)+'">'+ico('bookmark-plus')+' Guardar</button>';
- if(card.type==='SONG')actions='<button type="button" data-action="chat-card-song-play" data-id="'+attr(card.entityId)+'">'+ico('play')+' Play</button>'+(card.url?'<button type="button" data-action="chat-smart-link" data-url="'+attr(card.url)+'">'+ico('external-link')+' Abrir fuente</button>':'');
+ if(card.type==='SONG')actions='<button type="button" data-action="chat-card-song-play" data-id="'+attr(card.entityId)+'">'+ico('play')+' Play</button><button type="button" data-action="chat-card-song-add" data-id="'+attr(card.entityId)+'">'+ico('list-music')+' Añadir a Nuestra Música</button>'+(card.url?'<button type="button" data-action="chat-smart-link" data-url="'+attr(card.url)+'">'+ico('external-link')+' Abrir fuente</button>':'');
  if(card.type==='EVENT')actions='<button type="button" data-action="chat-card-event-plan" data-id="'+attr(card.entityId)+'">'+ico('calendar-plus')+' Añadir a planes</button><button type="button" data-action="chat-card-event-remind" data-id="'+attr(card.entityId)+'">'+ico('bell')+' Recordarme</button>';
+ if(card.type==='STATUS'&&String(card.entityId)!==String(cloud.person))actions='<button type="button" data-action="chat-card-status-reply" data-id="'+attr(card.entityId)+'">'+ico('message-circle-reply')+' Responder</button>';
  return '<div class="chat-galaxy-card '+String(card.type||'').toLowerCase()+'"><div class="chat-card-head"><span>'+ico(meta.icon)+'</span><div><p class="eyebrow">'+esc(meta.label.toUpperCase())+'</p><h3>'+esc(card.title||meta.label)+'</h3>'+body+(details?'<small>'+esc(details)+'</small>':'')+'</div></div>'+(actions?'<div class="chat-card-actions">'+actions+'</div>':'')+'</div>';
 }
 function chatSmartActionsMarkup(m){
@@ -1704,6 +1706,7 @@ async function openChatGalaxyPicker(){
  for(const place of mapData?.places||[])rows.push({cardType:'PLACE',kind:'place',id:place.id,label:'Lugar',title:place.name,icon:'map-pin'});
  const session=contextSession();if(session?.id)rows.unshift({cardType:'ETA',kind:'context_session',id:session.id,label:'ETA',title:session.label||'Acompáñame',icon:'navigation'});
  if(dateContext?.question&&cloud?.today)rows.unshift({cardType:'DAILY_QUESTION',kind:'daily_question',id:cloud.today,label:'Pregunta del día',title:dailyQuestion(),icon:'message-circle-question'});
+ for(const loc of cloud?.locations||[])if(loc?.status)rows.unshift({cardType:'STATUS',kind:'status',id:String(loc.person),label:String(loc.person)===String(cloud.person)?'Mi estado':'Estado de '+partnerName(),title:String(loc.status),icon:'message-circle'});
  showModal('Compartir de Nuestra Galaxia','<div class="chat-galaxy-picker">'+(rows.length?rows.slice(0,120).map(x=>'<button type="button" class="card" data-action="chat-galaxy-pick" data-card-type="'+attr(x.cardType)+'" data-kind="'+attr(x.kind)+'" data-id="'+attr(x.id)+'" data-title="'+attr(x.title)+'"><span>'+ico(x.icon)+'</span><div><small>'+esc(x.label)+'</small><b>'+esc(x.title)+'</b></div>'+ico('send')+'</button>').join(''):'<div class="empty">Todavía no hay contenido para compartir.</div>')+'</div>','chat-galaxy-picker');
 }
 function openChatPollForm(){
@@ -1908,7 +1911,7 @@ function openItemForm(kind,item){
  modal.dataset.editId=item?.id||'';modal.dataset.version=item?.version||'';modal.dataset.kind=kind;
  const needsDate=['memory','event','capsule','journey'].includes(kind),canPlace=['memory','journey','event'].includes(kind),sourceField=d.source?'<input type="hidden" name="sourceJson" value="'+attr(JSON.stringify(d.source))+'">':'';
  const placeField=canPlace?(places.length?'<div class="field"><label>Lugar de nuestra historia (opcional)</label><select name="placeId"><option value="">Sin lugar</option>'+places.map(p=>'<option value="'+p.id+'" '+(Number(d.placeId)===Number(p.id)?'selected':'')+'>'+esc(p.name)+'</option>').join('')+'</select></div>':(d.placeId?'<input type="hidden" name="placeId" value="'+attr(d.placeId)+'">':'')):'';
- const body='<form id="itemForm" class="stack" style="margin-top:16px">'+sourceField+<div class="field"><label>Título</label><input class="input" name="title" value="'+attr(d.title||'')+'" required maxlength="160"></div><div class="field"><label>Texto</label><textarea name="body" placeholder="Escribe aquí…">'+esc(d.body||'')+'</textarea></div>'+
+ const body='<form id="itemForm" class="stack" style="margin-top:16px">'+sourceField+'<div class="field"><label>Título</label><input class="input" name="title" value="'+attr(d.title||'')+'" required maxlength="160"></div><div class="field"><label>Texto</label><textarea name="body" placeholder="Escribe aquí…">'+esc(d.body||'')+'</textarea></div>'+
  (needsDate?'<div class="field"><label>'+(kind==='capsule'?'Fecha de desbloqueo':'Fecha')+'</label><input class="input" type="date" name="date" value="'+attr(d.unlockDate||d.date||'')+'"></div>':'')+
  (kind==='capsule'?'<div class="field"><label>Hora de desbloqueo</label><input class="input" type="time" name="unlockTime" value="'+attr(d.unlockTime||'00:00')+'"></div>':'')+
  '<div class="field"><label>Categoría</label><input class="input" name="category" value="'+attr(d.category||'')+'" placeholder="'+attr(meta[1])+'"></div>'+placeField+
@@ -2188,6 +2191,7 @@ document.addEventListener('click',async e=>{
   if(a==='chat-pin-jump'){await jumpToChatMessage(btn.dataset.id);return;}
   if(a==='chat-jump-present'){chatNewCount=0;const el=document.querySelector('#chatMessages');if(el)el.scrollTo({top:el.scrollHeight,behavior:'smooth'});btn.remove();setTimeout(()=>markChatReadIfVisible(),250);return;}
    if(a==='galaxy-share'){shareGalaxyEntity(btn.dataset.cardType,btn.dataset.kind,btn.dataset.id,btn.dataset.title||'');return;}
+   if(a==='status-chat-reply'){shareGalaxyEntity('STATUS','status',btn.dataset.id,btn.dataset.title||'Estado');go('chat');setTimeout(()=>document.querySelector('#chatForm textarea')?.focus(),120);return;}
   if(a==='chat-search-open'){openChatSearch();return;}
    if(a==='chat-galaxy-open'){await openChatGalaxyPicker();return;}
    if(a==='chat-galaxy-pick'){const cardType=btn.dataset.cardType,kind=btn.dataset.kind,id=btn.dataset.id,title=btn.dataset.title||'';closeModal();queueGalaxyCard(cardType,kind,id,{title});toast('Compartido en Galaxy Chat.');return;}
@@ -2276,8 +2280,20 @@ document.addEventListener('click',async e=>{
    if(a==='chat-card-eta-map'){closeModal();go('map');await refreshMap({quiet:true,detail:true});setTimeout(()=>document.querySelector('#etaCard')?.scrollIntoView({behavior:'smooth',block:'center'}),100);return;}
    if(a==='chat-card-place-map'){closeModal();go('map');await refreshMap({quiet:true,detail:true});setTimeout(()=>map?.setView([Number(btn.dataset.lat),Number(btn.dataset.lon)],16),120);return;}
    if(a==='chat-card-place-go'){if(!native.tracking){toast('Activa Compartir ubicación para iniciar Acompáñame.');go('map');return;}await api('context-session',{operation:'start',mode:'accompany',destinationKind:'place',placeId:Number(btn.dataset.id)});closeModal();go('map');await refreshMap({quiet:true,detail:true});toast('Acompáñame iniciado hacia este lugar.');return;}
-   if(a==='chat-card-place-save'){if((mapData?.places||cloud?.places||[]).some(p=>String(p.id)===String(btn.dataset.id)))toast('Este lugar ya está guardado en Nuestro Mapa.');else toast('Abre el lugar para confirmar antes de guardarlo.');return;}
+   if(a==='chat-card-place-save'){
+    const card=(chatState?.messages||[]).map(x=>x.card).find(x=>x?.type==='PLACE'&&String(x.entityId)===String(btn.dataset.id));if(!card)return;
+    const ownPlaces=(mapData?.places||cloud?.places||[]).filter(p=>String(p.owner)===String(cloud.person));
+    const duplicate=ownPlaces.some(p=>String(p.id)===String(card.entityId)||(Math.abs(Number(p.latitude)-Number(card.latitude))<0.00001&&Math.abs(Number(p.longitude)-Number(card.longitude))<0.00001&&String(p.name||'').trim().toLocaleLowerCase('es')===String(card.title||'').trim().toLocaleLowerCase('es')));
+    if(duplicate){toast('Este lugar ya está guardado en tu mapa.');return;}
+    if(!confirm('¿Guardar este lugar también en tu mapa?'))return;
+    showModal('Guardar lugar','<form id="placeForm" class="stack"><div class="field"><label>Nombre</label><input class="input" name="name" value="'+attr(card.title||'Lugar compartido')+'" required></div><div class="field"><label>Tipo</label><select name="kind"><option value="memory">Recuerdo</option><option value="home">Casa</option><option value="work">Trabajo</option><option value="adventure">Aventura</option></select></div><div class="field"><label>Nota</label><textarea name="note">'+esc(card.note||'')+'</textarea></div><input type="hidden" name="latitude" value="'+attr(card.latitude)+'"><input type="hidden" name="longitude" value="'+attr(card.longitude)+'"><button class="btn" type="submit">Guardar lugar</button></form>','place');return;
+   }
    if(a==='chat-card-song-play'){rebuildMusicQueue();const index=musicQueue.findIndex(x=>String(x.id)===String(btn.dataset.id));if(index>=0)playMusicAt(index);else toast('Esta canción ya no está disponible en Nuestra Música.');return;}
+   if(a==='chat-card-song-add'){const song=(cloud?.items||[]).find(x=>x.kind==='song'&&String(x.id)===String(btn.dataset.id));if(song){toast('Esta canción ya está en Nuestra Música.');return;}toast('La canción ya no está disponible para añadir.');return;}
+   if(a==='chat-card-status-reply'){
+    const m=(chatState?.messages||[]).find(x=>x.card?.type==='STATUS'&&String(x.card.entityId)===String(btn.dataset.id));if(!m)return;
+    chatReply=m;render();requestAnimationFrame(()=>document.querySelector('#chatForm textarea')?.focus());return;
+   }
    if(a==='chat-card-event-plan'){const event=(cloud?.items||[]).find(x=>x.kind==='event'&&String(x.id)===String(btn.dataset.id));if(event&&confirm('¿Abrir un plan con este evento?')){closeModal();chatOpenItemDraft('plan',event.data?.title||'Plan',event.data?.body||'',{date:event.data?.date||''});}return;}
    if(a==='chat-card-event-remind'){if(!native.momentNotifications){if(!confirm('¿Activar recordatorios de momentos para este teléfono?'))return;native=await GalaxyNative.call('setMomentNotifications',true);}await GalaxyNative.call('refreshMoments');toast('Recordatorio sincronizado con las notificaciones existentes.');return;}
    if(a==='chat-smart-link'){await GalaxyNative.call('openExternal',btn.dataset.url||'');return;}
