@@ -168,6 +168,12 @@ test('NG-QA-013 Intelligence source cleanup is queued and idempotently reconcila
   assert.match(edge,/reconcileIntelligenceCleanup/i);
 });
 
+test('NG-QA-014 deletable chat media is uploaded without reusable browser cache',()=>{
+  const upload=block(edge,'async function upload(','function nextPendingPlan(');
+  assert.match(upload,/kind\.startsWith\("chat-"\)\?"0":"3600"/);
+  assert.match(upload,/cacheControl/);
+});
+
 test('NG-QA-014 chat media paths are single-owner and cannot be reused across messages',()=>{
   assert.match(firewall,/galaxy_chat_attachments_bucket_path_uidx/);
   assert.match(firewall,/galaxy_chat_attachment_path_guard/);
