@@ -9,7 +9,7 @@ public final class ContextStore {
     public boolean nearbyEnabled(){return prefs.getBoolean("nearbyEnabled",false);}
     public boolean arrivedSafeEnabled(){return prefs.getBoolean("arrivedSafeEnabled",false);}
     public void pushPrefs(boolean nearby,boolean arrivedSafe){
-        prefs.edit().putBoolean("nearbyEnabled",nearby).putBoolean("arrivedSafeEnabled",arrivedSafe).commit();
+        prefs.edit().putBoolean("nearbyEnabled",nearby).putBoolean("arrivedSafeEnabled",arrivedSafe).apply();
     }
-    public void clear(){prefs.edit().clear().commit();}
+    public void clear(){prefs.edit().clear().apply();}
 }
