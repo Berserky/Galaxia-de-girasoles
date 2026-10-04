@@ -30,7 +30,7 @@ public final class WidgetPrefs {
         Set<String> current=prefs.getStringSet("enabled_"+widgetId,null);
         if(current==null)next.addAll(DEFAULT_ENABLED);else next.addAll(current);
         if(enabled)next.add(module);else next.remove(module);
-        prefs.edit().putStringSet("enabled_"+widgetId,next).commit();
+        prefs.edit().putStringSet("enabled_"+widgetId,next).apply();
     }
 
     public void moveUp(int widgetId,String module){move(widgetId,module,-1);}
@@ -40,10 +40,10 @@ public final class WidgetPrefs {
         List<String> order=order(widgetId);int from=order.indexOf(module),to=from+delta;
         if(from<0||to<0||to>=order.size())return;
         Collections.swap(order,from,to);
-        prefs.edit().putString("order_"+widgetId,String.join(",",order)).commit();
+        prefs.edit().putString("order_"+widgetId,String.join(",",order)).apply();
     }
 
     public void delete(int widgetId){
-        prefs.edit().remove("order_"+widgetId).remove("enabled_"+widgetId).commit();
+        prefs.edit().remove("order_"+widgetId).remove("enabled_"+widgetId).apply();
     }
 }
