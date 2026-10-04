@@ -47,6 +47,8 @@ public final class MainActivity extends ComponentActivity {
     private static final int REQ_DRIVE_FOLDER=204;
     private static final int REQ_CAMERA=205;
     private static final int REQ_VIDEO=206;
+    private static final int REQ_CHAT_CAMERA_PERMISSION=207;
+    private static final int REQ_CHAT_VIDEO_PERMISSION=208;
     private static final Set<String> MOBILE_ACTIONS=Set.of(
         "mobile-state","item-save","item-delete","settings-save","daily-save",
         "bond-save","bond-update","bond-guess","bond-delete","bond-widget","bond-send-gesture","bond-gesture-list","bond-gesture-save","bond-gesture-delete",
@@ -77,9 +79,12 @@ public final class MainActivity extends ComponentActivity {
     private String pendingPhotoPickerKind="photo";
     private String pendingCameraRequest;
     private String pendingCameraKind="photo";
+    private String pendingCameraPermissionRequest;
+    private String pendingCameraPermissionKind="photo";
     private File pendingCameraFile;
     private Uri pendingCameraUri;
     private String pendingVideoRequest;
+    private String pendingVideoPermissionRequest;
     private File pendingVideoFile;
     private Uri pendingVideoUri;
     private ActivityResultLauncher<PickVisualMediaRequest> photoPickerLauncher;
@@ -314,6 +319,13 @@ public final class MainActivity extends ComponentActivity {
     private void capturePhotoWithKind(String requestId,String kind){
         if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
         runOnUiThread(()->{
+            if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED){
+                if(pendingCameraPermissionRequest!=null){reject(requestId,"Ya hay una solicitud de permiso de cámara activa.");return;}
+                pendingCameraPermissionRequest=requestId;
+                pendingCameraPermissionKind=kind;
+                requestPermissions(new String[]{Manifest.permission.CAMERA},REQ_CHAT_CAMERA_PERMISSION);
+                return;
+            }
             if(pendingCameraRequest!=null){reject(requestId,"Ya hay una cámara abierta.");return;}
             try{
                 File dir=new File(getCacheDir(),"camera-media");
@@ -336,6 +348,17 @@ public final class MainActivity extends ComponentActivity {
     void captureChatVideo(String requestId){
         if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
         runOnUiThread(()->{
+            boolean cameraGranted=checkSelfPermission(Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED;
+            boolean microphoneGranted=checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED;
+            if(!cameraGranted||!microphoneGranted){
+                if(pendingVideoPermissionRequest!=null){reject(requestId,"Ya hay una solicitud de permisos de video activa.");return;}
+                pendingVideoPermissionRequest=requestId;
+                java.util.ArrayList<String> missing=new java.util.ArrayList<>();
+                if(!cameraGranted)missing.add(Manifest.permission.CAMERA);
+                if(!microphoneGranted)missing.add(Manifest.permission.RECORD_AUDIO);
+                requestPermissions(missing.toArray(new String[0]),REQ_CHAT_VIDEO_PERMISSION);
+                return;
+            }
             if(pendingVideoRequest!=null){reject(requestId,"Ya hay una cámara de video abierta.");return;}
             try{
                 File dir=new File(getCacheDir(),"camera-media");
@@ -950,7 +973,24 @@ public final class MainActivity extends ComponentActivity {
 
     @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] results){
         super.onRequestPermissionsResult(requestCode,permissions,results);
-        if(requestCode==REQ_MICROPHONE){
+        if(requestCode==REQ_CHAT_CAMERA_PERMISSION){
+            String request=pendingCameraPermissionRequest,kind=pendingCameraPermissionKind;
+            pendingCameraPermissionRequest=null;pendingCameraPermissionKind="photo";
+            boolean granted=checkSelfPermission(Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED;
+            if(request!=null){
+                if(granted)capturePhotoWithKind(request,kind);
+                else reject(request,"PERMISSION_CAMERA: Autoriza la cámara para tomar fotos desde el chat.");
+            }
+        }else if(requestCode==REQ_CHAT_VIDEO_PERMISSION){
+            String request=pendingVideoPermissionRequest;pendingVideoPermissionRequest=null;
+            boolean cameraGranted=checkSelfPermission(Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED;
+            boolean microphoneGranted=checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED;
+            if(request!=null){
+                if(cameraGranted&&microphoneGranted)captureChatVideo(request);
+                else if(!cameraGranted)reject(request,"PERMISSION_CAMERA: Autoriza la cámara para grabar video desde el chat.");
+                else reject(request,"PERMISSION_MICROPHONE: Autoriza el micrófono para grabar video con audio.");
+            }
+        }else if(requestCode==REQ_MICROPHONE){
             String request=pendingVoiceStartRequest;pendingVoiceStartRequest=null;
             boolean granted=results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED;
             if(request!=null){if(granted)beginVoiceRecording(request);else reject(request,"Activa el permiso de micrófono para grabar desde la aplicación.");}
