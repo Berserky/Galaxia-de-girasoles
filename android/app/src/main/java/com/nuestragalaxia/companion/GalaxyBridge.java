@@ -1,12 +1,73 @@
 package com.nuestragalaxia.companion;
 
 import android.webkit.JavascriptInterface;
+import android.net.Uri;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 public final class GalaxyBridge {
     private final MainActivity activity;
 
     GalaxyBridge(MainActivity activity){this.activity=activity;}
+
+    void dispatchMessage(String raw,Uri sourceOrigin,boolean isMainFrame){
+        if(!isMainFrame||sourceOrigin==null
+            ||!"https".equalsIgnoreCase(sourceOrigin.getScheme())
+            ||!"appassets.androidplatform.net".equalsIgnoreCase(sourceOrigin.getHost()))return;
+        String requestId=null;
+        try{
+            JSONObject message=new JSONObject(raw==null?"{}":raw);
+            requestId=message.optString("id","");
+            String method=message.optString("method","");
+            JSONArray args=message.optJSONArray("args");
+            if(args==null)args=new JSONArray();
+            switch(method){
+                case "nativeState" -> activity.resolve(requestId,activity.nativeState());
+                case "api" -> api(requestId,args.optString(0,"{}"));
+                case "pair" -> pair(requestId,args.optString(0,""));
+                case "unpair" -> unpair(requestId);
+                case "copyText" -> copyText(requestId,args.optString(0,""),args.optString(1,""));
+                case "pickMedia" -> pickMedia(requestId,args.optString(0,""));
+                case "pickPhotos" -> pickPhotos(requestId);
+                case "pickChatPhotos" -> pickChatPhotos(requestId);
+                case "capturePhoto" -> capturePhoto(requestId);
+                case "captureChatPhoto" -> captureChatPhoto(requestId);
+                case "captureChatVideo" -> captureChatVideo(requestId);
+                case "pickDriveFolder" -> pickDriveFolder(requestId);
+                case "syncDriveFolder" -> syncDriveFolder(requestId);
+                case "disconnectDriveFolder" -> disconnectDriveFolder(requestId);
+                case "startVoiceRecording" -> startVoiceRecording(requestId);
+                case "stopVoiceRecording" -> stopVoiceRecording(requestId);
+                case "pauseVoiceRecording" -> pauseVoiceRecording(requestId);
+                case "resumeVoiceRecording" -> resumeVoiceRecording(requestId);
+                case "playVoiceRecording" -> playVoiceRecording(requestId);
+                case "discardVoiceRecording" -> discardVoiceRecording(requestId);
+                case "saveVoiceRecording" -> saveVoiceRecording(requestId);
+                case "saveChatVoiceRecording" -> saveChatVoiceRecording(requestId);
+                case "exportJson" -> exportJson(requestId,args.optString(0,""),args.optString(1,"{}"));
+                case "importJson" -> importJson(requestId);
+                case "clearPendingGps" -> clearPendingGps(requestId);
+                case "startLocation" -> startLocation(requestId);
+                case "stopLocation" -> stopLocation(requestId);
+                case "refreshLocation" -> refreshLocation(requestId);
+                case "requestGalaxyNotifications" -> requestGalaxyNotifications(requestId);
+                case "setMomentNotifications" -> setMomentNotifications(requestId,args.optBoolean(0,false));
+                case "testMomentNotification" -> testMomentNotification(requestId);
+                case "setBondHaptics" -> setBondHaptics(requestId,args.optBoolean(0,false));
+                case "setContextPushPrefs" -> setContextPushPrefs(requestId,args.optBoolean(0,false),args.optBoolean(1,false));
+                case "addWidget" -> addWidget(requestId);
+                case "setSystemTheme" -> setSystemTheme(requestId,args.optString(0,"daylight"));
+                case "openAppSettings" -> openAppSettings(requestId);
+                case "clearChatNotifications" -> clearChatNotifications(requestId);
+                case "checkUpdate" -> checkUpdate(requestId);
+                case "refreshMoments" -> refreshMoments(requestId);
+                case "closeApp" -> closeApp();
+                default -> activity.reject(requestId,"Acción nativa no permitida.");
+            }
+        }catch(Exception e){
+            activity.reject(requestId,e.getMessage()==null?"Mensaje nativo no válido.":e.getMessage());
+        }
+    }
 
     @JavascriptInterface public String nativeState(){
         return activity.nativeState().toString();
