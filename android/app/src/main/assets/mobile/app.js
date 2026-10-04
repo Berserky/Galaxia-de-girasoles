@@ -1639,6 +1639,8 @@ document.addEventListener('click',async e=>{
   if(a==='chat-reply-cancel'){chatReply=null;render();return;}
   if(a==='notifications-open'){await openNotificationCenter();return;}
   if(a==='notifications-read-all'){await api('notifications-read');if(cloud?.notifications)cloud.notifications.unread=0;await openNotificationCenter();return;}
+  if(a==='notification-open'){await api('notifications-read',{id:btn.dataset.id});if(cloud?.notifications)cloud.notifications.unread=Math.max(0,Number(cloud.notifications.unread||0)-1);const target=btn.dataset.target||'home',entity=btn.dataset.entityId||'';closeModal();await routeGalaxyAction(target,entity);return;}
+  if(a==='galaxy-notifications-enable'){await GalaxyNative.call('requestGalaxyNotifications');native=nativeState();render();toast('Notificaciones activadas.');return;}
   if(a==='goals-open'){go('goals');await loadGoals(true);return;}
   if(a==='goals-filter'){goalsFilter=btn.dataset.value||'active';render();return;}
   if(a==='goal-new'){openGoalForm('goal');return;}
