@@ -591,7 +591,8 @@ async function notificationSummary(person:string){
  return {unread:Number(count||0)};
 }
 async function chatSummary(person:string){
- const latest=(await ok(db.from("galaxy_chat_messages").select("id,sender_person,body,message_type,deleted_at,created_at,server_seq").order("server_seq",{ascending:false}).limit(1)))?.[0]||null;
+ const recent=(await ok(db.from("galaxy_chat_messages").select("id,sender_person,body,message_type,deleted_at,created_at,server_seq,expires_at").eq("schedule_state","sent").is("deleted_at",null).order("server_seq",{ascending:false}).limit(20)))||[];
+ const latest=recent.find((row:any)=>!row.expires_at||Date.parse(String(row.expires_at))>Date.now())||null;
  const {count,error}=await db.from("galaxy_chat_messages").select("id",{count:"exact",head:true}).neq("sender_person",person).eq("schedule_state","sent").is("read_at",null).is("deleted_at",null);
  if(error)throw error;
  const partner=person==="0"?"1":"0";
