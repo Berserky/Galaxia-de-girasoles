@@ -65,6 +65,18 @@ test('checklists use optimistic versions and exact-card notifications',()=>{
  assert.ok(app.includes('chat-check-convert'));
 });
 
+test('Chat can start Acompáñame through the existing Context Engine without auto-enabling GPS',()=>{
+ assert.ok(app.includes('function openChatContextMenu('));
+ assert.ok(app.includes("api('context-session',{operation:'start',mode:'return_home'})"));
+ assert.ok(app.includes("api('context-session',{operation:'start',mode:'accompany'"));
+ assert.ok(app.includes("queueGalaxyCard('CHECK_IN','context_session'"));
+ const start=app.indexOf("if(a==='chat-context-start')");
+ const end=app.indexOf("if(a==='chat-galaxy-open'",start);
+ const block=app.slice(start,end);
+ assert.ok(block.includes('if(!native.tracking)'));
+ assert.equal(block.includes("GalaxyNative.call('startLocation')"),false);
+});
+
 test('ETA and check-in reuse Context Engine and expose lifecycle states',()=>{
  assert.equal(migration.includes('create table if not exists public.galaxy_chat_eta'),false);
  assert.ok(edge.includes('db.from("galaxy_context_sessions")'));
