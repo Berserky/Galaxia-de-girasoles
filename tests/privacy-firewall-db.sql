@@ -131,6 +131,34 @@ begin
 end $qa$;
 reset role;
 
+-- Un cliente no puede falsificar el estado server-owned unlockedFor al crear una cápsula.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','b0000000-0000-4000-8000-000000000001',true);
+insert into public.galaxy_items(id,kind,data,author) values(
+ 'b1000000-0000-4000-8000-000000000004',
+ 'capsule',
+ '{"title":"Lugar forjado","body":"FORGED-UNLOCK","unlockType":"place","latitude":4.7001,"longitude":-74.2001,"radius":150,"unlockedFor":["1"]}'::jsonb,
+ '0'
+);
+reset role;
+
+do $qa$
+begin
+ if coalesce((select data ? 'unlockedFor' from public.galaxy_items where id='b1000000-0000-4000-8000-000000000004'),true) then
+  raise exception 'NG-QA-001 client forged unlockedFor on capsule insert';
+ end if;
+end $qa$;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub','b0000000-0000-4000-8000-000000000002',true);
+do $qa$
+begin
+ if exists(select 1 from public.galaxy_items where id='b1000000-0000-4000-8000-000000000004') then
+  raise exception 'NG-QA-001 forged place capsule became visible to profile 1';
+ end if;
+end $qa$;
+reset role;
+
 -- NG-QA-013: la migración debe haber detectado el huérfano preexistente.
 do $qa$
 begin
