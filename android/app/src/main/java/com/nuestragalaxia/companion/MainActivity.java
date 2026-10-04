@@ -336,11 +336,17 @@ public final class MainActivity extends ComponentActivity {
                 intent.putExtra(MediaStore.EXTRA_OUTPUT,uri);
                 intent.setClipData(ClipData.newUri(getContentResolver(),"galaxy-camera",uri));
                 intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                if(intent.resolveActivity(getPackageManager())==null){file.delete();throw new IOException("No hay una cámara compatible en este teléfono.");}
                 pendingCameraRequest=requestId;pendingCameraFile=file;pendingCameraUri=uri;pendingCameraKind=kind;
                 startActivityForResult(intent,REQ_CAMERA);
+            }catch(ActivityNotFoundException e){
+                pendingCameraRequest=null;
+                if(pendingCameraFile!=null)pendingCameraFile.delete();
+                pendingCameraFile=null;pendingCameraUri=null;pendingCameraKind="photo";
+                reject(requestId,"No encontramos una aplicación de cámara disponible. Habilita la cámara del teléfono y vuelve a intentar.");
             }catch(Exception e){
-                pendingCameraRequest=null;pendingCameraFile=null;pendingCameraUri=null;pendingCameraKind="photo";
+                pendingCameraRequest=null;
+                if(pendingCameraFile!=null)pendingCameraFile.delete();
+                pendingCameraFile=null;pendingCameraUri=null;pendingCameraKind="photo";
                 reject(requestId,e.getMessage()==null?"No pudimos abrir la cámara.":e.getMessage());
             }
         });
@@ -372,11 +378,17 @@ public final class MainActivity extends ComponentActivity {
                 intent.putExtra(MediaStore.EXTRA_DURATION_LIMIT,120);
                 intent.putExtra(MediaStore.EXTRA_VIDEO_QUALITY,1);
                 intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                if(intent.resolveActivity(getPackageManager())==null){file.delete();throw new IOException("No hay una cámara de video compatible.");}
                 pendingVideoRequest=requestId;pendingVideoFile=file;pendingVideoUri=uri;
                 startActivityForResult(intent,REQ_VIDEO);
+            }catch(ActivityNotFoundException e){
+                pendingVideoRequest=null;
+                if(pendingVideoFile!=null)pendingVideoFile.delete();
+                pendingVideoFile=null;pendingVideoUri=null;
+                reject(requestId,"No encontramos una aplicación de cámara de video disponible. Habilita la cámara del teléfono y vuelve a intentar.");
             }catch(Exception e){
-                pendingVideoRequest=null;pendingVideoFile=null;pendingVideoUri=null;
+                pendingVideoRequest=null;
+                if(pendingVideoFile!=null)pendingVideoFile.delete();
+                pendingVideoFile=null;pendingVideoUri=null;
                 reject(requestId,e.getMessage()==null?"No pudimos abrir la cámara de video.":e.getMessage());
             }
         });
