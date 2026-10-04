@@ -316,9 +316,13 @@ function renderChatFab(){
  chatFab.innerHTML=ico('message-circle')+(unread?'<span class="chat-fab-badge">'+(unread>99?'99+':unread)+'</span>':'');
  chatFab.classList.toggle('has-unread',unread>0);
 }
+function syncChatViewportHeight(){
+ const height=Math.max(320,Math.round(window.visualViewport?.height||window.innerHeight||document.documentElement.clientHeight||0));
+ document.documentElement.style.setProperty('--chat-viewport-height',height+'px');
+}
 function go(next){
  const hadMap=!!mapData;
- view=next;render();window.scrollTo(0,0);
+ view=next;syncChatViewportHeight();render();window.scrollTo(0,0);
  if(view==='map'&&hadMap)refreshMap({quiet:true,detail:false});
 }
 let nativeThemeSent='';
@@ -346,7 +350,7 @@ function render(){
  if(view==='memories'){app.innerHTML=header()+memoriesView();requestAnimationFrame(()=>{const tabs=$('.memories-tabs');if(tabs)tabs.scrollLeft=memoriesTabsScroll;});if((memoryTab==='album'&&!mediaFresh('photo'))||(memoryTab==='music'&&!mediaFresh('music')))setTimeout(()=>loadMedia(memoryTab==='album'?'photo':'music').catch(e=>toast(e.message)),0);}
  if(view==='goals'){app.innerHTML=header()+goalsView();if(!goalsState)setTimeout(()=>loadGoals().catch(e=>toast(e.message)),0);}
  if(view==='ai'){app.innerHTML=header()+intelligenceHubView();if(!mapData)setTimeout(()=>refreshMap({quiet:true,detail:true}).catch(()=>{}),0);}
- if(view==='chat'){app.innerHTML=chatView();if(!chatState&&!chatLoading)setTimeout(()=>loadChat({quiet:true}),0);}
+ if(view==='chat'){syncChatViewportHeight();app.innerHTML=chatView();if(!chatState&&!chatLoading)setTimeout(()=>loadChat({quiet:true}),0);}
  if(view==='more')app.innerHTML=header()+moreView();
  refreshIcons();
  if(view==='chat')globalPlayer.className='global-player';else renderGlobalPlayer();
@@ -1366,12 +1370,12 @@ function chatView(){
  const draft=readChatDraft();
  return '<section class="chat-shell">'+
  '<header class="chat-shell-head"><button class="chat-back" type="button" data-action="chat-close" aria-label="Volver">'+ico('arrow-left')+'</button><div class="chat-avatar">'+esc(partnerName().slice(0,1).toUpperCase())+'</div><div class="chat-contact"><p class="eyebrow">GALAXY CHAT</p><h2>'+esc(partnerName())+'</h2><small>'+esc(chatPresenceLabel())+'</small></div><button class="chat-head-action" type="button" data-action="chat-search-open" aria-label="Buscar">'+ico('search')+'</button><button class="chat-head-action" type="button" data-action="chat-saved-open" aria-label="Guardados">'+ico('bookmark')+'</button></header>'+
- chatPinnedBar()+
+ '<div class="chat-pinned-slot">'+chatPinnedBar()+'</div>'+
  '<div class="chat-scroll-wrap"><div id="chatMessages" class="chat-messages" tabindex="0" aria-label="Mensajes">'+chatMessagesMarkup()+'</div>'+(chatNewCount?'<button class="chat-new-button" type="button" data-action="chat-jump-present">'+ico('arrow-down')+' '+chatNewCount+' mensaje'+(chatNewCount===1?'':'s')+' nuevo'+(chatNewCount===1?'':'s')+'</button>':'')+'</div>'+
  '<form id="chatForm" class="chat-composer" autocomplete="off">'+
  (chatReply?'<div class="chat-compose-reply"><span>'+ico('reply')+' Respondiendo a '+esc(chatOwn(chatReply)?'ti':partnerName())+'<small>'+esc(chatReply.body||'Mensaje')+'</small></span><button type="button" data-action="chat-reply-cancel" aria-label="Cancelar respuesta">'+ico('x')+'</button></div>':'')+
  chatDraftAttachmentMarkup()+
- '<div class="chat-compose-row"><button class="chat-plus" type="button" data-action="chat-attach-open" aria-label="Adjuntar">'+ico('plus')+'</button><textarea name="body" maxlength="4000" rows="1" placeholder="Mensaje para '+attr(partnerName())+'" aria-label="Mensaje">'+esc(draft)+'</textarea>'+(draft||chatAttachmentsDraft.length?'<button class="chat-send" type="submit" aria-label="Enviar">'+ico('send')+'</button>':'<button class="chat-send chat-mic-hold" type="button" data-action="chat-hold-record" aria-label="Mantén pulsado para grabar">'+ico('mic')+'</button>')+'</div><div class="chat-hold-hint" aria-live="polite" hidden></div></form></section>';
+ '<div class="chat-compose-row"><button class="chat-plus" type="button" data-action="chat-attach-open" aria-label="Adjuntar">'+ico('plus')+'</button><textarea name="body" maxlength="4000" rows="1" placeholder="Mensaje para '+attr(partnerName())+'" aria-label="Mensaje">'+esc(draft)+'</textarea><button class="chat-camera" type="button" data-action="chat-camera-open" aria-label="Abrir cámara">'+ico('camera')+'</button>'+(draft||chatAttachmentsDraft.length?'<button class="chat-send" type="submit" aria-label="Enviar">'+ico('send')+'</button>':'<button class="chat-send chat-mic-hold" type="button" data-action="chat-hold-record" aria-label="Mantén pulsado para grabar">'+ico('mic')+'</button>')+'</div><div class="chat-hold-hint" aria-live="polite" hidden></div></form></section>';
 }
 function chatSignature(state){
  const messages=(state?.messages||[]).map(m=>[m.id,m.body,m.deleted_at,m.edited_at,m.delivered_at,m.read_at,m.reply_to,m.server_seq,JSON.stringify(m.reactions||[]),!!m.pin,!!m.favorite,JSON.stringify(m.attachments||[])]);
@@ -1516,7 +1520,14 @@ async function runChatSearch(form){
  refreshIcons();
 }
 function openChatAttachMenu(){
- showModal('Compartir','<div class="chat-attach-grid"><button type="button" data-action="chat-attach-photo">'+ico('images')+'<span>Fotos</span></button><button type="button" data-action="chat-attach-camera">'+ico('camera')+'<span>Cámara</span></button><button type="button" data-action="chat-attach-video">'+ico('video')+'<span>Video</span></button><button type="button" data-action="chat-attach-video-camera">'+ico('video')+'<span>Grabar</span></button><button type="button" data-action="chat-attach-file">'+ico('file-text')+'<span>Documento</span></button><button type="button" data-action="chat-attach-location">'+ico('map-pin')+'<span>Ubicación</span></button><button type="button" data-action="chat-attach-song">'+ico('music-2')+'<span>Canción</span></button><button type="button" data-action="chat-voice-open">'+ico('mic')+'<span>Audio</span></button></div>','chat-attach');
+ showModal('Compartir','<div class="chat-attach-grid"><button type="button" data-action="chat-attach-photo">'+ico('images')+'<span>Fotos</span></button><button type="button" data-action="chat-attach-video">'+ico('video')+'<span>Video</span></button><button type="button" data-action="chat-attach-file">'+ico('file-text')+'<span>Documento</span></button><button type="button" data-action="chat-attach-location">'+ico('map-pin')+'<span>Ubicación</span></button><button type="button" data-action="chat-attach-song">'+ico('music-2')+'<span>Canción</span></button><button type="button" data-action="chat-voice-open">'+ico('mic')+'<span>Audio</span></button></div>','chat-attach');
+}
+function openChatCameraMenu(){
+ showModal('Cámara','<div class="chat-camera-grid"><button type="button" data-action="chat-attach-camera">'+ico('camera')+'<span><b>Tomar foto</b><small>Usar la cámara ahora</small></span></button><button type="button" data-action="chat-attach-video-camera">'+ico('video')+'<span><b>Grabar video</b><small>Usar cámara y micrófono</small></span></button></div>','chat-camera');
+}
+function openChatPermissionHelp(kind){
+ const video=kind==='video',label=video?'cámara y micrófono':'cámara';
+ showModal('Permiso necesario','<div class="chat-permission-help">'+ico(video?'video':'camera')+'<h3>Autoriza '+label+'</h3><p>Nuestra Galaxia necesita este permiso solo cuando quieras '+(video?'grabar un video':'tomar una foto')+'. Puedes volver a solicitarlo o abrir los ajustes de Android.</p><div class="chat-permission-actions"><button class="btn" type="button" data-action="chat-permission-retry" data-kind="'+kind+'">Volver a pedir permiso</button><button class="btn secondary" type="button" data-action="chat-open-app-settings">Abrir ajustes</button></div></div>','chat-permission');
 }
 function normalizeChatUpload(upload,kind,durationMs=null){
  return {kind,bucket:'galaxy-chat-media',path:upload.path,mime:upload.mime||'',name:upload.name||upload.originalName||kind,size:Number(upload.size||0),durationMs:durationMs||upload.durationMs||null,url:upload.url||''};
@@ -1528,7 +1539,12 @@ async function addChatNativeMedia(method,args,kind){
   const uploads=Array.isArray(result?.items)?result.items:[result];
   for(const item of uploads)if(item?.path)chatAttachmentsDraft.push(normalizeChatUpload(item,kind));
   closeModal();render();setChatPresence('ONLINE');
- }catch(e){setChatPresence('ONLINE');toast(e.message||'No pudimos adjuntar el archivo.');}
+ }catch(e){
+  setChatPresence('ONLINE');
+  const message=String(e?.message||'');
+  if(message.includes('PERMISSION_CAMERA')||message.includes('PERMISSION_MICROPHONE')){openChatPermissionHelp(kind==='video'?'video':'photo');return;}
+  toast(message||'No pudimos adjuntar el archivo.');
+ }
 }
 function openChatSongPicker(){
  rebuildMusicQueue();
@@ -1974,6 +1990,9 @@ document.addEventListener('click',async e=>{
   if(a==='chat-retry'){const rows=readChatOutbox(),i=rows.findIndex(x=>String(x.client_id)===String(btn.dataset.clientId));if(i>=0){rows[i]._localState='PENDING';writeChatOutbox(rows);render();await flushChatOutbox({retryFailed:true});await loadChat({quiet:true,force:true});}return;}
   if(a==='chat-local-delete'){writeChatOutbox(readChatOutbox().filter(x=>String(x.client_id)!==String(btn.dataset.clientId)));render();return;}
   if(a==='chat-attach-open'){openChatAttachMenu();return;}
+  if(a==='chat-camera-open'){openChatCameraMenu();return;}
+  if(a==='chat-permission-retry'){const kind=btn.dataset.kind==='video'?'video':'photo';closeModal();await addChatNativeMedia(kind==='video'?'captureChatVideo':'captureChatPhoto',[],kind);return;}
+  if(a==='chat-open-app-settings'){await GalaxyNative.call('openAppSettings');return;}
   if(a==='chat-attachment-remove'){chatAttachmentsDraft.splice(Number(btn.dataset.index),1);render();return;}
   if(a==='chat-attach-photo'){await addChatNativeMedia('pickChatPhotos',[],'photo');return;}
   if(a==='chat-attach-camera'){await addChatNativeMedia('captureChatPhoto',[],'photo');return;}
@@ -2256,6 +2275,9 @@ document.addEventListener('visibilitychange',()=>{
  }
 });
 
+window.visualViewport?.addEventListener('resize',syncChatViewportHeight);
+window.visualViewport?.addEventListener('scroll',syncChatViewportHeight);
+window.addEventListener('resize',syncChatViewportHeight);
 window.addEventListener('online',()=>{if(native.paired){flushChatOutbox({retryFailed:true}).then(()=>view==='chat'&&loadChat({quiet:true,force:true})).catch(()=>{});}});
 window.addEventListener('offline',()=>{if(view==='chat')toast('Sin conexión. Tus mensajes quedarán pendientes.');});
 document.addEventListener('scroll',e=>{
