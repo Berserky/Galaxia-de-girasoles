@@ -116,7 +116,7 @@ create or replace function public.galaxy_capsule_protect_unlock_state()
 returns trigger
 language plpgsql security invoker
 set search_path=''
-as $
+as $$
 begin
   if old.kind='capsule' and current_user not in ('postgres','service_role') then
     new.data:=new.data-'unlockedFor'-'unlocked_for';
@@ -125,7 +125,7 @@ begin
     end if;
   end if;
   return new;
-end $;
+end $$;
 revoke all on function public.galaxy_capsule_protect_unlock_state() from public,anon,authenticated;
 
 drop trigger if exists capsule_unlock_state_guard on public.galaxy_items;
