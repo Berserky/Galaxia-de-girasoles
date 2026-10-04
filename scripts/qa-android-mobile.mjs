@@ -64,6 +64,7 @@ assert.ok(manifest.includes('android.permission.CAMERA'),'Android debe declarar 
 assert.ok(manifest.includes('androidx.core.content.FileProvider'),'Android debe usar FileProvider para capturas');
 assert.ok(main.includes('WebViewCompat.addWebMessageListener')&&main.includes('https://appassets.androidplatform.net'),'El puente nativo debe limitarse al origen local confiable');
 assert.equal(main.includes('addJavascriptInterface'),false,'No se debe exponer addJavascriptInterface a iframes externos');
+assert.equal(bridge.includes('JavascriptInterface'),false,'El puente seguro no debe conservar anotaciones del bridge JavaScript legado');
 assert.ok(main.includes('settings.setAllowFileAccess(false)'),'WebView no debe permitir acceso directo al sistema de archivos');
 assert.equal(index.includes("default-src 'self' file:"),false,'La CSP móvil no debe permitir el esquema file');
 assert.ok(app.includes('GalaxyAndroid.postMessage(JSON.stringify({id,method,args}))'),'La UI debe usar el puente nativo basado en mensajes');
