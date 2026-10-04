@@ -1008,6 +1008,8 @@ public final class MainActivity extends ComponentActivity {
 
     private void toast(String text){runOnUiThread(()->Toast.makeText(this,text,Toast.LENGTH_LONG).show());}
 
+    void clearChatNotifications(String requestId){runOnUiThread(()->{GalaxyNotifications.resetChat(this);resolve(requestId,new JSONObject());});}
+
     void closeApp(){runOnUiThread(this::finish);}
 
     private void ensureTrackingService(){
@@ -1023,7 +1025,7 @@ public final class MainActivity extends ComponentActivity {
     private void captureDeepLink(Intent intent){
         if(intent==null)return;
         String action=intent.getStringExtra("galaxy_action"),entity=intent.getStringExtra("galaxy_entity_id"),eventType=intent.getStringExtra("galaxy_event_type");
-        if(action!=null&&!action.isBlank())pendingDeepLinkAction=action;
+        if(action!=null&&!action.isBlank()){pendingDeepLinkAction=action;if("chat".equals(action))GalaxyNotifications.resetChat(this);}
         if(entity!=null)pendingDeepLinkEntity=entity;
         if(eventType!=null)pendingDeepLinkEvent=eventType;
     }
