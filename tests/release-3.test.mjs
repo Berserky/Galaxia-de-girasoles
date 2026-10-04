@@ -14,12 +14,12 @@ test('Mega 3.0 release migration is canonical and non-destructive',()=>{
  assert.equal(new Set(tables).size,tables.length,'migration must not repeat table blocks');
 });
 
-test('Android stable metadata is aligned to Galaxy Chat 3.2.2',()=>{
+test('Android stable metadata is aligned to Galaxy Chat 3.2.3',()=>{
  const gradle=read('android/app/build.gradle.kts'),workflow=read('.github/workflows/android-companion.yml');
- assert.match(gradle,/versionCode = 29/);
- assert.match(gradle,/versionName = "3\.2\.2"/);
- assert.match(workflow,/"versionCode":29/);
- assert.match(workflow,/"versionName":"3\.2\.2"/);
+ assert.match(gradle,/versionCode = 30/);
+ assert.match(gradle,/versionName = "3\.2\.3"/);
+ assert.match(workflow,/"versionCode":30/);
+ assert.match(workflow,/"versionName":"3\.2\.3"/);
 });
 
 test('canonical schema no longer contains duplicated Mega blocks or broken dollar quotes',()=>{

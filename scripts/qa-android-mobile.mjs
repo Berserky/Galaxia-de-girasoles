@@ -65,6 +65,8 @@ assert.ok(manifest.includes('androidx.core.content.FileProvider'),'Android debe 
 assert.ok(filePaths.includes('name="camera-media"')&&filePaths.includes('path="camera-media/"'),'FileProvider debe exponer la caché camera-media usada por foto y video');
 assert.ok(main.includes('FileProvider.getUriForFile(this,getPackageName()+".files",file)'),'Foto/video deben generar content URI mediante FileProvider');
 assert.ok(main.includes('ClipData.newUri(getContentResolver(),"galaxy-camera",uri)')&&main.includes('ClipData.newUri(getContentResolver(),"galaxy-video",uri)'),'Foto/video deben conceder acceso al URI a la app de cámara');
+assert.equal(main.includes('resolveActivity(getPackageManager())'),false,'La captura no debe depender de resolveActivity: Android moderno puede ocultar handlers instalados');
+assert.ok(manifest.includes('android.media.action.IMAGE_CAPTURE')&&manifest.includes('android.media.action.VIDEO_CAPTURE'),'Manifest debe declarar visibilidad de intents de cámara y video');
 const scriptSources=[...index.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m=>m[1]);
 assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./insights.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./eta.js','./frequent-places.js','./gps-history.js','./theme.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
 assert.ok(index.includes("connect-src 'none'"),'La UI local no debe hacer fetch directo ni recibir credenciales');
