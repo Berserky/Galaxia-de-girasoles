@@ -377,3 +377,6 @@ assert.ok(schema.includes('galaxy_voice_transcripts')&&edge.includes('audioPrese
 assert.ok(css.includes('/* Mega Update 3.0 · Galaxy Intelligence Engine */'),'Faltan estilos de Galaxy Intelligence Engine');
 
 console.log('QA móvil Nuestra Galaxia: OK');
+
+assert.ok(updater.includes('GET_SIGNING_CERTIFICATES')&&updater.includes('signerDigests'),'El actualizador debe verificar el certificado de firma del APK');
+assert.ok(updater.includes('Collections.disjoint(currentSigners,updateSigners)'),'Una actualización con firma distinta debe rechazarse');
