@@ -51,6 +51,18 @@ test('NG-QA-001 Storage SELECT checks capsule lock before exposing linked media'
   assert.match(firewall,/galaxy_capsule_object_access/i);
 });
 
+test('NG-QA-001 place unlock is persistent, server-owned and driven by location updates',()=>{
+  assert.match(firewall,/galaxy_capsule_mark_place_unlocks/);
+  assert.match(firewall,/capsule_unlock_state_guard/);
+  assert.match(firewall,/unlockedFor/);
+  const access=block(edge,'function chatCapsuleAccess(','function privacyVisibleLocations(');
+  assert.match(access,/unlockedFor/);
+  const location=block(edge,'async function location(','function nextCalendarEvent(');
+  assert.match(location,/galaxy_capsule_mark_place_unlocks/);
+  const clean=block(edge,'function cleanItem(','async function validateCapsuleReferences(');
+  assert.match(clean,/delete out\.unlockedFor/);
+});
+
 test('NG-QA-001 service-role media browser filters locked capsule objects for the caller',()=>{
   const media=block(edge,'async function mediaList(','async function mediaDelete(');
   assert.match(media,/listBucket\("galaxy-photos",person\)/);
