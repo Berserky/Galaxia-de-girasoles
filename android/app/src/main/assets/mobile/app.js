@@ -1876,10 +1876,14 @@ setInterval(()=>{
 setInterval(()=>{
  if(native.paired&&view==='map'&&document.visibilityState==='visible')refreshMap({quiet:true,detail:false}).catch(()=>{});
 },12000);
+setInterval(()=>{
+ if(native.paired&&view==='chat'&&document.visibilityState==='visible'&&!editingNow())loadChat({quiet:true}).catch(()=>{});
+},4000);
 document.addEventListener('visibilitychange',()=>{
  if(document.visibilityState==='visible'&&native.paired){
    refreshStateIfChanged().catch(()=>{});
    if(view==='map')refreshMap({quiet:true,detail:false}).catch(()=>{});
+   if(view==='chat')loadChat({quiet:true}).catch(()=>{});
    if(native.momentNotifications)GalaxyNative.call('refreshMoments').catch(()=>{});
  }
 });
