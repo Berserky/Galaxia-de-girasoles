@@ -1048,6 +1048,7 @@ async function chatVisibleRows(person:string,query:any){
 
 async function chatState(req:Request,body:any={}){
  const d=await device(req),person=String(d.person),target=person==="0"?"1":"0",limit=clampInt(body.limit,20,100,60),beforeSeq=Number(body.beforeSeq||0),aroundId=text(body.aroundId||"",80);
+ await chatReconcileDeletedMedia();
  let query:any;
  if(aroundId){
   const anchor=(await ok(db.from("galaxy_chat_messages").select("server_seq").eq("id",aroundId).is("deleted_at",null).limit(1)))?.[0];
@@ -1330,6 +1331,15 @@ async function chatDeleteAttachments(messageId:string){
  ]);
 }
 
+async function chatReconcileDeletedMedia(limit=100){
+ const rows=await ok(db.from("galaxy_chat_messages").select("id").not("deleted_at","is",null).order("deleted_at",{ascending:true}).limit(Math.max(1,Math.min(500,limit))));
+ for(const row of rows||[]){
+  const exists=(await ok(db.from("galaxy_chat_attachments").select("id").eq("message_id",String(row.id)).limit(1)))?.length;
+  if(exists)await chatDeleteAttachments(String(row.id));
+ }
+ return true;
+}
+
 async function chatDelete(req:Request,body:any){
  const d=await device(req),person=String(d.person),target=person==="0"?"1":"0",id=String(body.id||""),scope=String(body.scope||"both");
  const row=(await ok(db.from("galaxy_chat_messages").select("*").eq("id",id).limit(1)))?.[0];
@@ -1340,8 +1350,8 @@ async function chatDelete(req:Request,body:any){
  }
  if(String(row.sender_person)!==person)return json({error:"Solo puedes eliminar tus propios mensajes."},403);
  if(Date.now()-Date.parse(row.created_at)>CHAT_DELETE_MINUTES*60000)return json({error:"La ventana para eliminar para ambos ya terminó."},409);
+ await chatDeleteAttachments(id);
  if(!row.deleted_at){
-  await chatDeleteAttachments(id);
   await ok(db.from("galaxy_chat_messages").update({deleted_at:new Date().toISOString(),body:"Mensaje eliminado",attachment:{},link_preview:{}}).eq("id",id));
  }
  await chatSignal(d,target,id);
