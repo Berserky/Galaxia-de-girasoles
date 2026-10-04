@@ -77,3 +77,9 @@ test('GPS history writes are idempotent without raising duplicate-key errors',()
  assert.match(edge,/galaxy_location_history"\)\.upsert\(row,\{onConflict:"source_device_id,client_sample_id",ignoreDuplicates:true\}\)/);
  assert.equal(edge.includes('error.code!=="23505"'),false);
 });
+
+
+test('trip point map reads have a recent-first index',()=>{
+ const sql=read('supabase/migrations/20261004052000_trip_points_map_index.sql');
+ assert.match(sql,/create index if not exists galaxy_trip_points_created_idx\s+on public\.galaxy_trip_points\(created_at desc\)/i);
+});
