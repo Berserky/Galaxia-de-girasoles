@@ -164,7 +164,8 @@ test('Smart Actions detects deterministic date/time and routes reminders through
  assert.ok(app.includes('chat-smart-remind'));
  assert.ok(app.includes("chatOpenItemDraft('event'"));
  assert.ok(app.includes('Confirma el evento para activar su recordatorio.'));
- const block=app.slice(app.indexOf('function chatSmartDateTime('),app.indexOf('function chatGalaxyCardMarkup(')>app.indexOf('function chatSmartDateTime(')?app.indexOf('function chatGalaxyCardMarkup('):app.length);
+ const start=app.indexOf('function chatSmartDateTime('),end=app.indexOf('\nfunction ',app.indexOf('function chatSmartActionsMarkup(')+1);
+ const block=app.slice(start,end>start?end:app.length);
  assert.equal(/intelligence|openai|embedding/i.test(block),false);
 });
 
