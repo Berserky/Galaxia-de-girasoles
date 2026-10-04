@@ -701,10 +701,20 @@ async function chatSignal(source:any,target:string,entityId:string,event="chat_s
 }
 async function chatPartnerPresence(person:string){
  const partner=person==="0"?"1":"0";
- const row=(await ok(db.from("galaxy_chat_presence").select("state,last_active_at,expires_at,metadata,updated_at").eq("person",partner).limit(1)))?.[0]||null;
+ const [row,pref]=await Promise.all([
+  ok(db.from("galaxy_chat_presence").select("state,last_active_at,expires_at,metadata,updated_at").eq("person",partner).limit(1)).then((x:any)=>x?.[0]||null),
+  ok(db.from("galaxy_chat_preferences").select("show_last_seen,show_typing").eq("person",partner).limit(1)).then((x:any)=>x?.[0]||null)
+ ]);
  if(!row)return {state:"LAST_ACTIVE",lastActiveAt:null,online:false};
  const fresh=Date.parse(String(row.expires_at||""))>Date.now();
- return fresh?{state:row.state,lastActiveAt:row.last_active_at,online:true,metadata:row.metadata||{}}:{state:"LAST_ACTIVE",lastActiveAt:row.last_active_at,online:false};
+ const typingVisible=pref?.show_typing!==false;
+ const lastSeenVisible=pref?.show_last_seen!==false;
+ if(!lastSeenVisible&&!typingVisible)return {state:"PRIVATE",lastActiveAt:null,online:false};
+ if(fresh){
+  const state=(row.state==="TYPING"&&!typingVisible)?"ONLINE":row.state;
+  return {state,lastActiveAt:lastSeenVisible?row.last_active_at:null,online:true,metadata:row.metadata||{}};
+ }
+ return {state:lastSeenVisible?"LAST_ACTIVE":"PRIVATE",lastActiveAt:lastSeenVisible?row.last_active_at:null,online:false};
 }
 async function chatHydrate(rows:any[],person:string){
  const list=(rows||[]).filter(Boolean),ids=list.map((r:any)=>String(r.id));
@@ -743,7 +753,8 @@ async function chatHydrate(rows:any[],person:string){
   reactions:reactionMap.get(String(row.id))||[],
   pin:pinMap.get(String(row.id))||null,
   favorite:favSet.has(String(row.id)),
-  attachments:(row.view_once&&row.opened_at&&String(row.sender_person)!==person)?[]:(attachmentMap.get(String(row.id))||[])
+  hasViewOnce:!!row.view_once,
+  attachments:(row.view_once&&String(row.sender_person)!==person)?[]:(attachmentMap.get(String(row.id))||[])
  }));
 }
 async function chatVisibleRows(person:string,query:any){
@@ -856,8 +867,9 @@ async function chatRead(req:Request,body:any={}){
  if(!row)row=(await ok(db.from("galaxy_chat_messages").select("id,created_at,server_seq").order("server_seq",{ascending:false}).limit(1)))?.[0];
  if(!row)return json({ok:true});
  const now=new Date().toISOString(),seq=Number(row.server_seq);
+ const pref=(await ok(db.from("galaxy_chat_preferences").select("show_read").eq("person",person).limit(1)))?.[0];
  await ok(db.from("galaxy_chat_messages").update({delivered_at:now}).neq("sender_person",person).eq("schedule_state","sent").lte("server_seq",seq).is("delivered_at",null));
- await ok(db.from("galaxy_chat_messages").update({read_at:now}).neq("sender_person",person).eq("schedule_state","sent").lte("server_seq",seq).is("read_at",null));
+ if(pref?.show_read!==false)await ok(db.from("galaxy_chat_messages").update({read_at:now}).neq("sender_person",person).eq("schedule_state","sent").lte("server_seq",seq).is("read_at",null));
  await ok(db.from("galaxy_chat_read_state").upsert({person,last_read_at:now,last_read_message_id:row.id,updated_at:now},{onConflict:"person"}));
  await ok(db.from("galaxy_notifications").update({read_at:now}).eq("target_person",person).eq("event_type","chat_message").is("read_at",null));
  await chatSignal(d,target,String(row.id));
