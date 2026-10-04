@@ -31,8 +31,7 @@ insert into storage.objects(bucket_id,name) values
  ('galaxy-photos','0/qa-future.jpg'),
  ('galaxy-voice','0/qa-future.m4a'),
  ('galaxy-photos','0/qa-open.jpg'),
- ('galaxy-photos','0/qa-place.jpg')
-on conflict(bucket_id,name) do nothing;
+ ('galaxy-photos','0/qa-place.jpg');
 
 insert into public.galaxy_trip_points(person,latitude,longitude) values
  ('0',4.61,-74.11),('1',4.62,-74.12);
