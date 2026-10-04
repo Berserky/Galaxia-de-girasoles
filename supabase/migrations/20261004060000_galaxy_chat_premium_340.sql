@@ -30,6 +30,15 @@ alter table public.galaxy_chat_messages
  add constraint galaxy_chat_messages_expiry_check
  check(expires_at is null or expires_at>created_at);
 
+alter table public.galaxy_chat_messages
+ drop constraint if exists galaxy_chat_messages_message_type_check;
+
+alter table public.galaxy_chat_messages
+ add constraint galaxy_chat_messages_message_type_check
+ check(message_type in (
+  'text','photo','video','video_message','audio','file','location','song','link','sticker','gif'
+ ));
+
 create index if not exists galaxy_chat_messages_due_idx
  on public.galaxy_chat_messages(scheduled_at)
  where schedule_state='pending' and deleted_at is null;
@@ -126,6 +135,27 @@ create table if not exists public.galaxy_chat_sticker_favorites (
  primary key(sticker_id,person)
 );
 
+-- Live location reuses galaxy_locations as the single GPS source of truth.
+-- This table stores only chat session metadata, never a second coordinate history.
+create table if not exists public.galaxy_chat_live_locations (
+ id uuid primary key default gen_random_uuid(),
+ sender_person text not null check(sender_person in ('0','1')),
+ message_id uuid references public.galaxy_chat_messages(id) on delete set null,
+ duration_seconds integer check(duration_seconds is null or duration_seconds in (900,3600,28800)),
+ started_at timestamptz not null default now(),
+ ends_at timestamptz,
+ stopped_at timestamptz,
+ created_at timestamptz not null default now(),
+ check(
+   (duration_seconds is null and ends_at is null)
+   or
+   (duration_seconds is not null and ends_at is not null)
+ )
+);
+create index if not exists galaxy_chat_live_locations_sender_active_idx
+ on public.galaxy_chat_live_locations(sender_person,started_at desc)
+ where stopped_at is null;
+
 -- Private runtime state used only by the server-side minute scheduler.
 create table if not exists public.galaxy_chat_runtime (
  id integer primary key check(id=1),
@@ -144,6 +174,7 @@ alter table public.galaxy_chat_albums enable row level security;
 alter table public.galaxy_chat_album_items enable row level security;
 alter table public.galaxy_chat_stickers enable row level security;
 alter table public.galaxy_chat_sticker_favorites enable row level security;
+alter table public.galaxy_chat_live_locations enable row level security;
 alter table public.galaxy_chat_runtime enable row level security;
 
 revoke all on
@@ -154,6 +185,7 @@ revoke all on
  public.galaxy_chat_album_items,
  public.galaxy_chat_stickers,
  public.galaxy_chat_sticker_favorites,
+ public.galaxy_chat_live_locations,
  public.galaxy_chat_runtime
 from public,anon,authenticated;
 
@@ -164,7 +196,8 @@ grant select,insert,update,delete on
  public.galaxy_chat_albums,
  public.galaxy_chat_album_items,
  public.galaxy_chat_stickers,
- public.galaxy_chat_sticker_favorites
+ public.galaxy_chat_sticker_favorites,
+ public.galaxy_chat_live_locations
 to service_role;
 
 grant select,update on public.galaxy_chat_runtime to service_role;
