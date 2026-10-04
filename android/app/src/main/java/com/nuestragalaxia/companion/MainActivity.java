@@ -892,6 +892,9 @@ public final class MainActivity extends FragmentActivity {
     }
 
     private void requestCurrentChatLocation(String requestId){
+        boolean granted=checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED
+            ||checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED;
+        if(!granted){reject(requestId,"Autoriza la ubicación para compartir una posición puntual.");return;}
         try{
             FusedLocationProviderClient fused=LocationServices.getFusedLocationProviderClient(this);
             CurrentLocationRequest current=new CurrentLocationRequest.Builder()
