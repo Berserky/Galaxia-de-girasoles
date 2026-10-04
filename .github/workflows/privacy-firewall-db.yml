@@ -1,0 +1,57 @@
+name: Privacy Firewall DB
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'supabase/**'
+      - 'tests/privacy-firewall-db.sql'
+      - 'tests/privacy-firewall-pre-migration.sql'
+      - 'tests/supabase-rls.sql'
+      - '.github/workflows/privacy-firewall-db.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  privacy-db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Initialize isolated Supabase
+        run: |
+          if [ ! -f supabase/config.toml ]; then
+            supabase init
+          fi
+          supabase start
+
+      - name: Load stable main baseline
+        run: |
+          git fetch origin main --depth=1
+          git show origin/main:supabase/schema.sql > /tmp/main-schema.sql
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f /tmp/main-schema.sql
+
+      - name: Seed pre-migration orphan
+        run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/privacy-firewall-pre-migration.sql
+
+      - name: Apply Phase 0 migration
+        run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f supabase/migrations/20261004212500_qa_phase0_privacy_firewall.sql
+
+      - name: Run existing RLS regression
+        run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/supabase-rls.sql
+
+      - name: Run Phase 0 two-profile attack probes
+        run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/privacy-firewall-db.sql
+
+      - name: Stop isolated Supabase
+        if: always()
+        run: supabase stop --no-backup
