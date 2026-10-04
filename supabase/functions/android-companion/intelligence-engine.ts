@@ -32,17 +32,41 @@ export function contentHashInput(doc:any={}){
  });
 }
 
+function capsuleUnlockMs(data:any,ctx:any={}){
+ const direct=clean(data?.unlockAt||data?.unlock_at,80);
+ if(direct){
+  const ms=Date.parse(direct);
+  if(Number.isFinite(ms))return ms;
+ }
+ const day=dateOnly(data?.unlockDate||data?.unlock_date||data?.date);
+ if(!day)return null;
+ const raw=clean(data?.unlockTime||data?.unlock_time,16);
+ const time=/^\d{2}:\d{2}$/.test(raw)?raw:"00:00";
+ const ms=Date.parse(day+"T"+time+":00-05:00");
+ return Number.isFinite(ms)?ms:null;
+}
+
 function itemDocument(row:any,ctx:any={}){
  const data=row?.data||{},kind=String(row?.kind||"item"),author=String(row?.author??"");
  const title=clean(data.title||({memory:"Recuerdo",note:"Nota",plan:"Plan",song:"Canción",journey:"Viaje",event:"Fecha",wish:"Deseo",capsule:"Cápsula"} as any)[kind]||"Contenido",300);
+ const nowRaw=String(ctx.now||"");
+ const nowMs=Number.isFinite(Date.parse(nowRaw))?Date.parse(nowRaw):Date.now();
+ if(kind==="capsule"){
+  const unlockType=String(data.unlockType||data.unlock_type||"date")==="place"?"place":"date";
+  const unlockMs=unlockType==="date"?capsuleUnlockMs(data,ctx):null;
+  const locked=unlockType==="place"||unlockMs==null||unlockMs>nowMs;
+  if(locked){
+   return {
+    sourceType:"capsule",sourceId:String(row?.id||""),sourceVersion:String(row?.version??""),
+    title,content:"",occurredOn:dateOnly(data.date||data.unlockDate||row?.created),
+    metadata:safeMeta({kind:"capsule",author}),ownerPerson:null,visibleAfter:null,searchable:false
+   };
+  }
+ }
  const body=clean(data.body,10000),category=clean(data.category,160),placeName=clean(data.placeName,160),platform=clean(data.platform,80);
  const parts=[body,category,placeName,platform,data.date?String(data.date):""].filter(Boolean);
  if(kind==="song"&&data.dedication)parts.push(clean(data.dedication,2000));
  let ownerPerson:string|null=null,visibleAfter:string|null=null;
- if(kind==="capsule"&&data.date){
-  const unlock=dateOnly(data.date);visibleAfter=unlock;
-  if(unlock&&unlock>String(ctx.today||"9999-12-31"))ownerPerson=author;
- }
  if(kind==="note"&&data.surprise){
   if(data.unlockType==="date"){
    const unlock=dateOnly(data.unlockDate);visibleAfter=unlock;
