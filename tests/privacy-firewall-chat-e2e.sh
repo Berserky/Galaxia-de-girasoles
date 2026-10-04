@@ -33,6 +33,12 @@ insert into public.galaxy_items(id,kind,data,author) values
    'unlockAt','2099-12-01T02:30:00.000Z'
  ),
  '0'
+),
+(
+ 'b5000000-0000-4000-8000-000000000003',
+ 'capsule',
+ '{"title":"Edge place capsule","body":"EDGE-PLACE-SECRET","unlockType":"place","placeId":1,"placeName":"QA point","latitude":4.7001,"longitude":-74.1001,"radius":150}'::jsonb,
+ '1'
 )
 on conflict(id) do nothing;
 SQL
@@ -64,7 +70,26 @@ for backup in "$owner_backup" "$partner_backup"; do
     echo "NG-QA-001: backup leaked locked capsule media path"
     exit 1
   fi
+  if grep -q 'EDGE-PLACE-SECRET' <<<"$backup"; then
+    echo "NG-QA-001: backup leaked locked place capsule before arrival"
+    exit 1
+  fi
 done
+
+location_on='{"action":"location","sharing":true,"latitude":4.7001,"longitude":-74.1001,"accuracy":5,"motion":"still"}'
+curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $DEVICE_TOKEN" -H 'content-type: application/json' --data "$location_on" >/dev/null
+owner_after_arrival=$(curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $DEVICE_TOKEN" -H 'content-type: application/json' --data '{"action":"mobile-state"}')
+grep -q 'EDGE-PLACE-SECRET' <<<"$owner_after_arrival" || { echo "NG-QA-001: place capsule did not unlock on server after arrival"; exit 1; }
+
+curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $DEVICE_TOKEN" -H 'content-type: application/json' --data '{"action":"location","sharing":false}' >/dev/null
+owner_after_pause=$(curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $DEVICE_TOKEN" -H 'content-type: application/json' --data '{"action":"mobile-state"}')
+grep -q 'EDGE-PLACE-SECRET' <<<"$owner_after_pause" || { echo "NG-QA-001: place capsule relocked after valid arrival"; exit 1; }
+
+partner_after_owner_arrival=$(curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $PARTNER_TOKEN" -H 'content-type: application/json' --data '{"action":"mobile-state"}')
+if grep -q 'EDGE-PLACE-SECRET' <<<"$partner_after_owner_arrival"; then
+  echo "NG-QA-001: place unlock leaked across profiles"
+  exit 1
+fi
 
 today=$(TZ=America/Bogota date +%F)
 history_payload=$(jq -nc --arg day "$today" '{action:"today-history",day:$day}')
