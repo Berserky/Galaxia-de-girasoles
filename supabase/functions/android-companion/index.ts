@@ -2443,7 +2443,7 @@ async function presenceSet(req:Request,body:any){
 
 async function backupExport(req:Request){
   await device(req);
-  const [settings,items,daily,bond,bondGestures,places,goals,goalParticipants,goalSteps,goalLinks,goalContributions,voiceTranscripts,photoContext,chatMessages,chatReactions,chatPins,chatFavorites,chatAttachments,chatPreferences,chatTranscripts,chatTranslations,chatAlbums,chatAlbumItems,chatStickers,chatStickerFavorites,chatStickerRecents,chatLiveLocations]=await Promise.all([
+  const [settings,items,daily,bond,bondGestures,places,goals,goalParticipants,goalSteps,goalLinks,goalContributions,voiceTranscripts,photoContext,chatMessages,chatReactions,chatPins,chatFavorites,chatAttachments,chatPreferences,chatTranscripts,chatTranslations,chatAlbums,chatAlbumItems,chatStickers,chatStickerFavorites,chatStickerRecents,chatLiveLocations,chatEntityRefs,chatPolls,chatPollOptions,chatPollVotes,chatChecklists,chatChecklistItems]=await Promise.all([
     ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
     ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:true}).limit(2000)),
     ok(db.from("galaxy_daily").select("day,person,mood,answer").order("day",{ascending:true}).limit(1000)),
@@ -2470,9 +2470,15 @@ async function backupExport(req:Request){
     ok(db.from("galaxy_chat_stickers").select("*").order("created_at",{ascending:true}).limit(2000)),
     ok(db.from("galaxy_chat_sticker_favorites").select("*").limit(4000)),
     ok(db.from("galaxy_chat_sticker_recents").select("*").limit(4000)),
-    ok(db.from("galaxy_chat_live_locations").select("*").order("started_at",{ascending:true}).limit(5000))
+    ok(db.from("galaxy_chat_live_locations").select("*").order("started_at",{ascending:true}).limit(5000)),
+    ok(db.from("galaxy_chat_entity_refs").select("*").limit(10000)),
+    ok(db.from("galaxy_chat_polls").select("*").order("created_at",{ascending:true}).limit(2000)),
+    ok(db.from("galaxy_chat_poll_options").select("*").limit(20000)),
+    ok(db.from("galaxy_chat_poll_votes").select("*").limit(20000)),
+    ok(db.from("galaxy_chat_checklists").select("*").order("created_at",{ascending:true}).limit(2000)),
+    ok(db.from("galaxy_chat_checklist_items").select("*").limit(20000))
   ]);
-  return json({format:"nuestra-galaxia-backup",version:3,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:items||[],daily:daily||[],bond:bond||[],bondGestures:bondGestures||[],places:places||[],goals:goals||[],goalParticipants:goalParticipants||[],goalSteps:goalSteps||[],goalLinks:goalLinks||[],goalContributions:goalContributions||[],voiceTranscripts:voiceTranscripts||[],photoContext:photoContext||[],chat:{messages:chatMessages||[],reactions:chatReactions||[],pins:chatPins||[],favorites:chatFavorites||[],attachments:chatAttachments||[],preferences:chatPreferences||[],transcripts:chatTranscripts||[],translations:chatTranslations||[],albums:chatAlbums||[],albumItems:chatAlbumItems||[],stickers:chatStickers||[],stickerFavorites:chatStickerFavorites||[],stickerRecents:chatStickerRecents||[],liveLocations:chatLiveLocations||[]}});
+  return json({format:"nuestra-galaxia-backup",version:4,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:items||[],daily:daily||[],bond:bond||[],bondGestures:bondGestures||[],places:places||[],goals:goals||[],goalParticipants:goalParticipants||[],goalSteps:goalSteps||[],goalLinks:goalLinks||[],goalContributions:goalContributions||[],voiceTranscripts:voiceTranscripts||[],photoContext:photoContext||[],chat:{messages:chatMessages||[],reactions:chatReactions||[],pins:chatPins||[],favorites:chatFavorites||[],attachments:chatAttachments||[],preferences:chatPreferences||[],transcripts:chatTranscripts||[],translations:chatTranslations||[],albums:chatAlbums||[],albumItems:chatAlbumItems||[],stickers:chatStickers||[],stickerFavorites:chatStickerFavorites||[],stickerRecents:chatStickerRecents||[],liveLocations:chatLiveLocations||[],entityRefs:chatEntityRefs||[],polls:chatPolls||[],pollOptions:chatPollOptions||[],pollVotes:chatPollVotes||[],checklists:chatChecklists||[],checklistItems:chatChecklistItems||[]}});
 }
 
 function uuidish(v:unknown){return /^[0-9a-f-]{36}$/i.test(String(v||""));}
@@ -2480,7 +2486,7 @@ function uuidish(v:unknown){return /^[0-9a-f-]{36}$/i.test(String(v||""));}
 async function backupRestore(req:Request,body:any){
   await device(req);
   const backup=body?.backup;
-  if(!backup||backup.format!=="nuestra-galaxia-backup"||![1,2,3].includes(Number(backup.version)))return json({error:"La copia no pertenece a Nuestra Galaxia."},400);
+  if(!backup||backup.format!=="nuestra-galaxia-backup"||![1,2,3,4].includes(Number(backup.version)))return json({error:"La copia no pertenece a Nuestra Galaxia."},400);
   const items=Array.isArray(backup.items)?backup.items.slice(0,2000):[];
   const daily=Array.isArray(backup.daily)?backup.daily.slice(0,1000):[];
   const bond=Array.isArray(backup.bond)?backup.bond.slice(0,2000):[];
@@ -2508,6 +2514,12 @@ async function backupRestore(req:Request,body:any){
   const chatStickerFavorites=Array.isArray(chat.stickerFavorites)?chat.stickerFavorites.slice(0,4000):[];
   const chatStickerRecents=Array.isArray(chat.stickerRecents)?chat.stickerRecents.slice(0,4000):[];
   const chatLiveLocations=Array.isArray(chat.liveLocations)?chat.liveLocations.slice(0,5000):[];
+  const chatEntityRefs=Array.isArray(chat.entityRefs)?chat.entityRefs.slice(0,10000):[];
+  const chatPolls=Array.isArray(chat.polls)?chat.polls.slice(0,2000):[];
+  const chatPollOptions=Array.isArray(chat.pollOptions)?chat.pollOptions.slice(0,20000):[];
+  const chatPollVotes=Array.isArray(chat.pollVotes)?chat.pollVotes.slice(0,20000):[];
+  const chatChecklists=Array.isArray(chat.checklists)?chat.checklists.slice(0,2000):[];
+  const chatChecklistItems=Array.isArray(chat.checklistItems)?chat.checklistItems.slice(0,20000):[];
   let restoredItems=0,restoredDaily=0,restoredBond=0,restoredBondGestures=0,restoredPlaces=0,restoredGoals=0,restoredGoalParticipants=0,restoredGoalSteps=0,restoredGoalLinks=0,restoredGoalContributions=0,restoredVoiceTranscripts=0,restoredPhotoContext=0,restoredChat=0;
 
   if(backup.settings&&typeof backup.settings==="object"&&!Array.isArray(backup.settings)){
@@ -2641,6 +2653,57 @@ async function backupRestore(req:Request,body:any){
     },{onConflict:"id",ignoreDuplicates:true}));
     restoredChat++;
   }
+  const pollClosedAt=new Map<string,string>();
+  for(const row of chatPolls){
+    const id=String(row?.id||""),createdBy=String(row?.created_by||""),question=text(row?.question,500);
+    if(!uuidish(id)||!["0","1"].includes(createdBy)||!question)continue;
+    const closesAt=row?.closes_at&&Number.isFinite(Date.parse(String(row.closes_at)))?new Date(String(row.closes_at)).toISOString():null;
+    await ok(db.from("galaxy_chat_polls").upsert({
+      id,message_id:uuidish(row?.message_id)?String(row.message_id):null,created_by:createdBy,question,
+      allow_multiple:row?.allow_multiple===true,closes_at:closesAt,closed_at:null,
+      created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()
+    },{onConflict:"id",ignoreDuplicates:true}));
+    if(row?.closed_at&&Number.isFinite(Date.parse(String(row.closed_at))))pollClosedAt.set(id,new Date(String(row.closed_at)).toISOString());
+  }
+  for(const row of chatPollOptions){
+    const id=String(row?.id||""),pollId=String(row?.poll_id||""),label=text(row?.label,240),position=Number(row?.position);
+    if(!uuidish(id)||!uuidish(pollId)||!label||!Number.isInteger(position)||position<0||position>9)continue;
+    await ok(db.from("galaxy_chat_poll_options").upsert({id,poll_id:pollId,label,position,created_at:row?.created_at||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
+  }
+  for(const row of chatPollVotes){
+    const pollId=String(row?.poll_id||""),optionId=String(row?.option_id||""),person=String(row?.person||"");
+    if(!uuidish(pollId)||!uuidish(optionId)||!["0","1"].includes(person))continue;
+    try{await ok(db.from("galaxy_chat_poll_votes").upsert({poll_id:pollId,option_id:optionId,person,voted_at:row?.voted_at||new Date().toISOString()},{onConflict:"poll_id,option_id,person",ignoreDuplicates:true}));}catch{}
+  }
+  for(const [id,closedAt] of pollClosedAt)await ok(db.from("galaxy_chat_polls").update({closed_at:closedAt}).eq("id",id).is("closed_at",null));
+
+  for(const row of chatChecklists){
+    const id=String(row?.id||""),createdBy=String(row?.created_by||""),title=text(row?.title,300);
+    if(!uuidish(id)||!["0","1"].includes(createdBy)||!title)continue;
+    await ok(db.from("galaxy_chat_checklists").upsert({
+      id,message_id:uuidish(row?.message_id)?String(row.message_id):null,created_by:createdBy,title,
+      version:Math.max(1,Number(row?.version)||1),created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()
+    },{onConflict:"id",ignoreDuplicates:true}));
+  }
+  for(const row of chatChecklistItems){
+    const id=String(row?.id||""),checklistId=String(row?.checklist_id||""),label=text(row?.label,300),position=Number(row?.position),updatedBy=row?.updated_by==null?null:String(row.updated_by);
+    if(!uuidish(id)||!uuidish(checklistId)||!label||!Number.isInteger(position)||position<0||position>99||(updatedBy!==null&&!["0","1"].includes(updatedBy)))continue;
+    await ok(db.from("galaxy_chat_checklist_items").upsert({
+      id,checklist_id:checklistId,label,position,checked:row?.checked===true,updated_by:updatedBy,version:Math.max(1,Number(row?.version)||1),
+      created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()
+    },{onConflict:"id",ignoreDuplicates:true}));
+  }
+  for(const row of chatEntityRefs){
+    const messageId=String(row?.message_id||"");
+    const normalized=chatNormalizeEntityRef({cardType:row?.card_type,entityKind:row?.entity_kind,entityId:row?.entity_id});
+    const createdBy=String(row?.created_by||"");
+    if(!uuidish(messageId)||!normalized||!["0","1"].includes(createdBy))continue;
+    await ok(db.from("galaxy_chat_entity_refs").upsert({
+      message_id:messageId,card_type:normalized.cardType,entity_kind:normalized.entityKind,entity_id:normalized.entityId,
+      snapshot:chatSafeObject(row?.snapshot,2048),created_by:createdBy,created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()
+    },{onConflict:"message_id",ignoreDuplicates:true}));
+  }
+
   for(const row of chatAttachments){
     const id=String(row?.id||""),messageId=String(row?.message_id||""),kind=String(row?.kind||"file");
     if(!uuidish(id)||!uuidish(messageId)||!["photo","video","audio","file"].includes(kind))continue;
@@ -2677,7 +2740,7 @@ async function backupRestore(req:Request,body:any){
   }
   for(const row of chatAlbumItems)if(uuidish(row?.album_id)&&uuidish(row?.attachment_id)&&["0","1"].includes(String(row?.added_by)))await ok(db.from("galaxy_chat_album_items").upsert({album_id:String(row.album_id),attachment_id:String(row.attachment_id),added_by:String(row.added_by),added_at:row?.added_at||new Date().toISOString()},{onConflict:"album_id,attachment_id",ignoreDuplicates:true}));
 
-  return json({ok:true,restored:{items:restoredItems,daily:restoredDaily,bond:restoredBond,bondGestures:restoredBondGestures,places:restoredPlaces,goals:restoredGoals,goalParticipants:restoredGoalParticipants,goalSteps:restoredGoalSteps,goalLinks:restoredGoalLinks,goalContributions:restoredGoalContributions,voiceTranscripts:restoredVoiceTranscripts,photoContext:restoredPhotoContext,chatMessages:restoredChat},restoredGoals});
+  return json({ok:true,restored:{items:restoredItems,daily:restoredDaily,bond:restoredBond,bondGestures:restoredBondGestures,places:restoredPlaces,goals:restoredGoals,goalParticipants:restoredGoalParticipants,goalSteps:restoredGoalSteps,goalLinks:restoredGoalLinks,goalContributions:restoredGoalContributions,voiceTranscripts:restoredVoiceTranscripts,photoContext:restoredPhotoContext,chatMessages:restoredChat,entityRefs:chatEntityRefs.length,polls:chatPolls.length,checklists:chatChecklists.length},restoredGoals});
 }
 
 async function recordParticipation(person:string){
