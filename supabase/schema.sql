@@ -1537,6 +1537,63 @@ drop policy if exists trip_history_read on public.galaxy_trip_history;
 create policy trip_history_read on public.galaxy_trip_history for select to authenticated
 using(person=public.galaxy_person() or exists(select 1 from public.galaxy_locations l where l.person=galaxy_trip_history.person and l.sharing=true));
 
+-- NG-QA-014: each chat Storage object belongs to one attachment claim only.
+create unique index if not exists galaxy_chat_attachments_bucket_path_uidx
+on public.galaxy_chat_attachments(bucket,path);
+
+create unique index if not exists galaxy_chat_attachments_bucket_thumbnail_uidx
+on public.galaxy_chat_attachments(bucket,thumbnail_path)
+where thumbnail_path is not null and thumbnail_path<>'';
+
+create or replace function public.galaxy_chat_attachment_path_guard()
+returns trigger
+language plpgsql security invoker
+set search_path=''
+as $
+declare
+  sender text;
+  p text;
+  claimed text[];
+begin
+  select m.sender_person into sender
+  from public.galaxy_chat_messages m
+  where m.id=new.message_id;
+
+  if sender not in ('0','1') then raise exception 'Chat attachment message is invalid'; end if;
+  if new.path is null or new.path='' or new.path not like sender||'/%' then raise exception 'Chat attachment path is not owned by sender'; end if;
+  if new.thumbnail_path is not null and new.thumbnail_path<>'' and new.thumbnail_path not like sender||'/%' then raise exception 'Chat attachment thumbnail is not owned by sender'; end if;
+  if new.thumbnail_path is not null and new.thumbnail_path=new.path then raise exception 'Chat attachment thumbnail cannot reuse primary path'; end if;
+
+  select array_agg(x order by x) into claimed
+  from (
+    select distinct x
+    from unnest(array[new.path,nullif(new.thumbnail_path,'')]) as u(x)
+    where x is not null
+  ) q;
+
+  foreach p in array claimed loop
+    perform pg_advisory_xact_lock(hashtextextended(new.bucket||chr(31)||p,0));
+  end loop;
+
+  if exists(
+    select 1
+    from public.galaxy_chat_attachments a
+    where a.id is distinct from new.id
+      and a.bucket=new.bucket
+      and (a.path=any(claimed) or a.thumbnail_path=any(claimed))
+  ) then
+    raise exception 'Chat attachment Storage object is already claimed';
+  end if;
+
+  return new;
+end $;
+revoke all on function public.galaxy_chat_attachment_path_guard() from public,anon,authenticated;
+
+drop trigger if exists galaxy_chat_attachment_path_guard_trigger on public.galaxy_chat_attachments;
+create trigger galaxy_chat_attachment_path_guard_trigger
+before insert or update of message_id,bucket,path,thumbnail_path on public.galaxy_chat_attachments
+for each row execute function public.galaxy_chat_attachment_path_guard();
+
 create table if not exists public.galaxy_intelligence_cleanup_queue(
   source_type text not null check(length(source_type) between 1 and 40),
   source_id text not null check(length(source_id) between 1 and 300),
