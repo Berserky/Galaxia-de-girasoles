@@ -1336,16 +1336,21 @@ function chatGalaxyCardMarkup(card,m){
  }
  if(card.type==='ETA'||card.type==='CHECK_IN'){
   const eta=Number.isFinite(Number(card.etaSeconds))?fmtDuration(Number(card.etaSeconds)):'ETA pendiente',distance=Number.isFinite(Number(card.distanceM))?fmtDistance(Number(card.distanceM)):'';
-  return '<button type="button" class="chat-galaxy-card eta" data-action="chat-card-eta-map" data-id="'+attr(card.entityId)+'"><div class="chat-card-head"><span>'+ico(meta.icon)+'</span><div><p class="eyebrow">'+esc(card.visualStatus||meta.label)+'</p><h3>'+esc(card.title||'Acompáñame')+'</h3><p>'+esc([distance,eta,card.transport].filter(Boolean).join(' · '))+'</p></div></div><div class="chat-card-progress"><i style="--p:'+Math.max(0,Math.min(100,Number(card.progressPct||0)))+'%"></i></div><small>Última actualización: '+esc(fmtDateTime(card.updatedAt))+'</small></button>';
+  const traveler=names()[Number(card.person)]||'Nosotros',destination=card.title||'Destino',route=traveler+' → '+destination;
+  return '<button type="button" class="chat-galaxy-card eta" data-action="chat-card-eta-map" data-id="'+attr(card.entityId)+'"><div class="chat-card-head"><span>'+ico(meta.icon)+'</span><div><p class="eyebrow">'+esc(card.visualStatus||meta.label)+'</p><h3>'+esc(route)+'</h3><p>'+esc([distance,eta,card.transport].filter(Boolean).join(' · '))+'</p></div></div><div class="chat-card-progress"><i style="--p:'+Math.max(0,Math.min(100,Number(card.progressPct||0)))+'%"></i></div><small>Última actualización: '+esc(fmtDateTime(card.updatedAt))+'</small></button>';
  }
  const body=card.body?'<p>'+esc(card.body)+'</p>':'';
- const details=[card.date?fmtDate(card.date):'',card.targetDate?fmtDate(card.targetDate):'',card.artist||'',card.category||'',card.note||'',card.status||''].filter(Boolean).join(' · ');
+ const ownLocation=(cloud?.locations||[]).find(l=>String(l.person)===String(cloud.person)&&l.sharing&&locationFreshState(l));
+ const placeMeters=card.type==='PLACE'&&ownLocation?window.GalaxyDistance?.metersBetween?.(ownLocation,{latitude:Number(card.latitude),longitude:Number(card.longitude)}):null;
+ const placeDistance=Number.isFinite(Number(placeMeters))?fmtDistance(Number(placeMeters)):'';
+ const details=[card.date?fmtDate(card.date):'',card.time||'',card.targetDate?fmtDate(card.targetDate):'',placeDistance,card.artist||'',card.source||'',card.category||'',card.note||'',card.status||''].filter(Boolean).join(' · ');
+ const songCover=card.type==='SONG'&&card.cover?'<img class="chat-song-cover" loading="lazy" src="'+attr(card.cover)+'" alt="Portada de '+attr(card.title||'canción')+'">':'';
  let actions='';
  if(card.type==='PLACE')actions='<button type="button" data-action="chat-card-place-map" data-id="'+attr(card.entityId)+'" data-lat="'+attr(card.latitude)+'" data-lon="'+attr(card.longitude)+'">'+ico('map')+' Ver mapa</button><button type="button" data-action="chat-card-place-go" data-id="'+attr(card.entityId)+'">'+ico('navigation')+' Ir</button><button type="button" data-action="chat-card-place-save" data-id="'+attr(card.entityId)+'">'+ico('bookmark-plus')+' Guardar</button>';
  if(card.type==='SONG')actions='<button type="button" data-action="chat-card-song-play" data-id="'+attr(card.entityId)+'">'+ico('play')+' Play</button><button type="button" data-action="chat-card-song-add" data-id="'+attr(card.entityId)+'">'+ico('list-music')+' Añadir a Nuestra Música</button>'+(card.url?'<button type="button" data-action="chat-smart-link" data-url="'+attr(card.url)+'">'+ico('external-link')+' Abrir fuente</button>':'');
  if(card.type==='EVENT')actions='<button type="button" data-action="chat-card-event-plan" data-id="'+attr(card.entityId)+'">'+ico('calendar-plus')+' Añadir a planes</button><button type="button" data-action="chat-card-event-remind" data-id="'+attr(card.entityId)+'">'+ico('bell')+' Recordarme</button>';
  if(card.type==='STATUS'&&String(card.entityId)!==String(cloud.person))actions='<button type="button" data-action="chat-card-status-reply" data-id="'+attr(card.entityId)+'">'+ico('message-circle-reply')+' Responder</button>';
- return '<div class="chat-galaxy-card '+String(card.type||'').toLowerCase()+'"><div class="chat-card-head"><span>'+ico(meta.icon)+'</span><div><p class="eyebrow">'+esc(meta.label.toUpperCase())+'</p><h3>'+esc(card.title||meta.label)+'</h3>'+body+(details?'<small>'+esc(details)+'</small>':'')+'</div></div>'+(actions?'<div class="chat-card-actions">'+actions+'</div>':'')+'</div>';
+ return '<div class="chat-galaxy-card '+String(card.type||'').toLowerCase()+'">'+songCover+'<div class="chat-card-head"><span>'+ico(meta.icon)+'</span><div><p class="eyebrow">'+esc(meta.label.toUpperCase())+'</p><h3>'+esc(card.title||meta.label)+'</h3>'+body+(details?'<small>'+esc(details)+'</small>':'')+'</div></div>'+(actions?'<div class="chat-card-actions">'+actions+'</div>':'')+'</div>';
 }
 function chatSmartActionsMarkup(m){
  if(m.deleted_at||m.message_type==='card')return'';
