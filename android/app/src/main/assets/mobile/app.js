@@ -1243,9 +1243,32 @@ function themeSettingsCard(){
  return '<div class="card theme-settings-card"><div class="row between"><div><p class="eyebrow">APARIENCIA</p><h3>Temas de Nuestra Galaxia</h3><p>'+(automatic?'Automático está activo. Ahora se ve como <b>'+esc(engine.LABELS[state.active])+'</b>.':'Elegiste <b>'+esc(engine.LABELS[state.active])+'</b> manualmente.')+'</p></div>'+ico(themeIcon(state.active))+'</div><div class="theme-grid">'+engine.options().map(option=>'<button class="theme-option '+(choice===option.id?'active':'')+'" data-action="theme-set" data-value="'+attr(option.id)+'"><span class="theme-preview" data-preview="'+attr(option.id)+'">'+ico(themeIcon(option.id))+'</span><span><b>'+esc(option.label)+'</b><small>'+(option.id==='auto'?'Cambia con la fecha':option.id===state.active?'Vista actual':'Elegir tema')+'</small></span>'+(choice===option.id?ico('circle-check-big'):'')+'</button>').join('')+'</div><p class="theme-local-note">'+ico('smartphone')+' La apariencia se guarda en este teléfono. No cambia el tema del teléfono de '+esc(partnerName())+'.</p></div>';
 }
 
+function chatTime(value){try{return new Intl.DateTimeFormat('es-CO',{hour:'numeric',minute:'2-digit'}).format(new Date(value));}catch{return'';}}
+function chatDay(value){try{return new Intl.DateTimeFormat('es-CO',{weekday:'short',day:'numeric',month:'short'}).format(new Date(value));}catch{return'';}}
+function chatMessageMarkup(m){
+ const own=String(m.sender_person)===String(cloud.person),read=own&&chatState?.partnerLastReadAt&&Date.parse(m.created_at)<=Date.parse(chatState.partnerLastReadAt);
+ const reply=m.reply?'<div class="chat-reply-preview"><b>'+esc(String(m.reply.sender_person)===String(cloud.person)?'Tú':partnerName())+'</b><span>'+esc(m.reply.deleted_at?'Mensaje eliminado':m.reply.body||'')+'</span></div>':'';
+ return '<article class="chat-message '+(own?'own':'partner')+' '+(m.deleted_at?'deleted':'')+'" data-message-id="'+attr(m.id)+'">'+reply+'<div class="chat-bubble">'+(m.deleted_at?'<em>Mensaje eliminado</em>':'<p>'+esc(m.body||'')+'</p>')+'<div class="chat-meta"><span>'+esc(chatTime(m.created_at))+'</span>'+(own?'<span>'+(read?'Leído':'Enviado')+'</span>':'')+'</div></div>'+(!m.deleted_at?'<div class="chat-message-actions"><button data-action="chat-reply" data-id="'+attr(m.id)+'">'+ico('reply')+'</button>'+(own?'<button data-action="chat-delete" data-id="'+attr(m.id)+'">'+ico('trash-2')+'</button>':'')+'</div>':'')+'</article>';
+}
+function chatMessagesMarkup(){
+ if(chatLoading&&!chatState)return loading('Cargando mensajes');
+ const list=chatState?.messages||[];if(!list.length)return '<div class="chat-empty">'+ico('message-circle')+'<h3>Empiecen por aquí</h3><p>Este chat es privado y no entra automáticamente a Galaxy Intelligence.</p></div>';
+ let out='',last='';
+ for(const m of list){const day=chatDay(m.created_at);if(day!==last){out+='<div class="chat-day"><span>'+esc(day)+'</span></div>';last=day;}out+=chatMessageMarkup(m);}
+ return (chatState?.nextBefore?'<button class="chat-load-more" data-action="chat-load-more">Cargar mensajes anteriores</button>':'')+out;
+}
 function chatView(){
- const unread=Math.max(0,Number(cloud?.chat?.unread||0));
- return '<section class="chat-shell"><div class="chat-shell-head"><button class="chat-back" data-action="chat-close" aria-label="Cerrar chat">'+ico('arrow-left')+'</button><div><p class="eyebrow">GALAXY CHAT</p><h2>'+esc(partnerName())+'</h2><small>'+esc(unread?unread+' sin leer':'Conversación privada')+'</small></div></div><div class="card chat-bootstrap">'+ico('message-circle')+'<div><h3>Nuestro chat</h3><p>La interfaz ya tiene su espacio propio. Mensajes, lectura, adjuntos y notificaciones se conectarán aquí durante el update 3.1.</p></div></div></section>';
+ return '<section class="chat-shell"><div class="chat-shell-head"><button class="chat-back" data-action="chat-close">'+ico('arrow-left')+'</button><div class="chat-avatar">'+esc(partnerName().slice(0,1).toUpperCase())+'</div><div><p class="eyebrow">GALAXY CHAT</p><h2>'+esc(partnerName())+'</h2><small>Conversación privada</small></div></div><div id="chatMessages" class="chat-messages">'+chatMessagesMarkup()+'</div><form id="chatForm" class="chat-composer">'+(chatReply?'<div class="chat-compose-reply"><span>Respondiendo a '+esc(String(chatReply.sender_person)===String(cloud.person)?'ti':partnerName())+'</span><button type="button" data-action="chat-reply-cancel">'+ico('x')+'</button></div>':'')+'<div class="chat-compose-row"><textarea name="body" maxlength="4000" rows="1" placeholder="Mensaje para '+attr(partnerName())+'"></textarea><button type="submit">'+ico('send')+'</button></div></form></section>';
+}
+async function loadChat({older=false,quiet=false}={}){
+ if(chatLoading)return;chatLoading=true;
+ try{
+  const before=older?chatState?.nextBefore:null,result=await api('chat-state',{limit:60,...(before?{before}:{})});
+  if(older&&chatState){const map=new Map([...(result.messages||[]),...(chatState.messages||[])].map(m=>[String(m.id),m]));chatState={...result,messages:[...map.values()].sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)))};}else chatState=result;
+  const last=chatState.messages?.at(-1);if(last){await api('chat-read',{messageId:last.id});chatState.unread=0;if(cloud?.chat)cloud.chat.unread=0;}
+  if(view==='chat'){render();setTimeout(()=>{const el=document.querySelector('#chatMessages');if(el&&!older)el.scrollTop=el.scrollHeight;},20);}else renderChatFab();
+ }catch(error){if(!quiet)toast(error.message||'No pudimos cargar el chat.');}
+ finally{chatLoading=false;}
 }
 
 function intelligenceHubView(){
