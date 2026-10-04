@@ -1391,9 +1391,10 @@ async function chatProcessDue(req:Request){
   if(!claimed)continue;
   const sentAt=new Date().toISOString();
   const updated=await ok(db.from("galaxy_chat_messages").update({schedule_state:"sent",sent_at:sentAt,server_received_at:sentAt}).eq("id",String(row.id)).select("*").single());
-  const sender=String(updated.sender_person),target=sender==="0"?"1":"0",names=await profileNames();
-  const pushBody=String(updated.body||"").trim()||({photo:"Foto",video:"Video",video_message:"Videomensaje",audio:"Nota de voz",file:"Archivo",location:"Ubicación",sticker:"Sticker",gif:"GIF"}[String(updated.message_type)]||"Mensaje");
-  await dispatchPushEvent({person:sender,id:null},target,"chat_message",{title:names[Number(sender)]||"Tu persona",body:pushBody,action:"chat",senderName:names[Number(sender)]||"Tu persona",entityType:"chat_message",entityId:String(updated.id),silent:updated.silent===true});
+  const sender=String(updated.sender_person),target=sender==="0"?"1":"0",names=await profileNames(),senderName=names[Number(sender)]||"Tu persona";
+  const ref=String(updated.message_type)==="card"?(await ok(db.from("galaxy_chat_entity_refs").select("card_type").eq("message_id",String(updated.id)).limit(1)))?.[0]:null;
+  const pushBody=ref?senderName+" "+chatCardPushBody(ref):String(updated.body||"").trim()||({photo:"Foto",video:"Video",video_message:"Videomensaje",audio:"Nota de voz",file:"Archivo",location:"Ubicación",song:"Canción",sticker:"Sticker",gif:"GIF"}[String(updated.message_type)]||"Mensaje");
+  await dispatchPushEvent({person:sender,id:null},target,"chat_message",{title:senderName,body:pushBody,action:"chat",senderName,entityType:"chat_message",entityId:String(updated.id),silent:updated.silent===true});
   sent++;
  }
  return json({ok:true,sent,expired:(expired||[]).length});
