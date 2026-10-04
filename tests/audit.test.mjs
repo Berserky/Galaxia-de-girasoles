@@ -95,7 +95,7 @@ test('Connected universe links history destinations encounters privacy and searc
 
 test('Android companion is explicit, foreground, revocable and reproducible',()=>{
  const manifest=read('android/app/src/main/AndroidManifest.xml'),service=read('android/app/src/main/java/com/nuestragalaxia/companion/TrackingService.java'),store=read('android/app/src/main/java/com/nuestragalaxia/companion/DeviceStore.java'),cloud=read('app/cloud/adapter.js'),schema=read('supabase/schema.sql'),edge=read('supabase/functions/android-companion/index.ts');
- assert.match(manifest,/FOREGROUND_SERVICE_LOCATION/);assert.match(manifest,/ACCESS_BACKGROUND_LOCATION/);assert.match(manifest,/foregroundServiceType="location"/);
+ assert.match(manifest,/FOREGROUND_SERVICE_LOCATION/);assert.doesNotMatch(manifest,/ACCESS_BACKGROUND_LOCATION/);assert.match(manifest,/foregroundServiceType="location"/);
  assert.match(service,/startForeground/);assert.match(service,/ACTION_STOP/);assert.match(service,/PendingPointStore/);assert.match(service,/START_STICKY/);
  assert.match(store,/AndroidKeyStore/);assert.match(cloud,/galaxy_device_pair_start/);assert.match(cloud,/galaxy_device_pair_start_for/);assert.match(cloud,/\/api\/devices\//);
  assert.match(schema,/create table public\.galaxy_devices/);assert.match(schema,/devices_read_own/);assert.match(schema,/galaxy_device_pair_start_for/);assert.match(schema,/target_person<>caller_person and caller_person<>'0'/);assert.match(schema,/galaxy_location_history_device_sample_uidx/);
