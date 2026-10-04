@@ -45,7 +45,7 @@ public final class MobileApiClient {
 
     public static JSONObject upload(Context context,String token,Uri uri,String kind) throws Exception {
         String mime=context.getContentResolver().getType(uri);
-        if(mime==null||mime.isBlank())mime="voice".equals(kind)?"audio/mpeg":"music".equals(kind)?"audio/mpeg":"image/jpeg";
+        if(mime==null||mime.isBlank())mime="voice".equals(kind)||"music".equals(kind)?"audio/mpeg":"chat-file".equals(kind)?"application/octet-stream":"image/jpeg";
         String name=fileName(context,uri);
         long length=fileSize(context,uri);
 

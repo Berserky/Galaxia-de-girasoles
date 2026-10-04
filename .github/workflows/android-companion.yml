@@ -1,5 +1,5 @@
 name: Nuestra Galaxia Android
-# Release 3.2.3
+# Release 3.2.4
 on:
   pull_request:
     branches: [main]
@@ -68,7 +68,7 @@ jobs:
           gradle -p android assembleRelease -Pandroid.injected.signing.store.file="$PWD/android/release.keystore" -Pandroid.injected.signing.store.password="$STORE_PASSWORD" -Pandroid.injected.signing.key.alias="$KEY_ALIAS" -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
           cp android/app/build/outputs/apk/release/app-release.apk NuestraGalaxia.apk
           SHA=$(sha256sum NuestraGalaxia.apk | awk '{print $1}')
-          printf '{"versionCode":30,"versionName":"3.2.3","apkUrl":"https://github.com/Berserky/Galaxia-de-girasoles/releases/download/android-stable/NuestraGalaxia.apk","sha256":"%s","notes":"Nuestra Galaxia 3.2.3 corrige la detección de cámara en Android moderno: elimina falsos negativos de resolveActivity y declara visibilidad para captura de foto/video."}\n' "$SHA" > update.json
+          printf '{"versionCode":31,"versionName":"3.2.4","apkUrl":"https://github.com/Berserky/Galaxia-de-girasoles/releases/download/android-stable/NuestraGalaxia.apk","sha256":"%s","notes":"Nuestra Galaxia 3.2.4 simplifica Galaxy Chat: Archivos agrupa fotos, videos, documentos y otros formatos; cámara y audio quedan en sus controles dedicados."}\n' "$SHA" > update.json
       - name: Publicar canal estable
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env: { GH_TOKEN: "${{ github.token }}" }

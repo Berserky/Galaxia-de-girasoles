@@ -67,6 +67,11 @@ assert.ok(main.includes('FileProvider.getUriForFile(this,getPackageName()+".file
 assert.ok(main.includes('ClipData.newUri(getContentResolver(),"galaxy-camera",uri)')&&main.includes('ClipData.newUri(getContentResolver(),"galaxy-video",uri)'),'Foto/video deben conceder acceso al URI a la app de cámara');
 assert.equal(main.includes('resolveActivity(getPackageManager())'),false,'La captura no debe depender de resolveActivity: Android moderno puede ocultar handlers instalados');
 assert.ok(manifest.includes('android.media.action.IMAGE_CAPTURE')&&manifest.includes('android.media.action.VIDEO_CAPTURE'),'Manifest debe declarar visibilidad de intents de cámara y video');
+assert.ok(app.includes("showModal('Adjuntar'")&&app.includes('>Archivos</span>')&&app.includes('>Ubicación</span>')&&app.includes('>Canción</span>'),'El menú + debe conservar solo Archivos, Ubicación y Canción');
+assert.equal(app.includes('data-action="chat-attach-photo"')||app.includes('data-action="chat-attach-video"')||app.includes('data-action="chat-voice-open"'),false,'El menú + no debe duplicar foto, video ni audio');
+assert.ok(main.includes('else mime="*/*"')&&!main.includes('Intent.EXTRA_MIME_TYPES'),'Archivos debe abrir el selector universal sin filtrar tipos');
+assert.ok(edge.includes('kind==="chat-file"')&&edge.includes('mimes:null')&&edge.includes('application/octet-stream'),'Backend debe aceptar adjuntos de cualquier MIME bajo chat-file');
+assert.ok(schema.includes("values('galaxy-chat-media','galaxy-chat-media',false,62914560,null)"),'El bucket privado de chat no debe restringir MIME a nivel Storage');
 const scriptSources=[...index.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m=>m[1]);
 assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./insights.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./eta.js','./frequent-places.js','./gps-history.js','./theme.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
 assert.ok(index.includes("connect-src 'none'"),'La UI local no debe hacer fetch directo ni recibir credenciales');

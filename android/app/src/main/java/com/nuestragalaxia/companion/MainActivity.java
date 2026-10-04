@@ -304,10 +304,6 @@ public final class MainActivity extends ComponentActivity {
             else if("voice".equals(kind)||"chat-audio".equals(kind))mime="audio/*";
             else mime="*/*";
             intent.setType(mime);
-            if("chat-file".equals(kind))intent.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{
-                "application/pdf","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                "application/vnd.ms-excel","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","text/plain","application/zip"
-            });
             try{startActivityForResult(intent,REQ_MEDIA);}
             catch(Exception e){pendingMediaRequest=null;pendingMediaKind=null;reject(requestId,"No hay un selector compatible en este teléfono.");}
         });

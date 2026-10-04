@@ -858,18 +858,9 @@ create index if not exists galaxy_notifications_target_created_idx on public.gal
 create index if not exists galaxy_notifications_target_unread_idx on public.galaxy_notifications(target_person,created_at desc) where read_at is null;
 
 insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
-values(
- 'galaxy-chat-media','galaxy-chat-media',false,62914560,
- array[
-  'image/jpeg','image/png','image/webp','video/mp4','video/webm',
-  'audio/mpeg','audio/ogg','audio/webm','audio/mp4','application/pdf',
-  'application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'text/plain','application/zip'
- ]::text[]
-)
+values('galaxy-chat-media','galaxy-chat-media',false,62914560,null)
 on conflict(id) do update set
- public=false,file_size_limit=excluded.file_size_limit,allowed_mime_types=excluded.allowed_mime_types;
+ public=false,file_size_limit=excluded.file_size_limit,allowed_mime_types=null;
 
 alter table public.galaxy_chat_messages enable row level security;
 alter table public.galaxy_chat_read_state enable row level security;
