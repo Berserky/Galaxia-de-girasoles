@@ -184,7 +184,7 @@ create table public.galaxy_location_history (
  source_device_id uuid, client_sample_id uuid
 );
 create index galaxy_location_history_person_time_idx on public.galaxy_location_history(person,captured_at desc);
-create unique index galaxy_location_history_device_sample_uidx on public.galaxy_location_history(source_device_id,client_sample_id) where source_device_id is not null and client_sample_id is not null;
+create unique index galaxy_location_history_device_sample_uidx on public.galaxy_location_history(source_device_id,client_sample_id);
 alter table public.galaxy_location_history enable row level security;
 create policy location_history_read on public.galaxy_location_history for select to authenticated using(public.galaxy_person() is not null);
 create policy location_history_insert_own on public.galaxy_location_history for insert to authenticated with check(person=public.galaxy_person());
