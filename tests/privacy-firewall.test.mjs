@@ -61,6 +61,15 @@ test('NG-QA-001 service-role media browser filters locked capsule objects for th
   assert.match(guard,/chatCapsuleAccess/);
 });
 
+test('NG-QA-001 backup and history apply capsule privacy even for the author',()=>{
+  const backup=block(edge,'async function backupExport(','function uuidish(');
+  const history=block(edge,'async function todayHistory(','async function encounterStats(');
+  assert.match(backup,/privacyItemResponse/);
+  assert.match(backup,/hiddenCapsules/);
+  assert.match(backup,/chatReconcileDeletedMedia/);
+  assert.match(history,/chatCapsuleAccess/);
+});
+
 test('NG-QA-002 future date-time capsule is not searchable or semantically indexed',()=>{
   const doc=intelligence.buildIntelligenceDocument('item',{
     id:'capsule-future',kind:'capsule',author:'0',version:1,created:'2026-10-04T12:00:00Z',
