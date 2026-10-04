@@ -56,6 +56,7 @@ public final class MainActivity extends FragmentActivity {
     private static final int REQ_VIDEO=206;
     private static final int REQ_CHAT_CAMERA_PERMISSION=207;
     private static final int REQ_CHAT_VIDEO_PERMISSION=208;
+    private static final int REQ_CHAT_LOCATION_PERMISSION=209;
     private static final String CHAT_SECURITY_PREFS="galaxy-chat-security";
     private static final String CHAT_LOCK_ENABLED="enabled";
     private static final Set<String> MOBILE_ACTIONS=Set.of(
@@ -94,8 +95,12 @@ public final class MainActivity extends FragmentActivity {
     private Uri pendingCameraUri;
     private String pendingVideoRequest;
     private String pendingVideoPermissionRequest;
+    private int pendingVideoPermissionDuration=120;
+    private boolean pendingVideoPermissionMessage=false;
+    private boolean pendingVideoMessage=false;
     private File pendingVideoFile;
     private Uri pendingVideoUri;
+    private String pendingChatLocationRequest;
     private ActivityResultLauncher<PickVisualMediaRequest> photoPickerLauncher;
     private CloudMediaStore cloudMedia;
     private MediaRecorder voiceRecorder;
@@ -407,14 +412,20 @@ public final class MainActivity extends FragmentActivity {
         });
     }
 
-    void captureChatVideo(String requestId){
+    void captureChatVideo(String requestId){ captureChatVideoWithLimit(requestId,120,false); }
+    void captureChatVideoMessage(String requestId,int seconds){
+        int duration=seconds==15||seconds==30||seconds==60?seconds:30;
+        captureChatVideoWithLimit(requestId,duration,true);
+    }
+
+    private void captureChatVideoWithLimit(String requestId,int durationSeconds,boolean videoMessage){
         if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
         runOnUiThread(()->{
             boolean cameraGranted=checkSelfPermission(Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED;
             boolean microphoneGranted=checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED;
             if(!cameraGranted||!microphoneGranted){
                 if(pendingVideoPermissionRequest!=null){reject(requestId,"Ya hay una solicitud de permisos de video activa.");return;}
-                pendingVideoPermissionRequest=requestId;
+                pendingVideoPermissionRequest=requestId;pendingVideoPermissionDuration=durationSeconds;pendingVideoPermissionMessage=videoMessage;
                 java.util.ArrayList<String> missing=new java.util.ArrayList<>();
                 if(!cameraGranted)missing.add(Manifest.permission.CAMERA);
                 if(!microphoneGranted)missing.add(Manifest.permission.RECORD_AUDIO);
@@ -425,23 +436,23 @@ public final class MainActivity extends FragmentActivity {
             try{
                 File dir=new File(getCacheDir(),"camera-media");
                 if(!dir.exists()&&!dir.mkdirs())throw new IOException("No se pudo preparar la cámara.");
-                File file=File.createTempFile("galaxy-video-", ".mp4", dir);
+                File file=File.createTempFile(videoMessage?"galaxy-video-message-":"galaxy-video-", ".mp4", dir);
                 Uri uri=FileProvider.getUriForFile(this,getPackageName()+".files",file);
                 Intent intent=new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
                 intent.putExtra(MediaStore.EXTRA_OUTPUT,uri);
                 intent.setClipData(ClipData.newUri(getContentResolver(),"galaxy-video",uri));
-                intent.putExtra(MediaStore.EXTRA_DURATION_LIMIT,120);
+                intent.putExtra(MediaStore.EXTRA_DURATION_LIMIT,durationSeconds);
                 intent.putExtra(MediaStore.EXTRA_VIDEO_QUALITY,1);
                 intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                pendingVideoRequest=requestId;pendingVideoFile=file;pendingVideoUri=uri;
+                pendingVideoRequest=requestId;pendingVideoFile=file;pendingVideoUri=uri;pendingVideoMessage=videoMessage;
                 startActivityForResult(intent,REQ_VIDEO);
             }catch(ActivityNotFoundException e){
-                pendingVideoRequest=null;
+                pendingVideoRequest=null;pendingVideoMessage=false;
                 if(pendingVideoFile!=null)pendingVideoFile.delete();
                 pendingVideoFile=null;pendingVideoUri=null;
                 reject(requestId,"No encontramos una aplicación de cámara de video disponible. Habilita la cámara del teléfono y vuelve a intentar.");
             }catch(Exception e){
-                pendingVideoRequest=null;
+                pendingVideoRequest=null;pendingVideoMessage=false;
                 if(pendingVideoFile!=null)pendingVideoFile.delete();
                 pendingVideoFile=null;pendingVideoUri=null;
                 reject(requestId,e.getMessage()==null?"No pudimos abrir la cámara de video.":e.getMessage());
@@ -600,8 +611,8 @@ public final class MainActivity extends FragmentActivity {
             return;
         }
         if(requestCode==REQ_VIDEO){
-            String request=pendingVideoRequest;File file=pendingVideoFile;Uri uri=pendingVideoUri;
-            pendingVideoRequest=null;pendingVideoFile=null;pendingVideoUri=null;
+            String request=pendingVideoRequest;File file=pendingVideoFile;Uri uri=pendingVideoUri;boolean videoMessage=pendingVideoMessage;
+            pendingVideoRequest=null;pendingVideoFile=null;pendingVideoUri=null;pendingVideoMessage=false;
             if(request==null)return;
             if(resultCode!=RESULT_OK||file==null||uri==null){if(file!=null)file.delete();reject(request,"Video cancelado.");return;}
             io.execute(()->{
@@ -609,7 +620,9 @@ public final class MainActivity extends FragmentActivity {
                     if(file.length()>60L*1024L*1024L)throw new IOException("El video supera 60 MB.");
                     String token=store.token();
                     if(token==null)throw new ApiClient.ApiException(401,"El vínculo del dispositivo ya no es válido.");
-                    resolve(request,MobileApiClient.upload(this,token,uri,"chat-video"));
+                    JSONObject uploaded=MobileApiClient.upload(this,token,uri,"chat-video");
+                    if(videoMessage)uploaded.put("videoMessage",true);
+                    resolve(request,uploaded);
                 }catch(Exception e){reject(request,e.getMessage()==null?"No pudimos guardar el video.":e.getMessage());}
                 finally{file.delete();}
             });
@@ -853,6 +866,51 @@ public final class MainActivity extends FragmentActivity {
                 nativeChanged();
             }catch(Exception e){reject(requestId,"No pudimos detener la ubicación.");}
         });
+    }
+
+    void searchGiphy(String requestId,String query,boolean stickers){
+        if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+        io.execute(()->{
+            try{resolve(requestId,MobileApiClient.giphySearch(BuildConfig.GIPHY_API_KEY,query,stickers));}
+            catch(Exception e){reject(requestId,e.getMessage()==null?"No pudimos buscar en GIPHY.":e.getMessage());}
+        });
+    }
+
+    void getChatLocation(String requestId){
+        if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
+        runOnUiThread(()->{
+            boolean granted=checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED
+                ||checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED;
+            if(!granted){
+                if(pendingChatLocationRequest!=null){reject(requestId,"Ya hay una solicitud de ubicación activa.");return;}
+                pendingChatLocationRequest=requestId;
+                requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION},REQ_CHAT_LOCATION_PERMISSION);
+                return;
+            }
+            requestCurrentChatLocation(requestId);
+        });
+    }
+
+    private void requestCurrentChatLocation(String requestId){
+        try{
+            FusedLocationProviderClient fused=LocationServices.getFusedLocationProviderClient(this);
+            CurrentLocationRequest current=new CurrentLocationRequest.Builder()
+                .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
+                .setMaxUpdateAgeMillis(15000)
+                .setDurationMillis(12000)
+                .build();
+            com.google.android.gms.tasks.CancellationToken tokenSource=new com.google.android.gms.tasks.CancellationTokenSource().getToken();
+            fused.getCurrentLocation(current,tokenSource)
+                .addOnSuccessListener(this,loc->{
+                    if(loc==null){reject(requestId,"Android no obtuvo una ubicación reciente.");return;}
+                    try{resolve(requestId,new JSONObject()
+                        .put("latitude",loc.getLatitude()).put("longitude",loc.getLongitude())
+                        .put("accuracy",loc.hasAccuracy()?loc.getAccuracy():0)
+                        .put("capturedAt",Instant.ofEpochMilli(loc.getTime()>0?loc.getTime():System.currentTimeMillis()).toString()));}
+                    catch(Exception e){reject(requestId,"No pudimos preparar tu ubicación.");}
+                })
+                .addOnFailureListener(this,e->reject(requestId,"Android no pudo solicitar una ubicación reciente."));
+        }catch(Exception e){reject(requestId,"Android no pudo solicitar una ubicación reciente.");}
     }
 
     void refreshLocation(String requestId){
@@ -1127,14 +1185,20 @@ public final class MainActivity extends FragmentActivity {
                 else reject(request,"PERMISSION_CAMERA: Autoriza la cámara para tomar fotos desde el chat.");
             }
         }else if(requestCode==REQ_CHAT_VIDEO_PERMISSION){
-            String request=pendingVideoPermissionRequest;pendingVideoPermissionRequest=null;
+            String request=pendingVideoPermissionRequest;int duration=pendingVideoPermissionDuration;boolean videoMessage=pendingVideoPermissionMessage;
+            pendingVideoPermissionRequest=null;pendingVideoPermissionDuration=120;pendingVideoPermissionMessage=false;
             boolean cameraGranted=checkSelfPermission(Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED;
             boolean microphoneGranted=checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED;
             if(request!=null){
-                if(cameraGranted&&microphoneGranted)captureChatVideo(request);
+                if(cameraGranted&&microphoneGranted)captureChatVideoWithLimit(request,duration,videoMessage);
                 else if(!cameraGranted)reject(request,"PERMISSION_CAMERA: Autoriza la cámara para grabar video desde el chat.");
                 else reject(request,"PERMISSION_MICROPHONE: Autoriza el micrófono para grabar video con audio.");
             }
+        }else if(requestCode==REQ_CHAT_LOCATION_PERMISSION){
+            String request=pendingChatLocationRequest;pendingChatLocationRequest=null;
+            boolean granted=checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED
+                ||checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED;
+            if(request!=null){if(granted)requestCurrentChatLocation(request);else reject(request,"Autoriza la ubicación para compartir una posición puntual.");}
         }else if(requestCode==REQ_MICROPHONE){
             String request=pendingVoiceStartRequest;pendingVoiceStartRequest=null;
             boolean granted=results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED;
