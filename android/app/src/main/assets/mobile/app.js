@@ -1248,7 +1248,7 @@ function themeSettingsCard(){
 function chatTime(value){try{return new Intl.DateTimeFormat('es-CO',{hour:'numeric',minute:'2-digit'}).format(new Date(value));}catch{return'';}}
 const CHAT_OUTBOX_KEY='nuestra-galaxia.chat-outbox.v3';
 const CHAT_DRAFT_KEY='nuestra-galaxia.chat-draft.v3';
-const CHAT_REACTIONS=['❤️','😂','🥹','😮','😢','👍'];
+const CHAT_REACTIONS=['\u2764\uFE0F','\uD83D\uDE02','\uD83E\uDD79','\uD83D\uDE2E','\uD83D\uDE22','\uD83D\uDC4D'];
 
 function chatDay(value){
  try{
@@ -1326,7 +1326,6 @@ function chatMessageMarkup(m,{newDivider=false}={}){
  '<div class="chat-bubble">'+chatRichMessageMarkup(m)+(m.edited_at&&!m.deleted_at?'<span class="chat-edited">Editado</span>':'')+'</div>'+
  chatReactionMarkup(m)+
  '<div class="chat-meta"><span>'+esc(chatClock(m.server_received_at||m.created_at||m.client_created_at))+'</span>'+(own?'<span class="chat-status '+d.cls+'" title="'+esc(d.text)+'">'+ico(d.icon)+' '+esc(d.text)+'</span>':'')+(m.pin?'<span title="Fijado">'+ico('pin')+'</span>':'')+'</div>'+
- (local==='$FAILED'?'<div></div>':'')+
  (local==='FAILED'?'<div class="chat-failed-actions"><button type="button" data-action="chat-retry" data-client-id="'+attr(m.client_id)+'">Reintentar</button><button type="button" data-action="chat-local-delete" data-client-id="'+attr(m.client_id)+'">Eliminar</button></div>':'')+
  '</article>';
 }
@@ -1376,7 +1375,7 @@ function chatView(){
 }
 function chatSignature(state){
  const messages=(state?.messages||[]).map(m=>[m.id,m.body,m.deleted_at,m.edited_at,m.delivered_at,m.read_at,m.reply_to,m.server_seq,JSON.stringify(m.reactions||[]),!!m.pin,!!m.favorite,JSON.stringify(m.attachments||[])]);
- return JSON.stringify([messages,state?.unread||0,state?.nextBeforeSeq||'',state?.partnerPresence||{},state?.pinnedIds||[]]);
+ return JSON.stringify([messages,state?.unread||0,state?.partnerLastReadAt||'',state?.nextBeforeSeq||'',state?.partnerPresence||{},state?.pinnedIds||[]]);
 }
 function chatCapturePlayback(){
  const audio=document.querySelector('.chat-audio-card audio:not([paused])');
