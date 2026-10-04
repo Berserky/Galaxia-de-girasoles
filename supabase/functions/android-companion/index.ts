@@ -1247,6 +1247,11 @@ async function goalResponse(id:string){
  const data=await loadGoalData(),goal=(data.goals||[]).find((row:any)=>String(row.id)===String(id));
  return goal?goalView(goal,data):null;
 }
+async function notifyGoalUpdate(d:any,goal:any,copy:string){
+ if(!goal)return;
+ const person=String(d.person),target=person==="0"?"1":"0",names=await profileNames(),name=names[Number(person)]||"Tu persona";
+ await dispatchPushEvent(d,target,"goal_update",{title:name+" actualizó un objetivo",body:text(copy||goal.title||"Nuestros objetivos",180),action:"goals",senderName:name,entityType:"goal",entityId:String(goal.id)});
+}
 async function convertItemToGoal(req:Request,body:any){
  const d=await device(req),id=String(body.itemId||""),item=(await ok(db.from("galaxy_items").select("*").eq("id",id).limit(1)))?.[0];
  if(!item||!["plan","wish"].includes(String(item.kind)))return json({error:"Solo un plan o deseo puede convertirse en objetivo."},400);
@@ -1268,6 +1273,7 @@ async function goalsEngine(req:Request,body:any){
   const goal=await createGoalRecord(person,body.goal||body);
   await recordParticipation(person);
   await intelligenceBestEffort("goal-create",()=>syncIntelligenceGoal(goal));
+  await notifyGoalUpdate(d,goal,"Nuevo objetivo: "+String(goal.title||""));
   return json({goal:await goalResponse(String(goal.id))},201);
  }
  if(operation==="convert-item")return await convertItemToGoal(req,body);
@@ -1286,6 +1292,7 @@ async function goalsEngine(req:Request,body:any){
   await ok(db.from("galaxy_goal_participants").insert(normalized.participants.map((p:string)=>({goal_id:id,person:p}))));
   await recordParticipation(person);
   await intelligenceBestEffort("goal-update",()=>syncIntelligenceGoal(updated));
+  await notifyGoalUpdate(d,updated,"Actualizó "+String(updated.title||"un objetivo")+".");
   return json({goal:await goalResponse(id)});
  }
  if(operation==="delete"){
@@ -1308,7 +1315,9 @@ async function goalsEngine(req:Request,body:any){
   const claimed=await touchGoalVersion(id,expectedVersion);if(!claimed)return json({error:"Este objetivo cambió en otro dispositivo."},409);
   const complete=body.completed!==false;
   await ok(db.from("galaxy_goal_steps").update({completed_at:complete?new Date().toISOString():null,completed_by:complete?person:null}).eq("id",stepId).eq("goal_id",id));
-  await recordParticipation(person);await intelligenceBestEffort("goal-step-toggle",()=>syncIntelligenceGoal(id));return json({goal:await goalResponse(id)});
+  await recordParticipation(person);await intelligenceBestEffort("goal-step-toggle",()=>syncIntelligenceGoal(id));
+  if(complete)await notifyGoalUpdate(d,existing,"Completó un paso de "+String(existing.title||"un objetivo")+".");
+  return json({goal:await goalResponse(id)});
  }
  if(operation==="step-reorder"){
   const rows=await ok(db.from("galaxy_goal_steps").select("*").eq("goal_id",id).order("position"));
@@ -1323,7 +1332,9 @@ async function goalsEngine(req:Request,body:any){
   let contribution;try{contribution=normalizeContribution(body.contribution||body,person);}catch(e){return json({error:e instanceof Error?e.message:"Aporte no válido."},400);}
   const claimed=await touchGoalVersion(id,expectedVersion);if(!claimed)return json({error:"Este objetivo cambió en otro dispositivo."},409);
   await ok(db.from("galaxy_goal_contributions").insert({goal_id:id,...contribution}));
-  await recordParticipation(person);return json({goal:await goalResponse(id)});
+  await recordParticipation(person);
+  await notifyGoalUpdate(d,existing,"Registró un aporte en "+String(existing.title||"una meta de ahorro")+".");
+  return json({goal:await goalResponse(id)});
  }
  if(operation==="contribution-delete"){
   if(existing.kind!=="savings")return json({error:"Este objetivo no es una meta de ahorro."},400);
