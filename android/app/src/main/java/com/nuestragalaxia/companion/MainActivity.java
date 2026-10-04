@@ -334,6 +334,7 @@ public final class MainActivity extends ComponentActivity {
                 Uri uri=FileProvider.getUriForFile(this,getPackageName()+".files",file);
                 Intent intent=new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
                 intent.putExtra(MediaStore.EXTRA_OUTPUT,uri);
+                intent.setClipData(ClipData.newUri(getContentResolver(),"galaxy-camera",uri));
                 intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 if(intent.resolveActivity(getPackageManager())==null){file.delete();throw new IOException("No hay una cámara compatible en este teléfono.");}
                 pendingCameraRequest=requestId;pendingCameraFile=file;pendingCameraUri=uri;pendingCameraKind=kind;
@@ -367,6 +368,7 @@ public final class MainActivity extends ComponentActivity {
                 Uri uri=FileProvider.getUriForFile(this,getPackageName()+".files",file);
                 Intent intent=new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
                 intent.putExtra(MediaStore.EXTRA_OUTPUT,uri);
+                intent.setClipData(ClipData.newUri(getContentResolver(),"galaxy-video",uri));
                 intent.putExtra(MediaStore.EXTRA_DURATION_LIMIT,120);
                 intent.putExtra(MediaStore.EXTRA_VIDEO_QUALITY,1);
                 intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_READ_URI_PERMISSION);
