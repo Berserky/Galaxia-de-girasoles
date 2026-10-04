@@ -15,40 +15,18 @@ declare
   unlock_day text;
   unlock_time text;
   unlock_at timestamptz;
-  target_lat double precision;
-  target_lon double precision;
-  target_radius double precision;
-  loc public.galaxy_locations%rowtype;
-  h double precision;
-  distance_m double precision;
+  unlocked_for jsonb:=case when jsonb_typeof(capsule->'unlockedFor')='array' then capsule->'unlockedFor' else '[]'::jsonb end;
 begin
   if viewer not in ('0','1') then return false; end if;
 
+  -- Place capsules unlock once, when the server records arrival for this profile.
+  -- They do not relock after leaving, so previously issued media URLs cannot outlive
+  -- the authorization state that created them.
   if unlock_type='place' then
-    begin
-      target_lat:=(capsule->>'latitude')::double precision;
-      target_lon:=(capsule->>'longitude')::double precision;
-      target_radius:=greatest(50,least(1000,coalesce((capsule->>'radius')::double precision,150)));
-    exception when others then
-      return false;
-    end;
-    if target_lat not between -90 and 90 or target_lon not between -180 and 180 then return false; end if;
-
-    select * into loc
-    from public.galaxy_locations
-    where person=viewer
-      and sharing=true
-      and latitude is not null
-      and longitude is not null
-      and updated_at>=at_time-interval '4 minutes'
-    limit 1;
-    if not found then return false; end if;
-
-    h:=power(sin(radians((loc.latitude-target_lat)/2)),2)
-       +cos(radians(target_lat))*cos(radians(loc.latitude))
-       *power(sin(radians((loc.longitude-target_lon)/2)),2);
-    distance_m:=6371000*2*asin(sqrt(least(1,greatest(0,h))));
-    return distance_m<=target_radius;
+    return exists(
+      select 1 from jsonb_array_elements_text(unlocked_for) value
+      where value=viewer
+    );
   end if;
 
   raw_at:=coalesce(nullif(capsule->>'unlockAt',''),nullif(capsule->>'unlock_at',''));
@@ -66,6 +44,73 @@ end $$;
 
 revoke all on function public.galaxy_capsule_unlocked(jsonb,text,timestamptz) from public,anon;
 grant execute on function public.galaxy_capsule_unlocked(jsonb,text,timestamptz) to authenticated,service_role;
+
+create or replace function public.galaxy_capsule_mark_place_unlocks(
+  viewer text,
+  at_time timestamptz default now()
+) returns integer
+language plpgsql volatile security definer
+set search_path=''
+as $$
+declare
+  loc public.galaxy_locations%rowtype;
+  unlocked_count integer:=0;
+begin
+  if viewer not in ('0','1') then return 0; end if;
+
+  select * into loc
+  from public.galaxy_locations
+  where person=viewer
+    and sharing=true
+    and latitude is not null
+    and longitude is not null
+    and updated_at>=at_time-interval '4 minutes'
+  limit 1;
+  if not found then return 0; end if;
+
+  update public.galaxy_items i
+  set data=jsonb_set(
+    i.data,
+    '{unlockedFor}',
+    (case when jsonb_typeof(i.data->'unlockedFor')='array' then i.data->'unlockedFor' else '[]'::jsonb end)
+      || jsonb_build_array(viewer),
+    true
+  )
+  where i.kind='capsule'
+    and coalesce(nullif(i.data->>'unlockType',''),nullif(i.data->>'unlock_type',''),'date')='place'
+    and jsonb_typeof(i.data->'latitude')='number'
+    and jsonb_typeof(i.data->'longitude')='number'
+    and (i.data->>'latitude')::double precision between -90 and 90
+    and (i.data->>'longitude')::double precision between -180 and 180
+    and not exists(
+      select 1
+      from jsonb_array_elements_text(
+        case when jsonb_typeof(i.data->'unlockedFor')='array' then i.data->'unlockedFor' else '[]'::jsonb end
+      ) value
+      where value=viewer
+    )
+    and (
+      6371000*2*asin(sqrt(least(1,greatest(0,
+        power(sin(radians((loc.latitude-(i.data->>'latitude')::double precision)/2)),2)
+        +cos(radians((i.data->>'latitude')::double precision))*cos(radians(loc.latitude))
+        *power(sin(radians((loc.longitude-(i.data->>'longitude')::double precision)/2)),2)
+      ))))
+    ) <= greatest(
+      50,
+      least(
+        1000,
+        case when jsonb_typeof(i.data->'radius')='number'
+          then coalesce((i.data->>'radius')::double precision,150)
+          else 150 end
+      )
+    );
+
+  get diagnostics unlocked_count=row_count;
+  return unlocked_count;
+end $$;
+
+revoke all on function public.galaxy_capsule_mark_place_unlocks(text,timestamptz) from public,anon,authenticated;
+grant execute on function public.galaxy_capsule_mark_place_unlocks(text,timestamptz) to service_role;
 
 drop policy if exists items_read on public.galaxy_items;
 create policy items_read on public.galaxy_items
