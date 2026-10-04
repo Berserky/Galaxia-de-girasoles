@@ -1634,6 +1634,8 @@ document.addEventListener('click',async e=>{
   if(a==='chat-open'){chatState=null;go('chat');await loadChat({quiet:true});return;}
   if(a==='chat-close'){chatReply=null;go('home');return;}
   if(a==='chat-load-more'){await loadChat({older:true});return;}
+  if(a==='chat-reply'){chatReply=(chatState?.messages||[]).find(m=>String(m.id)===String(btn.dataset.id))||null;render();return;}
+  if(a==='chat-delete'){if(confirm('¿Eliminar este mensaje?')){await api('chat-delete',{id:btn.dataset.id});await loadChat({quiet:true});}return;}
   if(a==='chat-reply-cancel'){chatReply=null;render();return;}
   if(a==='goals-open'){go('goals');await loadGoals(true);return;}
   if(a==='goals-filter'){goalsFilter=btn.dataset.value||'active';render();return;}
