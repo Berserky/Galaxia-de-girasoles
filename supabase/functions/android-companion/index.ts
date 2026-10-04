@@ -735,16 +735,27 @@ function chatCapsuleUnlockAt(data:any){
  const iso=date+"T"+time+":00-05:00";
  return Number.isFinite(Date.parse(iso))?new Date(iso).toISOString():null;
 }
+function chatCapsuleAccess(data:any,person:string,locations:any[]=[],now=Date.now()){
+ const unlockType=String(data?.unlockType||data?.unlock_type||"date")==="place"?"place":"date";
+ if(unlockType==="place"){
+  const lat=Number(data?.latitude),lon=Number(data?.longitude),radius=Math.max(50,Math.min(1000,Number(data?.radius)||150));
+  const own=(locations||[]).find((x:any)=>String(x.person)===String(person)&&x.sharing===true&&freshContextLocation(x,now));
+  const unlocked=!!own&&[lat,lon].every(Number.isFinite)&&meters(Number(own.latitude),Number(own.longitude),lat,lon)<=radius;
+  return {locked:!unlocked,unlockType,unlockAt:null};
+ }
+ const unlockAt=chatCapsuleUnlockAt(data);
+ return {locked:!!unlockAt&&Date.parse(unlockAt)>now,unlockType,unlockAt};
+}
 function chatCardUnavailable(ref:any){
  return {available:false,type:String(ref?.card_type||"").toUpperCase(),entityKind:String(ref?.entity_kind||""),entityId:String(ref?.entity_id||""),message:"Este contenido ya no está disponible."};
 }
-function chatItemCard(type:string,row:any){
+function chatItemCard(type:string,row:any,capsuleAccess:any=null){
  const data=row?.data||{},base={available:true,type,entityKind:String(row.kind),entityId:String(row.id),author:String(row.author),createdAt:row.created};
  const fallback:Record<string,string>={MEMORY:"Recuerdo",PLAN:"Plan",SONG:"Canción",CAPSULE:"Cápsula",EVENT:"Evento"};
  const title=text(data.title||data.name||fallback[type]||"Contenido",240);
  if(type==="CAPSULE"){
-  const unlockAt=chatCapsuleUnlockAt(data),locked=!!unlockAt&&Date.parse(unlockAt)>Date.now();
-  if(locked)return {...base,title,locked:true,unlockAt};
+  const access=capsuleAccess||chatCapsuleAccess(data,String(row.author),[]);
+  if(access.locked)return {...base,title,locked:true,unlockType:access.unlockType,unlockAt:access.unlockAt};
  }
  const safe:any={...base,title,locked:false};
  if(data.body)safe.body=text(data.body,1200);
@@ -796,7 +807,12 @@ async function chatHydrateEntityRef(ref:any,person:string){
  try{
   if(["memory","plan","song","capsule","event"].includes(kind)){
    const row=(await ok(db.from("galaxy_items").select("id,kind,data,author,created").eq("id",id).eq("kind",kind).limit(1)))?.[0];
-   return row?chatItemCard(type,row):chatCardUnavailable(ref);
+   if(!row)return chatCardUnavailable(ref);
+   if(kind==="capsule"){
+    const locations=await ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude,updated_at").eq("person",person).limit(1));
+    return chatItemCard(type,row,chatCapsuleAccess(row.data||{},person,locations||[]));
+   }
+   return chatItemCard(type,row);
   }
   if(kind==="goal"){
    const row=(await ok(db.from("galaxy_goals").select("id,kind,title,description,category,target_date,status,target_amount,created_by,version,completed_at,created_at,updated_at").eq("id",id).limit(1)))?.[0];
@@ -1715,8 +1731,8 @@ async function mobileState(req:Request){
   const safeItems=(items||[]).map((row:any)=>{
     const copy=structuredClone(row),data=copy.data||{};
     if(copy.kind==="capsule"){
-      const unlockAt=chatCapsuleUnlockAt(data),locked=!!unlockAt&&Date.parse(unlockAt)>Date.now();
-      if(locked)copy.data={title:text(data.title||"Cápsula cerrada",160)||"Cápsula cerrada",date:validDate(data.date)?data.date:"",unlockDate:validDate(data.unlockDate)?data.unlockDate:"",unlockTime:/^\d{2}:\d{2}$/.test(String(data.unlockTime||""))?String(data.unlockTime):"",unlockAt,locked:true};
+      const access=chatCapsuleAccess(data,person,locations||[]);
+      if(access.locked)copy.data={title:text(data.title||"Cápsula cerrada",160)||"Cápsula cerrada",date:access.unlockType==="date"&&validDate(data.date)?data.date:"",unlockDate:access.unlockType==="date"&&validDate(data.unlockDate)?data.unlockDate:"",unlockTime:access.unlockType==="date"&&/^\d{2}:\d{2}$/.test(String(data.unlockTime||""))?String(data.unlockTime):"",unlockAt:access.unlockAt,unlockType:access.unlockType,locked:true};
     }
     if(copy.kind==="note"&&data.surprise&&String(copy.author)!==person){
       let unlocked=data.unlockType!=="date"||!data.unlockDate||data.unlockDate<=day;
@@ -2471,7 +2487,7 @@ async function presenceSet(req:Request,body:any){
 }
 
 async function backupExport(req:Request){
-  await device(req);
+  const d=await device(req),person=String(d.person);
   const [settings,items,daily,bond,bondGestures,places,goals,goalParticipants,goalSteps,goalLinks,goalContributions,voiceTranscripts,photoContext,chatMessages,chatReactions,chatPins,chatFavorites,chatAttachments,chatPreferences,chatTranscripts,chatTranslations,chatAlbums,chatAlbumItems,chatStickers,chatStickerFavorites,chatStickerRecents,chatLiveLocations,chatEntityRefs,chatPolls,chatPollOptions,chatPollVotes,chatChecklists,chatChecklistItems]=await Promise.all([
     ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
     ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:true}).limit(2000)),
@@ -2507,7 +2523,13 @@ async function backupExport(req:Request){
     ok(db.from("galaxy_chat_checklists").select("*").order("created_at",{ascending:true}).limit(2000)),
     ok(db.from("galaxy_chat_checklist_items").select("*").limit(20000))
   ]);
-  return json({format:"nuestra-galaxia-backup",version:4,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:items||[],daily:daily||[],bond:bond||[],bondGestures:bondGestures||[],places:places||[],goals:goals||[],goalParticipants:goalParticipants||[],goalSteps:goalSteps||[],goalLinks:goalLinks||[],goalContributions:goalContributions||[],voiceTranscripts:voiceTranscripts||[],photoContext:photoContext||[],chat:{messages:chatMessages||[],reactions:chatReactions||[],pins:chatPins||[],favorites:chatFavorites||[],attachments:chatAttachments||[],preferences:chatPreferences||[],transcripts:chatTranscripts||[],translations:chatTranslations||[],albums:chatAlbums||[],albumItems:chatAlbumItems||[],stickers:chatStickers||[],stickerFavorites:chatStickerFavorites||[],stickerRecents:chatStickerRecents||[],liveLocations:chatLiveLocations||[],entityRefs:chatEntityRefs||[],polls:chatPolls||[],pollOptions:chatPollOptions||[],pollVotes:chatPollVotes||[],checklists:chatChecklists||[],checklistItems:chatChecklistItems||[]}});
+  const privacyLocations=await ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude,updated_at").order("person"));
+  const hiddenCapsules=new Set((items||[]).filter((row:any)=>row.kind==="capsule"&&String(row.author)!==person&&chatCapsuleAccess(row.data||{},person,privacyLocations||[]).locked).map((row:any)=>String(row.id)));
+  const safeItems=(items||[]).filter((row:any)=>!hiddenCapsules.has(String(row.id)));
+  const hiddenBondIds=new Set((bond||[]).filter((row:any)=>row.type==="voice"&&hiddenCapsules.has(String(row.data?.referenceId||""))).map((row:any)=>String(row.id)));
+  const safeBond=(bond||[]).filter((row:any)=>!hiddenBondIds.has(String(row.id)));
+  const safeVoiceTranscripts=(voiceTranscripts||[]).filter((row:any)=>!hiddenBondIds.has(String(row.bond_id||"")));
+  return json({format:"nuestra-galaxia-backup",version:4,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:safeItems,daily:daily||[],bond:safeBond,bondGestures:bondGestures||[],places:places||[],goals:goals||[],goalParticipants:goalParticipants||[],goalSteps:goalSteps||[],goalLinks:goalLinks||[],goalContributions:goalContributions||[],voiceTranscripts:safeVoiceTranscripts,photoContext:photoContext||[],chat:{messages:chatMessages||[],reactions:chatReactions||[],pins:chatPins||[],favorites:chatFavorites||[],attachments:chatAttachments||[],preferences:chatPreferences||[],transcripts:chatTranscripts||[],translations:chatTranslations||[],albums:chatAlbums||[],albumItems:chatAlbumItems||[],stickers:chatStickers||[],stickerFavorites:chatStickerFavorites||[],stickerRecents:chatStickerRecents||[],liveLocations:chatLiveLocations||[],entityRefs:chatEntityRefs||[],polls:chatPolls||[],pollOptions:chatPollOptions||[],pollVotes:chatPollVotes||[],checklists:chatChecklists||[],checklistItems:chatChecklistItems||[]}});
 }
 
 function uuidish(v:unknown){return /^[0-9a-f-]{36}$/i.test(String(v||""));}
