@@ -386,5 +386,5 @@ console.log('QA móvil Nuestra Galaxia: OK');
 
 assert.ok(updater.includes('GET_SIGNING_CERTIFICATES')&&updater.includes('signerDigests'),'El actualizador debe verificar el certificado de firma del APK');
 assert.ok(updater.includes('Collections.disjoint(currentSigners,updateSigners)'),'Una actualización con firma distinta debe rechazarse');
-assert.ok(notifications.includes('AndroidKeyStore')&&notifications.includes('AES/GCM/NoPadding')&&notifications.includes('HISTORY_CIPHER'),'El historial local de notificaciones de chat debe estar cifrado');
-assert.ok(notifications.includes('.remove(LEGACY_HISTORY)'),'La app debe eliminar el historial de chat legado en texto plano');
+assert.ok(galaxyNotifications.includes('AndroidKeyStore')&&galaxyNotifications.includes('AES/GCM/NoPadding')&&galaxyNotifications.includes('HISTORY_CIPHER'),'El historial local de notificaciones de chat debe estar cifrado');
+assert.ok(galaxyNotifications.includes('.remove(LEGACY_HISTORY)'),'La app debe eliminar el historial de chat legado en texto plano');
