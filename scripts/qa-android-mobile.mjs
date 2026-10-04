@@ -47,6 +47,7 @@ const contextStore=read('android/app/src/main/java/com/nuestragalaxia/companion/
 const schema=read('supabase/schema.sql');
 const build=read('android/app/build.gradle.kts');
 const manifest=read('android/app/src/main/AndroidManifest.xml');
+const filePaths=read('android/app/src/main/res/xml/file_paths.xml');
 const workflow=read('.github/workflows/android-companion.yml');
 const chatMigration=read('supabase/migrations/20261004002624_galaxy_chat_notifications_31.sql');
 const widget=read('android/app/src/main/res/layout/widget_bond.xml')+read('android/app/src/main/java/com/nuestragalaxia/companion/BondWidget.java');
@@ -59,6 +60,11 @@ assert.equal(emoji.test(widget),false,'El widget no debe usar emojis/dingbats co
 
 assert.ok(existsSync(resolve(root,'android/app/src/main/assets/mobile/lucide.js')),'Falta Lucide local');
 assert.ok(existsSync(resolve(root,'android/app/src/main/assets/mobile/LICENSE-lucide')),'Falta licencia de Lucide');
+assert.ok(manifest.includes('android.permission.CAMERA'),'Android debe declarar permiso de cámara');
+assert.ok(manifest.includes('androidx.core.content.FileProvider'),'Android debe usar FileProvider para capturas');
+assert.ok(filePaths.includes('name="camera-media"')&&filePaths.includes('path="camera-media/"'),'FileProvider debe exponer la caché camera-media usada por foto y video');
+assert.ok(main.includes('FileProvider.getUriForFile(this,getPackageName()+".files",file)'),'Foto/video deben generar content URI mediante FileProvider');
+assert.ok(main.includes('ClipData.newUri(getContentResolver(),"galaxy-camera",uri)')&&main.includes('ClipData.newUri(getContentResolver(),"galaxy-video",uri)'),'Foto/video deben conceder acceso al URI a la app de cámara');
 const scriptSources=[...index.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m=>m[1]);
 assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./insights.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./eta.js','./frequent-places.js','./gps-history.js','./theme.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
 assert.ok(index.includes("connect-src 'none'"),'La UI local no debe hacer fetch directo ni recibir credenciales');
