@@ -1074,6 +1074,32 @@ async function chatState(req:Request,body:any={}){
  const pins=await ok(db.from("galaxy_chat_pins").select("message_id,pinned_by,pinned_at").order("pinned_at",{ascending:false}).limit(100));
  return json({messages,unread:Number(count||0),nextBeforeSeq,partnerPresence:await chatPartnerPresence(person),pinnedIds:(pins||[]).map((x:any)=>String(x.message_id))});
 }
+async function chatAttachmentClaimProblem(files:any[],person:string,messageId:string=""){
+ const claims=new Map<string,Set<string>>();
+ for(const input of files||[]){
+  const bucket=["galaxy-chat-media","galaxy-voice"].includes(String(input?.bucket))?String(input.bucket):"galaxy-chat-media";
+  const path=text(input?.path,400),thumbnail=text(input?.thumbnailPath||"",400);
+  if(!path||!path.startsWith(person+"/"))return {status:403,error:"El archivo no pertenece a este perfil."};
+  if(thumbnail&&!thumbnail.startsWith(person+"/"))return {status:403,error:"La miniatura no pertenece a este perfil."};
+  const set=claims.get(bucket)||new Set<string>();
+  for(const candidate of [path,thumbnail].filter(Boolean)){
+   if(set.has(candidate))return {status:409,error:"El archivo ya está asociado dentro de este mensaje."};
+   set.add(candidate);
+  }
+  claims.set(bucket,set);
+ }
+ for(const [bucket,set] of claims){
+  const paths=[...set];
+  if(!paths.length)continue;
+  let primary:any=db.from("galaxy_chat_attachments").select("id,message_id").eq("bucket",bucket).in("path",paths).limit(1);
+  let thumbs:any=db.from("galaxy_chat_attachments").select("id,message_id").eq("bucket",bucket).in("thumbnail_path",paths).limit(1);
+  if(messageId){primary=primary.neq("message_id",messageId);thumbs=thumbs.neq("message_id",messageId);}
+  const [primaryRows,thumbnailRows]=await Promise.all([ok(primary),ok(thumbs)]);
+  if(primaryRows?.length||thumbnailRows?.length)return {status:409,error:"El archivo ya está asociado a otro mensaje."};
+ }
+ return null;
+}
+
 async function chatSend(req:Request,body:any){
  const started=Date.now(),d=await device(req),person=String(d.person),target=person==="0"?"1":"0",clientId=String(body.clientId||"");
  if(!uuidish(clientId))return json({error:"Identificador de mensaje no válido."},400);
@@ -1110,6 +1136,8 @@ async function chatSend(req:Request,body:any){
   replyTo=String(reply.id);
  }
  let row=(await ok(db.from("galaxy_chat_messages").select("*").eq("sender_person",person).eq("client_id",clientId).limit(1)))?.[0],isNew=false;
+ const attachmentClaimProblem=await chatAttachmentClaimProblem(files,person,row?String(row.id):"");
+ if(attachmentClaimProblem)return json({error:attachmentClaimProblem.error},attachmentClaimProblem.status);
  let scheduled=String(row?.schedule_state||"")==="pending";
  if(!row){
   const now=new Date().toISOString(),clientRaw=String(body.clientCreatedAt||"");
