@@ -35,3 +35,15 @@ test('canonical schema no longer contains duplicated Mega blocks or broken dolla
  assert.equal((sql.match(/-- Mega Update 3\.0 · Galaxy Context Engine/g)||[]).length,1);
  assert.equal((sql.match(/-- Mega Update 3\.0 · Galaxy Intelligence Engine/g)||[]).length,1);
 });
+
+
+test('QA hardening migration keeps least privilege and removes known planner warnings',()=>{
+ const sql=read('supabase/migrations/20261004044500_qa_hardening_330.sql');
+ assert.match(sql,/revoke all on public\.galaxy_daily_questions from public, anon, authenticated/i);
+ assert.match(sql,/drop policy if exists destinations_write_own/i);
+ assert.match(sql,/create policy destinations_insert_own/i);
+ assert.match(sql,/create policy destinations_update_own/i);
+ assert.match(sql,/create policy destinations_delete_own/i);
+ assert.match(sql,/create index if not exists galaxy_chat_metrics_message_idx\s+on public\.galaxy_chat_metrics\(message_id\)/i);
+ assert.equal(/drop table|truncate table|drop column/i.test(sql),false);
+});
