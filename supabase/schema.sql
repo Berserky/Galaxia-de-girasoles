@@ -1436,6 +1436,14 @@ drop policy if exists items_read on public.galaxy_items;
 create policy items_read on public.galaxy_items for select to authenticated
 using(public.galaxy_person() is not null and (kind<>'capsule' or public.galaxy_capsule_unlocked(data,public.galaxy_person(),now())));
 
+drop policy if exists items_update on public.galaxy_items;
+create policy items_update on public.galaxy_items for update to authenticated
+using(public.galaxy_person() is not null and (kind<>'capsule' or author=public.galaxy_person()))
+with check(public.galaxy_person() is not null and (kind<>'capsule' or author=public.galaxy_person()));
+drop policy if exists items_delete on public.galaxy_items;
+create policy items_delete on public.galaxy_items for delete to authenticated
+using(public.galaxy_person() is not null and (kind<>'capsule' or author=public.galaxy_person()));
+
 create or replace function public.galaxy_capsule_object_access(bucket text,object_name text)
 returns boolean
 language plpgsql stable security definer
