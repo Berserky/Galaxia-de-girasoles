@@ -49,6 +49,11 @@ ANON_KEY=$(supabase status -o env | sed -n 's/^ANON_KEY="\(.*\)"$/\1/p')
 [ -n "$ANON_KEY" ] || { echo "local Supabase ANON_KEY missing"; exit 1; }
 curl(){ command curl -H "Authorization: Bearer $ANON_KEY" "$@"; }
 
+# The canonical schema is loaded through psql after the local API stack starts.
+# Force PostgREST to refresh its schema cache before the Edge Function performs service-role reads.
+psql "$DB_URL" -v ON_ERROR_STOP=1 -c "notify pgrst, 'reload schema';"
+sleep 2
+
 supabase functions serve android-companion --no-verify-jwt >/tmp/android-companion-e2e.log 2>&1 &
 EDGE_PID=$!
 cleanup(){ kill "$EDGE_PID" >/dev/null 2>&1 || true; }
