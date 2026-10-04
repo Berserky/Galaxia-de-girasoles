@@ -813,10 +813,11 @@ async function mobileState(req:Request){
   let devicesQuery=db.from("galaxy_devices").select("id,person,name,created_at,last_seen_at").is("revoked_at",null).order("created_at",{ascending:false}).limit(30);
   if(person!=="0")devicesQuery=devicesQuery.eq("person",person);
   const devices=await ok(devicesQuery);
+  const [chat,notifications]=await Promise.all([chatSummary(person),notificationSummary(person)]);
   return json({
     person,device:{id:d.id,name:d.name},today:day,settings,items:safeItems,daily:maskedDaily(daily||[],person),
-    bond,locations,places,presence:safePresence,devices,nextEvent:nextCalendarEvent(safeItems.filter((i:any)=>i.kind==="event"),day),
-    capabilities:{photos:true,music:true,voice:true,widget:true,backgroundLocation:true,trips:true,backup:true,presence:true,profileManagement:true,intelligence:true,transcription:true,book:true}
+    bond,locations,places,presence:safePresence,devices,chat,notifications,nextEvent:nextCalendarEvent(safeItems.filter((i:any)=>i.kind==="event"),day),
+    capabilities:{photos:true,music:true,voice:true,widget:true,backgroundLocation:true,trips:true,backup:true,presence:true,profileManagement:true,intelligence:true,transcription:true,book:true,chat:true,notifications:true}
   });
 }
 
@@ -2403,6 +2404,12 @@ Deno.serve(async req=>{
     if(action==="history")return await history(req,body);
     if(action==="location")return await location(req,body);
     if(action==="mobile-state")return await mobileState(req);
+    if(action==="chat-state")return await chatState(req,body);
+    if(action==="chat-send")return await chatSend(req,body);
+    if(action==="chat-read")return await chatRead(req,body);
+    if(action==="chat-delete")return await chatDelete(req,body);
+    if(action==="notifications-list")return await notificationsList(req,body);
+    if(action==="notifications-read")return await notificationsRead(req,body);
     if(action==="item-save")return await itemSave(req,body);
     if(action==="item-delete")return await itemDelete(req,body);
     if(action==="settings-save")return await settingsSave(req,body);
