@@ -60,9 +60,10 @@ test('capsules support date/time or place unlock without exposing coordinates wh
 });
 
 test('locked capsules never expose protected content through Chat hydration',()=>{
- const lock=edge.indexOf('if(locked)return {...base,title,locked:true,unlockAt}');
- const body=edge.indexOf('if(data.body)safe.body',lock);
- assert.ok(lock>=0&&body>lock,'capsule lock must be evaluated before body/media metadata is exposed');
+ const itemStart=edge.indexOf('function chatItemCard(');
+ const lock=edge.indexOf('if(access.locked)return {...base,title,locked:true,unlockType:access.unlockType,unlockAt:access.unlockAt}',itemStart);
+ const body=edge.indexOf('if(data.body)safe.body',itemStart);
+ assert.ok(lock>=itemStart&&body>lock,'capsule access guard must run before body/media metadata is exposed');
  assert.ok(app.includes("card.type==='CAPSULE'&&card.locked"));
 });
 
