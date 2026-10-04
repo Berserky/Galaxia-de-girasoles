@@ -27,6 +27,7 @@ export function sanitizePushPayload(eventType:unknown,payload:any={}){
  if(source.senderName)out.senderName=clean(source.senderName,80);
  if(source.entityType)out.entityType=clean(source.entityType,80);
  if(source.entityId)out.entityId=clean(source.entityId,160);
+ if(source.silent===true||source.silent==="true")out.silent="true";
  // Never send state or coordinates through the generic push envelope.
  for(const forbidden of ["latitude","longitude","battery","song","listening","speed","heading","location"]){
   if(Object.hasOwn(source,forbidden))throw new Error("El evento push contiene datos privados no permitidos.");
