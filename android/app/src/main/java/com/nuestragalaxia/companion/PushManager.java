@@ -8,7 +8,20 @@ import org.json.JSONObject;
 
 public final class PushManager {
     private static final String SYNC="galaxy-push-token-sync";
+    private static final String PREFS="galaxy-push-config";
     private PushManager(){}
+
+    private static String value(Context context,String key,String fallback){
+        String stored=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).getString(key,"");
+        return stored==null||stored.trim().isEmpty()?fallback:stored;
+    }
+
+    public static boolean configured(Context context){
+        return !value(context,"projectId",BuildConfig.FIREBASE_PROJECT_ID).trim().isEmpty()
+            && !value(context,"applicationId",BuildConfig.FIREBASE_APPLICATION_ID).trim().isEmpty()
+            && !value(context,"apiKey",BuildConfig.FIREBASE_API_KEY).trim().isEmpty()
+            && !value(context,"senderId",BuildConfig.FIREBASE_SENDER_ID).trim().isEmpty();
+    }
 
     public static boolean configured(){
         return !BuildConfig.FIREBASE_PROJECT_ID.trim().isEmpty()
@@ -17,15 +30,25 @@ public final class PushManager {
             && !BuildConfig.FIREBASE_SENDER_ID.trim().isEmpty();
     }
 
+    public static void configure(Context context,JSONObject config){
+        if(config==null)return;
+        String projectId=config.optString("projectId",""),applicationId=config.optString("applicationId",""),apiKey=config.optString("apiKey",""),senderId=config.optString("senderId","");
+        if(projectId.isBlank()||applicationId.isBlank()||apiKey.isBlank()||senderId.isBlank())return;
+        context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit()
+            .putString("projectId",projectId).putString("applicationId",applicationId).putString("apiKey",apiKey).putString("senderId",senderId).apply();
+        ensureFirebase(context);
+        schedule(context);
+    }
+
     public static boolean ensureFirebase(Context context){
-        if(!configured())return false;
+        if(!configured(context))return false;
         try{
             if(FirebaseApp.getApps(context).isEmpty()){
                 FirebaseOptions options=new FirebaseOptions.Builder()
-                    .setProjectId(BuildConfig.FIREBASE_PROJECT_ID)
-                    .setApplicationId(BuildConfig.FIREBASE_APPLICATION_ID)
-                    .setApiKey(BuildConfig.FIREBASE_API_KEY)
-                    .setGcmSenderId(BuildConfig.FIREBASE_SENDER_ID)
+                    .setProjectId(value(context,"projectId",BuildConfig.FIREBASE_PROJECT_ID))
+                    .setApplicationId(value(context,"applicationId",BuildConfig.FIREBASE_APPLICATION_ID))
+                    .setApiKey(value(context,"apiKey",BuildConfig.FIREBASE_API_KEY))
+                    .setGcmSenderId(value(context,"senderId",BuildConfig.FIREBASE_SENDER_ID))
                     .build();
                 FirebaseApp.initializeApp(context.getApplicationContext(),options);
             }
@@ -39,7 +62,7 @@ public final class PushManager {
     }
 
     public static void schedule(Context context){
-        if(!configured()||!new DeviceStore(context).pairedFast())return;
+        if(!configured(context)||!new DeviceStore(context).pairedFast())return;
         WorkManager.getInstance(context).enqueueUniqueWork(
             SYNC,ExistingWorkPolicy.REPLACE,
             new OneTimeWorkRequest.Builder(PushSyncWorker.class)
