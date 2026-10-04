@@ -31,7 +31,7 @@ jobs:
       - uses: denoland/setup-deno@v2
         with: { deno-version: "v2.x" }
       - name: QA Supabase Edge Functions
-        run: deno check supabase/functions/android-companion/index.ts
+        run: deno check --node-modules-dir=auto supabase/functions/android-companion/index.ts
       - uses: actions/setup-java@v5
         with: { distribution: temurin, java-version: "17" }
       - name: Preparar Android SDK
@@ -65,7 +65,7 @@ jobs:
         run: |
           REPORT=$(find android/app/build -name 'lint-results-debug.txt' -type f | head -1)
           if [ -n "$REPORT" ]; then cat "$REPORT"; else echo "Sin reporte de Lint disponible"; fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with: { name: NuestraGalaxia-debug, path: android/app/build/outputs/apk/debug/app-debug.apk, retention-days: 7 }
 
