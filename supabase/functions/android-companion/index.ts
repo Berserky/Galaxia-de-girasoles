@@ -4,7 +4,7 @@ import { aggregateInsightRows, evaluateAchievements, isInsightVisibleItem, perio
 import { QUESTION_DECKS, buildDateRecap, buildSequentialPlan, buildSurpriseExperience, normalizePlanCategory, questionById, roulettePendingPlans, selectQuestion } from "./date-engine.ts";
 import { buildGoalDateSuggestions, buildGoalInsightSummary, computeGoalProgress, conversionDraft, normalizeContribution, normalizeGoalInput, reorderStepIds } from "./goals-engine.ts";
 import { BUILTIN_GESTURES, computeBondProgress, gestureSnapshot, normalizeCustomGesture, resolveGesture } from "./bond-engine.ts";
-import { PUSH_EVENT_TYPES, sanitizePushPayload, sendFcmData } from "./push-engine.ts";
+import { PUSH_EVENT_TYPES, firebaseAndroidClientConfig, sanitizePushPayload, sendFcmData } from "./push-engine.ts";
 import { CONTEXT_EVENTS, buildDateContextRecap, buildEncounterSuggestion, buildTripContextRecap, contextStep, emptyContextState, haversineM, summarizeTrack } from "./context-engine.ts";
 import { bookSections, buildIntelligenceDocument, contentHashInput, explainConnection, normalizeSearchText, sanitizeTranscriptSegments, validateNarrative } from "./intelligence-engine.ts";
 import { aiProviderConfig, extractJsonObject, generateGroundedResponse, gteSmallEmbedding, transcribeAudioBlob } from "./intelligence-provider.ts";
@@ -524,6 +524,19 @@ async function savePushPreferences(deviceId:string,value:any){
  ));
  return enabled;
 }
+async function pushClientConfig(req:Request){
+ const d=await device(req);
+ const credentials=fcmCredentials();
+ if(!credentials)return json({available:false},503);
+ try{
+  const config=await firebaseAndroidClientConfig(credentials,"com.nuestragalaxia.companion");
+  return json({available:true,config,deviceId:String(d.id)});
+ }catch(error){
+  console.error("push-client-config",error instanceof Error?error.message:"error");
+  return json({available:false},503);
+ }
+}
+
 async function pushTokenRegister(req:Request,body:any){
  const d=await device(req),token=text(body.token,4096);
  if(token.length<20)return json({error:"Token push no válido."},400);
@@ -2431,6 +2444,7 @@ Deno.serve(async req=>{
     if(action==="pair-code-create")return await pairCodeCreate(req,body);
     if(action==="profile-repair")return await profileRepair(req,body);
     if(action==="device-revoke")return await deviceRevoke(req,body);
+    if(action==="push-client-config")return await pushClientConfig(req);
     if(action==="push-token-register")return await pushTokenRegister(req,body);
     if(action==="push-token-unregister")return await pushTokenUnregister(req);
     if(action==="push-preferences")return await pushPreferences(req,body);
