@@ -119,7 +119,7 @@ export function validateNarrative(value:any,allowedSources:any[]=[]){
  if(!title||!paragraphs.length||paragraphs.length>12)throw new Error("Narración no válida.");
  const used=new Set<string>(),out:any[]=[];
  for(const p of paragraphs){
-  const text=clean(p?.text,2200),ids=[...new Set((Array.isArray(p?.sourceIds)?p.sourceIds:[]).map(String))];
+  const text=clean(p?.text,2200),ids=[...new Set<string>((Array.isArray(p?.sourceIds)?p.sourceIds:[]).map((id:any)=>String(id)))];
   if(!text||!ids.length)throw new Error("Cada párrafo necesita texto y fuentes.");
   for(const id of ids){if(!allowed.has(id))throw new Error("La narración citó una fuente desconocida.");used.add(id);}
   out.push({text,sourceIds:ids});
