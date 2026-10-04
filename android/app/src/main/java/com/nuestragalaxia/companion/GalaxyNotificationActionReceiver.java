@@ -14,7 +14,7 @@ public final class GalaxyNotificationActionReceiver extends BroadcastReceiver {
         Context app=context.getApplicationContext();
         new Thread(()->{
             try{
-                BondStore store=new BondStore(app);
+                DeviceStore store=new DeviceStore(app);
                 String token=store.token();
                 if(token==null||token.isBlank())return;
                 if(GalaxyNotifications.ACTION_REPLY.equals(action)){
