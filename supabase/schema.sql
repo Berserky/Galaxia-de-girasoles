@@ -1465,7 +1465,7 @@ create or replace function public.galaxy_capsule_protect_unlock_state()
 returns trigger
 language plpgsql security invoker
 set search_path=''
-as $
+as $$
 begin
   if new.kind='capsule' then
     if tg_op='INSERT' then
@@ -1478,7 +1478,7 @@ begin
     end if;
   end if;
   return new;
-end $;
+end $$;
 revoke all on function public.galaxy_capsule_protect_unlock_state() from public,anon,authenticated;
 
 drop trigger if exists capsule_unlock_state_guard on public.galaxy_items;
