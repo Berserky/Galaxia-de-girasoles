@@ -23,6 +23,8 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.webkit.WebViewAssetLoader;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
 import androidx.core.content.FileProvider;
 import androidx.core.content.ContextCompat;
 import com.google.android.gms.location.CurrentLocationRequest;
@@ -148,7 +150,7 @@ public final class MainActivity extends ComponentActivity {
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(false);
-        settings.setAllowFileAccess(true);
+        settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
         settings.setAllowFileAccessFromFileURLs(false);
         settings.setAllowUniversalAccessFromFileURLs(false);
@@ -158,7 +160,16 @@ public final class MainActivity extends ComponentActivity {
         settings.setDisplayZoomControls(false);
         if(Build.VERSION.SDK_INT>=26)settings.setSafeBrowsingEnabled(true);
 
-        web.addJavascriptInterface(new GalaxyBridge(this),"GalaxyAndroid");
+        GalaxyBridge secureBridge=new GalaxyBridge(this);
+        if(!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)){
+            throw new IllegalStateException("Android System WebView necesita actualizarse para abrir Nuestra Galaxia de forma segura.");
+        }
+        WebViewCompat.addWebMessageListener(
+            web,
+            "GalaxyAndroid",
+            java.util.Set.of("https://appassets.androidplatform.net"),
+            (view,message,sourceOrigin,isMainFrame,replyProxy)->secureBridge.dispatchMessage(message.getData(),sourceOrigin,isMainFrame)
+        );
         web.setWebChromeClient(new WebChromeClient());
         web.setWebViewClient(new WebViewClient(){
             @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){ return assetLoader.shouldInterceptRequest(request.getUrl()); }
@@ -1114,7 +1125,7 @@ public final class MainActivity extends ComponentActivity {
         if(chatSyncReceiver!=null){try{unregisterReceiver(chatSyncReceiver);}catch(Exception ignored){}chatSyncReceiver=null;}
         if(updater!=null)updater.close();
         io.shutdownNow();
-        if(web!=null){web.removeJavascriptInterface("GalaxyAndroid");web.destroy();}
+        if(web!=null){web.destroy();}
         super.onDestroy();
     }
 }
