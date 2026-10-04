@@ -59,6 +59,8 @@ public final class GalaxyBridge {
                 case "openChatFile" -> openChatFile(requestId,args.optString(0,""),args.optString(1,"archivo"),args.optString(2,"application/octet-stream"));
                 case "openAppSettings" -> openAppSettings(requestId);
                 case "clearChatNotifications" -> clearChatNotifications(requestId);
+                case "setChatLock" -> setChatLock(requestId,args.optBoolean(0,false));
+                case "unlockChat" -> unlockChat(requestId);
                 case "checkUpdate" -> checkUpdate(requestId);
                 case "refreshMoments" -> refreshMoments(requestId);
                 case "closeApp" -> closeApp();
@@ -163,6 +165,9 @@ public final class GalaxyBridge {
     public void clearChatNotifications(String requestId){
         activity.clearChatNotifications(requestId);
     }
+
+    public void setChatLock(String requestId,boolean enabled){ activity.setChatLock(requestId,enabled); }
+    public void unlockChat(String requestId){ activity.unlockChat(requestId); }
 
     public void checkUpdate(String requestId){
         activity.checkUpdate(requestId);
