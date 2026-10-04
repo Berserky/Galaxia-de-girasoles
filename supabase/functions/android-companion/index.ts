@@ -835,6 +835,20 @@ async function chatSend(req:Request,body:any){
  const message=text(body.body,4000),attachmentMeta=chatSafeObject(body.attachment,4096);
  const files=Array.isArray(body.attachments)?body.attachments.slice(0,10):[];
  if(!message&&messageType==="text"&&!files.length)return json({error:"Escribe un mensaje."},400);
+ if(messageType==="sticker"){
+  const stickerId=String(attachmentMeta.stickerId||"");
+  if(!uuidish(stickerId)||(await ok(db.from("galaxy_chat_stickers").select("id").eq("id",stickerId).limit(1)))?.length!==1)return json({error:"Sticker no disponible."},404);
+ }
+ if(messageType==="location"){
+  if(String(attachmentMeta.mode||"static")==="live"){
+   const liveId=String(attachmentMeta.liveSessionId||"");
+   const session=uuidish(liveId)?(await ok(db.from("galaxy_chat_live_locations").select("id,sender_person,stopped_at,ends_at").eq("id",liveId).limit(1)))?.[0]:null;
+   if(!session||String(session.sender_person)!==person||session.stopped_at||(session.ends_at&&Date.parse(String(session.ends_at))<=Date.now()))return json({error:"La ubicación en vivo ya no está disponible."},409);
+  }else{
+   const lat=Number(attachmentMeta.latitude),lon=Number(attachmentMeta.longitude);
+   if(!Number.isFinite(lat)||lat<-90||lat>90||!Number.isFinite(lon)||lon<-180||lon>180)return json({error:"Ubicación no válida."},400);
+  }
+ }
  const recent=await ok(db.from("galaxy_chat_messages").select("id").eq("sender_person",person).gt("server_received_at",new Date(Date.now()-60000).toISOString()).limit(100));
  if((recent||[]).length>=60)return json({error:"Espera un momento antes de enviar más mensajes."},429);
  let replyTo:string|null=null;
@@ -881,10 +895,12 @@ async function chatSend(req:Request,body:any){
   });
  }
  if(attachmentRows.length)await ok(db.from("galaxy_chat_attachments").upsert(attachmentRows,{onConflict:"message_id,path",ignoreDuplicates:true}));
+ if(isNew&&messageType==="location"&&String(attachmentMeta.mode||"")==="live"&&uuidish(attachmentMeta.liveSessionId))await ok(db.from("galaxy_chat_live_locations").update({message_id:row.id}).eq("id",String(attachmentMeta.liveSessionId)).eq("sender_person",person));
+ if(isNew&&messageType==="sticker"&&uuidish(attachmentMeta.stickerId))await ok(db.from("galaxy_chat_sticker_recents").upsert({sticker_id:String(attachmentMeta.stickerId),person,last_used_at:new Date().toISOString()},{onConflict:"sticker_id,person"}));
  if(!scheduled)await ok(db.from("galaxy_chat_read_state").upsert({person,last_read_at:row.created_at,last_read_message_id:row.id,updated_at:new Date().toISOString()},{onConflict:"person"}));
  let push:any={sent:0,configured:false,scheduled};
  if(isNew&&!scheduled){
-  const names=await profileNames(),pushBody=message||({photo:"Foto",video:"Video",audio:"Nota de voz",file:"Archivo",location:"Ubicación",song:"Canción",link:"Enlace"}[messageType]||"Mensaje");
+  const names=await profileNames(),pushBody=message||({photo:"Foto",video:"Video",video_message:"Videomensaje",audio:"Nota de voz",file:"Archivo",location:"Ubicación",song:"Canción",link:"Enlace",sticker:"Sticker",gif:"GIF"}[messageType]||"Mensaje");
   push=await dispatchPushEvent(d,target,"chat_message",{title:names[Number(person)]||"Tu persona",body:pushBody,action:"chat",senderName:names[Number(person)]||"Tu persona",entityType:"chat_message",entityId:String(row.id),silent:row.silent===true});
  }
  const hydrated=(await chatHydrate([row],person))[0];
@@ -1108,7 +1124,7 @@ async function chatProcessDue(req:Request){
   const sentAt=new Date().toISOString();
   const updated=await ok(db.from("galaxy_chat_messages").update({schedule_state:"sent",sent_at:sentAt,server_received_at:sentAt}).eq("id",String(row.id)).select("*").single());
   const sender=String(updated.sender_person),target=sender==="0"?"1":"0",names=await profileNames();
-  const pushBody=String(updated.body||"").trim()||({photo:"Foto",video:"Video",audio:"Nota de voz",file:"Archivo"}[String(updated.message_type)]||"Mensaje");
+  const pushBody=String(updated.body||"").trim()||({photo:"Foto",video:"Video",video_message:"Videomensaje",audio:"Nota de voz",file:"Archivo",location:"Ubicación",sticker:"Sticker",gif:"GIF"}[String(updated.message_type)]||"Mensaje");
   await dispatchPushEvent({person:sender,id:null},target,"chat_message",{title:names[Number(sender)]||"Tu persona",body:pushBody,action:"chat",senderName:names[Number(sender)]||"Tu persona",entityType:"chat_message",entityId:String(updated.id),silent:updated.silent===true});
   sent++;
  }
