@@ -38,7 +38,7 @@ export function cleanSample(sample:any,options:any={}){
 }
 
 function cleanTrack(samples:any[],options:any={}){
- const rows=(samples||[]).map(x=>cleanSample(x,options)).filter(Boolean).sort((a:any,b:any)=>toMs(a.captured_at)-toMs(b.captured_at));
+ const rows:any[]=(samples||[]).map(x=>cleanSample(x,options)).filter((x:any)=>x!==null).sort((a:any,b:any)=>toMs(a.captured_at)-toMs(b.captured_at));
  const accepted:any[]=[];
  const maxImplied=Math.max(15,Number(options.maxImpliedSpeedMs)||65);
  for(const row of rows){
