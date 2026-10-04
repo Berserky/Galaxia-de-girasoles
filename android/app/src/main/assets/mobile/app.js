@@ -1394,7 +1394,7 @@ async function markChatReadIfVisible(){
  const el=document.querySelector('#chatMessages');if(!chatNearBottom(el))return;
  const last=[...(chatState?.messages||[])].reverse().find(m=>!chatOwn(m));
  if(!last||last.read_at)return;
- try{await api('chat-read',{messageId:last.id});last.read_at=new Date().toISOString();chatNewCount=0;if(cloud?.chat)cloud.chat.unread=0;}catch{}
+ try{await api('chat-read',{messageId:last.id});GalaxyNative.call('clearChatNotifications').catch(()=>{});last.read_at=new Date().toISOString();chatNewCount=0;if(cloud?.chat)cloud.chat.unread=0;}catch{}
 }
 async function loadChat({older=false,quiet=false,force=false,aroundId=''}={}){
  if(chatLoading)return;chatLoading=true;
