@@ -613,6 +613,69 @@ async function dispatchPushEvent(sourceDevice:any,targetPerson:string,eventType:
  return {eventId:event.id,sent:deliveries.filter(x=>x.status==="sent").length,configured:!!credentials};
 }
 
+async function chatState(req:Request,body:any={}){
+ const d=await device(req),person=String(d.person),limit=clampInt(body.limit,20,100,60),before=text(body.before||"",40);
+ let query=db.from("galaxy_chat_messages").select("id,client_id,sender_person,body,reply_to,deleted_at,created_at").order("created_at",{ascending:false}).order("id",{ascending:false}).limit(limit+1);
+ if(before&&Number.isFinite(Date.parse(before)))query=query.lt("created_at",before);
+ const rows=await ok(query),hasMore=(rows||[]).length>limit,page=(rows||[]).slice(0,limit);
+ const replyIds=[...new Set(page.map((x:any)=>x.reply_to).filter(Boolean).map(String))];
+ const replies=replyIds.length?await ok(db.from("galaxy_chat_messages").select("id,sender_person,body,deleted_at,created_at").in("id",replyIds)):[];
+ const replyMap=new Map((replies||[]).map((x:any)=>[String(x.id),x]));
+ const messages=page.slice().reverse().map((row:any)=>({...row,body:row.deleted_at?"":row.body,reply:row.reply_to?replyMap.get(String(row.reply_to))||null:null}));
+ const partnerState=(await ok(db.from("galaxy_chat_read_state").select("*").neq("person",person).limit(1)))?.[0]||{};
+ const summary=await chatSummary(person);
+ return json({messages,unread:summary.unread,partnerLastReadAt:partnerState.last_read_at||null,nextBefore:hasMore?page[page.length-1]?.created_at:null});
+}
+async function chatSend(req:Request,body:any){
+ const d=await device(req),person=String(d.person),message=text(body.body,4000),clientId=String(body.clientId||"");
+ if(!message)return json({error:"Escribe un mensaje."},400);
+ if(!uuidish(clientId))return json({error:"Identificador de mensaje no válido."},400);
+ const recent=await ok(db.from("galaxy_chat_messages").select("id").eq("sender_person",person).gt("created_at",new Date(Date.now()-60000).toISOString()).limit(80));
+ if((recent||[]).length>=60)return json({error:"Espera un momento antes de enviar más mensajes."},429);
+ let replyTo:string|null=null;
+ if(body.replyTo){
+  const reply=(await ok(db.from("galaxy_chat_messages").select("id").eq("id",String(body.replyTo)).limit(1)))?.[0];
+  if(!reply)return json({error:"El mensaje al que respondes ya no existe."},404);
+  replyTo=String(reply.id);
+ }
+ let row=(await ok(db.from("galaxy_chat_messages").select("*").eq("sender_person",person).eq("client_id",clientId).limit(1)))?.[0];
+ if(!row)row=await ok(db.from("galaxy_chat_messages").insert({client_id:clientId,sender_person:person,body:message,reply_to:replyTo}).select("*").single());
+ await ok(db.from("galaxy_chat_read_state").upsert({person,last_read_at:row.created_at,last_read_message_id:row.id,updated_at:new Date().toISOString()},{onConflict:"person"}));
+ const names=await profileNames(),target=person==="0"?"1":"0";
+ const push=await dispatchPushEvent(d,target,"chat_message",{title:names[Number(person)]||"Tu persona",body:message,action:"chat",senderName:names[Number(person)]||"Tu persona",entityType:"chat_message",entityId:String(row.id)});
+ return json({message:row,push},201);
+}
+async function chatRead(req:Request,body:any={}){
+ const d=await device(req),person=String(d.person);
+ let row:any=null;
+ if(body.messageId)row=(await ok(db.from("galaxy_chat_messages").select("id,created_at").eq("id",String(body.messageId)).limit(1)))?.[0];
+ if(!row)row=(await ok(db.from("galaxy_chat_messages").select("id,created_at").order("created_at",{ascending:false}).limit(1)))?.[0];
+ if(!row)return json({ok:true});
+ await ok(db.from("galaxy_chat_read_state").upsert({person,last_read_at:row.created_at,last_read_message_id:row.id,updated_at:new Date().toISOString()},{onConflict:"person"}));
+ await ok(db.from("galaxy_notifications").update({read_at:new Date().toISOString()}).eq("target_person",person).eq("event_type","chat_message").is("read_at",null).lte("created_at",row.created_at));
+ return json({ok:true,lastReadAt:row.created_at});
+}
+async function chatDelete(req:Request,body:any){
+ const d=await device(req),person=String(d.person),id=String(body.id||"");
+ const row=(await ok(db.from("galaxy_chat_messages").select("id,sender_person,deleted_at").eq("id",id).limit(1)))?.[0];
+ if(!row)return json({ok:true});
+ if(String(row.sender_person)!==person)return json({error:"Solo puedes eliminar tus propios mensajes."},403);
+ if(!row.deleted_at)await ok(db.from("galaxy_chat_messages").update({deleted_at:new Date().toISOString(),body:"Mensaje eliminado"}).eq("id",id));
+ return json({ok:true});
+}
+async function notificationsList(req:Request,body:any={}){
+ const d=await device(req),person=String(d.person),limit=clampInt(body.limit,20,100,60);
+ const rows=await ok(db.from("galaxy_notifications").select("*").eq("target_person",person).order("created_at",{ascending:false}).limit(limit));
+ const summary=await notificationSummary(person);
+ return json({notifications:rows||[],unread:summary.unread});
+}
+async function notificationsRead(req:Request,body:any={}){
+ const d=await device(req),person=String(d.person),now=new Date().toISOString();
+ if(body.id)await ok(db.from("galaxy_notifications").update({read_at:now}).eq("id",String(body.id)).eq("target_person",person));
+ else await ok(db.from("galaxy_notifications").update({read_at:now}).eq("target_person",person).is("read_at",null));
+ return json({ok:true,...await notificationSummary(person)});
+}
+
 async function bondGestureCatalog(req:Request){
  await device(req);
  const custom=await ok(db.from("galaxy_bond_gestures").select("*").eq("enabled",true).order("created_at",{ascending:true}).limit(50));
