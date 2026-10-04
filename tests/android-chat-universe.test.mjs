@@ -37,6 +37,18 @@ test('native cards preserve references to the original Galaxy domains',()=>{
  assert.ok(edge.includes('chatCardUnavailable(ref)'));
 });
 
+test('unlocked capsules reuse existing photo, voice and song storage by reference',()=>{
+ assert.ok(app.includes('data-action="capsule-photo-file"'));
+ assert.ok(app.includes('data-action="capsule-audio-file"'));
+ assert.ok(app.includes('name="capsuleSongId"'));
+ assert.ok(edge.includes('db.schema("storage").from("objects")'));
+ assert.ok(edge.includes('bucket_id","galaxy-photos"'));
+ assert.ok(edge.includes('bucket_id","galaxy-voice"'));
+ assert.ok(edge.includes('card.photoUrl=await signed("galaxy-photos"'));
+ assert.ok(edge.includes('card.audioUrl=await signed("galaxy-voice"'));
+ assert.ok(app.includes('capsule-reveal-media'));
+});
+
 test('capsules support date/time or place unlock without exposing coordinates while locked',()=>{
  assert.ok(app.includes('name="unlockType"'));
  assert.ok(app.includes('name="unlockPlaceId"'));
