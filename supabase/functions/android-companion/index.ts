@@ -2210,8 +2210,13 @@ async function placeDelete(req:Request,body:any){
 }
 
 async function setStatus(req:Request,body:any){
-  const d=await device(req),status=text(body.status,40);
-  await ok(db.from("galaxy_locations").update({status:status||null}).eq("person",String(d.person)));
+  const d=await device(req),person=String(d.person),status=text(body.status,40);
+  const current=(await ok(db.from("galaxy_locations").select("status").eq("person",person).limit(1)))?.[0]?.status||"";
+  await ok(db.from("galaxy_locations").update({status:status||null}).eq("person",person));
+  if(String(current||"")!==status){
+    const names=await profileNames(),target=person==="0"?"1":"0",name=names[Number(person)]||"Tu persona";
+    await dispatchPushEvent(d,target,"status_changed",{title:name+" cambió su estado",body:status||"Quitó su estado actual.",action:"home",senderName:name,entityType:"status",entityId:person});
+  }
   return json({ok:true,status});
 }
 
