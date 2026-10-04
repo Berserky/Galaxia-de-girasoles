@@ -3714,8 +3714,8 @@ async function moments(req:Request){
     ok(db.from("galaxy_bond_participation").select("day,person"))
   ]);
   const names=(Array.isArray(settings?.data?.names)?settings.data.names:["Nosotros","Dos"]).slice(0,2).map((name:unknown)=>text(name,40));
-  let photoUrl=null;if(config?.photo_path)photoUrl=await signedForPerson("galaxy-photos",String(config.photo_path),person,300);
   const person=String(d.person),partner=person==="0"?"1":"0";
+  let photoUrl=null;if(config?.photo_path)photoUrl=await signedForPerson("galaxy-photos",String(config.photo_path),person,300);
   const mood=(daily||[]).find((x:any)=>String(x.person)===partner)?.mood||null;
   const loc=(locations||[]).find((x:any)=>String(x.person)===partner),own=(locations||[]).find((x:any)=>String(x.person)===person);
   const p=(presence||[]).find((x:any)=>String(x.person)===partner),legacy=settings?.data?.presence?.[partner]||{};
