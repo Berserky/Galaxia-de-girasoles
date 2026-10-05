@@ -96,9 +96,13 @@ public final class MobileApiClient {
         }
         InputStream open() throws IOException {
             if(file!=null)return new FileInputStream(file);
-            InputStream in=context.getContentResolver().openInputStream(uri);
-            if(in==null)throw new IOException("No se pudo leer el archivo.");
-            return in;
+            try{
+                InputStream in=context.getContentResolver().openInputStream(uri);
+                if(in==null)throw new IOException("No se pudo leer el archivo.");
+                return in;
+            }catch(SecurityException e){
+                throw new IOException("Android perdió el permiso para leer este archivo. Selecciónalo de nuevo.",e);
+            }
         }
         void cleanup(){if(temporary&&file!=null)try{file.delete();}catch(Exception ignored){}}
     }
@@ -106,7 +110,9 @@ public final class MobileApiClient {
     public static JSONObject upload(Context context,String token,Uri uri,String kind) throws Exception {
         long limit=uploadLimit(kind);
         if(limit<0)throw new IOException("Tipo de archivo no válido.");
-        UploadSource source=prepareUpload(context,uri,kind,limit);
+        UploadSource source;
+        try{source=prepareUpload(context,uri,kind,limit);}
+        catch(SecurityException e){throw new IOException("Android perdió el permiso para leer este archivo. Selecciónalo de nuevo.",e);}
         try{return uploadWithRetry(token,kind,source,limit);}
         finally{source.cleanup();}
     }
