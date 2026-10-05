@@ -51,6 +51,8 @@ const build=read('android/app/build.gradle.kts');
 const manifest=read('android/app/src/main/AndroidManifest.xml');
 const filePaths=read('android/app/src/main/res/xml/file_paths.xml');
 const workflow=read('.github/workflows/android-companion.yml');
+const candidateWorkflow=read('.github/workflows/android-release-candidate.yml');
+const stableWorkflow=read('.github/workflows/android-release-stable.yml');
 const chatMigration=read('supabase/migrations/20261004002624_galaxy_chat_notifications_31.sql');
 const widget=read('android/app/src/main/res/layout/widget_bond.xml')+read('android/app/src/main/java/com/nuestragalaxia/companion/BondWidget.java');
 const motionTest=read('android/app/src/test/java/com/nuestragalaxia/companion/MotionClassifierThresholdTest.java');
@@ -278,11 +280,11 @@ assert.ok(main.includes('REQ_BACKUP_EXPORT')&&main.includes('REQ_BACKUP_IMPORT')
 const version=build.match(/versionCode\s*=\s*(\d+);\s*versionName\s*=\s*"([^"]+)"/);
 assert.ok(version,'No se pudo leer la versión Android');
 const [,versionCode,versionName]=version;
-assert.ok(workflow.includes("VERSION_CODE=$(printf '%s'")&&workflow.includes('versionCode = ([0-9]+)'),'El release debe derivar versionCode desde Gradle');
-assert.ok(workflow.includes('VERSION_NAME=$(printf')&&workflow.includes('versionName = "([^"]+)"'),'El release debe derivar versionName desde Gradle');
-assert.ok(workflow.includes('"versionCode":%s')&&workflow.includes('"versionName":"%s'),'update.json debe usar los valores derivados');
-assert.ok(workflow.includes('contents: read')&&workflow.includes('contents: write'),'CI debe separar permisos de QA y publicación');
-assert.ok(workflow.includes('NuestraGalaxia.apk'),'El release debe usar el nombre final NuestraGalaxia.apk');
+assert.ok(candidateWorkflow.includes("VERSION_CODE=$(printf '%s'")&&candidateWorkflow.includes('versionCode = ([0-9]+)'),'El candidate debe derivar versionCode desde Gradle');
+assert.ok(candidateWorkflow.includes('VERSION_NAME=$(printf')&&candidateWorkflow.includes('versionName = "([^"]+)"'),'El candidate debe derivar versionName desde Gradle');
+assert.ok(stableWorkflow.includes('versionCode:$versionCode')&&stableWorkflow.includes('versionName:$versionName'),'update.json estable debe usar los valores derivados del candidate');
+assert.ok(workflow.includes('contents: read')&&!workflow.includes('contents: write')&&stableWorkflow.includes('contents: write'),'CI y promoción estable deben separar permisos');
+assert.ok(candidateWorkflow.includes('NuestraGalaxia.apk')&&stableWorkflow.includes('NuestraGalaxia.apk'),'El release debe usar el nombre final NuestraGalaxia.apk');
 assert.ok(workflow.includes('lintDebug'),'El pipeline debe ejecutar Android Lint');
 assert.ok(workflow.includes('qa-android-mobile.mjs'),'El pipeline debe ejecutar esta auditoría');
 
