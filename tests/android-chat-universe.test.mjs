@@ -67,22 +67,23 @@ test('locked capsules never expose protected content through Chat hydration',()=
  assert.ok(app.includes("card.type==='CAPSULE'&&card.locked"));
 });
 
-test('polls are normalized, idempotent and notify the exact Chat card',()=>{
+test('polls remain normalized while Phase 2 routes mutations through the canonical transactional RPC',()=>{
  assert.ok(migration.includes('galaxy_chat_poll_vote_guard'));
  assert.ok(migration.includes('position between 0 and 9'));
  assert.ok(edge.includes('labels.length<2'));
  assert.ok(edge.includes('slice(0,10)'));
- assert.ok(edge.includes('onConflict:"poll_id,option_id,person"'));
+ assert.ok(edge.includes('db.rpc("galaxy_chat_poll_mutate"'));
  assert.ok(edge.includes('senderName+" votó en "'));
  assert.ok(edge.includes('entityType:"chat_message",entityId:String(poll.message_id)'));
  assert.ok(app.includes('chat-poll-vote'));
  assert.ok(app.includes('chat-poll-plan'));
+ assert.ok(app.includes("operation:'winner',pollId:btn.dataset.pollId"));
 });
 
-test('checklists use optimistic versions and exact-card notifications',()=>{
+test('checklists keep item optimistic versions and use the Phase 2 aggregate-version RPC',()=>{
  assert.ok(migration.includes('version integer not null default 1'));
  assert.ok(edge.includes('expectedVersion'));
- assert.ok(edge.includes('.eq("version",item.version)'));
+ assert.ok(edge.includes('db.rpc("galaxy_chat_checklist_set"'));
  assert.ok(edge.includes('senderName+(checked?" completó ":" reabrió ")'));
  assert.ok(app.includes('chat-check-set'));
  assert.ok(app.includes('chat-check-convert'));
