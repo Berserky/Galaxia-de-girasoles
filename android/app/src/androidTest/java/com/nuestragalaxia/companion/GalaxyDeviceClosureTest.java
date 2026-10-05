@@ -218,6 +218,10 @@ public class GalaxyDeviceClosureTest {
 
     @Test public void galaxyChat_phase2ScrollEngine_anchorRealtimeResizeAndNavigationAreStable() throws Exception {
         launchChat();
+        runJs("window.GalaxyChatPerf?.enable(true);window.GalaxyChatPerf?.reset();");
+        long pssBefore = android.os.Debug.getPss();
+        long cpuBefore = android.os.Process.getElapsedCpuTime();
+
         runJs("chatState={messages:Array.from({length:220},(_,i)=>({id:'p2-'+(i+100),client_id:'p2c-'+(i+100),sender_person:String(i%2),body:'Phase2 '+i,message_type:'text',attachments:[],server_seq:i+100,created_at:'2026-10-05T12:00:00Z',reactions:[]})),nextBeforeSeq:100,nextAfterSeq:null,pinnedIds:[]};chatStateSignature=chatSignature(chatState);chatMessageEngine.resetWindow(chatRows().length,{align:'end'});render();");
         awaitJs("document.querySelectorAll('.chat-message').length>0 && document.querySelectorAll('.chat-message').length<=84");
 
@@ -227,8 +231,10 @@ public class GalaxyDeviceClosureTest {
         double anchorOffset = Double.parseDouble(js("window.__p2Offset||0"));
         assertFalse("Phase 2 needs a stable visible anchor", anchorId.isBlank());
 
-        runJs("const e=document.querySelector('#chatMessages'),anchor=window.__p2Anchor;const older=Array.from({length:50},(_,i)=>({id:'p2-old-'+i,client_id:'p2-oldc-'+i,sender_person:String(i%2),body:'Older '+i,message_type:'text',attachments:[],server_seq:50+i,created_at:'2026-10-05T11:00:00Z',reactions:[]}));chatState={...chatState,messages:chatMessageEngine.mergeMessages(older,chatState.messages)};const idx=chatRows().findIndex(m=>String(m.id)===String(anchor.id));chatMessageEngine.focus(chatRows().length,idx);chatRenderMessages({anchor,scroll:'preserve'});");
+        long prependStarted = SystemClock.elapsedRealtime();
+        runJs("const anchor=window.__p2Anchor;const older=Array.from({length:50},(_,i)=>({id:'p2-old-'+i,client_id:'p2-oldc-'+i,sender_person:String(i%2),body:'Older '+i,message_type:'text',attachments:[],server_seq:50+i,created_at:'2026-10-05T11:00:00Z',reactions:[]}));chatState={...chatState,messages:chatMessageEngine.mergeMessages(older,chatState.messages)};const idx=chatRows().findIndex(m=>String(m.id)===String(anchor.id));chatMessageEngine.focus(chatRows().length,idx);chatRenderMessages({anchor,scroll:'preserve'});");
         SystemClock.sleep(500);
+        long prependMs = SystemClock.elapsedRealtime() - prependStarted;
         assertEquals("Prepend changed the visible message", anchorId, js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.id||''"));
         double prependOffset = Double.parseDouble(js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.offset||0"));
         assertTrue("Prepend drifted the visual anchor: " + prependOffset, Math.abs(prependOffset-anchorOffset) < 4d);
@@ -246,7 +252,7 @@ public class GalaxyDeviceClosureTest {
         SystemClock.sleep(250);
         assertEquals("true", js("chatNearBottom(document.querySelector('#chatMessages'))"));
 
-        runJs("const e=document.querySelector('#chatMessages');e.scrollTop=Math.max(200,e.scrollTop-900);chatScrollEngine.onScroll(e);window.__p2ResizeAnchor=chatCaptureAnchor(e);const t=document.querySelector('#chatForm textarea');t.style.height='110px';t.value='línea 1\nlínea 2\nlínea 3';t.dispatchEvent(new Event('input',{bubbles:true}));");
+        runJs("const e=document.querySelector('#chatMessages');e.scrollTop=Math.max(200,e.scrollTop-900);chatScrollEngine.onScroll(e);window.__p2ResizeAnchor=chatCaptureAnchor(e);const t=document.querySelector('#chatForm textarea');t.style.height='110px';t.value='linea 1\\nlinea 2\\nlinea 3';t.dispatchEvent(new Event('input',{bubbles:true}));");
         SystemClock.sleep(550);
         assertEquals("Composer resize changed the reading anchor", js("window.__p2ResizeAnchor?.id||''"), js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.id||''"));
 
@@ -257,6 +263,22 @@ public class GalaxyDeviceClosureTest {
         SystemClock.sleep(500);
         assertEquals("Navigation return lost chat context", js("window.__p2NavAnchor?.id||''"), js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.id||''"));
         assertTrue(Integer.parseInt(js("document.querySelectorAll('.chat-message').length")) <= 84);
+
+        long pssAfter = android.os.Debug.getPss();
+        long cpuAfter = android.os.Process.getElapsedCpuTime();
+        JSONObject perf = new JSONObject(js("JSON.stringify(window.GalaxyChatPerf?.report?.()||{})"));
+        JSONObject result = new JSONObject()
+            .put("prepend50MsLocalQa", prependMs)
+            .put("anchorBeforeOffset", anchorOffset)
+            .put("anchorAfterOffset", prependOffset)
+            .put("realtimeScrollBefore", realtimeBefore)
+            .put("realtimeScrollAfter", realtimeAfter)
+            .put("pssBeforeKb", pssBefore)
+            .put("pssAfterKb", pssAfter)
+            .put("cpuMs", Math.max(0, cpuAfter-cpuBefore))
+            .put("renderedMessages", Integer.parseInt(js("document.querySelectorAll('.chat-message').length")))
+            .put("perf", perf);
+        System.out.println("GALAXY_CHAT_PHASE2_ANDROID=" + result);
     }
 
     @Test public void dailyGoalsPlansEventsCapsulesMapContextBackupAndUpdate_areReachable() throws Exception {
