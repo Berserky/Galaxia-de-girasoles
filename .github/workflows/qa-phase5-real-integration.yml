@@ -1,0 +1,139 @@
+name: QA Phase 5 Real Integration
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "android/**"
+      - "scripts/qa-phase5-staging.mjs"
+      - "docs/qa/phase-5-device-closure.md"
+      - ".github/workflows/qa-phase5-real-integration.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa-phase5-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android_device_closure:
+    name: Android instrumentation + lifecycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Preparar Android SDK
+        run: |
+          SDK_ROOT=/usr/local/lib/android/sdk
+          SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | head -1)
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "platform-tools" "emulator"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.4.1"
+
+      - name: Habilitar KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm || true
+
+      - name: Empaquetar música de bienvenida
+        run: cp musica.mp3 android/app/src/main/assets/musica.mp3
+
+      - name: Instrumentation en emulador limpio
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: |
+            mkdir -p qa-artifacts
+            adb logcat -c
+            set -o pipefail
+            gradle -p android --no-daemon :app:connectedDebugAndroidTest               -PQA_EDGE_URL=http://127.0.0.1:18765               -PQA_SUPABASE_PUBLISHABLE_KEY=qa_phase5               2>&1 | tee qa-artifacts/instrumentation.txt
+
+            PACKAGE=com.nuestragalaxia.companion
+            echo "=== killed -> cold start ===" | tee qa-artifacts/lifecycle.txt
+            adb shell am force-stop "$PACKAGE"
+            if adb shell pidof "$PACKAGE" | grep -q .; then
+              echo "FAIL: package survived force-stop" | tee -a qa-artifacts/lifecycle.txt
+              exit 1
+            fi
+            adb shell am start -W -n "$PACKAGE/.MainActivity" | tee -a qa-artifacts/lifecycle.txt
+            sleep 2
+            adb shell pidof "$PACKAGE" | tee -a qa-artifacts/lifecycle.txt
+            adb shell dumpsys activity activities | grep -m1 -E "mResumedActivity|topResumedActivity" | tee -a qa-artifacts/lifecycle.txt
+
+            echo "=== foreground -> background ===" | tee -a qa-artifacts/lifecycle.txt
+            adb shell input keyevent KEYCODE_HOME
+            sleep 1
+            if adb shell dumpsys activity activities | grep -m1 -E "mResumedActivity|topResumedActivity" | grep -q "$PACKAGE"; then
+              echo "FAIL: app remained resumed after HOME" | tee -a qa-artifacts/lifecycle.txt
+              exit 1
+            fi
+
+            echo "=== background -> foreground ===" | tee -a qa-artifacts/lifecycle.txt
+            adb shell am start -W -n "$PACKAGE/.MainActivity" | tee -a qa-artifacts/lifecycle.txt
+            sleep 1
+            adb shell dumpsys activity activities | grep -m1 -E "mResumedActivity|topResumedActivity" | tee -a qa-artifacts/lifecycle.txt
+            adb shell dumpsys activity activities | grep -m1 -E "mResumedActivity|topResumedActivity" | grep -q "$PACKAGE"
+
+            echo "VERIFIED: killed/cold-start/background/foreground" | tee -a qa-artifacts/lifecycle.txt
+            adb logcat -d > qa-artifacts/logcat.txt
+
+      - name: Publicar resultados device closure
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: qa-phase5-android-device-closure
+          path: |
+            qa-artifacts/**
+            android/app/build/outputs/androidTest-results/**
+            android/app/build/reports/androidTests/**
+          retention-days: 14
+
+  remote_staging_dual_user:
+    name: Dual-user remote staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      QA_STAGING_EDGE_URL: ${{ vars.QA_STAGING_EDGE_URL }}
+      QA_STAGING_PUBLISHABLE_KEY: ${{ secrets.QA_STAGING_PUBLISHABLE_KEY }}
+      QA_STAGING_TOKEN_0: ${{ secrets.QA_STAGING_TOKEN_0 }}
+      QA_STAGING_TOKEN_1: ${{ secrets.QA_STAGING_TOKEN_1 }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Ejecutar o declarar NOT_EXECUTED
+        shell: bash
+        run: |
+          mkdir -p qa-artifacts
+          set +e
+          node scripts/qa-phase5-staging.mjs 2>&1 | tee qa-artifacts/remote-staging.txt
+          code=${PIPESTATUS[0]}
+          set -e
+          if [ "$code" -eq 78 ]; then
+            echo "Remote staging: NOT_EXECUTED (entorno/credenciales no configurados)." | tee -a qa-artifacts/remote-staging.txt
+            exit 0
+          fi
+          exit "$code"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: qa-phase5-remote-staging
+          path: qa-artifacts/remote-staging.txt
+          retention-days: 14
