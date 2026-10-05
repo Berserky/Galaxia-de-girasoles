@@ -31,12 +31,13 @@ Antes de producir el candidate se exigen:
 - Deno/type checks y tests;
 - replay limpio de migraciones Supabase/PostgreSQL;
 - RLS/chat DB smoke;
-- Android unit tests;
+- Android unit tests, incluidas regresiones del updater para downgrade, SHA corrupto e interrupción;
 - Android instrumentation y lifecycle;
 - Android Lint;
 - firma con el keystore de release;
 - verificación criptográfica de la firma;
-- SHA-256 del APK.
+- SHA-256 del APK;
+- instalación del APK estable actual y upgrade in-place al candidate firmado en un emulador limpio.
 
 El resultado es el artefacto privado de Actions `android-candidate`. No es una GitHub Release y no modifica `android-stable`.
 
@@ -75,6 +76,7 @@ Antes de escribir la release vuelve a comprobar:
 - staging smoke `VERIFIED`;
 - checksum SHA-256;
 - firma APK válida;
+- upgrade install stable → candidate verificado;
 - continuidad del certificado de firma respecto al APK estable actual;
 - `versionCode` estrictamente mayor al publicado.
 
@@ -124,7 +126,7 @@ La app empaqueta su UI móvil local, usa bridge nativo y consume `android-compan
 2. Abrir Actions → **Android Release Candidate**.
 3. Confirmar que el run terminó `success`; si staging falta o falla, corregir staging y generar un nuevo candidate válido.
 4. Revisar Security Advisor/Auth. Si hay usuarios con contraseña, confirmar que Leaked Password Protection está habilitado.
-5. Comprobar que `versionCode` es mayor al stable actual.
+5. Comprobar que `versionCode` es mayor al stable actual y que el gate de upgrade install terminó PASS.
 6. Ejecutar manualmente **Android Stable Promotion** con el Run ID.
 7. Introducir las dos confirmaciones requeridas.
 8. Aprobar el environment `android-stable` si tiene reviewer configurado.
