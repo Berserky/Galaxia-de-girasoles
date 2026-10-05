@@ -3,11 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "start": "node --env-file-if-exists=.env app/server.mjs",
     "dev": "node --env-file-if-exists=.env app/server.mjs --demo",
     "test": "node --test tests/*.test.mjs",
-    "build": "node scripts/build-pages.mjs"
+    "build": "node scripts/build-pages.mjs",
+    "bench:chat4:phase0": "node scripts/chat-4-phase0-baseline.mjs"
   }
 }

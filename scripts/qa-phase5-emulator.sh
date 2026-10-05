@@ -9,6 +9,8 @@ gradle -p android --no-daemon :app:connectedDebugAndroidTest \
   -PQA_SUPABASE_PUBLISHABLE_KEY=qa_phase5 \
   2>&1 | tee qa-artifacts/instrumentation.txt
 
+grep "GALAXY_CHAT_PHASE0_ANDROID=" qa-artifacts/instrumentation.txt > qa-artifacts/chat-4-phase0-android.jsonl || true
+
 PACKAGE=com.nuestragalaxia.companion
 DEBUG_APK="android/app/build/outputs/apk/debug/app-debug.apk"
 

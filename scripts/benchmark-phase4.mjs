@@ -103,7 +103,7 @@ async function timed(fn,repeats=3){
 
 const metrics={source:sourcePath,generatedAt:new Date().toISOString(),chat:{},cards:{},images:{},search:{},map:{},intelligence:{}};
 
-for(const count of [100,500,5000]){
+for(const count of [100,500,5000,20000]){
  const messages=Array.from({length:count},(_,i)=>message(i+1));
  h.setRows(baseRows());
  const m=await timed(()=>h.api.chatHydrate(messages,'0'));
