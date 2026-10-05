@@ -86,5 +86,7 @@ test('native premium bridge includes short video, GIPHY and point location',()=>
  const gradle=read('android/app/build.gradle.kts');
  for(const marker of ['captureChatVideoMessage','searchGiphy','getChatLocation'])assert.ok(bridge.includes(marker),marker);
  assert.ok(mobile.includes('giphySearch('));
- assert.ok(gradle.includes('GIPHY_API_KEY'));
+ assert.ok(edge.includes('Deno.env.get("GIPHY_API_KEY")'));
+ assert.ok(edge.includes('action==="giphy-search"'));
+ assert.equal(gradle.includes('GIPHY_API_KEY'),false,'La clave GIPHY no puede quedar en el APK');
 });
