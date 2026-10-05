@@ -216,6 +216,49 @@ public class GalaxyDeviceClosureTest {
         System.out.println("GALAXY_CHAT_PHASE1_ANDROID=" + result);
     }
 
+    @Test public void galaxyChat_phase2ScrollEngine_anchorRealtimeResizeAndNavigationAreStable() throws Exception {
+        launchChat();
+        runJs("chatState={messages:Array.from({length:220},(_,i)=>({id:'p2-'+(i+100),client_id:'p2c-'+(i+100),sender_person:String(i%2),body:'Phase2 '+i,message_type:'text',attachments:[],server_seq:i+100,created_at:'2026-10-05T12:00:00Z',reactions:[]})),nextBeforeSeq:100,nextAfterSeq:null,pinnedIds:[]};chatStateSignature=chatSignature(chatState);chatMessageEngine.resetWindow(chatRows().length,{align:'end'});render();");
+        awaitJs("document.querySelectorAll('.chat-message').length>0 && document.querySelectorAll('.chat-message').length<=84");
+
+        runJs("const e=document.querySelector('#chatMessages');e.scrollTop=Math.max(250,Math.floor((e.scrollHeight-e.clientHeight)*.42));chatScrollEngine.onScroll(e);window.__p2Anchor=chatCaptureAnchor(e);window.__p2Offset=window.__p2Anchor?.offset||0;");
+        SystemClock.sleep(250);
+        String anchorId = js("window.__p2Anchor?.id||''");
+        double anchorOffset = Double.parseDouble(js("window.__p2Offset||0"));
+        assertFalse("Phase 2 needs a stable visible anchor", anchorId.isBlank());
+
+        runJs("const e=document.querySelector('#chatMessages'),anchor=window.__p2Anchor;const older=Array.from({length:50},(_,i)=>({id:'p2-old-'+i,client_id:'p2-oldc-'+i,sender_person:String(i%2),body:'Older '+i,message_type:'text',attachments:[],server_seq:50+i,created_at:'2026-10-05T11:00:00Z',reactions:[]}));chatState={...chatState,messages:chatMessageEngine.mergeMessages(older,chatState.messages)};const idx=chatRows().findIndex(m=>String(m.id)===String(anchor.id));chatMessageEngine.focus(chatRows().length,idx);chatRenderMessages({anchor,scroll:'preserve'});");
+        SystemClock.sleep(500);
+        assertEquals("Prepend changed the visible message", anchorId, js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.id||''"));
+        double prependOffset = Double.parseDouble(js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.offset||0"));
+        assertTrue("Prepend drifted the visual anchor: " + prependOffset, Math.abs(prependOffset-anchorOffset) < 4d);
+
+        runJs("const e=document.querySelector('#chatMessages'),anchor=chatCaptureAnchor(e);window.__p2RealtimeTop=e.scrollTop;const incoming={id:'p2-live',client_id:'p2-livec',sender_person:'1',body:'Realtime while reading',message_type:'text',attachments:[],server_seq:9999,created_at:'2026-10-05T12:01:00Z',reactions:[]};chatState=chatMessageEngine.applySingle(chatState,incoming);chatStateSignature=chatSignature(chatState);chatNewCount=1;chatRenderMessages({anchor,scroll:'preserve'});");
+        SystemClock.sleep(450);
+        double realtimeBefore = Double.parseDouble(js("window.__p2RealtimeTop||0"));
+        double realtimeAfter = Double.parseDouble(js("document.querySelector('#chatMessages')?.scrollTop||0"));
+        assertTrue("Realtime moved a user reading history", Math.abs(realtimeAfter-realtimeBefore) < 8d);
+        assertEquals("1", js("chatNewCount"));
+        assertEquals("true", js("!!document.querySelector('.chat-new-button')"));
+        assertEquals("false", js("chatNearBottom(document.querySelector('#chatMessages'))"));
+
+        runJs("const e=document.querySelector('#chatMessages');chatScrollEngine.toBottom(e,{reason:'qa-bottom'});");
+        SystemClock.sleep(250);
+        assertEquals("true", js("chatNearBottom(document.querySelector('#chatMessages'))"));
+
+        runJs("const e=document.querySelector('#chatMessages');e.scrollTop=Math.max(200,e.scrollTop-900);chatScrollEngine.onScroll(e);window.__p2ResizeAnchor=chatCaptureAnchor(e);const t=document.querySelector('#chatForm textarea');t.style.height='110px';t.value='línea 1\nlínea 2\nlínea 3';t.dispatchEvent(new Event('input',{bubbles:true}));");
+        SystemClock.sleep(550);
+        assertEquals("Composer resize changed the reading anchor", js("window.__p2ResizeAnchor?.id||''"), js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.id||''"));
+
+        runJs("chatScrollEngine.remember(document.querySelector('#chatMessages'),'chat');window.__p2NavAnchor=chatCaptureAnchor(document.querySelector('#chatMessages'));go('home');");
+        awaitJs("!document.querySelector('.chat-shell')");
+        runJs("go('chat')");
+        awaitJs("!!document.querySelector('.chat-shell')");
+        SystemClock.sleep(500);
+        assertEquals("Navigation return lost chat context", js("window.__p2NavAnchor?.id||''"), js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.id||''"));
+        assertTrue(Integer.parseInt(js("document.querySelectorAll('.chat-message').length")) <= 84);
+    }
+
     @Test public void dailyGoalsPlansEventsCapsulesMapContextBackupAndUpdate_areReachable() throws Exception {
         launch();
         awaitJs("document.body.innerText.includes('¿Qué construimos después?')");
