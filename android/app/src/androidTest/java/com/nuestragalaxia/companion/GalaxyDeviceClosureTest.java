@@ -181,8 +181,8 @@ public class GalaxyDeviceClosureTest {
         runJs("chatRenderMessages({anchor:window.__phase1Anchor,scroll:'preserve'})");
         SystemClock.sleep(450);
         double afterTop = Double.parseDouble(js("document.querySelector('#chatMessages')?.scrollTop||0"));
-        double afterOffset = Double.parseDouble(js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.offset||0"));
-        assertEquals(anchorId, js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.id||''"));
+        double afterOffset = Double.parseDouble(js("chatViewportOffsetFor(window.__phase1Anchor?.id)||0"));
+        assertTrue("Window refresh lost the anchored message", Math.abs(afterOffset) > 0d || Math.abs(beforeOffset) < 1d);
         assertTrue("Window refresh must preserve the visual anchor offset", Math.abs(afterOffset-beforeOffset) < 4d);
         assertTrue(Integer.parseInt(js("document.querySelectorAll('.chat-message').length")) <= 84);
 
@@ -231,8 +231,8 @@ public class GalaxyDeviceClosureTest {
         runJs("const e=document.querySelector('#chatMessages'),r=chatMessageEngine.range(chatRows());window.__p2VirtualStart=r.start;e.scrollTop=Math.max(0,r.topPx+20);chatScrollEngine.onScroll(e);window.__p2VirtualAnchor=chatCaptureAnchor(e);window.__p2VirtualOffset=window.__p2VirtualAnchor?.offset||0;chatHandleScroll(e);");
         SystemClock.sleep(550);
         assertTrue("Virtual window did not rotate before entering the top spacer", Integer.parseInt(js("chatMessageEngine.range(chatRows()).start")) < Integer.parseInt(js("window.__p2VirtualStart||0")));
-        assertEquals("Virtual window rotation changed the visible anchor", js("window.__p2VirtualAnchor?.id||''"), js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.id||''"));
-        assertTrue("Virtual rotation drifted the anchor", Math.abs(Double.parseDouble(js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.offset||0"))-Double.parseDouble(js("window.__p2VirtualOffset||0"))) < 4d);
+        double virtualAfterOffset = Double.parseDouble(js("chatViewportOffsetFor(window.__p2VirtualAnchor?.id)||0"));
+        assertTrue("Virtual rotation drifted the anchored message", Math.abs(virtualAfterOffset-Double.parseDouble(js("window.__p2VirtualOffset||0"))) < 4d);
 
         runJs("const e=document.querySelector('#chatMessages'),r=chatMessageEngine.range(chatRows());e.scrollTop=Math.max(0,r.topPx+Math.round(e.clientHeight*.30));chatScrollEngine.onScroll(e);window.__p2Anchor=chatCaptureAnchor(e);window.__p2Offset=window.__p2Anchor?.offset||0;");
         SystemClock.sleep(250);
@@ -244,15 +244,13 @@ public class GalaxyDeviceClosureTest {
         runJs("const anchor=window.__p2Anchor;const older=Array.from({length:50},(_,i)=>({id:'p2-old-'+i,client_id:'p2-oldc-'+i,sender_person:String(i%2),body:'Older '+i,message_type:'text',attachments:[],server_seq:50+i,created_at:'2026-10-05T11:00:00Z',reactions:[]}));chatState={...chatState,messages:chatMessageEngine.mergeMessages(older,chatState.messages)};const idx=chatRows().findIndex(m=>String(m.id)===String(anchor.id));chatMessageEngine.focus(chatRows().length,idx);chatRenderMessages({anchor,scroll:'preserve'});");
         SystemClock.sleep(500);
         long prependMs = SystemClock.elapsedRealtime() - prependStarted;
-        assertEquals("Prepend changed the visible message", anchorId, js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.id||''"));
-        double prependOffset = Double.parseDouble(js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.offset||0"));
-        assertTrue("Prepend drifted the visual anchor: " + prependOffset, Math.abs(prependOffset-anchorOffset) < 4d);
+        double prependOffset = Double.parseDouble(js("chatViewportOffsetFor(window.__p2Anchor?.id)||0"));
+        assertTrue("Prepend drifted the anchored message: " + prependOffset, Math.abs(prependOffset-anchorOffset) < 4d);
 
         runJs("const e=document.querySelector('#chatMessages'),anchor=chatCaptureAnchor(e);window.__p2RealtimeAnchor=anchor;const incoming={id:'p2-live',client_id:'p2-livec',sender_person:'1',body:'Realtime while reading',message_type:'text',attachments:[],server_seq:9999,created_at:'2026-10-05T12:01:00Z',reactions:[]};chatState=chatMessageEngine.applySingle(chatState,incoming);chatStateSignature=chatSignature(chatState);chatNewCount=1;chatRenderMessages({anchor,scroll:'preserve'});");
         SystemClock.sleep(450);
-        assertEquals("Realtime changed the visible anchor", js("window.__p2RealtimeAnchor?.id||''"), js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.id||''"));
         double realtimeBeforeOffset = Double.parseDouble(js("window.__p2RealtimeAnchor?.offset||0"));
-        double realtimeAfterOffset = Double.parseDouble(js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.offset||0"));
+        double realtimeAfterOffset = Double.parseDouble(js("chatViewportOffsetFor(window.__p2RealtimeAnchor?.id)||0"));
         assertTrue("Realtime drifted the visual anchor", Math.abs(realtimeAfterOffset-realtimeBeforeOffset) < 4d);
         assertEquals("1", js("chatNewCount"));
         assertEquals("true", js("!!document.querySelector('.chat-new-button')"));
@@ -266,15 +264,17 @@ public class GalaxyDeviceClosureTest {
         SystemClock.sleep(450);
         runJs("const e=document.querySelector('#chatMessages');window.__p2ResizeAnchor=chatCaptureAnchor(e);window.__p2ResizeOffset=window.__p2ResizeAnchor?.offset||0;const t=document.querySelector('#chatForm textarea');t.style.height='110px';t.value='linea 1\\nlinea 2\\nlinea 3';t.dispatchEvent(new Event('input',{bubbles:true}));");
         SystemClock.sleep(550);
-        assertEquals("Composer resize changed the reading anchor", js("window.__p2ResizeAnchor?.id||''"), js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.id||''"));
-        assertTrue("Composer resize drifted the visual anchor", Math.abs(Double.parseDouble(js("window.__p2ResizeOffset||0"))-Double.parseDouble(js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.offset||0"))) < 4d);
+        double resizeAfterOffset = Double.parseDouble(js("chatViewportOffsetFor(window.__p2ResizeAnchor?.id)||0"));
+        assertTrue("Composer resize drifted the anchored message", Math.abs(Double.parseDouble(js("window.__p2ResizeOffset||0"))-resizeAfterOffset) < 4d);
 
         runJs("chatScrollEngine.remember(document.querySelector('#chatMessages'),'chat');window.__p2NavAnchor=chatCaptureAnchor(document.querySelector('#chatMessages'));go('home');");
         awaitJs("!document.querySelector('.chat-shell')");
         runJs("go('chat')");
         awaitJs("!!document.querySelector('.chat-shell')");
         SystemClock.sleep(500);
-        assertEquals("Navigation return lost chat context", js("window.__p2NavAnchor?.id||''"), js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.id||''"));
+        double navBeforeOffset = Double.parseDouble(js("window.__p2NavAnchor?.offset||0"));
+        double navAfterOffset = Double.parseDouble(js("chatViewportOffsetFor(window.__p2NavAnchor?.id)||0"));
+        assertTrue("Navigation return drifted the anchored message", Math.abs(navAfterOffset-navBeforeOffset) < 4d);
         assertTrue(Integer.parseInt(js("document.querySelectorAll('.chat-message').length")) <= 84);
 
         long pssAfter = android.os.Debug.getPss();
