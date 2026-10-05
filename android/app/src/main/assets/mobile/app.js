@@ -1549,7 +1549,7 @@ function chatHandleScroll(el){
   }
  });
 }
-function chatDraftAttachmentMarkup(){function chatDraftAttachmentMarkup(){
+function chatDraftAttachmentMarkup(){
  if(!chatAttachmentsDraft.length)return'';
  return '<div class="chat-draft-media">'+chatAttachmentsDraft.map((a,i)=>'<div><span>'+ico(a.kind==='photo'?'image':a.kind==='video'?'video':a.kind==='audio'?'mic':'file')+'</span><small>'+esc(a.name||a.kind)+'</small><button type="button" data-action="chat-attachment-remove" data-index="'+i+'" aria-label="Quitar adjunto">'+ico('x')+'</button></div>').join('')+'</div>';
 }
@@ -1678,7 +1678,7 @@ async function loadChat({older=false,newer=false,quiet=false,force=false,aroundI
   const queued=chatQueuedLoad;chatQueuedLoad=null;if(queued)setTimeout(()=>loadChat(queued),0);
  }
 }
-async function refreshChatBadgeasync function refreshChatBadge(){
+async function refreshChatBadge(){
  if(!native.paired)return;
  try{const result=await api('chat-state',{limit:20});if(cloud?.chat)cloud.chat.unread=Number(result.unread||0);renderChatFab();}catch{}
 }
@@ -1740,7 +1740,7 @@ function queueChatMessage({body='',messageType='text',attachments=[],attachment=
  }
  flushChatOutbox().then(()=>loadChat({quiet:true,force:true})).catch(()=>{});
 }
-function queueGalaxyCardfunction queueGalaxyCard(cardType,entityKind,entityId,localCard={}){
+function queueGalaxyCard(cardType,entityKind,entityId,localCard={}){
  if(!entityId)return;
  queueChatMessage({messageType:'card',entityRef:{cardType,entityKind,entityId:String(entityId)},card:{available:true,type:cardType,entityKind,entityId:String(entityId),...localCard}});
 }
