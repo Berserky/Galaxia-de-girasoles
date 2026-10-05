@@ -1448,8 +1448,16 @@ function mergeChatOutbox(messages){
 }
 function chatRows(){return mergeChatOutbox(chatState?.messages||[]);}
 function chatCaptureAnchor(el=document.querySelector('#chatMessages')){
- const anchor=chatScrollEngine.captureAnchor(el);
- return anchor?{id:anchor.messageId,offset:anchor.viewportOffset}:null;
+ if(!el)return null;
+ const box=el.getBoundingClientRect();
+ const visible=[...el.querySelectorAll('.chat-message')].find(row=>{const r=row.getBoundingClientRect();return r.bottom>box.top+2&&r.top<box.bottom-2;});
+ if(visible)return {id:String(visible.dataset.chatId||visible.dataset.id||''),offset:visible.getBoundingClientRect().top-box.top};
+ const list=chatRows();if(!list.length)return null;
+ const probe=Math.max(0,el.scrollTop+Math.min(180,el.clientHeight*.35)),index=chatMessageEngine.indexAtOffset(list,probe);
+ if(index<0)return null;
+ const message=list[index],id=String(message?.id||message?.client_id||'');if(!id)return null;
+ chatMessageEngine.focus(list.length,index);
+ return {id,offset:chatMessageEngine.offsetBefore(list,index)-el.scrollTop,virtual:true};
 }
 function chatRestoreAnchor(el,anchor){
  if(!anchor)return false;
@@ -1549,6 +1557,8 @@ function chatHandleScroll(el){
   const programmatic=chatScrollEngine.isProgrammatic();chatScrollEngine.onScroll(el);
   if(programmatic)return;
   const list=chatRows();if(!list.length)return;
+  const viewportAnchor=chatCaptureAnchor(el);
+  if(viewportAnchor?.virtual){chatRenderMessages({anchor:viewportAnchor,scroll:'preserve'});return;}
   const range=chatMessageEngine.range(list),remaining=el.scrollHeight-el.scrollTop-el.clientHeight;
   const rendered=[...el.querySelectorAll('.chat-message')],box=el.getBoundingClientRect(),first=rendered[0],last=rendered[rendered.length-1];
   const firstDistance=first?first.getBoundingClientRect().top-box.top:Infinity;
