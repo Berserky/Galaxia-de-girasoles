@@ -137,12 +137,17 @@ function create(options={}){
   return bound;
  }
 
- function remember(el=bound,context='chat'){
-  if(!el)return null;
-  const state=captureState(el,context);
-  const safe={anchor:state.anchor?{messageId:state.anchor.messageId,viewportOffset:Math.round(state.anchor.viewportOffset*100)/100,fallbacks:(state.anchor.fallbacks||[]).slice(0,2).map(x=>({messageId:x.messageId,viewportOffset:Math.round(Number(x.viewportOffset||0)*100)/100}))}:null,atBottom:state.atBottom,context:state.context,savedAt:now()};
+ function rememberState(state,context=state?.context||'chat'){
+  if(!state)return null;
+  const safe={anchor:state.anchor?{messageId:String(state.anchor.messageId||''),viewportOffset:Math.round(Number(state.anchor.viewportOffset||0)*100)/100,fallbacks:(state.anchor.fallbacks||[]).slice(0,2).map(x=>({messageId:String(x.messageId||''),viewportOffset:Math.round(Number(x.viewportOffset||0)*100)/100})).filter(x=>x.messageId)}:null,atBottom:!!state.atBottom,context:String(context||'chat'),savedAt:now()};
+  if(safe.anchor&&!safe.anchor.messageId)safe.anchor=null;
   try{sessionStorage.setItem(config.memoryKey,JSON.stringify(safe));}catch{}
   return safe;
+ }
+
+ function remember(el=bound,context='chat'){
+  if(!el)return null;
+  return rememberState(captureState(el,context),context);
  }
 
  function recalled(context='chat'){
@@ -181,7 +186,7 @@ function create(options={}){
 
  return {
   config:Object.freeze({...config}),bind,isAtBottom,captureAnchor,captureState,restoreAnchor,restoreState,
-  toBottom,toMessage,onScroll,stabilize,sync,remember,recalled,restoreMemory,clearMemory,
+  toBottom,toMessage,onScroll,stabilize,sync,remember,rememberState,recalled,restoreMemory,clearMemory,
   beforeViewportChange,afterViewportChange,isProgrammatic
  };
 }
