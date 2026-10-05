@@ -172,15 +172,18 @@ public class GalaxyDeviceClosureTest {
 
         runJs("chatState={messages:Array.from({length:420},(_,i)=>({id:'scroll-'+i,client_id:'scrollc-'+i,sender_person:String(i%2),body:'Scroll QA '+i,message_type:'text',attachments:[],server_seq:i+1,created_at:'2026-10-05T12:00:00Z',reactions:[]})),nextBeforeSeq:1,nextAfterSeq:null,pinnedIds:[]};chatStateSignature=chatSignature(chatState);chatMessageEngine.resetWindow(chatRows().length,{align:'end'});render();");
         awaitJs("document.querySelectorAll('.chat-message').length>0 && document.querySelectorAll('.chat-message').length<=84");
-        runJs("const e=document.querySelector('#chatMessages');e.scrollTop=Math.max(250,Math.floor(e.scrollHeight*.45));window.__phase1Anchor=chatCaptureAnchor(e);window.__phase1Top=e.scrollTop;");
-        SystemClock.sleep(250);
+        runJs("const e=document.querySelector('#chatMessages'),r=chatMessageEngine.range(chatRows());e.scrollTop=Math.max(0,r.topPx+Math.min(900,Math.max(220,e.clientHeight*.75)));chatHandleScroll(e);");
+        SystemClock.sleep(450);
+        runJs("const e=document.querySelector('#chatMessages');window.__phase1Anchor=chatCaptureAnchor(e);window.__phase1Top=e.scrollTop;window.__phase1Offset=window.__phase1Anchor?.offset||0;");
         String anchorId = js("window.__phase1Anchor?.id||''");
         double beforeTop = Double.parseDouble(js("window.__phase1Top||0"));
+        double beforeOffset = Double.parseDouble(js("window.__phase1Offset||0"));
         runJs("chatRenderMessages({anchor:window.__phase1Anchor,scroll:'preserve'})");
         SystemClock.sleep(450);
         double afterTop = Double.parseDouble(js("document.querySelector('#chatMessages')?.scrollTop||0"));
+        double afterOffset = Double.parseDouble(js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.offset||0"));
         assertEquals(anchorId, js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.id||''"));
-        assertTrue("Window refresh must keep the reading position anchored", Math.abs(afterTop-beforeTop) < 220);
+        assertTrue("Window refresh must preserve the visual anchor offset", Math.abs(afterOffset-beforeOffset) < 4d);
         assertTrue(Integer.parseInt(js("document.querySelectorAll('.chat-message').length")) <= 84);
 
         runJs("chatState=null;chatStateSignature='';chatMessageEngine.resetWindow(0,{align:'end'});loadChat({quiet:true,force:true,present:true});");
@@ -245,11 +248,10 @@ public class GalaxyDeviceClosureTest {
         double prependOffset = Double.parseDouble(js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.offset||0"));
         assertTrue("Prepend drifted the visual anchor: " + prependOffset, Math.abs(prependOffset-anchorOffset) < 4d);
 
-        runJs("const e=document.querySelector('#chatMessages'),anchor=chatCaptureAnchor(e);window.__p2RealtimeTop=e.scrollTop;const incoming={id:'p2-live',client_id:'p2-livec',sender_person:'1',body:'Realtime while reading',message_type:'text',attachments:[],server_seq:9999,created_at:'2026-10-05T12:01:00Z',reactions:[]};chatState=chatMessageEngine.applySingle(chatState,incoming);chatStateSignature=chatSignature(chatState);chatNewCount=1;chatRenderMessages({anchor,scroll:'preserve'});");
+        runJs("const e=document.querySelector('#chatMessages'),anchor=chatCaptureAnchor(e);window.__p2RealtimeAnchor=anchor;const incoming={id:'p2-live',client_id:'p2-livec',sender_person:'1',body:'Realtime while reading',message_type:'text',attachments:[],server_seq:9999,created_at:'2026-10-05T12:01:00Z',reactions:[]};chatState=chatMessageEngine.applySingle(chatState,incoming);chatStateSignature=chatSignature(chatState);chatNewCount=1;chatRenderMessages({anchor,scroll:'preserve'});");
         SystemClock.sleep(450);
-        double realtimeBefore = Double.parseDouble(js("window.__p2RealtimeTop||0"));
-        double realtimeAfter = Double.parseDouble(js("document.querySelector('#chatMessages')?.scrollTop||0"));
-        assertTrue("Realtime moved a user reading history", Math.abs(realtimeAfter-realtimeBefore) < 8d);
+        assertEquals("Realtime changed the visible anchor", js("window.__p2RealtimeAnchor?.id||''"), js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.id||''"));
+        assertTrue("Realtime drifted the visual anchor", Math.abs(Double.parseDouble(js("window.__p2RealtimeAnchor?.offset||0"))-Double.parseDouble(js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.offset||0"))) < 4d);
         assertEquals("1", js("chatNewCount"));
         assertEquals("true", js("!!document.querySelector('.chat-new-button')"));
         assertEquals("false", js("chatNearBottom(document.querySelector('#chatMessages'))"));
@@ -258,9 +260,12 @@ public class GalaxyDeviceClosureTest {
         SystemClock.sleep(250);
         assertEquals("true", js("chatNearBottom(document.querySelector('#chatMessages'))"));
 
-        runJs("const e=document.querySelector('#chatMessages');e.scrollTop=Math.max(200,e.scrollTop-900);chatScrollEngine.onScroll(e);window.__p2ResizeAnchor=chatCaptureAnchor(e);const t=document.querySelector('#chatForm textarea');t.style.height='110px';t.value='linea 1\\nlinea 2\\nlinea 3';t.dispatchEvent(new Event('input',{bubbles:true}));");
+        runJs("const e=document.querySelector('#chatMessages'),r=chatMessageEngine.range(chatRows());e.scrollTop=Math.max(0,r.topPx+Math.min(900,Math.max(220,e.clientHeight*.75)));chatHandleScroll(e);");
+        SystemClock.sleep(450);
+        runJs("const e=document.querySelector('#chatMessages');window.__p2ResizeAnchor=chatCaptureAnchor(e);window.__p2ResizeOffset=window.__p2ResizeAnchor?.offset||0;const t=document.querySelector('#chatForm textarea');t.style.height='110px';t.value='linea 1\\nlinea 2\\nlinea 3';t.dispatchEvent(new Event('input',{bubbles:true}));");
         SystemClock.sleep(550);
         assertEquals("Composer resize changed the reading anchor", js("window.__p2ResizeAnchor?.id||''"), js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.id||''"));
+        assertTrue("Composer resize drifted the visual anchor", Math.abs(Double.parseDouble(js("window.__p2ResizeOffset||0"))-Double.parseDouble(js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.offset||0"))) < 4d);
 
         runJs("chatScrollEngine.remember(document.querySelector('#chatMessages'),'chat');window.__p2NavAnchor=chatCaptureAnchor(document.querySelector('#chatMessages'));go('home');");
         awaitJs("!document.querySelector('.chat-shell')");
