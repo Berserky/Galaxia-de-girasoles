@@ -73,12 +73,14 @@ test('NG-QA-001 service-role media browser filters locked capsule objects for th
   assert.match(guard,/chatCapsuleAccess/);
 });
 
-test('NG-QA-001 backup and history apply capsule privacy even for the author',()=>{
+test('NG-QA-001 backup returns only an opaque v5 descriptor while history keeps capsule privacy',()=>{
   const backup=block(edge,'async function backupExport(','function uuidish(');
   const history=block(edge,'async function todayHistory(','async function encounterStats(');
-  assert.match(backup,/privacyItemResponse/);
-  assert.match(backup,/hiddenCapsules/);
+  assert.match(backup,/galaxy_backup_export_v5/);
+  assert.match(backup,/BACKUP_PAYLOAD_BUCKET/);
   assert.match(backup,/chatReconcileDeletedMedia/);
+  assert.match(backup,/format:"nuestra-galaxia-backup"/);
+  assert.doesNotMatch(backup,/sections\s*:/);
   assert.match(history,/chatCapsuleAccess/);
 });
 
