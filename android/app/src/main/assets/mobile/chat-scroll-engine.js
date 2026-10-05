@@ -27,11 +27,11 @@ function create(options={}){
   if(!el||!Number.isFinite(Number(value)))return false;
   const max=Math.max(0,el.scrollHeight-el.clientHeight),from=Number(el.scrollTop||0),to=clamp(Number(value),0,max);
   if(Math.abs(to-from)<.5)return false;
-  programmaticDepth++;
+  programmaticDepth=1;
   el.scrollTop=to;
   emit(reason,from,to);
   cancelAnimationFrame(programmaticRaf);
-  programmaticRaf=requestAnimationFrame(()=>{programmaticDepth=Math.max(0,programmaticDepth-1);sync(el);});
+  programmaticRaf=requestAnimationFrame(()=>requestAnimationFrame(()=>{programmaticDepth=0;sync(el);}));
   return true;
  }
 
@@ -74,9 +74,9 @@ function create(options={}){
   if(!el)return false;
   const target=Math.max(0,el.scrollHeight-el.clientHeight);
   if(smooth&&!reduceMotion()&&typeof el.scrollTo==='function'){
-   const from=Number(el.scrollTop||0);programmaticDepth++;
+   const from=Number(el.scrollTop||0);programmaticDepth=1;
    el.scrollTo({top:target,behavior:'smooth'});emit(reason,from,target);
-   clearTimeout(toBottom.timer);toBottom.timer=setTimeout(()=>{programmaticDepth=Math.max(0,programmaticDepth-1);sync(el);},260);
+   clearTimeout(toBottom.timer);toBottom.timer=setTimeout(()=>{programmaticDepth=0;sync(el);},260);
    return true;
   }
   return write(el,target,reason);
@@ -93,8 +93,8 @@ function create(options={}){
   const target=el.scrollTop+delta;
   if(smooth&&!reduceMotion()&&typeof el.scrollTo==='function'){
    const max=Math.max(0,el.scrollHeight-el.clientHeight),to=clamp(target,0,max),from=Number(el.scrollTop||0);
-   programmaticDepth++;el.scrollTo({top:to,behavior:'smooth'});emit(reason,from,to);
-   clearTimeout(toMessage.timer);toMessage.timer=setTimeout(()=>{programmaticDepth=Math.max(0,programmaticDepth-1);sync(el);},260);
+   programmaticDepth=1;el.scrollTo({top:to,behavior:'smooth'});emit(reason,from,to);
+   clearTimeout(toMessage.timer);toMessage.timer=setTimeout(()=>{programmaticDepth=0;sync(el);},260);
    return true;
   }
   return write(el,target,reason);
