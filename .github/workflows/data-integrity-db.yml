@@ -57,6 +57,7 @@ jobs:
             supabase init
           fi
           mv supabase/migrations/20261005011401_qa_phase1_data_integrity.sql /tmp/phase1.sql
+          mv supabase/migrations/20261005023000_qa_phase2_chat_correctness.sql /tmp/phase2.sql
           supabase start
 
       - name: Compare clean replay against production Phase-0 schema
@@ -66,6 +67,7 @@ jobs:
         run: |
           mv /tmp/phase1.sql supabase/migrations/20261005011401_qa_phase1_data_integrity.sql
           supabase migration up
+          mv /tmp/phase2.sql supabase/migrations/20261005023000_qa_phase2_chat_correctness.sql
 
       - name: Validate Phase 1 DB invariants
         run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/data-integrity-db.sql

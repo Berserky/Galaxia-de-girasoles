@@ -8,6 +8,7 @@ const app=read('android/app/src/main/assets/mobile/app.js');
 const css=read('android/app/src/main/assets/mobile/app.css');
 const edge=read('supabase/functions/android-companion/index.ts');
 const migration=read('supabase/migrations/20261004202006_galaxy_chat_universe_350.sql');
+const correctness=read('supabase/migrations/20261005023000_qa_phase2_chat_correctness.sql');
 const schema=read('supabase/schema.sql');
 const main=read('android/app/src/main/java/com/nuestragalaxia/companion/MainActivity.java');
 const gradle=read('android/app/build.gradle.kts');
@@ -67,22 +68,23 @@ test('locked capsules never expose protected content through Chat hydration',()=
  assert.ok(app.includes("card.type==='CAPSULE'&&card.locked"));
 });
 
-test('polls are normalized, idempotent and notify the exact Chat card',()=>{
+test('polls remain normalized while Phase 2 routes mutations through the canonical transactional RPC',()=>{
  assert.ok(migration.includes('galaxy_chat_poll_vote_guard'));
  assert.ok(migration.includes('position between 0 and 9'));
  assert.ok(edge.includes('labels.length<2'));
  assert.ok(edge.includes('slice(0,10)'));
- assert.ok(edge.includes('onConflict:"poll_id,option_id,person"'));
+ assert.ok(edge.includes('db.rpc("galaxy_chat_poll_mutate"'));
  assert.ok(edge.includes('senderName+" votó en "'));
  assert.ok(edge.includes('entityType:"chat_message",entityId:String(poll.message_id)'));
  assert.ok(app.includes('chat-poll-vote'));
  assert.ok(app.includes('chat-poll-plan'));
+ assert.ok(app.includes("operation:'winner',pollId:btn.dataset.pollId"));
 });
 
-test('checklists use optimistic versions and exact-card notifications',()=>{
+test('checklists keep item optimistic versions and use the Phase 2 aggregate-version RPC',()=>{
  assert.ok(migration.includes('version integer not null default 1'));
  assert.ok(edge.includes('expectedVersion'));
- assert.ok(edge.includes('.eq("version",item.version)'));
+ assert.ok(edge.includes('db.rpc("galaxy_chat_checklist_set"'));
  assert.ok(edge.includes('senderName+(checked?" completó ":" reabrió ")'));
  assert.ok(app.includes('chat-check-set'));
  assert.ok(app.includes('chat-check-convert'));
@@ -140,9 +142,12 @@ test('smart actions are deterministic and do not invoke Galaxy Intelligence',()=
  assert.equal(/intelligence|openai|embedding/i.test(block),false);
 });
 
-test('typed search includes Universe cards',()=>{
- for(const type of ['memories','plans','music','places','goals','polls','checklists','capsules','events','eta','daily','status'])
-  assert.ok(edge.includes(type+':"'),type);
+test('typed search includes Universe cards through the canonical Phase 2 RPC',()=>{
+ assert.ok(edge.includes('db.rpc("galaxy_chat_search_page"'));
+ for(const type of ['memories','plans','music','places','goals','polls','checklists','capsules','events','eta','daily','status']){
+  assert.ok(correctness.includes("'"+type+"'"),type);
+  assert.ok(app.includes('<option value="'+type+'">'),type+' UI');
+ }
  for(const label of ['Recuerdos','Planes','Música','Lugares','Objetivos','Encuestas','Checklists','Cápsulas','Eventos'])
   assert.ok(app.includes(label),label);
 });
