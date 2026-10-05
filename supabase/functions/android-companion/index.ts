@@ -8,6 +8,7 @@ import { PUSH_EVENT_TYPES, firebaseAndroidClientConfig, sanitizePushPayload, sen
 import { CONTEXT_EVENTS, buildDateContextRecap, buildEncounterSuggestion, buildTripContextRecap, contextStep, emptyContextState, haversineM, summarizeTrack } from "./context-engine.ts";
 import { bookSections, buildIntelligenceDocument, contentHashInput, explainConnection, normalizeSearchText, sanitizeTranscriptSegments, validateNarrative } from "./intelligence-engine.ts";
 import { aiProviderConfig, extractJsonObject, generateGroundedResponse, gteSmallEmbedding, transcribeAudioBlob } from "./intelligence-provider.ts";
+import { validateUploadMedia } from "./media-validation.ts";
 
 const url=Deno.env.get("SUPABASE_URL")!;
 // FCM HTTP v1 transport lives in push-engine.ts; credentials are server-side only.
@@ -1750,17 +1751,45 @@ async function chatLiveLocation(req:Request,body:any={}){
  return json({session:{...session,active},location:active&&loc?.sharing?loc:null});
 }
 
+async function giphySearch(req:Request,body:any={}){
+  await device(req);
+  const apiKey=String(Deno.env.get("GIPHY_API_KEY")||"").trim();
+  if(!apiKey)return json({provider:"giphy",configured:false,items:[],message:"GIFs online no están configurados en el servidor."});
+  const query=text(body.query||"",50),stickers=body.stickers===true;
+  const endpoint=new URL("https://api.giphy.com/v1/"+(stickers?"stickers":"gifs")+(query?"/search":"/trending"));
+  endpoint.searchParams.set("api_key",apiKey);
+  if(query)endpoint.searchParams.set("q",query);
+  endpoint.searchParams.set("limit","20");
+  endpoint.searchParams.set("rating","pg-13");
+  endpoint.searchParams.set("lang","es");
+  let response:Response;
+  try{response=await fetch(endpoint,{headers:{accept:"application/json"},signal:AbortSignal.timeout(15000)});}
+  catch{return json({error:"GIPHY no está disponible en este momento."},503);}
+  if(!response.ok)return json({error:"GIPHY no está disponible en este momento."},503);
+  const raw=await response.json().catch(()=>({} as any)),items:any[]=[];
+  for(const item of Array.isArray(raw?.data)?raw.data:[]){
+    const preview=item?.images?.fixed_width_small||item?.images?.fixed_width||{};
+    const original=item?.images?.downsized_medium||item?.images?.original||{};
+    const previewUrl=String(preview?.webp||preview?.url||""),url=String(original?.url||"");
+    const valid=(value:string)=>{try{const u=new URL(value);return u.protocol==="https:"&&(u.hostname==="giphy.com"||u.hostname.endsWith(".giphy.com"));}catch{return false;}};
+    if(!valid(previewUrl)||!valid(url))continue;
+    items.push({id:text(item?.id||"",120),title:text(item?.title||(stickers?"Sticker":"GIF"),160),previewUrl,url});
+  }
+  return json({provider:"giphy",configured:true,items});
+}
+
 async function chatGifImport(req:Request,body:any={}){
  const d=await device(req),person=String(d.person),raw=text(body.url,1200),title=text(body.title||"GIF",120)||"GIF";
  const u=chatPublicUrl(raw);if(!u||!(u.hostname==="giphy.com"||u.hostname.endsWith(".giphy.com")))return json({error:"GIF no válido."},400);
  let response:Response;
  try{response=await fetch(u,{redirect:"error",signal:AbortSignal.timeout(12000),headers:{accept:"image/gif,image/webp"}});}catch{return json({error:"No se pudo descargar el GIF."},503);}
  if(!response.ok)return json({error:"No se pudo descargar el GIF."},503);
- const mime=String(response.headers.get("content-type")||"").split(";")[0].toLowerCase();
- if(!["image/gif","image/webp"].includes(mime))return json({error:"Formato GIF no permitido."},415);
+ const declaredMime=String(response.headers.get("content-type")||"").split(";")[0].toLowerCase();
  const declared=Number(response.headers.get("content-length")||0);if(declared>10*1024*1024)return json({error:"El GIF supera 10 MB."},413);
- const bytes=new Uint8Array(await response.arrayBuffer());if(bytes.length<1||bytes.length>10*1024*1024)return json({error:"El GIF supera 10 MB."},413);
- const ext=mime==="image/gif"?"gif":"webp",path=person+"/gif-"+crypto.randomUUID()+"."+ext;
+ const bytes=new Uint8Array(await response.arrayBuffer());if(bytes.length<1||bytes.length>10*1024*1024)return json({error:bytes.length<1?"El GIF está vacío.":"El GIF supera 10 MB."},bytes.length<1?400:413);
+ const validation=validateUploadMedia("chat-gif",declaredMime,title+".gif",bytes);
+ if(!validation.ok)return json({error:validation.message},validation.status);
+ const mime=validation.mime,ext=validation.extension,path=person+"/gif-"+crypto.randomUUID()+"."+ext;
  const {error}=await db.storage.from("galaxy-chat-media").upload(path,bytes,{contentType:mime,upsert:false,cacheControl:"3600",metadata:{originalName:title+"."+ext,provider:"giphy"}});
  if(error)throw error;
  return json({item:{kind:"photo",path,bucket:"galaxy-chat-media",mime,name:title+"."+ext,size:bytes.length,url:await signed("galaxy-chat-media",path,1800),gif:true}});
@@ -3803,25 +3832,61 @@ function uploadRules(kind:string){
   return null;
 }
 
+async function readUploadBytes(req:Request,limit:number):Promise<{bytes:Uint8Array|null,error:Response|null}>{
+  if(!req.body)return {bytes:new Uint8Array(),error:null};
+  const reader=req.body.getReader(),chunks:Uint8Array[]=[];let total=0;
+  try{
+    while(true){
+      const {done,value}=await reader.read();if(done)break;
+      if(!value)continue;
+      total+=value.length;
+      if(total>limit){
+        try{await reader.cancel();}catch{}
+        return {bytes:null,error:json({error:"El archivo supera el límite permitido."},413)};
+      }
+      chunks.push(value);
+    }
+  }finally{try{reader.releaseLock();}catch{}}
+  const bytes=new Uint8Array(total);let offset=0;
+  for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
+  return {bytes,error:null};
+}
+
+function uploadId(req:Request){
+  const raw=String(req.headers.get("x-upload-id")||"").trim().toLowerCase();
+  if(!raw)return {value:crypto.randomUUID(),idempotent:false};
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(raw))return null;
+  return {value:raw,idempotent:true};
+}
+
 async function upload(req:Request){
   const d=await device(req),kind=String(req.headers.get("x-media-kind")||""),rules=uploadRules(kind);
   if(!rules)return json({error:"Tipo de archivo no válido."},400);
-  const mime=String(req.headers.get("content-type")||"application/octet-stream").split(";")[0].trim().toLowerCase()||"application/octet-stream";
-  if(rules.mimes&&!rules.mimes.has(mime))return json({error:"Formato de archivo no permitido."},415);
+  const id=uploadId(req);if(!id)return json({error:"Identificador de upload no válido."},400);
+  const declaredMime=String(req.headers.get("content-type")||"application/octet-stream").split(";")[0].trim().toLowerCase()||"application/octet-stream";
   const declared=Number(req.headers.get("content-length")||0);
-  if(declared>rules.limit)return json({error:"El archivo supera el límite permitido."},413);
-  const bytes=new Uint8Array(await req.arrayBuffer());
-  if(bytes.length<1||bytes.length>rules.limit)return json({error:"El archivo supera el límite permitido."},413);
+  if(Number.isFinite(declared)&&declared>rules.limit)return json({error:"El archivo supera el límite permitido."},413);
+  const read=await readUploadBytes(req,rules.limit);
+  if(read.error)return read.error;
+  const bytes=read.bytes||new Uint8Array();
+  if(bytes.length<1)return json({error:"El archivo está vacío."},400);
+
   let originalName="archivo";
   try{originalName=decodeURIComponent(String(req.headers.get("x-file-name")||"archivo")).slice(0,300)||"archivo";}catch{}
-  const originalExt=originalName.includes(".")?String(originalName.split(".").pop()||"").toLowerCase().replace(/[^a-z0-9]/g,"").slice(0,12):"";
-  const extension=rules.ext?.[mime]||originalExt||"bin";
-  const path=String(d.person)+"/"+String(rules.pathKind||kind).replace(/[^a-z0-9_-]/gi,"")+"-"+crypto.randomUUID()+"."+extension;
+  const validation=validateUploadMedia(kind,declaredMime,originalName,bytes);
+  if(!validation.ok)return json({error:validation.message},validation.status);
+  const mime=validation.mime,extension=validation.extension;
+  const stem=String(rules.pathKind||kind).replace(/[^a-z0-9_-]/gi,"");
+  const path=String(d.person)+"/"+stem+"-"+id.value+"."+extension;
   const cacheControl=kind.startsWith("chat-")?"0":"3600";
-  const {error}=await db.storage.from(rules.bucket).upload(path,bytes,{contentType:mime,upsert:false,cacheControl,metadata:{originalName}});
-  if(error)throw error;
+  const metadata={originalName,declaredMime,uploadId:id.value};
+  const {error}=await db.storage.from(rules.bucket).upload(path,bytes,{contentType:mime,upsert:false,cacheControl,metadata});
+  if(error){
+    const duplicate=id.idempotent&&/duplicate|already exists|resource already exists/i.test(String(error.message||error));
+    if(!duplicate)throw error;
+  }
   const signedUrl=await signed(rules.bucket,path,3600);
-  return json({path,mime,url:signedUrl,name:originalName,size:bytes.length},201);
+  return json({path,bucket:rules.bucket,mime,url:signedUrl,name:originalName,size:bytes.length,reused:!!error},error?200:201);
 }
 
 function nextPendingPlan(items:any[],day:string){
@@ -3932,6 +3997,7 @@ Deno.serve(async req=>{
     if(action==="chat-albums")return await chatAlbums(req,body);
     if(action==="chat-stickers")return await chatStickers(req,body);
     if(action==="chat-live-location")return await chatLiveLocation(req,body);
+    if(action==="giphy-search")return await giphySearch(req,body);
     if(action==="chat-gif-import")return await chatGifImport(req,body);
     if(action==="notifications-list")return await notificationsList(req,body);
     if(action==="notifications-read")return await notificationsRead(req,body);
