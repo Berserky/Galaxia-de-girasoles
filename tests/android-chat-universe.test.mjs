@@ -8,6 +8,7 @@ const app=read('android/app/src/main/assets/mobile/app.js');
 const css=read('android/app/src/main/assets/mobile/app.css');
 const edge=read('supabase/functions/android-companion/index.ts');
 const migration=read('supabase/migrations/20261004202006_galaxy_chat_universe_350.sql');
+const correctness=read('supabase/migrations/20261005023000_qa_phase2_chat_correctness.sql');
 const schema=read('supabase/schema.sql');
 const main=read('android/app/src/main/java/com/nuestragalaxia/companion/MainActivity.java');
 const gradle=read('android/app/build.gradle.kts');
@@ -141,9 +142,12 @@ test('smart actions are deterministic and do not invoke Galaxy Intelligence',()=
  assert.equal(/intelligence|openai|embedding/i.test(block),false);
 });
 
-test('typed search includes Universe cards',()=>{
- for(const type of ['memories','plans','music','places','goals','polls','checklists','capsules','events','eta','daily','status'])
-  assert.ok(edge.includes(type+':"'),type);
+test('typed search includes Universe cards through the canonical Phase 2 RPC',()=>{
+ assert.ok(edge.includes('db.rpc("galaxy_chat_search_page"'));
+ for(const type of ['memories','plans','music','places','goals','polls','checklists','capsules','events','eta','daily','status']){
+  assert.ok(correctness.includes("'"+type+"'"),type);
+  assert.ok(app.includes('<option value="'+type+'">'),type+' UI');
+ }
  for(const label of ['Recuerdos','Planes','Música','Lugares','Objetivos','Encuestas','Checklists','Cápsulas','Eventos'])
   assert.ok(app.includes(label),label);
 });
