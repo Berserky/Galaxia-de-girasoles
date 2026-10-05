@@ -7,7 +7,7 @@ const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const app=read('android/app/src/main/assets/mobile/app.js');
 const css=read('android/app/src/main/assets/mobile/app.css');
 const edge=read('supabase/functions/android-companion/index.ts');
-const migration=read('supabase/migrations/20261004173000_galaxy_chat_universe_350.sql');
+const migration=read('supabase/migrations/20261004202006_galaxy_chat_universe_350.sql');
 const schema=read('supabase/schema.sql');
 const main=read('android/app/src/main/java/com/nuestragalaxia/companion/MainActivity.java');
 const gradle=read('android/app/build.gradle.kts');
