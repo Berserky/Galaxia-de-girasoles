@@ -188,6 +188,15 @@ test('virtualization measurement preserves anchor while spacer estimates change'
  assert.ok(measure.includes('chatUpdateVirtualSpacers'));
 });
 
+test('virtual window rotates at rendered boundaries instead of absolute scroll container edges',()=>{
+ const handler=block(app,'function chatHandleScroll(','function chatDraftAttachmentMarkup');
+ assert.ok(handler.includes('firstDistance>-760'));
+ assert.ok(handler.includes('lastDistance<760'));
+ assert.ok(handler.includes("el.querySelectorAll('.chat-message')"));
+ assert.equal(handler.includes('el.scrollTop<760&&range.start>0'),false);
+ assert.ok(handler.includes('chatScrollEngine.isProgrammatic()'));
+});
+
 test('history/search/deep contextual navigation does not force present',()=>{
  const load=block(app,'async function loadChat(','async function refreshChatBadge');
  assert.ok(load.includes("direction=aroundId?'around'"));
