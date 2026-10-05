@@ -251,7 +251,9 @@ public class GalaxyDeviceClosureTest {
         runJs("const e=document.querySelector('#chatMessages'),anchor=chatCaptureAnchor(e);window.__p2RealtimeAnchor=anchor;const incoming={id:'p2-live',client_id:'p2-livec',sender_person:'1',body:'Realtime while reading',message_type:'text',attachments:[],server_seq:9999,created_at:'2026-10-05T12:01:00Z',reactions:[]};chatState=chatMessageEngine.applySingle(chatState,incoming);chatStateSignature=chatSignature(chatState);chatNewCount=1;chatRenderMessages({anchor,scroll:'preserve'});");
         SystemClock.sleep(450);
         assertEquals("Realtime changed the visible anchor", js("window.__p2RealtimeAnchor?.id||''"), js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.id||''"));
-        assertTrue("Realtime drifted the visual anchor", Math.abs(Double.parseDouble(js("window.__p2RealtimeAnchor?.offset||0"))-Double.parseDouble(js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.offset||0"))) < 4d);
+        double realtimeBeforeOffset = Double.parseDouble(js("window.__p2RealtimeAnchor?.offset||0"));
+        double realtimeAfterOffset = Double.parseDouble(js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.offset||0"));
+        assertTrue("Realtime drifted the visual anchor", Math.abs(realtimeAfterOffset-realtimeBeforeOffset) < 4d);
         assertEquals("1", js("chatNewCount"));
         assertEquals("true", js("!!document.querySelector('.chat-new-button')"));
         assertEquals("false", js("chatNearBottom(document.querySelector('#chatMessages'))"));
@@ -282,8 +284,8 @@ public class GalaxyDeviceClosureTest {
             .put("prepend50MsLocalQa", prependMs)
             .put("anchorBeforeOffset", anchorOffset)
             .put("anchorAfterOffset", prependOffset)
-            .put("realtimeScrollBefore", realtimeBefore)
-            .put("realtimeScrollAfter", realtimeAfter)
+            .put("realtimeAnchorBeforeOffset", realtimeBeforeOffset)
+            .put("realtimeAnchorAfterOffset", realtimeAfterOffset)
             .put("pssBeforeKb", pssBefore)
             .put("pssAfterKb", pssAfter)
             .put("cpuMs", Math.max(0, cpuAfter-cpuBefore))
