@@ -4,8 +4,8 @@ on:
   pull_request:
     branches: [ main ]
     paths:
-      - 'supabase/migrations/20261005023000_qa_phase2_chat_correctness.sql'
-      - 'supabase/rollbacks/20261005023000_qa_phase2_chat_correctness_rollback.sql'
+      - 'supabase/migrations/20261005023031_qa_phase2_chat_correctness.sql'
+      - 'supabase/rollbacks/20261005023031_qa_phase2_chat_correctness_rollback.sql'
       - 'supabase/schema.sql'
       - 'supabase/functions/android-companion/**'
       - 'android/app/src/main/assets/mobile/app.js'
@@ -69,12 +69,12 @@ jobs:
       - name: Validate Phase 2 rollback and re-apply
         run: |
           DB='postgresql://postgres:postgres@127.0.0.1:54322/postgres'
-          psql "$DB" -v ON_ERROR_STOP=1 -f supabase/rollbacks/20261005023000_qa_phase2_chat_correctness_rollback.sql
+          psql "$DB" -v ON_ERROR_STOP=1 -f supabase/rollbacks/20261005023031_qa_phase2_chat_correctness_rollback.sql
           test "$(psql "$DB" -Atqc "select to_regprocedure('public.galaxy_chat_search_page(text,text,text,text,date,bigint,integer)') is null")" = "t"
           test "$(psql "$DB" -Atqc "select to_regprocedure('public.galaxy_chat_poll_mutate(uuid,text,text,uuid,boolean)') is null")" = "t"
           test "$(psql "$DB" -Atqc "select to_regprocedure('public.galaxy_chat_poll_winner(uuid)') is null")" = "t"
           test "$(psql "$DB" -Atqc "select to_regprocedure('public.galaxy_chat_checklist_set(uuid,uuid,text,boolean,integer)') is null")" = "t"
-          psql "$DB" -v ON_ERROR_STOP=1 -f supabase/migrations/20261005023000_qa_phase2_chat_correctness.sql
+          psql "$DB" -v ON_ERROR_STOP=1 -f supabase/migrations/20261005023031_qa_phase2_chat_correctness.sql
           psql "$DB" -v ON_ERROR_STOP=1 -f tests/chat-correctness-db.sql
 
       - name: Stop isolated Supabase

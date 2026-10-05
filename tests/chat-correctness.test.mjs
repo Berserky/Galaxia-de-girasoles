@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const edge=read('supabase/functions/android-companion/index.ts');
 const app=read('android/app/src/main/assets/mobile/app.js');
-const migration=read('supabase/migrations/20261005023000_qa_phase2_chat_correctness.sql');
+const migration=read('supabase/migrations/20261005023031_qa_phase2_chat_correctness.sql');
 const schema=read('supabase/schema.sql');
 const workflow=read('.github/workflows/chat-correctness-db.yml');
 
