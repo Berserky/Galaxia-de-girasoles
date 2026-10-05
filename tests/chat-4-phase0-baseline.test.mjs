@@ -6,6 +6,7 @@ const app=read('android/app/src/main/assets/mobile/app.js');
 const perf=read('android/app/src/main/assets/mobile/chat-perf.js');
 const bench=read('scripts/chat-4-phase0-baseline.mjs');
 const gradle=read('android/app/build.gradle.kts');
+const baselineDoc=read('docs/qa/chat-4-phase0-baseline.md');
 
 test('Phase 0 starts from Galaxy Chat Universe 3.5.1',()=>{
  assert.match(gradle,/versionCode = 35; versionName = "3\.5\.1"/);
@@ -19,19 +20,19 @@ test('performance instrumentation is opt-in and content-blind',()=>{
  assert.ok(perf.includes('window.GalaxyChatPerf'));
  assert.equal(/messageBody|bodyText|latitude|longitude|attachmentUrl|payloadContent/.test(perf),false);
 });
-test('Realtime baseline records the current native chat-sync bridge gap',()=>{
+test('Phase 0 Realtime gap remains documented while later phases may close it',()=>{
  const main=read('android/app/src/main/java/com/nuestragalaxia/companion/MainActivity.java');
  assert.ok(main.includes('event("chat-sync"'));
- assert.equal(app.includes("name==='chat-sync'"),false);
+ assert.ok(baselineDoc.includes('does not consume')||baselineDoc.includes('no consume'));
+ assert.ok(app.includes("name==='chat-sync'"));
 });
-test('P0 scroll jump mechanism is characterized without fixing it',()=>{
- assert.ok(app.includes("app.innerHTML=chatView()"));
- assert.ok(app.includes("oldTop+(el.scrollHeight-oldHeight)"));
- assert.ok(app.includes("else if(wasNear||chatInitialScroll)"));
- const restoreBlock=app.slice(app.indexOf("requestAnimationFrame(()=>{",app.indexOf("async function loadChat")),app.indexOf("chatRestorePlayback",app.indexOf("async function loadChat")));
- assert.equal(restoreBlock.includes("else if(!wasNear)"),false);
+test('Phase 0 scroll defect remains a historical baseline after Message Engine changes',()=>{
+ assert.ok(baselineDoc.includes('full chat DOM replacement')||baselineDoc.includes('full chat render'));
+ assert.ok(baselineDoc.includes('scroll-jump'));
+ assert.ok(app.includes('chatCaptureAnchor'));
+ assert.ok(app.includes('chatRestoreAnchor'));
+ assert.equal(app.includes("oldTop+(el.scrollHeight-oldHeight)"),false);
 });
-test.todo('P0 Scroll Engine: ordinary incoming refresh preserves the visible anchor while user reads history');
 test('Phase 0 benchmark reuses Phase 4 hydration benchmark instead of duplicating it',()=>{
  assert.ok(bench.includes("scripts/benchmark-phase4.mjs"));
 });
