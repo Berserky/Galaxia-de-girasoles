@@ -130,7 +130,7 @@ test('position memory stores only anchor/context metadata and restores it',()=>{
 
 test('global chat render, navigation and background paths preserve context',()=>{
  const render=block(app,'function render(){','function renderOnboarding');
- assert.ok(render.includes('chatScrollEngine.captureState'));
+ assert.ok(render.includes('previousChatAnchor=previousChatEl?chatCaptureAnchor(previousChatEl):null'));
  assert.ok(render.includes('render-preserve'));
  assert.ok(render.includes('chatScrollEngine.restoreMemory'));
  const go=block(app,'function go(next){','let nativeThemeSent');
