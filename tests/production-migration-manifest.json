@@ -1,6 +1,6 @@
 {
-  "capturedFrom": "Nuestra galaxia production after Phase 0",
-  "capturedAt": "2026-10-05T01:14:01Z",
+  "capturedFrom": "Nuestra galaxia canonical migration history through Phase 2",
+  "capturedAt": "2026-10-05T02:30:00Z",
   "migrations": [
     {
       "version": "20261001204606",
@@ -196,6 +196,11 @@
       "version": "20261005011401",
       "name": "qa_phase1_data_integrity",
       "normalized_md5": "3b1167ef28d83f5fd93b1bab66165c1f"
+    },
+    {
+      "version": "20261005023000",
+      "name": "qa_phase2_chat_correctness",
+      "normalized_md5": "67fab731d026aba57734ada0bf2d691d"
     }
   ]
 }
