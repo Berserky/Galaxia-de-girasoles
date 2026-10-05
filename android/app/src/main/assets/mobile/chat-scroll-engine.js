@@ -163,7 +163,7 @@ function create(options={}){
  function afterViewportChange(el=bound){
   const token=viewportToken;viewportToken=null;
   if(!el||!token)return false;
-  requestAnimationFrame(()=>restoreState(el,token,{reason:'viewport-resize',fallbackBottom:true}));
+  requestAnimationFrame(()=>{if(el.isConnected)restoreState(el,token,{reason:'viewport-resize',fallbackBottom:true});});
   return true;
  }
 
