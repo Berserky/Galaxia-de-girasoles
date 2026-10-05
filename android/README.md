@@ -49,7 +49,7 @@ Aplicación móvil de Nuestra Galaxia. Desde la versión 1.4.0 deja de ser solo 
 gradle -p android testDebugUnitTest assembleDebug
 ```
 
-GitHub Actions genera el APK firmado cuando los cambios llegan a `main` y actualiza la release `android-stable`.
+`main` genera un **release candidate** firmado y verificable; nunca sustituye automáticamente `android-stable`. La promoción estable es manual, requiere staging/smoke, checksum, firma, `versionCode` creciente y aprobación explícita. Ver [gobernanza de releases](../docs/RELEASE_GOVERNANCE.md).
 
 
 ## Calidad de release 1.4.1
