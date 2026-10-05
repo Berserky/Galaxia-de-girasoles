@@ -1,0 +1,250 @@
+name: Android Release Candidate
+
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+
+concurrency:
+  group: android-candidate-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  node_deno_security:
+    name: Node + Deno + security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: "v2.x"
+      - name: Node regression suite
+        run: npm test
+      - name: Security regression suite
+        run: node --test tests/privacy-firewall.test.mjs tests/release-governance.test.mjs
+      - name: Deno type checks and tests
+        run: |
+          deno check --node-modules-dir=auto supabase/functions/android-companion/index.ts
+          deno test supabase/functions/android-companion/media-validation.test.ts
+
+  db_migration_replay:
+    name: DB migration replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.119.0
+      - name: Validate canonical migration history
+        run: node --test tests/migration-history.test.mjs
+      - name: Replay migrations on a clean local database
+        run: |
+          if [ ! -f supabase/config.toml ]; then
+            supabase init
+          fi
+          supabase start
+          supabase migration list --local
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -Atqc "select count(*) from supabase_migrations.schema_migrations"
+      - name: RLS and chat correctness smoke
+        run: |
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/supabase-rls.sql
+          psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/chat-correctness-db.sql
+      - name: Stop isolated Supabase
+        if: always()
+        run: supabase stop --no-backup
+
+  android_unit_lint:
+    name: Android unit + lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Preparar Android SDK
+        run: |
+          SDK_ROOT=/usr/local/lib/android/sdk
+          SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | head -1)
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.4.1"
+      - name: Empaquetar música de bienvenida
+        run: cp musica.mp3 android/app/src/main/assets/musica.mp3
+      - name: Unit tests and lint
+        run: gradle -p android --no-daemon testDebugUnitTest lintDebug
+
+  android_instrumentation:
+    name: Android instrumentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Preparar Android SDK
+        run: |
+          SDK_ROOT=/usr/local/lib/android/sdk
+          SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | head -1)
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "platform-tools" "emulator"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.4.1"
+      - name: Habilitar KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm || true
+      - name: Empaquetar música de bienvenida
+        run: cp musica.mp3 android/app/src/main/assets/musica.mp3
+      - name: Instrumentation + lifecycle
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: bash scripts/qa-phase5-emulator.sh
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: android-candidate-instrumentation
+          path: |
+            qa-artifacts/**
+            android/app/build/outputs/androidTest-results/**
+            android/app/build/reports/androidTests/**
+          retention-days: 30
+
+  build_candidate:
+    name: Signed candidate + checksum
+    needs: [node_deno_security, db_migration_replay, android_unit_lint, android_instrumentation]
+    runs-on: ubuntu-latest
+    env:
+      FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID || vars.FIREBASE_PROJECT_ID }}
+      FIREBASE_APPLICATION_ID: ${{ secrets.FIREBASE_APPLICATION_ID || vars.FIREBASE_APPLICATION_ID }}
+      FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY || vars.FIREBASE_API_KEY }}
+      FIREBASE_SENDER_ID: ${{ secrets.FIREBASE_SENDER_ID || vars.FIREBASE_SENDER_ID }}
+      KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Preparar Android SDK
+        run: |
+          SDK_ROOT=/usr/local/lib/android/sdk
+          SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | head -1)
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.4.1"
+      - name: Empaquetar música de bienvenida
+        run: cp musica.mp3 android/app/src/main/assets/musica.mp3
+      - name: Build signed candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_B64"
+          test -n "$STORE_PASSWORD"
+          test -n "$KEY_ALIAS"
+          test -n "$KEY_PASSWORD"
+          echo "$KEYSTORE_B64" | base64 -d > android/release.keystore
+          gradle -p android --no-daemon assembleRelease             -Pandroid.injected.signing.store.file="$PWD/android/release.keystore"             -Pandroid.injected.signing.store.password="$STORE_PASSWORD"             -Pandroid.injected.signing.key.alias="$KEY_ALIAS"             -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+          mkdir -p candidate
+          cp android/app/build/outputs/apk/release/app-release.apk candidate/NuestraGalaxia.apk
+          (cd candidate && sha256sum NuestraGalaxia.apk > NuestraGalaxia.apk.sha256)
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs candidate/NuestraGalaxia.apk | tee candidate/signature.txt
+          VERSION_LINE=$(grep -oE 'versionCode = [0-9]+; versionName = "[^"]+"' android/app/build.gradle.kts | head -1)
+          VERSION_CODE=$(printf '%s' "$VERSION_LINE" | sed -E 's/.*versionCode = ([0-9]+).*/\1/')
+          VERSION_NAME=$(printf '%s' "$VERSION_LINE" | sed -E 's/.*versionName = "([^"]+)".*/\1/')
+          SHA256=$(awk '{print $1}' candidate/NuestraGalaxia.apk.sha256)
+          jq -n             --arg sourceSha "$GITHUB_SHA"             --argjson runId "$GITHUB_RUN_ID"             --argjson versionCode "$VERSION_CODE"             --arg versionName "$VERSION_NAME"             --arg sha256 "$SHA256"             --arg builtAt "$(date -u +%FT%TZ)"             '{schema:1,sourceSha:$sourceSha,runId:$runId,versionCode:$versionCode,versionName:$versionName,sha256:$sha256,builtAt:$builtAt}'             > candidate/candidate.json
+          rm -f android/release.keystore
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-candidate
+          path: candidate/**
+          retention-days: 30
+          if-no-files-found: error
+
+  staging_smoke:
+    name: Candidate staging smoke
+    needs: [build_candidate]
+    runs-on: ubuntu-latest
+    env:
+      QA_STAGING_EDGE_URL: ${{ vars.QA_STAGING_EDGE_URL }}
+      QA_STAGING_PUBLISHABLE_KEY: ${{ secrets.QA_STAGING_PUBLISHABLE_KEY }}
+      QA_STAGING_TOKEN_0: ${{ secrets.QA_STAGING_TOKEN_0 }}
+      QA_STAGING_TOKEN_1: ${{ secrets.QA_STAGING_TOKEN_1 }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: android-candidate
+          path: candidate
+      - name: Verify downloaded candidate checksum
+        run: (cd candidate && sha256sum -c NuestraGalaxia.apk.sha256)
+      - name: Strict remote staging smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p candidate-evidence
+          test -n "$QA_STAGING_EDGE_URL"
+          test -n "$QA_STAGING_PUBLISHABLE_KEY"
+          test -n "$QA_STAGING_TOKEN_0"
+          test -n "$QA_STAGING_TOKEN_1"
+          node scripts/qa-phase5-staging.mjs 2>&1 | tee candidate-evidence/staging-smoke.txt
+          grep -q '^VERIFIED: remote staging dual-user concurrency/realtime/map/backup' candidate-evidence/staging-smoke.txt
+      - name: Release gate ledger
+        run: |
+          cat > candidate-evidence/release-gates.json <<EOF
+          {
+            "sourceSha": "${GITHUB_SHA}",
+            "runId": ${GITHUB_RUN_ID},
+            "node": "PASS",
+            "denoTypeChecks": "PASS",
+            "security": "PASS",
+            "dbMigrationReplay": "PASS",
+            "androidUnit": "PASS",
+            "androidInstrumentation": "PASS",
+            "androidLint": "PASS",
+            "signedCandidate": "PASS",
+            "checksum": "PASS",
+            "stagingSmoke": "PASS"
+          }
+          EOF
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: android-candidate-evidence
+          path: candidate-evidence/**
+          retention-days: 30
+          if-no-files-found: warn

@@ -1,0 +1,126 @@
+name: Android Stable Promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_run_id:
+        description: "Run ID exitoso de Android Release Candidate"
+        required: true
+        type: string
+      auth_review:
+        description: "Escribe GOOGLE_ONLY_OR_LEAK_PROTECTION_ENABLED tras revisar Auth"
+        required: true
+        type: string
+      confirmation:
+        description: "Escribe PROMOTE_ANDROID_STABLE para aprobar la promoción"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: android-stable
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Verify gates and promote stable
+    runs-on: ubuntu-latest
+    environment: android-stable
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+      AUTH_REVIEW: ${{ inputs.auth_review }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - name: Explicit Auth posture acknowledgement
+        run: test "$AUTH_REVIEW" = "GOOGLE_ONLY_OR_LEAK_PROTECTION_ENABLED"
+      - name: Explicit operator approval token
+        run: test "$CONFIRMATION" = "PROMOTE_ANDROID_STABLE"
+
+      - uses: actions/checkout@v5
+
+      - name: Verify candidate workflow provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID" > /tmp/run.json
+          test "$(jq -r '.name' /tmp/run.json)" = "Android Release Candidate"
+          test "$(jq -r '.event' /tmp/run.json)" = "push"
+          test "$(jq -r '.head_branch' /tmp/run.json)" = "main"
+          test "$(jq -r '.conclusion' /tmp/run.json)" = "success"
+          CANDIDATE_SHA=$(jq -r '.head_sha' /tmp/run.json)
+          test -n "$CANDIDATE_SHA"
+          echo "CANDIDATE_SHA=$CANDIDATE_SHA" >> "$GITHUB_ENV"
+
+      - name: Download immutable candidate and evidence
+        run: |
+          mkdir -p candidate candidate-evidence
+          gh run download "$CANDIDATE_RUN_ID" -n android-candidate -D candidate
+          gh run download "$CANDIDATE_RUN_ID" -n android-candidate-evidence -D candidate-evidence
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Preparar Android signature verifier
+        run: |
+          SDK_ROOT=/usr/local/lib/android/sdk
+          SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | head -1)
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "build-tools;36.0.0"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+
+      - name: Verify required candidate gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(jq -r '.sourceSha' candidate/candidate.json)" = "$CANDIDATE_SHA"
+          test "$(jq -r '.runId' candidate/candidate.json)" = "$CANDIDATE_RUN_ID"
+          for gate in node denoTypeChecks security dbMigrationReplay androidUnit androidInstrumentation androidLint signedCandidate checksum stagingSmoke; do
+            test "$(jq -r --arg gate "$gate" '.[$gate]' candidate-evidence/release-gates.json)" = "PASS"
+          done
+          grep -q '^VERIFIED: remote staging dual-user concurrency/realtime/map/backup' candidate-evidence/staging-smoke.txt
+          (cd candidate && sha256sum -c NuestraGalaxia.apk.sha256)
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs candidate/NuestraGalaxia.apk | tee /tmp/candidate-signature.txt
+
+      - name: Enforce versionCode growth and signing continuity
+        shell: bash
+        run: |
+          set -euo pipefail
+          NEW_CODE=$(jq -r '.versionCode' candidate/candidate.json)
+          test "$NEW_CODE" -gt 0
+          mkdir -p previous
+          if gh release view android-stable >/dev/null 2>&1; then
+            gh release download android-stable -p update.json -p NuestraGalaxia.apk -D previous --clobber
+            OLD_CODE=$(jq -r '.versionCode // 0' previous/update.json)
+            test "$NEW_CODE" -gt "$OLD_CODE"
+            "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs previous/NuestraGalaxia.apk > /tmp/stable-signature.txt
+            NEW_CERT=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' /tmp/candidate-signature.txt | head -1)
+            OLD_CERT=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' /tmp/stable-signature.txt | head -1)
+            test -n "$NEW_CERT"
+            test "$NEW_CERT" = "$OLD_CERT"
+          fi
+
+      - name: Build stable update manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION_CODE=$(jq -r '.versionCode' candidate/candidate.json)
+          VERSION_NAME=$(jq -r '.versionName' candidate/candidate.json)
+          SHA256=$(jq -r '.sha256' candidate/candidate.json)
+          jq -n             --argjson versionCode "$VERSION_CODE"             --arg versionName "$VERSION_NAME"             --arg apkUrl "https://github.com/Berserky/Galaxia-de-girasoles/releases/download/android-stable/NuestraGalaxia.apk"             --arg sha256 "$SHA256"             --arg sourceSha "$CANDIDATE_SHA"             --argjson candidateRunId "$CANDIDATE_RUN_ID"             '{versionCode:$versionCode,versionName:$versionName,apkUrl:$apkUrl,sha256:$sha256,sourceSha:$sourceSha,candidateRunId:$candidateRunId,notes:("Nuestra Galaxia "+$versionName+" · promoción gobernada desde candidate verificado.")}'             > candidate/update.json
+
+      - name: Publish android-stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view android-stable >/dev/null 2>&1 || gh release create android-stable --title "Nuestra Galaxia · Android estable" --notes "Canal estable gobernado. Solo acepta candidates verificados y aprobación explícita."
+          gh release upload android-stable candidate/NuestraGalaxia.apk candidate/update.json --clobber
+          gh release delete-asset android-stable NuestraGalaxia-Companion.apk -y >/dev/null 2>&1 || true

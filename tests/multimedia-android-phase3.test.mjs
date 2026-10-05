@@ -79,10 +79,10 @@ test('openChatFile privacy boundary and WebView file isolation remain intact',()
   assert.equal(main.includes('file://'),false);
 });
 
-test('staging compiles a real release artifact without publishing android-stable',()=>{
+test('CI compiles a release artifact without publishing android-stable',()=>{
   assert.ok(workflow.includes('assembleDebug assembleRelease'));
-  assert.ok(workflow.includes('NuestraGalaxia-release-staging'));
-  assert.ok(workflow.includes('CURRENT_VERSION')&&workflow.includes('BEFORE_VERSION')&&workflow.includes('$CURRENT_VERSION" != "$BEFORE_VERSION'));
-  const buildBlock=workflow.slice(workflow.indexOf('  build:'),workflow.indexOf('  release_scope:'));
-  assert.equal(buildBlock.includes('android-stable'),false);
+  assert.ok(workflow.includes('NuestraGalaxia-release-ci'));
+  assert.equal(workflow.includes('contents: write'),false);
+  assert.equal(workflow.includes('gh release upload'),false);
+  assert.equal(workflow.includes('android-stable'),false);
 });

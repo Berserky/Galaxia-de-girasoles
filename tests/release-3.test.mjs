@@ -15,15 +15,17 @@ test('Mega 3.0 release migration is canonical and non-destructive',()=>{
 });
 
 test('Android stable metadata is aligned to Galaxy Chat Universe 3.5.0',()=>{
- const gradle=read('android/app/build.gradle.kts'),workflow=read('.github/workflows/android-companion.yml');
+ const gradle=read('android/app/build.gradle.kts');
+ const candidate=read('.github/workflows/android-release-candidate.yml');
+ const stable=read('.github/workflows/android-release-stable.yml');
  assert.match(gradle,/versionCode = 34/);
  assert.match(gradle,/versionName = "3\.5\.0"/);
- assert.match(workflow,/VERSION_CODE=.*versionCode/);
- assert.match(workflow,/VERSION_NAME=.*versionName/);
- assert.match(workflow,/"versionCode":%s/);
- assert.match(workflow,/"versionName":"%s"/);
- assert.match(workflow,/permissions:\n\s+contents: read/);
- assert.match(workflow,/release:[\s\S]*?permissions:\n\s+contents: write/);
+ assert.match(candidate,/VERSION_CODE=.*versionCode/);
+ assert.match(candidate,/VERSION_NAME=.*versionName/);
+ assert.match(stable,/versionCode:\$versionCode/);
+ assert.match(stable,/versionName:\$versionName/);
+ assert.match(candidate,/permissions:\n\s+contents: read/);
+ assert.match(stable,/permissions:[\s\S]*?contents: write/);
 });
 
 test('canonical schema no longer contains duplicated Mega blocks or broken dollar quotes',()=>{

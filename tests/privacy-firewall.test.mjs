@@ -203,12 +203,11 @@ test('NG-QA-014 deleted media cannot survive through pins, saved, search, shared
   assert.match(albums,/deleted_at|message_id|galaxy_chat_messages/);
 });
 
-test('backend-only Phase 0 merge cannot publish android-stable',()=>{
+test('backend-only changes cannot publish android-stable from Android CI',()=>{
   const workflow=read('.github/workflows/android-companion.yml');
-  assert.match(workflow,/release_scope:/);
-  assert.match(workflow,/android_changed/);
-  assert.match(workflow,/\^\(android\/\|musica\\\.mp3\$\)/);
-  assert.match(workflow,/needs\.release_scope\.outputs\.android_changed == 'true'/);
+  assert.equal(workflow.includes('contents: write'),false);
+  assert.equal(workflow.includes('gh release upload'),false);
+  assert.equal(workflow.includes('android-stable'),false);
 });
 
 test('privacy firewall does not bump or replace Android stable 3.5.0',()=>{
