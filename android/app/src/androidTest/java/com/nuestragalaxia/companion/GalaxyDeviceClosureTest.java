@@ -122,7 +122,7 @@ public class GalaxyDeviceClosureTest {
         String text = js("document.querySelector('#chatMessages')?.innerText||''");
         for (String marker : new String[]{
                 "Recuerdo QA","Plan QA","Objetivo QA","Lugar QA","Canción QA",
-                "Casa QA","Universidad QA","Encuesta QA","Checklist QA","Cápsula QA",
+                "Casa QA","Universidad QA","¿Plan A o B?","Checklist QA","Cápsula QA",
                 "¿Qué construimos después?","Evento QA","Todo bien"}) {
             assertTrue("Missing card: " + marker, text.contains(marker));
         }
@@ -233,9 +233,10 @@ public class GalaxyDeviceClosureTest {
         assertEquals(PackageManager.PERMISSION_GRANTED, context.checkSelfPermission(Manifest.permission.RECORD_AUDIO));
         assertEquals(PackageManager.PERMISSION_GRANTED, context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION));
 
-        instrumentation.getUiAutomation().revokeRuntimePermission(pkg, Manifest.permission.CAMERA);
-        assertEquals(PackageManager.PERMISSION_DENIED, context.checkSelfPermission(Manifest.permission.CAMERA));
-        instrumentation.getUiAutomation().grantRuntimePermission(pkg, Manifest.permission.CAMERA);
+        // Do not revoke a runtime permission from inside instrumentation: Android
+        // terminates the target package process when a permission is revoked.
+        // Denied-state coverage is exercised from the clean-install workflow boundary.
+        assertEquals(PackageManager.PERMISSION_GRANTED, context.checkSelfPermission(Manifest.permission.CAMERA));
 
         shell("cmd uimode night yes");
         launch();
