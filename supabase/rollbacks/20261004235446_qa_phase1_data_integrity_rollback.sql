@@ -23,7 +23,7 @@ create or replace function public.galaxy_capsule_protect_unlock_state()
 returns trigger
 language plpgsql
 set search_path=''
-as $
+as $rollback_capsule$
 begin
   if new.kind='capsule' then
     if tg_op='INSERT' then
@@ -36,13 +36,13 @@ begin
     end if;
   end if;
   return new;
-end $;
+end $rollback_capsule$;
 
 create or replace function public.galaxy_goal_version()
 returns trigger
 language plpgsql
 set search_path=''
-as $
+as $rollback_goal$
 begin
  if tg_op='UPDATE' then
   new.id:=old.id;
@@ -56,7 +56,7 @@ begin
  if new.status='completed' and new.completed_at is null then new.completed_at:=now(); end if;
  if new.status<>'completed' then new.completed_at:=null; end if;
  return new;
-end $;
+end $rollback_goal$;
 
 drop index if exists public.galaxy_chat_album_items_attachment_id_idx;
 drop index if exists public.galaxy_chat_albums_cover_attachment_id_idx;
