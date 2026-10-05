@@ -865,16 +865,20 @@ async function chatPollCard(id:string,person:string){
  ]);
  const totalPeople=new Set((votes||[]).map((v:any)=>String(v.person))).size,totalVotes=(votes||[]).length;
  const closed=!!poll.closed_at||(poll.closes_at&&Date.parse(String(poll.closes_at))<=Date.now());
+ const normalized=(options||[]).map((option:any)=>{
+  const optionVotes=(votes||[]).filter((v:any)=>String(v.option_id)===String(option.id));
+  return {id:String(option.id),label:text(option.label,240),position:Number(option.position),votes:optionVotes.length,percent:totalVotes?Math.round(optionVotes.length*100/totalVotes):0,selected:optionVotes.some((v:any)=>String(v.person)===person)};
+ });
+ const topVotes=normalized.reduce((max:number,o:any)=>Math.max(max,Number(o.votes||0)),0);
+ const leaders=topVotes>0?normalized.filter((o:any)=>Number(o.votes||0)===topVotes):[];
+ const tie=closed&&leaders.length>1,winner=closed&&leaders.length===1?{id:leaders[0].id,label:leaders[0].label,position:leaders[0].position,votes:leaders[0].votes}:null;
  return {
   available:true,type:"POLL",entityKind:"poll",entityId:id,title:text(poll.question,500),question:text(poll.question,500),
   allowMultiple:!!poll.allow_multiple,closesAt:poll.closes_at,closedAt:poll.closed_at,closed,createdBy:String(poll.created_by),
-  totalPeople,totalVotes,
-  options:(options||[]).map((option:any)=>{
-   const optionVotes=(votes||[]).filter((v:any)=>String(v.option_id)===String(option.id));
-   return {id:String(option.id),label:text(option.label,240),position:Number(option.position),votes:optionVotes.length,percent:totalVotes?Math.round(optionVotes.length*100/totalVotes):0,selected:optionVotes.some((v:any)=>String(v.person)===person)};
-  })
+  totalPeople,totalVotes,topVotes,winner,tie,noVotes:closed&&topVotes===0,options:normalized
  };
 }
+
 async function chatChecklistCard(id:string){
  const list=(await ok(db.from("galaxy_chat_checklists").select("*").eq("id",id).limit(1)))?.[0];
  if(!list)return null;
@@ -1242,33 +1246,52 @@ async function chatPoll(req:Request,body:any={}){
  const poll=(await ok(db.from("galaxy_chat_polls").select("*").eq("id",pollId).limit(1)))?.[0];
  if(!poll)return json({error:"Encuesta no disponible."},404);
  if(operation==="state")return json({poll:await chatPollCard(pollId,person)});
+ if(operation==="winner"){
+  try{
+   const result=await ok(db.rpc("galaxy_chat_poll_winner",{p_poll_id:pollId}));
+   if(result?.tie)return json({error:"La encuesta terminó en empate; no existe un ganador único.",...result},409);
+   if(!result?.winner)return json({error:"La encuesta cerró sin votos; no existe un ganador.",...result},409);
+   return json(result);
+  }catch(error){
+   const message=String((error as any)?.message||"");
+   if(message.includes("sigue abierta"))return json({error:"Cierra la encuesta antes de convertir su ganador en Plan."},409);
+   throw error;
+  }
+ }
  if(operation==="close"){
-  if(String(poll.created_by)!==person)return json({error:"Solo quien creó la encuesta puede cerrarla."},403);
-  const now=new Date().toISOString();
-  await ok(db.from("galaxy_chat_polls").update({closed_at:poll.closed_at||now,updated_at:now}).eq("id",pollId));
-  if(poll.message_id)await chatSignal(d,target,String(poll.message_id));
-  return json({poll:await chatPollCard(pollId,person)});
+  try{
+   const mutation=await ok(db.rpc("galaxy_chat_poll_mutate",{p_poll_id:pollId,p_person:person,p_operation:"close",p_option_id:null,p_selected:true}));
+   if(mutation?.changed&&poll.message_id)await chatSignal(d,target,String(poll.message_id));
+   return json({poll:await chatPollCard(pollId,person),idempotent:!mutation?.changed});
+  }catch(error){
+   const message=String((error as any)?.message||"");
+   if(message.includes("Solo quien creó"))return json({error:"Solo quien creó la encuesta puede cerrarla."},403);
+   throw error;
+  }
  }
  if(operation==="vote"){
   const optionId=String(body.optionId||"");
   if(!uuidish(optionId))return json({error:"Opción no válida."},400);
-  const option=(await ok(db.from("galaxy_chat_poll_options").select("id,poll_id,label").eq("id",optionId).eq("poll_id",pollId).limit(1)))?.[0];
-  if(!option)return json({error:"Opción no disponible."},404);
-  const closed=!!poll.closed_at||(poll.closes_at&&Date.parse(String(poll.closes_at))<=Date.now());
-  if(closed)return json({error:"La encuesta está cerrada."},409);
-  const selected=body.selected!==false;
-  if(selected)await ok(db.from("galaxy_chat_poll_votes").upsert({poll_id:pollId,option_id:optionId,person,voted_at:new Date().toISOString()},{onConflict:"poll_id,option_id,person"}));
-  else await ok(db.from("galaxy_chat_poll_votes").delete().eq("poll_id",pollId).eq("option_id",optionId).eq("person",person));
+  let mutation:any;
+  try{
+   mutation=await ok(db.rpc("galaxy_chat_poll_mutate",{p_poll_id:pollId,p_person:person,p_operation:"vote",p_option_id:optionId,p_selected:body.selected!==false}));
+  }catch(error){
+   const message=String((error as any)?.message||"");
+   if(message.includes("cerrada"))return json({error:"La encuesta está cerrada."},409);
+   if(message.includes("Opción no disponible"))return json({error:"Opción no disponible."},404);
+   throw error;
+  }
   const card=await chatPollCard(pollId,person);
-  if(poll.message_id){
+  if(mutation?.changed&&poll.message_id){
    const names=await profileNames(),senderName=names[Number(person)]||"Tu persona";
    await dispatchPushEvent(d,target,"chat_message",{title:senderName,body:senderName+" votó en "+text(poll.question,120),action:"chat",senderName,entityType:"chat_message",entityId:String(poll.message_id)});
    await chatSignal(d,target,String(poll.message_id));
   }
-  return json({poll:card});
+  return json({poll:card,idempotent:!mutation?.changed});
  }
  return json({error:"Operación de encuesta no válida."},400);
 }
+
 async function chatChecklist(req:Request,body:any={}){
  const d=await device(req),person=String(d.person),target=person==="0"?"1":"0",operation=String(body.operation||"state");
  if(operation==="create"){
@@ -1291,27 +1314,30 @@ async function chatChecklist(req:Request,body:any={}){
  if(!list)return json({error:"Checklist no disponible."},404);
  if(operation==="state")return json({checklist:await chatChecklistCard(checklistId)});
  if(operation==="set"){
-  const itemId=String(body.itemId||""),checked=body.checked===true;
+  const itemId=String(body.itemId||""),checked=body.checked===true,expected=Number(body.expectedVersion);
   if(!uuidish(itemId))return json({error:"Elemento no válido."},400);
-  const item=(await ok(db.from("galaxy_chat_checklist_items").select("*").eq("id",itemId).eq("checklist_id",checklistId).limit(1)))?.[0];
+  if(!Number.isInteger(expected)||expected<1)return json({error:"Versión de checklist no válida."},400);
+  const item=(await ok(db.from("galaxy_chat_checklist_items").select("id,label").eq("id",itemId).eq("checklist_id",checklistId).limit(1)))?.[0];
   if(!item)return json({error:"Elemento no disponible."},404);
-  if(!!item.checked!==checked){
-   const expected=Number(body.expectedVersion||item.version);
-   if(expected!==Number(item.version))return json({error:"La checklist cambió. Actualiza antes de intentarlo otra vez."},409);
-   const now=new Date().toISOString();
-   const updated=await ok(db.from("galaxy_chat_checklist_items").update({checked,updated_by:person,version:Number(item.version)+1,updated_at:now}).eq("id",itemId).eq("version",item.version).select("id").maybeSingle());
-   if(!updated)return json({error:"La checklist cambió. Actualiza antes de intentarlo otra vez."},409);
-   await ok(db.from("galaxy_chat_checklists").update({version:Number(list.version)+1,updated_at:now}).eq("id",checklistId));
-   if(list.message_id){
-    const names=await profileNames(),senderName=names[Number(person)]||"Tu persona";
-    await dispatchPushEvent(d,target,"chat_message",{title:senderName,body:senderName+(checked?" completó ":" reabrió ")+text(item.label,120),action:"chat",senderName,entityType:"chat_message",entityId:String(list.message_id)});
-    await chatSignal(d,target,String(list.message_id));
-   }
+  let mutation:any;
+  try{
+   mutation=await ok(db.rpc("galaxy_chat_checklist_set",{p_checklist_id:checklistId,p_item_id:itemId,p_person:person,p_checked:checked,p_expected_item_version:expected}));
+  }catch(error){
+   const message=String((error as any)?.message||"");
+   if(message.includes("cambió"))return json({error:"La checklist cambió. Actualiza antes de intentarlo otra vez."},409);
+   if(message.includes("no disponible"))return json({error:message.includes("Elemento")?"Elemento no disponible.":"Checklist no disponible."},404);
+   throw error;
   }
-  return json({checklist:await chatChecklistCard(checklistId)});
+  if(mutation?.changed&&list.message_id){
+   const names=await profileNames(),senderName=names[Number(person)]||"Tu persona";
+   await dispatchPushEvent(d,target,"chat_message",{title:senderName,body:senderName+(checked?" completó ":" reabrió ")+text(item.label,120),action:"chat",senderName,entityType:"chat_message",entityId:String(list.message_id)});
+   await chatSignal(d,target,String(list.message_id));
+  }
+  return json({checklist:await chatChecklistCard(checklistId),idempotent:!mutation?.changed});
  }
  return json({error:"Operación de checklist no válida."},400);
 }
+
 async function chatRead(req:Request,body:any={}){
  const d=await device(req),person=String(d.person),target=person==="0"?"1":"0";
  let row:any=null;
@@ -1432,19 +1458,18 @@ async function chatCollection(req:Request,body:any,kind:"pins"|"saved"){
  return json({messages:await chatHydrate(ids.map((id:string)=>byId.get(id)).filter((x:any)=>Boolean(x)),person)});
 }
 async function chatSearch(req:Request,body:any={}){
- const d=await device(req),person=String(d.person),q=text(body.query||"",160).toLocaleLowerCase("es"),sender=String(body.sender||"all"),type=String(body.type||"all"),date=String(body.date||"");
- let rows=await chatVisibleRows(person,db.from("galaxy_chat_messages").select("*").order("server_seq",{ascending:false}).limit(500));
- if(sender==="me")rows=rows.filter((x:any)=>String(x.sender_person)===person);
- if(sender==="partner")rows=rows.filter((x:any)=>String(x.sender_person)!==person);
- if(/^\d{4}-\d{2}-\d{2}$/.test(date))rows=rows.filter((x:any)=>String(x.created_at||"").slice(0,10)===date);
- if(["photo","video","audio","file","link"].includes(type))rows=rows.filter((x:any)=>String(x.message_type)===type||(type==="link"&&Object.keys(x.link_preview||{}).length>0));
- let hydrated=await chatHydrate(rows.slice(0,240),person);
- const cardTypes:Record<string,string>={memories:"MEMORY",plans:"PLAN",music:"SONG",places:"PLACE",goals:"GOAL",polls:"POLL",checklists:"CHECKLIST",capsules:"CAPSULE",events:"EVENT",eta:"ETA",daily:"DAILY_QUESTION",status:"STATUS"};
- if(type==="messages")hydrated=hydrated.filter((x:any)=>x.message_type!=="card");
- else if(cardTypes[type])hydrated=hydrated.filter((x:any)=>x.card?.available&&String(x.card.type)===cardTypes[type]);
- if(q)hydrated=hydrated.filter((x:any)=>String(x.body||"").toLocaleLowerCase("es").includes(q)||(x.card?.available&&JSON.stringify(x.card).toLocaleLowerCase("es").includes(q)));
- return json({messages:hydrated.slice(0,80)});
+ const d=await device(req),person=String(d.person),q=text(body.query||"",160),sender=String(body.sender||"all"),type=String(body.type||"all"),date=String(body.date||"");
+ const limit=clampInt(body.limit,10,80,40),beforeSeq=Number(body.beforeSeq||0);
+ const rowsRaw=await ok(db.rpc("galaxy_chat_search_page",{
+  p_person:person,p_query:q,p_sender:sender,p_type:type,p_date:/^\d{4}-\d{2}-\d{2}$/.test(date)?date:null,
+  p_before_seq:Number.isFinite(beforeSeq)&&beforeSeq>0?beforeSeq:null,p_limit:limit+1
+ }));
+ const rows=Array.isArray(rowsRaw)?rowsRaw:[],hasMore=rows.length>limit,page=rows.slice(0,limit);
+ const messages=await chatHydrate(page,person);
+ const nextBeforeSeq=hasMore&&page.length?Math.min(...page.map((x:any)=>Number(x.server_seq||Number.MAX_SAFE_INTEGER))):null;
+ return json({messages,nextBeforeSeq});
 }
+
 async function chatPresence(req:Request,body:any={}){
  const d=await device(req),person=String(d.person),state=String(body.state||"ONLINE"),now=new Date();
  if(state==="OFFLINE"){
