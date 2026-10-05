@@ -50,7 +50,7 @@ test('backward cursor pagination merges multiple pages without duplicates or hol
  let state=e.applyPage(null,{messages:rows(4941,60),nextBeforeSeq:4941},{direction:'latest'});
  state=e.applyPage(state,{messages:rows(4881,60),nextBeforeSeq:4881},{direction:'older'});
  state=e.applyPage(state,{messages:rows(4821,60),nextBeforeSeq:4821},{direction:'older'});
- const seqs=state.messages.map(x=>x.server_seq);
+ const seqs=Array.from(state.messages,x=>x.server_seq);
  assert.equal(seqs.length,180);
  assert.deepEqual(seqs,Array.from({length:180},(_,i)=>4821+i));
  assert.equal(new Set(seqs).size,seqs.length);
@@ -97,7 +97,7 @@ test('server_seq is the primary deterministic order key',()=>{
   {id:'c',server_seq:2,created_at:'2026-01-01T00:00:01Z'}
  ];
  const sorted=e.mergeMessages([],unordered);
- assert.deepEqual(sorted.map(x=>x.id),['a','b','c']);
+ assert.deepEqual(Array.from(sorted,x=>x.id),['a','b','c']);
 });
 
 test('20k logical history never requires a 20k rendered window',()=>{
