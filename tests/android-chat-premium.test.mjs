@@ -10,7 +10,7 @@ const push=read('supabase/functions/android-companion/push-engine.ts');
 const main=read('android/app/src/main/java/com/nuestragalaxia/companion/MainActivity.java');
 const firebase=read('android/app/src/main/java/com/nuestragalaxia/companion/GalaxyFirebaseService.java');
 const notifications=read('android/app/src/main/java/com/nuestragalaxia/companion/GalaxyNotifications.java');
-const migration=read('supabase/migrations/20261004060000_galaxy_chat_premium_340.sql');
+const migration=read('supabase/migrations/20261004165848_galaxy_chat_premium_340.sql');
 const gradle=read('android/app/build.gradle.kts');
 
 test('Premium 3.4 migration remains compatible under Universe 3.5',()=>{
