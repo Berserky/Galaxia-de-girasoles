@@ -20,7 +20,7 @@ function create(options={}){
  const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 
  function emit(reason,from,to){
-  try{window.GalaxyChatPerf?.note?.('programmatic-scroll',{delta:Math.round(to-from)});}catch{}
+  try{window.GalaxyChatPerf?.programmaticScroll?.(reason,Math.round(to-from));}catch{}
  }
 
  function write(el,value,reason='restore'){
@@ -43,9 +43,11 @@ function create(options={}){
  function captureAnchor(el){
   if(!el)return null;
   const box=el.getBoundingClientRect();
-  const visible=rows(el).find(row=>row.getBoundingClientRect().bottom>box.top+2);
-  if(!visible)return null;
-  return {messageId:rowId(visible),viewportOffset:visible.getBoundingClientRect().top-box.top};
+  const visible=rows(el).filter(row=>row.getBoundingClientRect().bottom>box.top+2).slice(0,3);
+  if(!visible.length)return null;
+  const anchors=visible.map(row=>({messageId:rowId(row),viewportOffset:row.getBoundingClientRect().top-box.top})).filter(x=>x.messageId);
+  if(!anchors.length)return null;
+  return {...anchors[0],fallbacks:anchors.slice(1)};
  }
 
  function captureState(el,context='chat'){
@@ -54,10 +56,15 @@ function create(options={}){
 
  function restoreAnchor(el,anchor,reason='anchor'){
   if(!el||!anchor?.messageId)return false;
-  const row=rows(el).find(node=>rowId(node)===String(anchor.messageId));
-  if(!row)return false;
+  const candidates=[anchor,...(Array.isArray(anchor.fallbacks)?anchor.fallbacks:[])];
+  let selected=null,row=null;
+  for(const candidate of candidates){
+   row=rows(el).find(node=>rowId(node)===String(candidate?.messageId||''));
+   if(row){selected=candidate;break;}
+  }
+  if(!row||!selected)return false;
   const box=el.getBoundingClientRect();
-  const delta=row.getBoundingClientRect().top-box.top-Number(anchor.viewportOffset||0);
+  const delta=row.getBoundingClientRect().top-box.top-Number(selected.viewportOffset||0);
   if(!Number.isFinite(delta)||Math.abs(delta)<.5)return true;
   write(el,el.scrollTop+delta,reason);
   return true;
@@ -133,7 +140,7 @@ function create(options={}){
  function remember(el=bound,context='chat'){
   if(!el)return null;
   const state=captureState(el,context);
-  const safe={anchor:state.anchor?{messageId:state.anchor.messageId,viewportOffset:Math.round(state.anchor.viewportOffset*100)/100}:null,atBottom:state.atBottom,context:state.context,savedAt:now()};
+  const safe={anchor:state.anchor?{messageId:state.anchor.messageId,viewportOffset:Math.round(state.anchor.viewportOffset*100)/100,fallbacks:(state.anchor.fallbacks||[]).slice(0,2).map(x=>({messageId:x.messageId,viewportOffset:Math.round(Number(x.viewportOffset||0)*100)/100}))}:null,atBottom:state.atBottom,context:state.context,savedAt:now()};
   try{sessionStorage.setItem(config.memoryKey,JSON.stringify(safe));}catch{}
   return safe;
  }
