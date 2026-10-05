@@ -76,8 +76,8 @@ test('translation is ephemeral unless persistence is explicitly requested',()=>{
  assert.ok(edge.includes('if(!persist)return json({translation:result,persisted:false})'));
 });
 
-test('backup v3 includes premium chat metadata',()=>{
- for(const marker of ['stickerRecents:chatStickerRecents','liveLocations:chatLiveLocations','chatStickerRecents','chatLiveLocations'])assert.ok(edge.includes(marker),marker);
+test('backup v5 preserves premium chat metadata through canonical sections',()=>{
+ for(const marker of ['chatStickerRecents','chatLiveLocations','BACKUP_SECTION_NAMES','galaxy_backup_export_v5'])assert.ok(edge.includes(marker),marker);
 });
 
 test('native premium bridge includes short video, GIPHY and point location',()=>{
