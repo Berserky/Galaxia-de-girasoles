@@ -47,7 +47,7 @@ let toastTimer,refreshing=false,updateState={text:'La app está al día.',progre
 let dateContext=null,dateContextLoadedAt=0,dateQuestionNonce=0,dateMode=null,dateModeTimer=null,dateLastExperience=null;
 let goalsState=null,goalsLoadedAt=0,goalsFilter='active';
 let presenceLastSignature='',voiceTimer=null,voiceSeconds=0,intelligenceSearchNonce=0;
-let chatState=null,chatLoading=false,chatReply=null,chatStateSignature='',chatPreferencesState=null,chatUnlockedSession=false,notificationState=null,pendingDeepLink=null;
+let chatState=null,chatLoading=false,chatQueuedLoad=null,chatReply=null,chatStateSignature='',chatPreferencesState=null,chatUnlockedSession=false,notificationState=null,pendingDeepLink=null;
 let chatAttachmentsDraft=[],chatNewCount=0,chatPinIndex=0,chatTypingTimer=null,chatPresenceTimer=null,chatOutboxFlushing=false,chatOutboxFlushPromise=null,chatInitialScroll=true,chatVoiceState={recording:false,paused:false,ready:false,durationMs:0},chatHoldRecord=null;
 let welcomeStep=0,welcomePreview=false,welcomeGift=true,welcomeEntering=false,tourStep=-1;
 const welcomeMusic=new Audio('../musica.mp3');welcomeMusic.loop=true;welcomeMusic.volume=.32;
@@ -1508,7 +1508,7 @@ async function markChatReadIfVisible(){
  try{await api('chat-read',{messageId:last.id});GalaxyNative.call('clearChatNotifications').catch(()=>{});last.read_at=new Date().toISOString();chatNewCount=0;if(cloud?.chat)cloud.chat.unread=0;}catch{}
 }
 async function loadChat({older=false,quiet=false,force=false,aroundId=''}={}){
- if(chatLoading)return;chatLoading=true;
+ if(chatLoading){if(older||force||aroundId)chatQueuedLoad={older,quiet,force,aroundId};return;}chatLoading=true;
  const current=document.querySelector('#chatMessages'),oldHeight=current?.scrollHeight||0,oldTop=current?.scrollTop||0,wasNear=chatNearBottom(current),oldLastSeq=Math.max(0,...(chatState?.messages||[]).map(x=>Number(x.server_seq||0))),playback=chatCapturePlayback();
  try{
   const beforeSeq=older?chatState?.nextBeforeSeq:null;
@@ -1538,7 +1538,7 @@ async function loadChat({older=false,quiet=false,force=false,aroundId=''}={}){
    }else await markChatReadIfVisible();
   }else renderChatFab();
  }catch(error){if(!quiet)toast(error.message||'No pudimos cargar el chat.');}
- finally{chatLoading=false;}
+ finally{chatLoading=false;const queued=chatQueuedLoad;chatQueuedLoad=null;if(queued)setTimeout(()=>loadChat(queued),0);}
 }
 async function refreshChatBadge(){
  if(!native.paired)return;
