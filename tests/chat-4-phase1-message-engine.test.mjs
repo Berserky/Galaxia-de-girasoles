@@ -80,6 +80,14 @@ test('Realtime during pagination reconciles by id/client_id and preserves server
  assert.equal(state.messages.at(-1).body,'Reconciliado');
 });
 
+test('incremental sync cannot grow loaded memory beyond the cache bound',()=>{
+ const e=engine({maxCache:420});
+ let state={messages:rows(1,420)};
+ for(let seq=421;seq<=900;seq++)state=e.applySingle(state,rows(seq,1)[0]);
+ assert.equal(state.messages.length,420);
+ assert.equal(state.messages.at(-1).server_seq,900);
+});
+
 test('client optimistic event and server confirmation deduplicate by client_id',()=>{
  const e=engine();
  let state={messages:[{id:'local:x',client_id:'x',server_seq:null,local_order:1,client_created_at:'2026-10-05T12:00:00Z'}]};
