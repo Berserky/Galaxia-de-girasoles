@@ -20,7 +20,8 @@ test('candidate requires the full automated release gate set',()=>{
     'testDebugUnitTest','lintDebug','qa-phase5-emulator.sh','sha256sum',
     'apksigner','qa-phase5-staging.mjs','android-candidate','release-gates.json'
   ]) assert.ok(workflow.includes(marker),marker);
-  assert.ok(workflow.includes('adb install -r candidate/NuestraGalaxia.apk'),'candidate must prove in-place upgrade over stable');
+  const upgrade=read('scripts/qa-candidate-upgrade.sh');
+  assert.ok(upgrade.includes('adb install -r candidate/NuestraGalaxia.apk'),'candidate must prove in-place upgrade over stable');
   assert.ok(workflow.includes('"upgradeInstall": "PASS"'),'candidate ledger must record upgrade install');
   assert.equal(workflow.includes('gh release upload android-stable'),false);
 });
