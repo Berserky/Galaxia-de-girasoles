@@ -25,6 +25,22 @@ from generate_series(1,2105) g;
 insert into public.galaxy_rewards(person,reward_key,day,coins)
 values('0','qa_phase1_restore',(now() at time zone 'America/Bogota')::date,3)
 on conflict do nothing;
+
+-- Exercise exact restore through triggers that normally own server-side fields.
+insert into public.galaxy_items(id,kind,data,author,created) values(
+ 'c1000000-0000-4000-8000-000000000003',
+ 'capsule',
+ '{"title":"Unlocked place capsule","body":"server state must survive","unlockType":"place","latitude":4.7,"longitude":-74.2,"radius":150,"unlockedFor":["0"]}'::jsonb,
+ '0',
+ '2026-10-01T10:00:00Z'
+);
+insert into public.galaxy_goals(
+ id,kind,title,description,category,target_date,status,target_amount,created_by,version,completed_at,created_at,updated_at
+) values(
+ 'c3000000-0000-4000-8000-000000000001',
+ 'goal','Restore exact goal','trigger-owned fields must survive','project',null,'active',null,'0',7,null,
+ '2026-09-01T10:00:00Z','2026-09-20T15:30:00Z'
+);
 SQL
 
 printf '\xff\xd8\xff\xd9' > /tmp/qa-backup-photo.jpg
@@ -195,6 +211,11 @@ jq -e '.ok==true and .verified==true and .media.verified>=1' /tmp/phase1-restore
 
 POST_HASH=$(psql "$DB_URL" -Atqc "select md5(public.galaxy_backup_export_v5()::text)")
 [ "$POST_HASH" = "$PRE_HASH" ] || { echo "deep DB compare failed: $PRE_HASH != $POST_HASH"; exit 1; }
+
+CAPSULE_UNLOCK=$(psql "$DB_URL" -Atqc "select coalesce((data->'unlockedFor') @> '[\"0\"]'::jsonb,false) from public.galaxy_items where id='c1000000-0000-4000-8000-000000000003'::uuid")
+[ "$CAPSULE_UNLOCK" = "t" ] || { echo "server-owned capsule unlock state was not restored"; exit 1; }
+GOAL_STATE=$(psql "$DB_URL" -Atqc "select version||'|'||to_char(updated_at at time zone 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS') from public.galaxy_goals where id='c3000000-0000-4000-8000-000000000001'::uuid")
+[ "$GOAL_STATE" = "7|2026-09-20T15:30:00" ] || { echo "goal trigger-owned fields drifted: $GOAL_STATE"; exit 1; }
 
 media_state=$(curl -fsS -X POST "$FUNCTION_URL" -H "x-device-token: $DEVICE_TOKEN" \
   -H 'content-type: application/json' --data '{"action":"media-list","kind":"photo"}')
