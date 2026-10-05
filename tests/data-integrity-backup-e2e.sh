@@ -103,7 +103,7 @@ export_status=$(curl -sS -o /tmp/phase1-backup.json -w '%{http_code}' \
 jq -e --argjson items "$PRE_ITEMS" '
   .format=="nuestra-galaxia-backup" and
   .version==5 and
-  .manifest.schemaVersion=="20261004235446" and
+  .manifest.schemaVersion=="20261005011401" and
   .manifest.counts.items==$items and
   .manifest.limits.maxRowsPerSection>=100000 and
   .manifest.media.count>=1 and
