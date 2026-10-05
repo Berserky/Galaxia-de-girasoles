@@ -253,7 +253,16 @@ jobs:
             grep -F "versionName=$VERSION_NAME" /tmp/pkg.txt
             adb shell am force-stop com.nuestragalaxia.companion
             adb shell am start -W -n com.nuestragalaxia.companion/.MainActivity | tee -a candidate-evidence/upgrade-install.txt
-            grep -q '^Success    name: Candidate staging smoke
+            grep -q "^Success$" candidate-evidence/upgrade-install.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: android-candidate-upgrade-smoke
+          path: candidate-evidence/upgrade-install.txt
+          retention-days: 30
+          if-no-files-found: error
+  staging_smoke:
+    name: Candidate staging smoke
     needs: [build_candidate, upgrade_install_smoke]
     runs-on: ubuntu-latest
     env:
@@ -296,68 +305,6 @@ jobs:
             "signedCandidate": "PASS",
             "checksum": "PASS",
             "upgradeInstall": "PASS",
-            "stagingSmoke": "PASS"
-          }
-          EOF
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: android-candidate-evidence
-          path: candidate-evidence/**
-          retention-days: 30
-          if-no-files-found: warn
- candidate-evidence/upgrade-install.txt
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: android-candidate-upgrade-smoke
-          path: candidate-evidence/upgrade-install.txt
-          retention-days: 30
-          if-no-files-found: error
-
-  staging_smoke:
-    name: Candidate staging smoke
-    needs: [build_candidate]
-    runs-on: ubuntu-latest
-    env:
-      QA_STAGING_EDGE_URL: ${{ vars.QA_STAGING_EDGE_URL }}
-      QA_STAGING_PUBLISHABLE_KEY: ${{ secrets.QA_STAGING_PUBLISHABLE_KEY }}
-      QA_STAGING_TOKEN_0: ${{ secrets.QA_STAGING_TOKEN_0 }}
-      QA_STAGING_TOKEN_1: ${{ secrets.QA_STAGING_TOKEN_1 }}
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
-        with:
-          name: android-candidate
-          path: candidate
-      - name: Verify downloaded candidate checksum
-        run: (cd candidate && sha256sum -c NuestraGalaxia.apk.sha256)
-      - name: Strict remote staging smoke
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p candidate-evidence
-          test -n "$QA_STAGING_EDGE_URL"
-          test -n "$QA_STAGING_PUBLISHABLE_KEY"
-          test -n "$QA_STAGING_TOKEN_0"
-          test -n "$QA_STAGING_TOKEN_1"
-          node scripts/qa-phase5-staging.mjs 2>&1 | tee candidate-evidence/staging-smoke.txt
-          grep -q '^VERIFIED: remote staging dual-user concurrency/realtime/map/backup' candidate-evidence/staging-smoke.txt
-      - name: Release gate ledger
-        run: |
-          cat > candidate-evidence/release-gates.json <<EOF
-          {
-            "sourceSha": "${GITHUB_SHA}",
-            "runId": ${GITHUB_RUN_ID},
-            "node": "PASS",
-            "denoTypeChecks": "PASS",
-            "security": "PASS",
-            "dbMigrationReplay": "PASS",
-            "androidUnit": "PASS",
-            "androidInstrumentation": "PASS",
-            "androidLint": "PASS",
-            "signedCandidate": "PASS",
-            "checksum": "PASS",
             "stagingSmoke": "PASS"
           }
           EOF
