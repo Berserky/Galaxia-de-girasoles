@@ -98,9 +98,10 @@ test('Goals integrates with Date Engine through generic suggestions only',()=>{
  assert.equal(dateEngine.includes('galaxy_goals'),false);
 });
 
-test('Goals backup includes relational goal data',()=>{
+test('Goals backup includes relational goal data in transactional v5 restore',()=>{
  for(const key of ['goals','goalParticipants','goalSteps','goalLinks','goalContributions'])assert.ok(edge.includes(key),key);
- assert.ok(edge.includes('restoredGoals'));
+ assert.ok(edge.includes('galaxy_backup_restore_v5'));
+ assert.ok(edge.includes('verified:restored?.verified===true'));
 });
 
 test('Goals UI uses theme tokens and reduced motion',()=>{
