@@ -1451,9 +1451,8 @@ function mergeChatOutbox(messages){
 function chatRows(){return mergeChatOutbox(chatState?.messages||[]);}
 function chatCaptureAnchor(el=document.querySelector('#chatMessages')){
  if(!el)return null;
- const box=el.getBoundingClientRect();
- const visible=[...el.querySelectorAll('.chat-message')].find(row=>{const r=row.getBoundingClientRect();return r.bottom>box.top+2&&r.top<box.bottom-2;});
- if(visible)return {id:String(visible.dataset.chatId||visible.dataset.id||''),offset:visible.getBoundingClientRect().top-box.top};
+ const stable=chatScrollEngine.captureAnchor(el);
+ if(stable)return {id:stable.messageId,offset:stable.viewportOffset,fallbacks:(stable.fallbacks||[]).map(x=>({id:x.messageId,offset:x.viewportOffset}))};
  const list=chatRows();if(!list.length)return null;
  const probe=Math.max(0,el.scrollTop+Math.min(180,el.clientHeight*.35)),index=chatMessageEngine.indexAtOffset(list,probe);
  if(index<0)return null;
@@ -1463,7 +1462,7 @@ function chatCaptureAnchor(el=document.querySelector('#chatMessages')){
 }
 function chatRestoreAnchor(el,anchor){
  if(!anchor)return false;
- return chatScrollEngine.restoreAnchor(el,{messageId:anchor.id,viewportOffset:anchor.offset},'anchor-restore');
+ return chatScrollEngine.restoreAnchor(el,{messageId:anchor.id,viewportOffset:anchor.offset,fallbacks:(anchor.fallbacks||[]).map(x=>({messageId:x.id,viewportOffset:x.offset}))},'anchor-restore');
 }
 function chatMeasureRendered(){
  chatMeasureRaf=0;
