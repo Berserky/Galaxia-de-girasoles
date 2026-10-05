@@ -1635,7 +1635,14 @@ async function loadChat({older=false,newer=false,quiet=false,force=false,aroundI
   let nextState=chatState,direction='refresh',syncDeferred=false;
   if(syncId){
    const message=result?.messages?.[0]||null;
-   if(!message)return;
+   if(!message){
+    const remaining=oldMessages.filter(m=>String(m.id)!==String(syncId));
+    if(remaining.length!==oldMessages.length){
+     chatState={...(chatState||{}),messages:remaining};chatStateSignature=chatSignature(chatState);
+     if(view==='chat')chatRenderMessages({anchor,scroll:'preserve'});
+    }
+    return;
+   }
    const exists=oldMessages.some(m=>String(m.id)===String(message.id)||String(m.client_id||'')===String(message.client_id||''));
    const isNewer=Number(message.server_seq||0)>oldLastSeq;
    const readingHistory=!!chatState?.nextAfterSeq||!wasNear;
