@@ -907,9 +907,10 @@ async function chatHydrateEntityRefs(refEntries:any[],person:string){
   return {messageId,ref,type:String(ref?.card_type||"").toUpperCase(),kind:String(ref?.entity_kind||""),id:String(ref?.entity_id||"")};
  }).filter((x:any)=>x.messageId&&x.ref&&x.kind&&x.id);
  if(!entries.length)return new Map<string,any>();
+ const cardKey=(entry:any)=>entry.type+"|"+entry.kind+"|"+entry.id;
  const unique=new Map<string,any>();
  for(const entry of entries){
-  const key=entry.kind+"|"+entry.id;
+  const key=cardKey(entry);
   if(!unique.has(key))unique.set(key,entry);
  }
  const refs=[...unique.values()];
@@ -982,7 +983,7 @@ async function chatHydrateEntityRefs(refEntries:any[],person:string){
    const unavailable=()=>chatCardUnavailable(entry.ref);
    if(itemKinds.includes(entry.kind)){
     const row=itemMap.get(entry.kind+"|"+entry.id);
-    if(!row){cards.set(entry.kind+"|"+entry.id,unavailable());continue;}
+    if(!row){cards.set(cardKey(entry),unavailable());continue;}
     if(entry.kind==="capsule"){
      const access=capsuleAccess.get(entry.id)||chatCapsuleAccess(row.data||{},person,ownLocation);
      const card:any=chatItemCard(entry.type,row,access);
@@ -994,40 +995,40 @@ async function chatHydrateEntityRefs(refEntries:any[],person:string){
        if(song)card.song={id:String(song.id),title:text(song.data?.title||"Canción",160),artist:text(song.data?.artist||"",160),source:text(song.data?.source||"",80),url:/^https:\/\//i.test(String(song.data?.url||""))?String(song.data.url):""};
       }
      }
-     cards.set(entry.kind+"|"+entry.id,card);
-    }else cards.set(entry.kind+"|"+entry.id,chatItemCard(entry.type,row));
+     cards.set(cardKey(entry),card);
+    }else cards.set(cardKey(entry),chatItemCard(entry.type,row));
     continue;
    }
    if(entry.kind==="goal"){
     const row=goalMap.get(entry.id);
-    cards.set(entry.kind+"|"+entry.id,row?{available:true,type:"GOAL",entityKind:"goal",entityId:entry.id,title:text(row.title,300),body:text(row.description,1200),category:text(row.category,100),targetDate:row.target_date,status:row.status,targetAmount:row.target_amount,createdBy:String(row.created_by),version:Number(row.version),updatedAt:row.updated_at}:unavailable());
+    cards.set(cardKey(entry),row?{available:true,type:"GOAL",entityKind:"goal",entityId:entry.id,title:text(row.title,300),body:text(row.description,1200),category:text(row.category,100),targetDate:row.target_date,status:row.status,targetAmount:row.target_amount,createdBy:String(row.created_by),version:Number(row.version),updatedAt:row.updated_at}:unavailable());
     continue;
    }
    if(entry.kind==="place"){
     const row=placeMap.get(entry.id);
-    cards.set(entry.kind+"|"+entry.id,row?{available:true,type:"PLACE",entityKind:"place",entityId:entry.id,title:text(row.name,160),placeKind:text(row.kind,40),note:text(row.note,400),latitude:Number(row.latitude),longitude:Number(row.longitude),owner:String(row.owner),createdAt:row.created_at}:unavailable());
+    cards.set(cardKey(entry),row?{available:true,type:"PLACE",entityKind:"place",entityId:entry.id,title:text(row.name,160),placeKind:text(row.kind,40),note:text(row.note,400),latitude:Number(row.latitude),longitude:Number(row.longitude),owner:String(row.owner),createdAt:row.created_at}:unavailable());
     continue;
    }
    if(entry.kind==="daily_question"){
     const row=dailyMap.get(entry.id),q=row?questionById(String(row.question_id)):null;
-    if(!row||!q){cards.set(entry.kind+"|"+entry.id,unavailable());continue;}
+    if(!row||!q){cards.set(cardKey(entry),unavailable());continue;}
     const answers=answersByDay.get(entry.id)||[],mine=answers.find((x:any)=>String(x.person)===person),partner=answers.find((x:any)=>String(x.person)!==person);
     const both=!!text(mine?.answer,3000)&&!!text(partner?.answer,3000);
-    cards.set(entry.kind+"|"+entry.id,{available:true,type:"DAILY_QUESTION",entityKind:"daily_question",entityId:entry.id,title:text(q.text,600),questionId:q.id,deck:q.deck,day:entry.id,favorite:!!row.favorite,answeredByMe:!!text(mine?.answer,3000),answeredByPartner:!!text(partner?.answer,3000),myAnswer:text(mine?.answer,3000),partnerAnswer:both?text(partner?.answer,3000):"",revealed:both});
+    cards.set(cardKey(entry),{available:true,type:"DAILY_QUESTION",entityKind:"daily_question",entityId:entry.id,title:text(q.text,600),questionId:q.id,deck:q.deck,day:entry.id,favorite:!!row.favorite,answeredByMe:!!text(mine?.answer,3000),answeredByPartner:!!text(partner?.answer,3000),myAnswer:text(mine?.answer,3000),partnerAnswer:both?text(partner?.answer,3000):"",revealed:both});
     continue;
    }
    if(entry.kind==="context_session"){
     const session=contextMap.get(entry.id);
-    if(!session){cards.set(entry.kind+"|"+entry.id,unavailable());continue;}
+    if(!session){cards.set(cardKey(entry),unavailable());continue;}
     const eta=etaMap.get(entry.id)||null,loc=locationMap.get(String(session.person))||null;
     const raw=String(session.status||"active"),distanceM=Number(eta?.distance_m??session.last_distance_m);
     const visual=raw==="arrived"?"LLEGÓ":raw==="cancelled"?"CANCELADO":raw==="finished"||raw==="completed"?"FINALIZADO":Number.isFinite(distanceM)&&distanceM<=300?"CERCA":"EN CAMINO";
-    cards.set(entry.kind+"|"+entry.id,{available:true,type:entry.type==="CHECK_IN"?"CHECK_IN":"ETA",entityKind:"context_session",entityId:entry.id,title:text(session.label||"Acompáñame",120),person:String(session.person),destinationKind:session.destination_kind,targetPerson:session.target_person,placeId:session.place_id,transport:text(loc?.transport_preference||"auto",40),status:raw,visualStatus:visual,distanceM:Number.isFinite(distanceM)?distanceM:null,etaSeconds:eta?.eta_s??session.last_eta_s,progressPct:eta?.progress_pct??session.progress_pct,startedAt:session.started_at,arrivedAt:session.arrived_at,endedAt:session.ended_at,updatedAt:eta?.captured_at||session.updated_at});
+    cards.set(cardKey(entry),{available:true,type:entry.type==="CHECK_IN"?"CHECK_IN":"ETA",entityKind:"context_session",entityId:entry.id,title:text(session.label||"Acompáñame",120),person:String(session.person),destinationKind:session.destination_kind,targetPerson:session.target_person,placeId:session.place_id,transport:text(loc?.transport_preference||"auto",40),status:raw,visualStatus:visual,distanceM:Number.isFinite(distanceM)?distanceM:null,etaSeconds:eta?.eta_s??session.last_eta_s,progressPct:eta?.progress_pct??session.progress_pct,startedAt:session.started_at,arrivedAt:session.arrived_at,endedAt:session.ended_at,updatedAt:eta?.captured_at||session.updated_at});
     continue;
    }
    if(entry.kind==="poll"){
     const poll=pollMap.get(entry.id);
-    if(!poll){cards.set(entry.kind+"|"+entry.id,unavailable());continue;}
+    if(!poll){cards.set(cardKey(entry),unavailable());continue;}
     const options=optionsByPoll.get(entry.id)||[],votes=votesByPoll.get(entry.id)||[];
     const totalPeople=new Set(votes.map((v:any)=>String(v.person))).size,totalVotes=votes.length;
     const closed=!!poll.closed_at||(poll.closes_at&&Date.parse(String(poll.closes_at))<=Date.now());
@@ -1037,24 +1038,24 @@ async function chatHydrateEntityRefs(refEntries:any[],person:string){
     });
     const topVotes=normalized.reduce((max:number,o:any)=>Math.max(max,Number(o.votes||0)),0),leaders=topVotes>0?normalized.filter((o:any)=>Number(o.votes||0)===topVotes):[];
     const tie=closed&&leaders.length>1,winner=closed&&leaders.length===1?{id:leaders[0].id,label:leaders[0].label,position:leaders[0].position,votes:leaders[0].votes}:null;
-    cards.set(entry.kind+"|"+entry.id,{available:true,type:"POLL",entityKind:"poll",entityId:entry.id,title:text(poll.question,500),question:text(poll.question,500),allowMultiple:!!poll.allow_multiple,closesAt:poll.closes_at,closedAt:poll.closed_at,closed,createdBy:String(poll.created_by),totalPeople,totalVotes,topVotes,winner,tie,noVotes:closed&&topVotes===0,options:normalized});
+    cards.set(cardKey(entry),{available:true,type:"POLL",entityKind:"poll",entityId:entry.id,title:text(poll.question,500),question:text(poll.question,500),allowMultiple:!!poll.allow_multiple,closesAt:poll.closes_at,closedAt:poll.closed_at,closed,createdBy:String(poll.created_by),totalPeople,totalVotes,topVotes,winner,tie,noVotes:closed&&topVotes===0,options:normalized});
     continue;
    }
    if(entry.kind==="checklist"){
     const list=checklistMap.get(entry.id);
-    if(!list){cards.set(entry.kind+"|"+entry.id,unavailable());continue;}
+    if(!list){cards.set(cardKey(entry),unavailable());continue;}
     const items=itemsByChecklist.get(entry.id)||[],done=items.filter((x:any)=>x.checked).length;
-    cards.set(entry.kind+"|"+entry.id,{available:true,type:"CHECKLIST",entityKind:"checklist",entityId:entry.id,title:text(list.title,300),createdBy:String(list.created_by),version:Number(list.version),done,total:items.length,items:items.map((x:any)=>({id:String(x.id),label:text(x.label,300),position:Number(x.position),checked:!!x.checked,updatedBy:x.updated_by==null?null:String(x.updated_by),updatedAt:x.updated_at,version:Number(x.version)}))});
+    cards.set(cardKey(entry),{available:true,type:"CHECKLIST",entityKind:"checklist",entityId:entry.id,title:text(list.title,300),createdBy:String(list.created_by),version:Number(list.version),done,total:items.length,items:items.map((x:any)=>({id:String(x.id),label:text(x.label,300),position:Number(x.position),checked:!!x.checked,updatedBy:x.updated_by==null?null:String(x.updated_by),updatedAt:x.updated_at,version:Number(x.version)}))});
     continue;
    }
    if(entry.kind==="status"){
     const row=locationMap.get(entry.id);
-    cards.set(entry.kind+"|"+entry.id,row?{available:true,type:"STATUS",entityKind:"status",entityId:entry.id,title:text(row.status||"Sin estado",160),person:entry.id,updatedAt:row.updated_at}:unavailable());
+    cards.set(cardKey(entry),row?{available:true,type:"STATUS",entityKind:"status",entityId:entry.id,title:text(row.status||"Sin estado",160),person:entry.id,updatedAt:row.updated_at}:unavailable());
     continue;
    }
-   cards.set(entry.kind+"|"+entry.id,unavailable());
+   cards.set(cardKey(entry),unavailable());
   }
-  return new Map(entries.map((entry:any)=>[entry.messageId,cards.get(entry.kind+"|"+entry.id)||chatCardUnavailable(entry.ref)]));
+  return new Map(entries.map((entry:any)=>[entry.messageId,cards.get(cardKey(entry))||chatCardUnavailable(entry.ref)]));
  }catch(error){
   console.warn("chat-card-batch-hydrate",error instanceof Error?error.message:"error");
   const fallback=await Promise.all(entries.map(async(entry:any)=>[entry.messageId,await chatHydrateEntityRef(entry.ref,person)] as [string,any]));
