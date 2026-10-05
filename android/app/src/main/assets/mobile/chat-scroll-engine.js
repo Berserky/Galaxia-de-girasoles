@@ -121,10 +121,10 @@ function create(options={}){
  function stabilize(el=bound,reason='resize'){
   if(!el)return;
   cancelAnimationFrame(resizeRaf);
-  const anchor=liveAnchor,bottom=liveBottom;
   resizeRaf=requestAnimationFrame(()=>{
    if(!el.isConnected)return;
    if(programmaticDepth===0&&now()-lastUserScrollAt<config.resizeQuietMs){sync(el);return;}
+   const anchor=liveAnchor,bottom=liveBottom;
    if(bottom)toBottom(el,{reason});
    else if(anchor)restoreAnchor(el,anchor,reason);
    sync(el);
