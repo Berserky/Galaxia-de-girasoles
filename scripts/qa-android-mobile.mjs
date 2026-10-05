@@ -36,6 +36,7 @@ const trackingService=read('android/app/src/main/java/com/nuestragalaxia/compani
 const updater=read('android/app/src/main/java/com/nuestragalaxia/companion/UpdateManager.java');
 const apiClient=read('android/app/src/main/java/com/nuestragalaxia/companion/MobileApiClient.java');
 const edge=read('supabase/functions/android-companion/index.ts');
+const mediaValidation=read('supabase/functions/android-companion/media-validation.ts');
 const serverInsights=read('supabase/functions/android-companion/insights.ts');
 const dateEngine=read('supabase/functions/android-companion/date-engine.ts');
 const goalsEngine=read('supabase/functions/android-companion/goals-engine.ts');
@@ -83,7 +84,9 @@ assert.ok(manifest.includes('android.media.action.IMAGE_CAPTURE')&&manifest.incl
 assert.ok(app.includes("showModal('Adjuntar'")&&app.includes('>Archivos</span>')&&app.includes('>Ubicación</span>')&&app.includes('>Acompáñame</span>')&&app.includes('>Nuestra Galaxia</span>')&&app.includes('>Encuesta</span>')&&app.includes('>Checklist</span>')&&app.includes('>GIF / stickers</span>'),'El menú + debe conservar adjuntos esenciales y las acciones nativas de Galaxy Chat Universe');
 assert.equal(app.includes('data-action="chat-attach-photo"')||app.includes('data-action="chat-attach-video"')||app.includes('data-action="chat-voice-open"'),false,'El menú + no debe duplicar foto, video ni audio');
 assert.ok(main.includes('else mime="*/*"')&&!main.includes('Intent.EXTRA_MIME_TYPES'),'Archivos debe abrir el selector universal sin filtrar tipos');
-assert.ok(edge.includes('kind==="chat-file"')&&edge.includes('mimes:null')&&edge.includes('application/octet-stream'),'Backend debe aceptar adjuntos de cualquier MIME bajo chat-file');
+assert.ok(edge.includes('kind==="chat-file"')&&edge.includes('mimes:null')&&mediaValidation.includes('application/octet-stream'),'Backend debe aceptar archivos genéricos sin confiar en MIME declarado');
+assert.ok(edge.includes('validateUploadMedia')&&edge.includes('readUploadBytes')&&edge.includes('x-upload-id'),'Uploads deben validar contenido, cortar por límite e idempotencia de retry');
+assert.ok(mediaValidation.includes('image/heic')&&mediaValidation.includes('image/heif')&&mediaValidation.includes('DOCX_MIME')&&mediaValidation.includes('XLSX_MIME'),'La matriz multimedia debe reconocer HEIC/HEIF y documentos Office');
 assert.ok(schema.includes("values('galaxy-chat-media','galaxy-chat-media',false,62914560,null)"),'El bucket privado de chat no debe restringir MIME a nivel Storage');
 const scriptSources=[...index.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m=>m[1]);
 assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./insights.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./eta.js','./frequent-places.js','./gps-history.js','./theme.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
@@ -294,6 +297,9 @@ assert.ok(edge.includes('sharing:!!loc?.sharing')&&edge.includes('listening'),'E
 assert.ok(edge.includes('3*1024*1024')&&edge.includes('Solicitud demasiado grande')&&edge.includes('JSON no válido'),'El backend móvil debe limitar y validar el JSON antes de procesarlo');
 assert.ok(apiClient.includes('MAX_JSON_RESPONSE_BYTES')&&apiClient.includes('Respuesta demasiado grande.'),'Android debe limitar respuestas JSON anómalas');
 assert.ok(apiClient.includes('uploadLimit(String kind)')&&apiClient.includes('if(length>limit)'),'Android debe rechazar archivos demasiado grandes antes de subirlos');
+assert.ok(apiClient.includes('transcodeHeifToJpeg')&&apiClient.includes('x-upload-id')&&apiClient.includes('uploadWithRetry'),'Android debe normalizar HEIC/HEIF y reintentar sin duplicar');
+assert.equal(build.includes('GIPHY_API_KEY'),false,'GIPHY_API_KEY no puede empaquetarse en BuildConfig');
+assert.ok(edge.includes('Deno.env.get("GIPHY_API_KEY")')&&edge.includes('configured:false'),'GIPHY debe vivir en backend y degradar explícitamente');
 assert.ok(edge.includes('Date.now()-lastSeen>5*60*1000'),'La autenticación del dispositivo debe limitar escrituras de last_seen');
 assert.ok(edge.includes('const hydratedAttachments=await Promise.all'),'La firma de adjuntos del chat debe paralelizarse');
 assert.ok(edge.includes('body.detail!==true'),'El mapa debe tener refresco ligero');
