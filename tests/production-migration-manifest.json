@@ -1,6 +1,6 @@
 {
   "capturedFrom": "Nuestra galaxia production after Phase 0",
-  "capturedAt": "2026-10-04",
+  "capturedAt": "2026-10-05T01:14:01Z",
   "migrations": [
     {
       "version": "20261001204606",
@@ -191,6 +191,11 @@
       "version": "20261004232942",
       "name": "qa_phase0_privacy_firewall",
       "normalized_md5": "0937f1daf4d8c712f50027f6c77e0f81"
+    },
+    {
+      "version": "20261005011401",
+      "name": "qa_phase1_data_integrity",
+      "normalized_md5": "3b1167ef28d83f5fd93b1bab66165c1f"
     }
   ]
 }
