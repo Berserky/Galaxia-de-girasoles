@@ -33,7 +33,7 @@ jobs:
       - name: QA Supabase Edge Functions
         run: |
           deno check --node-modules-dir=auto supabase/functions/android-companion/index.ts
-          deno test --allow-none supabase/functions/android-companion/media-validation.test.ts
+          deno test supabase/functions/android-companion/media-validation.test.ts
       - uses: actions/setup-java@v5
         with: { distribution: temurin, java-version: "17" }
       - name: Preparar Android SDK
