@@ -289,7 +289,7 @@ assert.ok(workflow.includes('lintDebug'),'El pipeline debe ejecutar Android Lint
 assert.ok(workflow.includes('qa-android-mobile.mjs'),'El pipeline debe ejecutar esta auditoría');
 
 assert.ok(updater.includes('BuildConfig.APPLICATION_ID.equals(info.packageName)'),'El updater debe verificar packageName');
-assert.ok(updater.includes('version<=BuildConfig.VERSION_CODE'),'El updater debe rechazar APK no superior');
+assert.ok(updater.includes('!isNewerVersion(version,BuildConfig.VERSION_CODE)'),'El updater debe rechazar APK no superior');
 assert.ok(updater.includes('resumePendingInstall'),'El updater debe retomar la instalación tras conceder permisos');
 assert.ok(updater.includes('MAX_APK_BYTES'),'El updater debe limitar el tamaño de descarga');
 assert.ok(widget.includes('widgetModules')&&widget.includes('moduleValue')&&widget.includes('"mood"'),'El Widget 2.0 debe conservar el estado Ahora mediante módulos dinámicos');
