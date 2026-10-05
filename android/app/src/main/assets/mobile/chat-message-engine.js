@@ -123,6 +123,17 @@ function create(options={}){
   }
   return Math.max(0,Math.round(px));
  }
+ function offsetBefore(messages=[],index=0){return estimate(messages,0,Math.max(0,Math.min(messages.length,index)));}
+ function indexAtOffset(messages=[],offset=0){
+  if(!messages.length)return -1;
+  const target=Math.max(0,Number(offset)||0);let px=0;
+  for(let i=0;i<messages.length;i++){
+   const height=heights.get(messageKey(messages[i]))||average;
+   if(px+height>target)return i;
+   px+=height;
+  }
+  return messages.length-1;
+ }
  function range(messages=[]){
   ensureWindow(messages.length);
   return {
@@ -190,7 +201,7 @@ function create(options={}){
 
  return {
   config:Object.freeze({...config}),messageKey,compareMessages,mergeMessages,minSeq,maxSeq,
-  resetWindow,ensureWindow,focus,shift,measure,range,applyPage,applySingle,report
+  resetWindow,ensureWindow,focus,shift,measure,offsetBefore,indexAtOffset,range,applyPage,applySingle,report
  };
 }
 
