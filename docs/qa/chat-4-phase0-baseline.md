@@ -21,7 +21,7 @@ bash scripts/qa-phase5-emulator.sh
 
 Initial UI request is 60 messages. Server clamps 20..100, orders by `server_seq`, over-fetches up to limit+50 to remove hidden/deleted/expired rows, trims to the requested limit and returns `nextBeforeSeq`. History prepends by merging IDs, sorting by `server_seq` and compensating `scrollHeight - oldHeight`.
 
-Local sends enter an outbox immediately, use a synthetic local order, then reconcile by `client_id` with the server result. Delivery refresh uses native chat-sync/push paths plus a 25 s visible-chat fallback poll and a forced refresh on foreground. There is no second browser-side Supabase Realtime client.
+Local sends enter an outbox immediately, use a synthetic local order, then reconcile by `client_id` with the server result. MainActivity registers a native `chat-sync` receiver and emits that event into the WebView, but the current JavaScript `GalaxyNative.event()` does not consume `chat-sync`. Effective visible-chat refresh therefore relies on the 25 s fallback poll, explicit loads/actions and forced foreground refresh. There is no browser-side Supabase Realtime client.
 
 Hydration already batches Galaxy Card domain reads and Storage URL signing from Phase 4; that mechanism is reused.
 
@@ -31,7 +31,7 @@ Hydration already batches Galaxy Card domain reads and Storage URL signing from 
 | --- | --- | --- | --- |
 | P0 | Scroll | Chat replaces the full chat DOM on state changes. Ordinary refresh while the user is reading history has no anchor restoration unless it is a history prepend, an explicit jump, or the user was already near the bottom. This reproduces the spontaneous jump toward old/start content. | Scroll Engine |
 | P1 | Message Engine | Loaded history accumulates in state and DOM. `content-visibility:auto` reduces paint/layout work but is not message virtualization/windowing. | Message Engine |
-| P1 | Delivery | Incoming/foreground/poll refresh can trigger a whole-view render instead of an append/reconcile-only update. | Delivery/Realtime |
+| P1 | Delivery | The native `chat-sync` event is emitted but not handled by JavaScript; effective freshness falls back to polling/foreground refresh. Those refreshes can trigger a whole-view render instead of append/reconcile-only update. | Delivery/Realtime |
 | P1 | Media | Images are lazy, but video/audio use `preload="metadata"`; off-viewport media still exists in the DOM and can perform metadata work. | Media Performance |
 | P2 | Composer | Reply, optimistic send and several composer transitions call global render, increasing focus/IME and scroll sensitivity. | Composer |
 | P2 | Android | WebView viewport resize, lifecycle resume and native bridge refreshes can coincide with full chat render. | Android Performance |
