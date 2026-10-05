@@ -126,17 +126,22 @@ test('position memory stores only anchor/context metadata and restores it',()=>{
  assert.ok(engine.restoreMemory(el,'chat'));
  const after=engine.captureAnchor(el);
  assert.equal(after.messageId,before.messageId);
+ engine.rememberState({anchor:{messageId:'virtual-42',viewportOffset:77,fallbacks:[]},atBottom:false,context:'chat',body:'must-not-persist'},'chat');
+ const externalRaw=store.dump()[0][1];
+ assert.ok(externalRaw.includes('virtual-42'));
+ assert.equal(externalRaw.includes('must-not-persist'),false);
 });
 
 test('global chat render, navigation and background paths preserve context',()=>{
  const render=block(app,'function render(){','function renderOnboarding');
- assert.ok(render.includes('previousChatAnchor=previousChatEl?chatCaptureAnchor(previousChatEl):null'));
+ assert.ok(render.includes("chatCapturePositionState(previousChatEl,'render')"));
  assert.ok(render.includes('render-preserve'));
  assert.ok(render.includes('chatScrollEngine.restoreMemory'));
  const go=block(app,'function go(next){','let nativeThemeSent');
  assert.ok(go.includes("previous==='chat'&&next!=='chat'"));
- assert.ok(go.includes('chatScrollEngine.remember'));
- assert.ok(app.includes("document.visibilityState==='hidden'")&&app.includes("chatScrollEngine.remember(document.querySelector('#chatMessages'),'chat')"));
+ assert.ok(go.includes('chatRememberPosition'));
+ assert.ok(app.includes("document.visibilityState==='hidden'")&&app.includes('chatSnapshotResumeBaseline();chatRememberPosition'));
+ assert.ok(scrollSource.includes('rememberState'));
 });
 
 test('keyboard, composer and orientation resize use anchor/bottom restoration',()=>{
@@ -226,10 +231,17 @@ test('deletion/edit/sync reconciliation stays anchor-preserving',()=>{
  assert.ok(load.includes('chatRenderMessages({anchor'));
 });
 
-test('network foreground/reconnect refresh keeps scroll engine in the loop',()=>{
- assert.ok(app.includes("window.addEventListener('online'"));
- assert.ok(app.includes("loadChat({quiet:true,force:true})"));
- assert.ok(app.includes("requestAnimationFrame(()=>chatScrollEngine.restoreMemory(document.querySelector('#chatMessages'),'chat'))"));
+test('network foreground/reconnect preserves history and only refreshes present directly',()=>{
+ const resume=block(app,'function refreshChatAfterResume(){','function patchLocalMessage');
+ assert.ok(resume.includes('readingHistory=!!chatState?.nextAfterSeq||!chatNearBottom(el)'));
+ assert.ok(resume.includes("if(!chatState||!readingHistory){await loadChat({quiet:true,force:true});return;}"));
+ assert.ok(resume.includes("api('chat-state',{limit:60})"));
+ assert.ok(resume.includes('chatNewCount=Math.max(chatNewCount,chatResumeNewCount+delta)'));
+ const lifecycle=block(app,"document.addEventListener('visibilitychange',()=>{\n if(document.visibilityState==='visible'","window.visualViewport?.addEventListener");
+ assert.ok(lifecycle.includes('chatScrollEngine.restoreMemory'));
+ assert.ok(lifecycle.includes('refreshChatAfterResume()'));
+ const online=block(app,"window.addEventListener('online'","window.addEventListener('offline'");
+ assert.ok(online.includes('refreshChatAfterResume()'));
 });
 
 test('20k logical history remains windowed while phase2 adds no second scroll container',()=>{
