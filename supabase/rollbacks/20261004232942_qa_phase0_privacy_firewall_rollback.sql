@@ -1,6 +1,6 @@
 begin;
 
--- Emergency rollback for 20261004212500_qa_phase0_privacy_firewall.sql.
+-- Emergency rollback for 20261004232942_qa_phase0_privacy_firewall.sql.
 -- WARNING: this intentionally restores the pre-Phase-0 privacy model and is
 -- only for operational rollback if the hotfix itself causes a production outage.
 

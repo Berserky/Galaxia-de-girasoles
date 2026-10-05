@@ -10,7 +10,7 @@ const push=read('supabase/functions/android-companion/push-engine.ts');
 const main=read('android/app/src/main/java/com/nuestragalaxia/companion/MainActivity.java');
 const firebase=read('android/app/src/main/java/com/nuestragalaxia/companion/GalaxyFirebaseService.java');
 const notifications=read('android/app/src/main/java/com/nuestragalaxia/companion/GalaxyNotifications.java');
-const migration=read('supabase/migrations/20261004060000_galaxy_chat_premium_340.sql');
+const migration=read('supabase/migrations/20261004165848_galaxy_chat_premium_340.sql');
 const gradle=read('android/app/build.gradle.kts');
 
 test('Premium 3.4 migration remains compatible under Universe 3.5',()=>{
@@ -76,8 +76,8 @@ test('translation is ephemeral unless persistence is explicitly requested',()=>{
  assert.ok(edge.includes('if(!persist)return json({translation:result,persisted:false})'));
 });
 
-test('backup v3 includes premium chat metadata',()=>{
- for(const marker of ['stickerRecents:chatStickerRecents','liveLocations:chatLiveLocations','chatStickerRecents','chatLiveLocations'])assert.ok(edge.includes(marker),marker);
+test('backup v5 preserves premium chat metadata through canonical sections',()=>{
+ for(const marker of ['chatStickerRecents','chatLiveLocations','BACKUP_SECTION_NAMES','galaxy_backup_export_v5'])assert.ok(edge.includes(marker),marker);
 });
 
 test('native premium bridge includes short video, GIPHY and point location',()=>{

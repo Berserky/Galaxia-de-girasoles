@@ -1,0 +1,201 @@
+{
+  "capturedFrom": "Nuestra galaxia production after Phase 0",
+  "capturedAt": "2026-10-05T01:14:01Z",
+  "migrations": [
+    {
+      "version": "20261001204606",
+      "name": "private_couple_space",
+      "normalized_md5": "e38b3d3817e0d7703ec9c7aa851e24fa"
+    },
+    {
+      "version": "20261001204906",
+      "name": "validate_invitation_token",
+      "normalized_md5": "97d57af684b821db401f9e8d024f1087"
+    },
+    {
+      "version": "20261002065616",
+      "name": "add_private_galaxy_music_bucket",
+      "normalized_md5": "ef94d0a5ffcc0aa84319dd2d845a2edb"
+    },
+    {
+      "version": "20261002070137",
+      "name": "add_shared_cozy_home_v1",
+      "normalized_md5": "653f48d20172f784ba2f93ecce7f19b5"
+    },
+    {
+      "version": "20261002071412",
+      "name": "expand_home_rooms_and_functional_furniture",
+      "normalized_md5": "46c11ef815f815806ce39b4c730dea25"
+    },
+    {
+      "version": "20261002074248",
+      "name": "authoritative_home_catalog_and_more_items",
+      "normalized_md5": "4fe408689b1bc2eb7855ab66e6463c64"
+    },
+    {
+      "version": "20261002075958",
+      "name": "add_rpg_indoors_catalog_v1",
+      "normalized_md5": "a334fecc32528ec0795690770d81ff65"
+    },
+    {
+      "version": "20261002082817",
+      "name": "add_full_roguelike_indoors_shop_catalog",
+      "normalized_md5": "64bfac8cda40878099c5f39467ebd7a2"
+    },
+    {
+      "version": "20261002084418",
+      "name": "add_modern_home_catalog_v28",
+      "normalized_md5": "cd4dd567695ca1c164fec72b43140e5a"
+    },
+    {
+      "version": "20261002132458",
+      "name": "add_curated_home_catalog_v30",
+      "normalized_md5": "66839b4b57b91c71c1d61376cc429691"
+    },
+    {
+      "version": "20261002135005",
+      "name": "add_shared_live_locations",
+      "normalized_md5": "5e755441001cdaa0b64b1a1ce6922663"
+    },
+    {
+      "version": "20261002143213",
+      "name": "add_map_v2_places_and_trips",
+      "normalized_md5": "d962d74756ddcfc9af81dd03c062f5e7"
+    },
+    {
+      "version": "20261002145648",
+      "name": "harden_map_and_table_grants",
+      "normalized_md5": "8a7b1cdf87e4f9baf711db880da88d2e"
+    },
+    {
+      "version": "20261002145813",
+      "name": "remove_unused_location_delete_grant",
+      "normalized_md5": "2a5b52f0a750891059d7316e9d9d2d6b"
+    },
+    {
+      "version": "20261002150328",
+      "name": "add_live_motion_detection",
+      "normalized_md5": "ece592f0d82878320143ea65a1010663"
+    },
+    {
+      "version": "20261002151148",
+      "name": "add_private_location_and_trip_history",
+      "normalized_md5": "199d3fbe3f9caf6eff2402480bdfe910"
+    },
+    {
+      "version": "20261002152134",
+      "name": "add_smart_place_arrivals",
+      "normalized_md5": "48cc4a21a2af8f246942569fa6a97731"
+    },
+    {
+      "version": "20261002152703",
+      "name": "add_universe_story_features",
+      "normalized_md5": "bd81c9af5f290cb670ab42b376804e36"
+    },
+    {
+      "version": "20261002154604",
+      "name": "add_android_companion_devices",
+      "normalized_md5": "00600c089d2f62214ba91615f73d0ef7"
+    },
+    {
+      "version": "20261002154827",
+      "name": "deduplicate_android_location_samples",
+      "normalized_md5": "35ee6d9f0603c14538c0ea952cfaaa9a"
+    },
+    {
+      "version": "20261002161002",
+      "name": "index_relationship_location_foreign_keys",
+      "normalized_md5": "e063eada602e96c59dc13d139190186a"
+    },
+    {
+      "version": "20261002183542",
+      "name": "couple_moments",
+      "normalized_md5": "2c26e8c430b59a88444fd0ef091c5867"
+    },
+    {
+      "version": "20261003014159",
+      "name": "add_private_presence_now",
+      "normalized_md5": "1900ed769de053651bfdfeb43ac4b17c"
+    },
+    {
+      "version": "20261003043319",
+      "name": "partner_device_pairing",
+      "normalized_md5": "a00bc7658bcf7f260223f939e4c535a8"
+    },
+    {
+      "version": "20261003213818",
+      "name": "mega_update_3_release",
+      "normalized_md5": "2d1b19e28cca95e6f0b9758e3ffa5d02"
+    },
+    {
+      "version": "20261003213917",
+      "name": "mega_update_3_fk_indexes",
+      "normalized_md5": "25f2a36ece5e5924fa200a44812da0e9"
+    },
+    {
+      "version": "20261004002624",
+      "name": "galaxy_chat_notifications_31",
+      "normalized_md5": "bc0c19a4a627721a090f808b94c5ca89"
+    },
+    {
+      "version": "20261004005840",
+      "name": "galaxy_chat_fk_indexes_31",
+      "normalized_md5": "aa3aa6b859c79af77a6c73fac7b85511"
+    },
+    {
+      "version": "20261004021255",
+      "name": "galaxy_chat_core_320",
+      "normalized_md5": "b539977cf5d22b9d6f63e30df48fdea2"
+    },
+    {
+      "version": "20261004041353",
+      "name": "galaxy_chat_any_file_324",
+      "normalized_md5": "ecdff2ee751e0d7b259c16b105ceda33"
+    },
+    {
+      "version": "20261004045515",
+      "name": "allow_chat_sync_push",
+      "normalized_md5": "2293c045858ec5f95f9211c8ee6d8aa3"
+    },
+    {
+      "version": "20261004051137",
+      "name": "qa_hardening_330",
+      "normalized_md5": "de08941c7160da8d6ec7910508ceb130"
+    },
+    {
+      "version": "20261004052203",
+      "name": "trip_points_map_index",
+      "normalized_md5": "82c024155928cb1470724de37a716b71"
+    },
+    {
+      "version": "20261004052639",
+      "name": "fix_location_history_upsert",
+      "normalized_md5": "0abddede73047d8a326153f498ae6bd4"
+    },
+    {
+      "version": "20261004165848",
+      "name": "galaxy_chat_premium_340",
+      "normalized_md5": "3118a89f620a41c5b36aadfcce303a7a"
+    },
+    {
+      "version": "20261004202006",
+      "name": "galaxy_chat_universe_350",
+      "normalized_md5": "83f315357f58902832845d574796e808"
+    },
+    {
+      "version": "20261004232919",
+      "name": "phase0_predeploy_backup_20261004_2326z",
+      "normalized_md5": "6df38d4205e0f41bdbd4a8c9dea330cb"
+    },
+    {
+      "version": "20261004232942",
+      "name": "qa_phase0_privacy_firewall",
+      "normalized_md5": "0937f1daf4d8c712f50027f6c77e0f81"
+    },
+    {
+      "version": "20261005011401",
+      "name": "qa_phase1_data_integrity",
+      "normalized_md5": "3b1167ef28d83f5fd93b1bab66165c1f"
+    }
+  ]
+}

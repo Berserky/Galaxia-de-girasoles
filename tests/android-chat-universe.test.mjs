@@ -7,7 +7,7 @@ const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const app=read('android/app/src/main/assets/mobile/app.js');
 const css=read('android/app/src/main/assets/mobile/app.css');
 const edge=read('supabase/functions/android-companion/index.ts');
-const migration=read('supabase/migrations/20261004173000_galaxy_chat_universe_350.sql');
+const migration=read('supabase/migrations/20261004202006_galaxy_chat_universe_350.sql');
 const schema=read('supabase/schema.sql');
 const main=read('android/app/src/main/java/com/nuestragalaxia/companion/MainActivity.java');
 const gradle=read('android/app/build.gradle.kts');
@@ -147,11 +147,12 @@ test('typed search includes Universe cards',()=>{
   assert.ok(app.includes(label),label);
 });
 
-test('backup v4 includes new Chat-native Universe state by reference',()=>{
- assert.ok(edge.includes('version:4'));
- for(const field of ['entityRefs:chatEntityRefs','polls:chatPolls','pollOptions:chatPollOptions','pollVotes:chatPollVotes','checklists:chatChecklists','checklistItems:chatChecklistItems'])
+test('backup v5 includes Chat-native Universe state and rejects unsafe legacy restores',()=>{
+ assert.ok(edge.includes('const BACKUP_VERSION=5'));
+ for(const field of ['chatEntityRefs','chatPolls','chatPollOptions','chatPollVotes','chatChecklists','chatChecklistItems'])
   assert.ok(edge.includes(field),field);
- assert.ok(edge.includes('![1,2,3,4].includes(Number(backup.version))'));
+ assert.ok(edge.includes('BACKUP_LEGACY_UNSAFE'));
+ assert.ok(edge.includes('[1,2,3,4].includes(version)'));
 });
 
 test('Android native allowlist exposes new Chat APIs',()=>{

@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 
 test('Mega 3.0 release migration is canonical and non-destructive',()=>{
- const sql=read('supabase/migrations/20261003220000_mega_update_3_release.sql');
+ const sql=read('supabase/migrations/20261003213818_mega_update_3_release.sql');
  assert.equal(/\bas \$\s*$/m.test(sql),false,'PL/pgSQL bodies must use valid dollar quoting');
  assert.equal(/^\s*end \$;\s*$/m.test(sql),false,'PL/pgSQL bodies must close with $$');
  assert.equal(/\b(drop table|truncate table|drop column|drop schema)\b/i.test(sql),false,'release migration must stay additive');

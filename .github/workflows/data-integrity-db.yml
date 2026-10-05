@@ -1,0 +1,131 @@
+name: Data Integrity DB
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/rollbacks/**'
+      - 'supabase/functions/android-companion/**'
+      - 'tests/data-integrity-**'
+      - 'tests/migration-history.test.mjs'
+      - 'tests/production-migration-manifest.json'
+      - 'tests/privacy-firewall.test.mjs'
+      - 'tests/release-3.test.mjs'
+      - 'tests/android-chat-premium.test.mjs'
+      - 'tests/android-chat-universe.test.mjs'
+      - '.github/workflows/data-integrity-db.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: data-integrity-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  data-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: 'v2.x'
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.119.0
+
+      - name: Verify canonical production migration history
+        run: node --test tests/migration-history.test.mjs
+
+      - name: Typecheck backup Edge Function
+        run: deno check --node-modules-dir=auto supabase/functions/android-companion/index.ts
+
+      - name: Replay clean database through Phase 0
+        run: |
+          if [ ! -f supabase/config.toml ]; then
+            supabase init
+          fi
+          mv supabase/migrations/20261005011401_qa_phase1_data_integrity.sql /tmp/phase1.sql
+          supabase start
+
+      - name: Compare clean replay against production Phase-0 schema
+        run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/data-integrity-schema-parity.sql
+
+      - name: Apply Phase 1 through migration history
+        run: |
+          mv /tmp/phase1.sql supabase/migrations/20261005011401_qa_phase1_data_integrity.sql
+          supabase migration up
+
+      - name: Validate Phase 1 DB invariants
+        run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/data-integrity-db.sql
+
+      - name: Prove FK indexes are selected by representative lookup plans
+        shell: bash
+        run: |
+          DB='postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+          plan_album_item=$(psql "$DB" -Atqc "set enable_seqscan=off; explain (costs off) select 1 from public.galaxy_chat_album_items where attachment_id='00000000-0000-4000-8000-000000000001'::uuid")
+          plan_album=$(psql "$DB" -Atqc "set enable_seqscan=off; explain (costs off) select 1 from public.galaxy_chat_albums where cover_attachment_id='00000000-0000-4000-8000-000000000001'::uuid")
+          plan_live=$(psql "$DB" -Atqc "set enable_seqscan=off; explain (costs off) select 1 from public.galaxy_chat_live_locations where message_id='00000000-0000-4000-8000-000000000001'::uuid")
+          grep -q 'galaxy_chat_album_items_attachment_id_idx' <<<"$plan_album_item"
+          grep -q 'galaxy_chat_albums_cover_attachment_id_idx' <<<"$plan_album"
+          grep -q 'galaxy_chat_live_locations_message_id_idx' <<<"$plan_live"
+
+      - name: Run Node regression suite
+        run: npm test
+
+      - name: Export, destroy staging, fail atomically, restore and deep-compare
+        run: bash tests/data-integrity-backup-e2e.sh
+
+      - name: Validate Phase 1 rollback and re-apply
+        run: |
+          DB='postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+          psql "$DB" -v ON_ERROR_STOP=1 -f supabase/rollbacks/20261005011401_qa_phase1_data_integrity_rollback.sql
+          test "$(psql "$DB" -Atqc "select to_regprocedure('public.galaxy_backup_export_v5()') is null")" = "t"
+          test "$(psql "$DB" -Atqc "select to_regclass('public.galaxy_chat_album_items_attachment_id_idx') is null")" = "t"
+          psql "$DB" -v ON_ERROR_STOP=1 <<'SQL'
+          begin;
+          insert into public.galaxy_items(id,kind,data,author,created) values(
+            'c4000000-0000-4000-8000-000000000001','capsule',
+            '{"title":"rollback probe","unlockType":"place","unlockedFor":["0"]}'::jsonb,'0',now()
+          );
+          do $rollback_probe_capsule$
+          begin
+            if exists(
+              select 1 from public.galaxy_items
+              where id='c4000000-0000-4000-8000-000000000001'
+                and data ? 'unlockedFor'
+            ) then raise exception 'Phase-0 capsule insert guard was not restored'; end if;
+          end $rollback_probe_capsule$;
+          insert into public.galaxy_goals(
+            id,kind,title,description,category,status,created_by,version,created_at,updated_at
+          ) values(
+            'c4000000-0000-4000-8000-000000000002','goal','rollback goal','','project','active','0',3,
+            '2026-09-01T00:00:00Z','2020-01-01T00:00:00Z'
+          );
+          do $rollback_probe_goal$
+          begin
+            if exists(
+              select 1 from public.galaxy_goals
+              where id='c4000000-0000-4000-8000-000000000002'
+                and updated_at='2020-01-01T00:00:00Z'::timestamptz
+            ) then raise exception 'Phase-0 goal trigger was not restored'; end if;
+          end $rollback_probe_goal$;
+          rollback;
+          SQL
+          psql "$DB" -v ON_ERROR_STOP=1 -f supabase/migrations/20261005011401_qa_phase1_data_integrity.sql
+          psql "$DB" -v ON_ERROR_STOP=1 -f tests/data-integrity-db.sql
+
+      - name: Stop isolated Supabase
+        if: always()
+        run: supabase stop --no-backup
