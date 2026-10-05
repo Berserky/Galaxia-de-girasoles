@@ -50,7 +50,7 @@ jobs:
           retention-days: 14
 
   android-runtime:
-    runs-on: ubuntu-latest
+    runs-on: macos-15-intel
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
@@ -60,34 +60,28 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Prepare Android SDK
-        run: |
-          SDK_ROOT=/usr/local/lib/android/sdk
-          SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | head -1)
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0' 'platform-tools'
-          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.4.1'
-      - name: Build baseline and branch staging APKs
-        run: |
-          git worktree add --detach /tmp/phase4-baseline 72b10c94a683d4cbec506d8e143b3db1bd997310
-          cp /tmp/phase4-baseline/musica.mp3 /tmp/phase4-baseline/android/app/src/main/assets/musica.mp3
-          gradle -p /tmp/phase4-baseline/android assembleDebug
-          cp /tmp/phase4-baseline/android/app/build/outputs/apk/debug/app-debug.apk /tmp/phase4-baseline.apk
-          cp musica.mp3 android/app/src/main/assets/musica.mp3
-          gradle -p android assembleDebug
-          cp android/app/build/outputs/apk/debug/app-debug.apk /tmp/phase4-after.apk
       - name: Measure RAM CPU and cold launch on staging emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
           arch: x86_64
           target: google_apis
+          profile: pixel_5
+          force-avd-creation: false
+          emulator-options: -no-snapshot-load -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
           disable-animations: true
-          script: bash scripts/android-performance-phase4.sh /tmp/phase4-baseline.apk /tmp/phase4-after.apk /tmp/android-phase4.md
+          script: |
+            git worktree add --detach /tmp/phase4-baseline 72b10c94a683d4cbec506d8e143b3db1bd997310
+            cp /tmp/phase4-baseline/musica.mp3 /tmp/phase4-baseline/android/app/src/main/assets/musica.mp3
+            gradle -p /tmp/phase4-baseline/android assembleDebug
+            cp /tmp/phase4-baseline/android/app/build/outputs/apk/debug/app-debug.apk /tmp/phase4-baseline.apk
+            cp musica.mp3 android/app/src/main/assets/musica.mp3
+            gradle -p android assembleDebug
+            cp android/app/build/outputs/apk/debug/app-debug.apk /tmp/phase4-after.apk
+            bash scripts/android-performance-phase4.sh /tmp/phase4-baseline.apk /tmp/phase4-after.apk /tmp/android-phase4.md
       - name: Publish Android runtime summary
         if: always()
         run: |
