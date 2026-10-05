@@ -43,12 +43,9 @@ El resultado es el artefacto privado de Actions `android-candidate`. No es una G
 
 ### 3. candidate → staging/smoke
 
-El mismo run debe superar el smoke remoto usando un entorno QA separado de producción:
+El mismo run debe superar el smoke remoto usando un proyecto QA separado de producción. La URL y la publishable key del proyecto QA son públicas por diseño; las identidades de dispositivo **no** se almacenan en GitHub.
 
-- `QA_STAGING_EDGE_URL`;
-- `QA_STAGING_PUBLISHABLE_KEY`;
-- `QA_STAGING_TOKEN_0`;
-- `QA_STAGING_TOKEN_1`.
+El job solicita un token OIDC de GitHub con `id-token: write` y audiencia `nuestra-galaxia-qa`. La función QA-only `qa-github-bootstrap` valida firma y claims (`repository`, `repository_id`, `ref`, `event_name`, `workflow`, `workflow_ref`, `run_id` y `sha`) antes de emitir dos tokens de dispositivo efímeros. Los tokens se enmascaran en Actions y se revocan al finalizar el job.
 
 El smoke reutiliza el probe dual-user de Fase 5 y debe terminar con estado `VERIFIED`. La ausencia de staging ya no cuenta como éxito para un release candidate: el run queda bloqueado y por tanto no puede promoverse.
 
