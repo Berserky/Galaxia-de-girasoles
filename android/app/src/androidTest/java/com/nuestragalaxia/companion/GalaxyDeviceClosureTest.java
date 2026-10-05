@@ -225,7 +225,13 @@ public class GalaxyDeviceClosureTest {
         runJs("chatState={messages:Array.from({length:220},(_,i)=>({id:'p2-'+(i+100),client_id:'p2c-'+(i+100),sender_person:String(i%2),body:'Phase2 '+i,message_type:'text',attachments:[],server_seq:i+100,created_at:'2026-10-05T12:00:00Z',reactions:[]})),nextBeforeSeq:100,nextAfterSeq:null,pinnedIds:[]};chatStateSignature=chatSignature(chatState);chatMessageEngine.resetWindow(chatRows().length,{align:'end'});render();");
         awaitJs("document.querySelectorAll('.chat-message').length>0 && document.querySelectorAll('.chat-message').length<=84");
 
-        runJs("const e=document.querySelector('#chatMessages');e.scrollTop=Math.max(250,Math.floor((e.scrollHeight-e.clientHeight)*.42));chatScrollEngine.onScroll(e);window.__p2Anchor=chatCaptureAnchor(e);window.__p2Offset=window.__p2Anchor?.offset||0;");
+        runJs("const e=document.querySelector('#chatMessages'),r=chatMessageEngine.range(chatRows());window.__p2VirtualStart=r.start;e.scrollTop=Math.max(0,r.topPx+20);chatScrollEngine.onScroll(e);window.__p2VirtualAnchor=chatCaptureAnchor(e);window.__p2VirtualOffset=window.__p2VirtualAnchor?.offset||0;chatHandleScroll(e);");
+        SystemClock.sleep(550);
+        assertTrue("Virtual window did not rotate before entering the top spacer", Integer.parseInt(js("chatMessageEngine.range(chatRows()).start")) < Integer.parseInt(js("window.__p2VirtualStart||0")));
+        assertEquals("Virtual window rotation changed the visible anchor", js("window.__p2VirtualAnchor?.id||''"), js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.id||''"));
+        assertTrue("Virtual rotation drifted the anchor", Math.abs(Double.parseDouble(js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.offset||0"))-Double.parseDouble(js("window.__p2VirtualOffset||0"))) < 4d);
+
+        runJs("const e=document.querySelector('#chatMessages'),r=chatMessageEngine.range(chatRows());e.scrollTop=Math.max(0,r.topPx+Math.round(e.clientHeight*.30));chatScrollEngine.onScroll(e);window.__p2Anchor=chatCaptureAnchor(e);window.__p2Offset=window.__p2Anchor?.offset||0;");
         SystemClock.sleep(250);
         String anchorId = js("window.__p2Anchor?.id||''");
         double anchorOffset = Double.parseDouble(js("window.__p2Offset||0"));
