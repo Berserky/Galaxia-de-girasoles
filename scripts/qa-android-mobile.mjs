@@ -301,7 +301,7 @@ assert.ok(apiClient.includes('transcodeHeifToJpeg')&&apiClient.includes('x-uploa
 assert.equal(build.includes('GIPHY_API_KEY'),false,'GIPHY_API_KEY no puede empaquetarse en BuildConfig');
 assert.ok(edge.includes('Deno.env.get("GIPHY_API_KEY")')&&edge.includes('configured:false'),'GIPHY debe vivir en backend y degradar explícitamente');
 assert.ok(edge.includes('Date.now()-lastSeen>5*60*1000'),'La autenticación del dispositivo debe limitar escrituras de last_seen');
-assert.ok(edge.includes('const hydratedAttachments=await Promise.all'),'La firma de adjuntos del chat debe paralelizarse');
+assert.ok(edge.includes('async function signedMany(')&&edge.includes('const hydratedAttachments=(attachments||[]).map')&&edge.includes('await signedMany(bucket,paths,1800)'),'La firma de adjuntos del chat debe agruparse por bucket y firmarse por lotes');
 assert.ok(edge.includes('body.detail!==true'),'El mapa debe tener refresco ligero');
 assert.ok(app.includes("refreshMap({quiet:true,detail:false})"),'El polling del mapa debe usar refresco ligero');
 assert.ok(app.includes("document.visibilityState!=='visible'"),'La app debe pausar polling fuera de primer plano');

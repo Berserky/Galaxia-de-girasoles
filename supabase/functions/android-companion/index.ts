@@ -525,6 +525,19 @@ async function signed(bucket:string,path:string,seconds=900){
   const {data,error}=await db.storage.from(bucket).createSignedUrl(path,seconds);
   return error?null:data.signedUrl;
 }
+async function signedMany(bucket:string,paths:string[],seconds=900){
+  const unique=[...new Set((paths||[]).map(String).filter(Boolean))];
+  const result=new Map<string,string|null>();
+  if(!unique.length)return result;
+  const {data,error}=await db.storage.from(bucket).createSignedUrls(unique,seconds);
+  if(error){
+    const fallback=await Promise.all(unique.map(async path=>[path,await signed(bucket,path,seconds)] as [string,string|null]));
+    return new Map(fallback);
+  }
+  for(const row of data||[])result.set(String(row.path||""),row.error?null:(row.signedUrl||null));
+  for(const path of unique)if(!result.has(path))result.set(path,null);
+  return result;
+}
 
 
 function fcmCredentials(){
@@ -887,6 +900,168 @@ async function chatChecklistCard(id:string){
  const done=(items||[]).filter((x:any)=>x.checked).length;
  return {available:true,type:"CHECKLIST",entityKind:"checklist",entityId:id,title:text(list.title,300),createdBy:String(list.created_by),version:Number(list.version),done,total:(items||[]).length,items:(items||[]).map((x:any)=>({id:String(x.id),label:text(x.label,300),position:Number(x.position),checked:!!x.checked,updatedBy:x.updated_by==null?null:String(x.updated_by),updatedAt:x.updated_at,version:Number(x.version)}))};
 }
+
+async function chatHydrateEntityRefs(refEntries:any[],person:string){
+ const entries=(refEntries||[]).map((entry:any)=>{
+  const messageId=String(entry?.[0]||""),ref=entry?.[1]||null;
+  return {messageId,ref,type:String(ref?.card_type||"").toUpperCase(),kind:String(ref?.entity_kind||""),id:String(ref?.entity_id||"")};
+ }).filter((x:any)=>x.messageId&&x.ref&&x.kind&&x.id);
+ if(!entries.length)return new Map<string,any>();
+ const cardKey=(entry:any)=>entry.type+"|"+entry.kind+"|"+entry.id;
+ const unique=new Map<string,any>();
+ for(const entry of entries){
+  const key=cardKey(entry);
+  if(!unique.has(key))unique.set(key,entry);
+ }
+ const refs=[...unique.values()];
+ const ids=(kind:string)=>[...new Set(refs.filter((x:any)=>x.kind===kind).map((x:any)=>x.id))];
+ const itemKinds=["memory","plan","song","capsule","event"];
+ const itemRefs=refs.filter((x:any)=>itemKinds.includes(x.kind));
+ const itemIds=[...new Set(itemRefs.map((x:any)=>x.id))];
+ const goalIds=ids("goal"),placeIds=ids("place").map(Number).filter(Number.isFinite),dailyIds=ids("daily_question"),contextIds=ids("context_session"),pollIds=ids("poll"),checklistIds=ids("checklist");
+ const needsLocations=refs.some((x:any)=>x.kind==="capsule"||x.kind==="context_session"||x.kind==="status");
+ try{
+  const [itemRows,goalRows,placeRows,dailyRows,dailyAnswers,contextRows,etaRows,pollRows,pollOptions,pollVotes,checklistRows,checklistItems,locationRows]=await Promise.all([
+   itemIds.length?ok(db.from("galaxy_items").select("id,kind,data,author,created").in("id",itemIds).in("kind",itemKinds)):Promise.resolve([]),
+   goalIds.length?ok(db.from("galaxy_goals").select("id,kind,title,description,category,target_date,status,target_amount,created_by,version,completed_at,created_at,updated_at").in("id",goalIds)):Promise.resolve([]),
+   placeIds.length?ok(db.from("galaxy_places").select("id,owner,name,kind,latitude,longitude,note,created_at").in("id",placeIds)):Promise.resolve([]),
+   dailyIds.length?ok(db.from("galaxy_daily_questions").select("*").in("day",dailyIds)):Promise.resolve([]),
+   dailyIds.length?ok(db.from("galaxy_daily").select("day,person,answer").in("day",dailyIds).order("person")):Promise.resolve([]),
+   contextIds.length?ok(db.from("galaxy_context_sessions").select("*").in("id",contextIds)):Promise.resolve([]),
+   contextIds.length?ok(db.from("galaxy_context_eta_history").select("session_id,captured_at,distance_m,eta_s,progress_pct").in("session_id",contextIds).order("captured_at",{ascending:false})):Promise.resolve([]),
+   pollIds.length?ok(db.from("galaxy_chat_polls").select("*").in("id",pollIds)):Promise.resolve([]),
+   pollIds.length?ok(db.from("galaxy_chat_poll_options").select("id,poll_id,label,position").in("poll_id",pollIds).order("position")):Promise.resolve([]),
+   pollIds.length?ok(db.from("galaxy_chat_poll_votes").select("poll_id,option_id,person,voted_at").in("poll_id",pollIds)):Promise.resolve([]),
+   checklistIds.length?ok(db.from("galaxy_chat_checklists").select("*").in("id",checklistIds)):Promise.resolve([]),
+   checklistIds.length?ok(db.from("galaxy_chat_checklist_items").select("*").in("checklist_id",checklistIds).order("position")):Promise.resolve([]),
+   needsLocations?ok(db.from("galaxy_locations").select("person,status,sharing,latitude,longitude,transport_preference,updated_at").order("person")):Promise.resolve([])
+  ]);
+
+  const itemMap=new Map<string,any>((itemRows||[]).map((x:any)=>[String(x.kind)+"|"+String(x.id),x] as [string,any]));
+  const goalMap=new Map<string,any>((goalRows||[]).map((x:any)=>[String(x.id),x] as [string,any]));
+  const placeMap=new Map<string,any>((placeRows||[]).map((x:any)=>[String(x.id),x] as [string,any]));
+  const dailyMap=new Map<string,any>((dailyRows||[]).map((x:any)=>[String(x.day),x] as [string,any]));
+  const contextMap=new Map<string,any>((contextRows||[]).map((x:any)=>[String(x.id),x] as [string,any]));
+  const pollMap=new Map<string,any>((pollRows||[]).map((x:any)=>[String(x.id),x] as [string,any]));
+  const checklistMap=new Map<string,any>((checklistRows||[]).map((x:any)=>[String(x.id),x] as [string,any]));
+  const locationMap=new Map<string,any>((locationRows||[]).map((x:any)=>[String(x.person),x] as [string,any]));
+  const etaMap=new Map<string,any>();
+  for(const row of etaRows||[]){const key=String(row.session_id);if(!etaMap.has(key))etaMap.set(key,row);}
+  const answersByDay=new Map<string,any[]>();
+  for(const row of dailyAnswers||[]){const key=String(row.day),arr=answersByDay.get(key)||[];arr.push(row);answersByDay.set(key,arr);}
+  const optionsByPoll=new Map<string,any[]>();
+  for(const row of pollOptions||[]){const key=String(row.poll_id),arr=optionsByPoll.get(key)||[];arr.push(row);optionsByPoll.set(key,arr);}
+  const votesByPoll=new Map<string,any[]>();
+  for(const row of pollVotes||[]){const key=String(row.poll_id),arr=votesByPoll.get(key)||[];arr.push(row);votesByPoll.set(key,arr);}
+  const itemsByChecklist=new Map<string,any[]>();
+  for(const row of checklistItems||[]){const key=String(row.checklist_id),arr=itemsByChecklist.get(key)||[];arr.push(row);itemsByChecklist.set(key,arr);}
+
+  const capsuleEntries=refs.filter((x:any)=>x.kind==="capsule");
+  const capsuleAccess=new Map<string,any>();
+  const photoPaths:string[]=[] ,audioPaths:string[]=[] ,songIds:string[]=[];
+  const ownLocation=locationMap.has(person)?[locationMap.get(person)]:[];
+  for(const entry of capsuleEntries){
+   const row=itemMap.get("capsule|"+entry.id);
+   if(!row)continue;
+   const access=chatCapsuleAccess(row.data||{},person,ownLocation);
+   capsuleAccess.set(entry.id,access);
+   if(access.locked)continue;
+   if(row.data?.photoPath)photoPaths.push(String(row.data.photoPath));
+   if(row.data?.audioPath)audioPaths.push(String(row.data.audioPath));
+   if(row.data?.songId)songIds.push(String(row.data.songId));
+  }
+  const uniqueSongIds=[...new Set(songIds)];
+  const [songRows,photoUrls,audioUrls]=await Promise.all([
+   uniqueSongIds.length?ok(db.from("galaxy_items").select("id,data").eq("kind","song").in("id",uniqueSongIds)):Promise.resolve([]),
+   signedMany("galaxy-photos",photoPaths,900),
+   signedMany("galaxy-voice",audioPaths,900)
+  ]);
+  const capsuleSongMap=new Map<string,any>((songRows||[]).map((x:any)=>[String(x.id),x] as [string,any]));
+
+  const cards=new Map<string,any>();
+  for(const entry of refs){
+   const unavailable=()=>chatCardUnavailable(entry.ref);
+   if(itemKinds.includes(entry.kind)){
+    const row=itemMap.get(entry.kind+"|"+entry.id);
+    if(!row){cards.set(cardKey(entry),unavailable());continue;}
+    if(entry.kind==="capsule"){
+     const access=capsuleAccess.get(entry.id)||chatCapsuleAccess(row.data||{},person,ownLocation);
+     const card:any=chatItemCard(entry.type,row,access);
+     if(!access.locked){
+      if(row.data?.photoPath)card.photoUrl=photoUrls.get(String(row.data.photoPath))||null;
+      if(row.data?.audioPath)card.audioUrl=audioUrls.get(String(row.data.audioPath))||null;
+      if(row.data?.songId){
+       const song=capsuleSongMap.get(String(row.data.songId));
+       if(song)card.song={id:String(song.id),title:text(song.data?.title||"Canción",160),artist:text(song.data?.artist||"",160),source:text(song.data?.source||"",80),url:/^https:\/\//i.test(String(song.data?.url||""))?String(song.data.url):""};
+      }
+     }
+     cards.set(cardKey(entry),card);
+    }else cards.set(cardKey(entry),chatItemCard(entry.type,row));
+    continue;
+   }
+   if(entry.kind==="goal"){
+    const row=goalMap.get(entry.id);
+    cards.set(cardKey(entry),row?{available:true,type:"GOAL",entityKind:"goal",entityId:entry.id,title:text(row.title,300),body:text(row.description,1200),category:text(row.category,100),targetDate:row.target_date,status:row.status,targetAmount:row.target_amount,createdBy:String(row.created_by),version:Number(row.version),updatedAt:row.updated_at}:unavailable());
+    continue;
+   }
+   if(entry.kind==="place"){
+    const row=placeMap.get(entry.id);
+    cards.set(cardKey(entry),row?{available:true,type:"PLACE",entityKind:"place",entityId:entry.id,title:text(row.name,160),placeKind:text(row.kind,40),note:text(row.note,400),latitude:Number(row.latitude),longitude:Number(row.longitude),owner:String(row.owner),createdAt:row.created_at}:unavailable());
+    continue;
+   }
+   if(entry.kind==="daily_question"){
+    const row=dailyMap.get(entry.id),q=row?questionById(String(row.question_id)):null;
+    if(!row||!q){cards.set(cardKey(entry),unavailable());continue;}
+    const answers=answersByDay.get(entry.id)||[],mine=answers.find((x:any)=>String(x.person)===person),partner=answers.find((x:any)=>String(x.person)!==person);
+    const both=!!text(mine?.answer,3000)&&!!text(partner?.answer,3000);
+    cards.set(cardKey(entry),{available:true,type:"DAILY_QUESTION",entityKind:"daily_question",entityId:entry.id,title:text(q.text,600),questionId:q.id,deck:q.deck,day:entry.id,favorite:!!row.favorite,answeredByMe:!!text(mine?.answer,3000),answeredByPartner:!!text(partner?.answer,3000),myAnswer:text(mine?.answer,3000),partnerAnswer:both?text(partner?.answer,3000):"",revealed:both});
+    continue;
+   }
+   if(entry.kind==="context_session"){
+    const session=contextMap.get(entry.id);
+    if(!session){cards.set(cardKey(entry),unavailable());continue;}
+    const eta=etaMap.get(entry.id)||null,loc=locationMap.get(String(session.person))||null;
+    const raw=String(session.status||"active"),distanceM=Number(eta?.distance_m??session.last_distance_m);
+    const visual=raw==="arrived"?"LLEGÓ":raw==="cancelled"?"CANCELADO":raw==="finished"||raw==="completed"?"FINALIZADO":Number.isFinite(distanceM)&&distanceM<=300?"CERCA":"EN CAMINO";
+    cards.set(cardKey(entry),{available:true,type:entry.type==="CHECK_IN"?"CHECK_IN":"ETA",entityKind:"context_session",entityId:entry.id,title:text(session.label||"Acompáñame",120),person:String(session.person),destinationKind:session.destination_kind,targetPerson:session.target_person,placeId:session.place_id,transport:text(loc?.transport_preference||"auto",40),status:raw,visualStatus:visual,distanceM:Number.isFinite(distanceM)?distanceM:null,etaSeconds:eta?.eta_s??session.last_eta_s,progressPct:eta?.progress_pct??session.progress_pct,startedAt:session.started_at,arrivedAt:session.arrived_at,endedAt:session.ended_at,updatedAt:eta?.captured_at||session.updated_at});
+    continue;
+   }
+   if(entry.kind==="poll"){
+    const poll=pollMap.get(entry.id);
+    if(!poll){cards.set(cardKey(entry),unavailable());continue;}
+    const options=optionsByPoll.get(entry.id)||[],votes=votesByPoll.get(entry.id)||[];
+    const totalPeople=new Set(votes.map((v:any)=>String(v.person))).size,totalVotes=votes.length;
+    const closed=!!poll.closed_at||(poll.closes_at&&Date.parse(String(poll.closes_at))<=Date.now());
+    const normalized=options.map((option:any)=>{
+     const optionVotes=votes.filter((v:any)=>String(v.option_id)===String(option.id));
+     return {id:String(option.id),label:text(option.label,240),position:Number(option.position),votes:optionVotes.length,percent:totalVotes?Math.round(optionVotes.length*100/totalVotes):0,selected:optionVotes.some((v:any)=>String(v.person)===person)};
+    });
+    const topVotes=normalized.reduce((max:number,o:any)=>Math.max(max,Number(o.votes||0)),0),leaders=topVotes>0?normalized.filter((o:any)=>Number(o.votes||0)===topVotes):[];
+    const tie=closed&&leaders.length>1,winner=closed&&leaders.length===1?{id:leaders[0].id,label:leaders[0].label,position:leaders[0].position,votes:leaders[0].votes}:null;
+    cards.set(cardKey(entry),{available:true,type:"POLL",entityKind:"poll",entityId:entry.id,title:text(poll.question,500),question:text(poll.question,500),allowMultiple:!!poll.allow_multiple,closesAt:poll.closes_at,closedAt:poll.closed_at,closed,createdBy:String(poll.created_by),totalPeople,totalVotes,topVotes,winner,tie,noVotes:closed&&topVotes===0,options:normalized});
+    continue;
+   }
+   if(entry.kind==="checklist"){
+    const list=checklistMap.get(entry.id);
+    if(!list){cards.set(cardKey(entry),unavailable());continue;}
+    const items=itemsByChecklist.get(entry.id)||[],done=items.filter((x:any)=>x.checked).length;
+    cards.set(cardKey(entry),{available:true,type:"CHECKLIST",entityKind:"checklist",entityId:entry.id,title:text(list.title,300),createdBy:String(list.created_by),version:Number(list.version),done,total:items.length,items:items.map((x:any)=>({id:String(x.id),label:text(x.label,300),position:Number(x.position),checked:!!x.checked,updatedBy:x.updated_by==null?null:String(x.updated_by),updatedAt:x.updated_at,version:Number(x.version)}))});
+    continue;
+   }
+   if(entry.kind==="status"){
+    const row=locationMap.get(entry.id);
+    cards.set(cardKey(entry),row?{available:true,type:"STATUS",entityKind:"status",entityId:entry.id,title:text(row.status||"Sin estado",160),person:entry.id,updatedAt:row.updated_at}:unavailable());
+    continue;
+   }
+   cards.set(cardKey(entry),unavailable());
+  }
+  return new Map(entries.map((entry:any)=>[entry.messageId,cards.get(cardKey(entry))||chatCardUnavailable(entry.ref)]));
+ }catch(error){
+  console.warn("chat-card-batch-hydrate",error instanceof Error?error.message:"error");
+  const fallback=await Promise.all(entries.map(async(entry:any)=>[entry.messageId,await chatHydrateEntityRef(entry.ref,person)] as [string,any]));
+  return new Map(fallback);
+ }
+}
 async function chatHydrateEntityRef(ref:any,person:string){
  if(!ref)return null;
  const type=String(ref.card_type||"").toUpperCase(),kind=String(ref.entity_kind||""),id=String(ref.entity_id||"");
@@ -991,28 +1166,35 @@ async function chatHydrate(rows:any[],person:string){
  const pinMap=new Map((pins||[]).map((x:any)=>[String(x.message_id),x]));
  const favSet=new Set((favorites||[]).map((x:any)=>String(x.message_id)));
  const attachmentMap=new Map<string,any[]>();
- const hydratedAttachments=await Promise.all((attachments||[]).map(async(a:any)=>{
-  const bucket=String(a.bucket||"galaxy-chat-media"),path=String(a.path||"");
-  const [url,thumbnailUrl]=await Promise.all([
-   signed(bucket,path,1800),
-   a.thumbnail_path?signed(bucket,String(a.thumbnail_path),1800):Promise.resolve(null)
-  ]);
-  return {...a,url,thumbnailUrl};
- }));
+ const attachmentPaths=new Map<string,string[]>();
+ for(const a of attachments||[]){
+  const bucket=String(a.bucket||"galaxy-chat-media"),paths=attachmentPaths.get(bucket)||[];
+  if(a.path)paths.push(String(a.path));
+  if(a.thumbnail_path)paths.push(String(a.thumbnail_path));
+  attachmentPaths.set(bucket,paths);
+ }
+ const attachmentSigned=new Map<string,Map<string,string|null>>();
+ await Promise.all([...attachmentPaths.entries()].map(async([bucket,paths])=>attachmentSigned.set(bucket,await signedMany(bucket,paths,1800))));
+ const hydratedAttachments=(attachments||[]).map((a:any)=>{
+  const bucket=String(a.bucket||"galaxy-chat-media"),urls=attachmentSigned.get(bucket)||new Map<string,string|null>(),path=String(a.path||"");
+  return {...a,url:urls.get(path)||null,thumbnailUrl:a.thumbnail_path?(urls.get(String(a.thumbnail_path))||null):null};
+ });
  for(const a of hydratedAttachments){
   const safe={id:a.id,kind:a.kind,mime:a.mime,name:a.name,sizeBytes:a.size_bytes,durationMs:a.duration_ms,width:a.width,height:a.height,caption:a.caption,url:a.url,thumbnailUrl:a.thumbnailUrl,waveform:a.waveform||[],mediaQuality:a.media_quality||"optimized"};
   const k=String(a.message_id),v=attachmentMap.get(k)||[];v.push(safe);attachmentMap.set(k,v);
  }
- const stickerMap=new Map<string,any>();
+ const stickerMap=new Map<string,any>(),stickerPaths=new Map<string,string[]>();
+ for(const x of stickers||[]){const bucket=String(x.bucket),paths=stickerPaths.get(bucket)||[];paths.push(String(x.path));stickerPaths.set(bucket,paths);}
+ const stickerSigned=new Map<string,Map<string,string|null>>();
+ await Promise.all([...stickerPaths.entries()].map(async([bucket,paths])=>stickerSigned.set(bucket,await signedMany(bucket,paths,1800))));
  for(const x of stickers||[]){
-  const id=String(x.id),url=await signed(String(x.bucket),String(x.path),1800);
+  const id=String(x.id),url=stickerSigned.get(String(x.bucket))?.get(String(x.path))||null;
   stickerMap.set(id,{id,name:x.name,url,createdBy:x.created_by});
  }
  const sessionMap=new Map<string,any>((liveSessions||[]).map((x:any)=>[String(x.id),x] as [string,any]));
  const locationMap=new Map<string,any>((locations||[]).map((x:any)=>[String(x.person),x] as [string,any]));
  const refMap=new Map((entityRefs||[]).map((x:any)=>[String(x.message_id),x]));
- const cardEntries=await Promise.all([...refMap.entries()].map(async([messageId,ref]:any)=>[messageId,await chatHydrateEntityRef(ref,person)] as [string,any]));
- const cardMap=new Map<string,any>(cardEntries);
+ const cardMap=await chatHydrateEntityRefs([...refMap.entries()],person);
  const now=Date.now();
  return list.map((row:any)=>{
   const deleted=!!row.deleted_at,stickerId=deleted?"":String(row?.attachment?.stickerId||""),liveId=deleted?"":String(row?.attachment?.liveSessionId||"");

@@ -1,0 +1,95 @@
+name: Phase 4 Performance
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/functions/android-companion/**'
+      - 'tests/performance-phase4.test.mjs'
+      - 'scripts/benchmark-phase4.mjs'
+      - 'scripts/compare-phase4-benchmark.mjs'
+      - 'scripts/android-performance-phase4.sh'
+      - '.github/workflows/performance-phase4.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase4-performance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Phase 4 contract tests
+        run: node --test tests/performance-phase4.test.mjs
+      - name: Benchmark baseline and branch
+        run: |
+          git show 72b10c94a683d4cbec506d8e143b3db1bd997310:supabase/functions/android-companion/index.ts > /tmp/phase4-baseline-index.ts
+          node scripts/benchmark-phase4.mjs /tmp/phase4-baseline-index.ts > /tmp/phase4-baseline.json
+          node scripts/benchmark-phase4.mjs supabase/functions/android-companion/index.ts > /tmp/phase4-after.json
+          node scripts/compare-phase4-benchmark.mjs /tmp/phase4-baseline.json /tmp/phase4-after.json /tmp/phase4-benchmark.md
+          cat /tmp/phase4-benchmark.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: phase4-performance-benchmark
+          path: |
+            /tmp/phase4-baseline.json
+            /tmp/phase4-after.json
+            /tmp/phase4-benchmark.md
+          retention-days: 14
+
+  android-runtime:
+    runs-on: macos-15-intel
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.4.1'
+      - name: Measure RAM CPU and cold launch on staging emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          force-avd-creation: false
+          emulator-options: -no-snapshot-load -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          disable-animations: true
+          script: |
+            git worktree add --detach /tmp/phase4-baseline 72b10c94a683d4cbec506d8e143b3db1bd997310
+            cp /tmp/phase4-baseline/musica.mp3 /tmp/phase4-baseline/android/app/src/main/assets/musica.mp3
+            gradle -p /tmp/phase4-baseline/android assembleDebug
+            cp /tmp/phase4-baseline/android/app/build/outputs/apk/debug/app-debug.apk /tmp/phase4-baseline.apk
+            cp musica.mp3 android/app/src/main/assets/musica.mp3
+            gradle -p android assembleDebug
+            cp android/app/build/outputs/apk/debug/app-debug.apk /tmp/phase4-after.apk
+            bash scripts/android-performance-phase4.sh /tmp/phase4-baseline.apk /tmp/phase4-after.apk /tmp/android-phase4.md
+      - name: Publish Android runtime summary
+        if: always()
+        run: |
+          if [ -f /tmp/android-phase4.md ]; then cat /tmp/android-phase4.md >> "$GITHUB_STEP_SUMMARY"; else echo 'Android runtime measurement did not complete.' >> "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: phase4-android-runtime
+          path: /tmp/android-phase4.md
+          if-no-files-found: warn
+          retention-days: 14
