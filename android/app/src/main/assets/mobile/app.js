@@ -347,7 +347,9 @@ function syncSystemTheme(themeState){
  GalaxyNative.call('setSystemTheme',active).catch(()=>{nativeThemeSent='';});
 }
 function render(){
- const chatRenderState=view==='chat'?chatScrollEngine.captureState(document.querySelector('#chatMessages'),'render'):null;
+ const previousChatEl=view==='chat'?document.querySelector('#chatMessages'):null;
+ const previousChatAnchor=previousChatEl?chatCaptureAnchor(previousChatEl):null;
+ const chatRenderState=previousChatEl?{anchor:previousChatAnchor?{messageId:previousChatAnchor.id,viewportOffset:previousChatAnchor.offset}:null,atBottom:chatNearBottom(previousChatEl),context:'render'}:null;
  const currentMemoriesTabs=$('.memories-tabs');
  if(currentMemoriesTabs)memoriesTabsScroll=currentMemoriesTabs.scrollLeft;
  const themeState=window.GalaxyTheme?.applyTheme(window.GalaxyTheme.getChoice());
