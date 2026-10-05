@@ -157,7 +157,7 @@ public class GalaxyDeviceClosureTest {
         awaitJs("document.body.innerText.includes('¿Qué construimos después?')");
         assertTrue(js("document.body.innerText").contains("PRÓXIMA FECHA"));
 
-        runJs("document.querySelector('[data-action=\"goals-open\"]')?.click()");
+        tapWebElement("[data-action=\"goals-open\"]");
         awaitJs("document.body.innerText.includes('Nuestros objetivos')");
         awaitJs("document.body.innerText.includes('Objetivo QA')");
         assertTrue(backend.actions().contains("goals-engine"));
