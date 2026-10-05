@@ -99,28 +99,28 @@ jobs:
             'c4000000-0000-4000-8000-000000000001','capsule',
             '{"title":"rollback probe","unlockType":"place","unlockedFor":["0"]}'::jsonb,'0',now()
           );
-          do $
+          do $rollback_probe_capsule$
           begin
             if exists(
               select 1 from public.galaxy_items
               where id='c4000000-0000-4000-8000-000000000001'
                 and data ? 'unlockedFor'
             ) then raise exception 'Phase-0 capsule insert guard was not restored'; end if;
-          end $;
+          end $rollback_probe_capsule$;
           insert into public.galaxy_goals(
             id,kind,title,description,category,status,created_by,version,created_at,updated_at
           ) values(
             'c4000000-0000-4000-8000-000000000002','goal','rollback goal','','project','active','0',3,
             '2026-09-01T00:00:00Z','2020-01-01T00:00:00Z'
           );
-          do $
+          do $rollback_probe_capsule$
           begin
             if exists(
               select 1 from public.galaxy_goals
               where id='c4000000-0000-4000-8000-000000000002'
                 and updated_at='2020-01-01T00:00:00Z'::timestamptz
             ) then raise exception 'Phase-0 goal trigger was not restored'; end if;
-          end $;
+          end $rollback_probe_goal$;
           rollback;
           SQL
           psql "$DB" -v ON_ERROR_STOP=1 -f supabase/migrations/20261004235446_qa_phase1_data_integrity.sql
