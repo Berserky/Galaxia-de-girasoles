@@ -5,7 +5,7 @@ declare n integer;
 begin
   select count(*) into n from supabase_migrations.schema_migrations;
   if n<>39 then raise exception 'NG-QA-004 expected 39 replayed migrations, got %',n; end if;
-  if not exists(select 1 from supabase_migrations.schema_migrations where version='20261004235446' and name='qa_phase1_data_integrity') then
+  if not exists(select 1 from supabase_migrations.schema_migrations where version='20261005011401' and name='qa_phase1_data_integrity') then
     raise exception 'NG-QA-004 Phase 1 migration missing from replay history';
   end if;
 
