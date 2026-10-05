@@ -43,7 +43,7 @@ function create(options={}){
  function captureAnchor(el){
   if(!el)return null;
   const box=el.getBoundingClientRect();
-  const visible=rows(el).filter(row=>row.getBoundingClientRect().bottom>box.top+2).slice(0,3);
+  const visible=rows(el).filter(row=>{const rect=row.getBoundingClientRect();return rect.bottom>box.top+2&&rect.top<box.bottom-2;}).slice(0,3);
   if(!visible.length)return null;
   const anchors=visible.map(row=>({messageId:rowId(row),viewportOffset:row.getBoundingClientRect().top-box.top})).filter(x=>x.messageId);
   if(!anchors.length)return null;
