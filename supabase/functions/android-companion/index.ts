@@ -2749,7 +2749,8 @@ function backupObjectFingerprint(rows:any[]){
  ]).sort((a:any,b:any)=>String(a[0]+"\n"+a[1]).localeCompare(String(b[0]+"\n"+b[1]))));
 }
 async function backupSha256(bytes:Uint8Array){
- const input=bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength) as ArrayBuffer;\n const digest=new Uint8Array(await crypto.subtle.digest("SHA-256",input));
+ const input=bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength) as ArrayBuffer;
+ const digest=new Uint8Array(await crypto.subtle.digest("SHA-256",input));
  return [...digest].map(x=>x.toString(16).padStart(2,"0")).join("");
 }
 async function backupStorageObjects(bucket:string,prefix="",includeReserved=false){
