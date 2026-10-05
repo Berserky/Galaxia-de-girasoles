@@ -1470,6 +1470,12 @@ function chatRememberPosition(el=document.querySelector('#chatMessages'),context
  const state=chatCapturePositionState(el,context);
  return state?chatScrollEngine.rememberState(state,context):null;
 }
+function chatViewportOffsetFor(id,el=document.querySelector('#chatMessages')){
+ if(!el||!id)return null;
+ const row=[...el.querySelectorAll('.chat-message')].find(x=>String(x.dataset.chatId||x.dataset.id||'')===String(id));
+ if(!row)return null;
+ return row.getBoundingClientRect().top-el.getBoundingClientRect().top;
+}
 function chatRestoreAnchor(el,anchor){
  if(!anchor)return false;
  return chatScrollEngine.restoreAnchor(el,chatAnchorToEngine(anchor),'anchor-restore');
@@ -1783,11 +1789,12 @@ async function flushChatOutbox({retryFailed=false}={}){
      const result=await api('chat-send',{clientId:item.client_id,clientCreatedAt:item.client_created_at,body:item.body||'',replyTo:item.reply_to||null,messageType:item.message_type||'text',attachments:item.attachments||[],attachment:item.attachment||{},entityRef:item.entityRef||null,scheduledAt:item.scheduled_at||null,silent:item.silent===true,ttlSeconds:item.ttl_seconds||null,viewOnce:item.view_once===true,effect:item.effect||null,retryCount:Number(item.retryCount||0)});window.GalaxyChatPerf?.confirmed?.(item.client_id);
      rows=readChatOutbox().filter(x=>String(x.client_id)!==String(item.client_id));writeChatOutbox(rows);
      if(result?.message){
-      const keepBottom=chatNearBottom();
+      const normalConversation=!chatState?.nextAfterSeq;
       chatState=chatMessageEngine.applySingle(chatState||{messages:[],unread:0,pinnedIds:[]},result.message);
       chatStateSignature=chatSignature(chatState);
-      chatMessageEngine.ensureWindow(chatRows().length);
-      if(view==='chat')chatRenderMessages({scroll:keepBottom?'bottom':'preserve'});
+      if(normalConversation)chatMessageEngine.resetWindow(chatRows().length,{align:'end'});
+      else chatMessageEngine.ensureWindow(chatRows().length);
+      if(view==='chat')chatRenderMessages({scroll:normalConversation?'bottom':'preserve'});
      }
      try{await api('chat-metric',{event:'sent',messageId:result?.message?.id,retryCount:Number(item.retryCount||0)});}catch{}
     }catch(error){
@@ -2569,7 +2576,7 @@ document.addEventListener('click',async e=>{
   if(a==='chat-favorite-toggle'){await api('chat-favorite',{id:btn.dataset.id,saved:btn.dataset.saved!=='true'});closeModal();await loadChat({quiet:true,force:true});return;}
   if(a==='chat-react-menu'){const m=(chatState?.messages||[]).find(x=>String(x.id)===String(btn.dataset.id)),mine=(m?.reactions||[]).find(r=>String(r.person)===String(cloud.person))?.emoji||'',emoji=mine===btn.dataset.emoji?'':btn.dataset.emoji;await api('chat-react',{id:btn.dataset.id,emoji});if(modal.open)closeModal();await loadChat({quiet:true,force:true});return;}
   if(a==='chat-react-quick'){const m=(chatState?.messages||[]).find(x=>String(x.id)===String(btn.dataset.id)),mine=(m?.reactions||[]).find(r=>String(r.person)===String(cloud.person))?.emoji||'',emoji=mine===btn.dataset.emoji?'':btn.dataset.emoji;await api('chat-react',{id:btn.dataset.id,emoji});await loadChat({quiet:true,force:true});return;}
-  if(a==='chat-retry'){const rows=readChatOutbox(),i=rows.findIndex(x=>String(x.client_id)===String(btn.dataset.clientId));if(i>=0){rows[i]._localState='PENDING';writeChatOutbox(rows);render();await flushChatOutbox({retryFailed:true});await loadChat({quiet:true,force:true});}return;}
+  if(a==='chat-retry'){const rows=readChatOutbox(),i=rows.findIndex(x=>String(x.client_id)===String(btn.dataset.clientId));if(i>=0){rows[i]._localState='PENDING';writeChatOutbox(rows);chatMessageEngine.resetWindow(chatRows().length,{align:'end'});chatRenderMessages({scroll:'bottom'});await flushChatOutbox({retryFailed:true});}return;}
   if(a==='chat-local-delete'){writeChatOutbox(readChatOutbox().filter(x=>String(x.client_id)!==String(btn.dataset.clientId)));render();return;}
   if(a==='chat-attach-open'){openChatAttachMenu();return;}
   if(a==='chat-camera-open'){openChatCameraMenu();return;}
