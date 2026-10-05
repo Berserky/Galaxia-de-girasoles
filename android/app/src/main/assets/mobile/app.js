@@ -334,7 +334,7 @@ function syncChatViewportHeight(){
 }
 function go(next){
  const hadMap=!!mapData,previous=view;
- if(previous==='chat'&&next!=='chat')chatScrollEngine.remember(document.querySelector('#chatMessages'),'chat');
+ if(previous==='chat'&&next!=='chat')chatRememberPosition(document.querySelector('#chatMessages'),'chat');
  if(next==='chat'&&previous!=='chat'&&!chatInitialScroll)chatRestoreOnRender=true;
  view=next;syncChatViewportHeight();render();window.scrollTo(0,0);
  if(view==='map'&&hadMap)refreshMap({quiet:true,detail:false});
@@ -348,8 +348,7 @@ function syncSystemTheme(themeState){
 }
 function render(){
  const previousChatEl=view==='chat'?document.querySelector('#chatMessages'):null;
- const previousChatAnchor=previousChatEl?chatCaptureAnchor(previousChatEl):null;
- const chatRenderState=previousChatEl?{anchor:previousChatAnchor?{messageId:previousChatAnchor.id,viewportOffset:previousChatAnchor.offset}:null,atBottom:chatNearBottom(previousChatEl),context:'render'}:null;
+ const chatRenderState=previousChatEl?chatCapturePositionState(previousChatEl,'render'):null;
  const currentMemoriesTabs=$('.memories-tabs');
  if(currentMemoriesTabs)memoriesTabsScroll=currentMemoriesTabs.scrollLeft;
  const themeState=window.GalaxyTheme?.applyTheme(window.GalaxyTheme.getChoice());
@@ -1460,9 +1459,21 @@ function chatCaptureAnchor(el=document.querySelector('#chatMessages')){
  chatMessageEngine.focus(list.length,index);
  return {id,offset:chatMessageEngine.offsetBefore(list,index)-el.scrollTop,virtual:true};
 }
+function chatAnchorToEngine(anchor){
+ if(!anchor)return null;
+ return {messageId:anchor.id,viewportOffset:anchor.offset,fallbacks:(anchor.fallbacks||[]).map(x=>({messageId:x.id,viewportOffset:x.offset}))};
+}
+function chatCapturePositionState(el=document.querySelector('#chatMessages'),context='chat'){
+ if(!el)return null;
+ return {anchor:chatAnchorToEngine(chatCaptureAnchor(el)),atBottom:chatScrollEngine.isAtBottom(el),context:String(context||'chat'),capturedAt:Date.now()};
+}
+function chatRememberPosition(el=document.querySelector('#chatMessages'),context='chat'){
+ const state=chatCapturePositionState(el,context);
+ return state?chatScrollEngine.rememberState(state,context):null;
+}
 function chatRestoreAnchor(el,anchor){
  if(!anchor)return false;
- return chatScrollEngine.restoreAnchor(el,{messageId:anchor.id,viewportOffset:anchor.offset,fallbacks:(anchor.fallbacks||[]).map(x=>({messageId:x.id,viewportOffset:x.offset}))},'anchor-restore');
+ return chatScrollEngine.restoreAnchor(el,chatAnchorToEngine(anchor),'anchor-restore');
 }
 function chatMeasureRendered(){
  chatMeasureRaf=0;
@@ -2898,7 +2909,7 @@ document.addEventListener('pointercancel',e=>{
 document.addEventListener('click',e=>{if(chatSendSuppress&&e.target.closest?.('.chat-send[type="submit"]')){e.preventDefault();e.stopImmediatePropagation();chatSendSuppress=false;}},true);
 document.addEventListener('touchstart',e=>{const row=e.target.closest?.('.chat-message[data-id]'),t=e.touches?.[0];if(row&&row.dataset.id&&t)chatSwipe={id:row.dataset.id,x:t.clientX,y:t.clientY};},{passive:true});
 document.addEventListener('touchend',e=>{if(!chatSwipe)return;const t=e.changedTouches?.[0],swipe=chatSwipe;chatSwipe=null;if(!t)return;const dx=t.clientX-swipe.x,dy=Math.abs(t.clientY-swipe.y);if(dx>58&&dy<45){const m=(chatState?.messages||[]).find(x=>String(x.id)===String(swipe.id));if(m){chatReply=m;render();requestAnimationFrame(()=>document.querySelector('#chatForm textarea')?.focus());}}},{passive:true});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){chatUnlockedSession=false;if(view==='chat'){chatScrollEngine.remember(document.querySelector('#chatMessages'),'chat');setChatPresence('OFFLINE');}}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){chatUnlockedSession=false;if(view==='chat'){chatRememberPosition(document.querySelector('#chatMessages'),'chat');setChatPresence('OFFLINE');}}});
 
 render();
 if(native.paired)refreshState().then(()=>{syncPresence();flushChatOutbox({retryFailed:true}).catch(()=>{});}).catch(()=>{});
