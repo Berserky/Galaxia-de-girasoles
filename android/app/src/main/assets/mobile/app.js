@@ -1513,8 +1513,8 @@ async function markChatReadIfVisible(){
  try{await api('chat-read',{messageId:last.id});GalaxyNative.call('clearChatNotifications').catch(()=>{});last.read_at=new Date().toISOString();chatNewCount=0;if(cloud?.chat)cloud.chat.unread=0;}catch{}
 }
 async function loadChat({older=false,quiet=false,force=false,aroundId=''}={}){
- const perfLoad=window.GalaxyChatPerf?.loadStart?.(older?'history':aroundId?'around':'state');
  if(chatLoading){if(older||force||aroundId)chatQueuedLoad={older,quiet,force,aroundId};return;}chatLoading=true;
+ const perfLoad=window.GalaxyChatPerf?.loadStart?.(older?'history':aroundId?'around':'state');
  const current=document.querySelector('#chatMessages'),oldHeight=current?.scrollHeight||0,oldTop=current?.scrollTop||0,wasNear=chatNearBottom(current),oldLastSeq=Math.max(0,...(chatState?.messages||[]).map(x=>Number(x.server_seq||0))),playback=chatCapturePlayback();
  try{
   const beforeSeq=older?chatState?.nextBeforeSeq:null;
