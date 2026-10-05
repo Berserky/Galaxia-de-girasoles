@@ -17,6 +17,8 @@ import android.os.ParcelFileDescriptor;
 import android.os.SystemClock;
 import android.webkit.WebView;
 
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.lifecycle.Lifecycle;
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.core.app.ApplicationProvider;
@@ -99,11 +101,12 @@ public class GalaxyDeviceClosureTest {
         runJs("document.querySelector('[data-action=\"modal-close\"]')?.click()");
         awaitJs("document.querySelector('#modal')?.open===false");
 
-        runJs("const t=document.querySelector('#chatForm textarea');t.focus();t.value='';");
+        tapWebElement("#chatForm textarea");
         awaitJs("document.activeElement===document.querySelector('#chatForm textarea')");
-        instrumentation.sendStringSync("QA_keyboard");
-        awaitJs("(document.querySelector('#chatForm textarea')?.value||'').includes('QA_keyboard')");
+        awaitCondition(this::imeVisible, UI_TIMEOUT_MS);
         assertEquals("TEXTAREA", js("document.activeElement?.tagName||''"));
+        runJs("const t=document.querySelector('#chatForm textarea');t.value='QA_keyboard';t.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:'QA_keyboard'}));");
+        awaitJs("(document.querySelector('#chatForm textarea')?.value||'')==='QA_keyboard'");
 
         scenario.moveToState(Lifecycle.State.CREATED);
         scenario.moveToState(Lifecycle.State.RESUMED);
@@ -333,6 +336,35 @@ public class GalaxyDeviceClosureTest {
         AtomicReference<Integer> out = new AtomicReference<>(0);
         scenario.onActivity(a -> out.set(a.getResources().getConfiguration().orientation));
         return out.get();
+    }
+
+    private boolean imeVisible() {
+        AtomicReference<Boolean> out = new AtomicReference<>(false);
+        scenario.onActivity(a -> {
+            WebView web = a.findViewById(R.id.webView);
+            WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(web);
+            out.set(insets != null && insets.isVisible(WindowInsetsCompat.Type.ime()));
+        });
+        return Boolean.TRUE.equals(out.get());
+    }
+
+    private void tapWebElement(String selector) throws Exception {
+        String quoted = JSONObject.quote(selector);
+        String raw = js("JSON.stringify((()=>{const e=document.querySelector(" + quoted + ");if(!e)return null;const r=e.getBoundingClientRect();return {x:(r.left+r.right)/2,y:(r.top+r.bottom)/2,vw:window.innerWidth,vh:window.innerHeight};})())");
+        assertFalse("Web element not found: " + selector, raw.isBlank() || "null".equals(raw));
+        JSONObject g = new JSONObject(raw);
+        AtomicReference<int[]> frame = new AtomicReference<>();
+        scenario.onActivity(a -> {
+            WebView web = a.findViewById(R.id.webView);
+            int[] location = new int[2];
+            web.getLocationOnScreen(location);
+            frame.set(new int[]{location[0], location[1], web.getWidth(), web.getHeight()});
+        });
+        int[] v = frame.get();
+        int x = v[0] + (int)Math.round(g.getDouble("x") * v[2] / Math.max(1d, g.getDouble("vw")));
+        int y = v[1] + (int)Math.round(g.getDouble("y") * v[3] / Math.max(1d, g.getDouble("vh")));
+        assertTrue("Unable to tap WebView element: " + selector, UiDevice.getInstance(instrumentation).click(x, y));
+        SystemClock.sleep(250);
     }
 
     private void runJs(String script) {
