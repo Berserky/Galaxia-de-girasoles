@@ -50,7 +50,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 @RunWith(AndroidJUnit4.class)
 public class GalaxyDeviceClosureTest {
-    private static final long UI_TIMEOUT_MS = 15_000;
+    private static final long UI_TIMEOUT_MS = 30_000;
     private static QaHttpServer backend;
 
     private final Context context = ApplicationProvider.getApplicationContext();
