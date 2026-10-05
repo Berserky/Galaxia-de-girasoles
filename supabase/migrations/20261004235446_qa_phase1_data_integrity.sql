@@ -299,7 +299,7 @@ begin
   if coalesce((payload#>>'{manifest,counts,settings}')::bigint,-1)<>jsonb_array_length(rows) then
     raise exception 'Conteo settings no coincide con manifiesto';
   end if;
-  delete from public.galaxy_settings;
+  delete from public.galaxy_settings where true;
   insert into public.galaxy_settings
   select * from jsonb_populate_recordset(null::public.galaxy_settings,rows);
 
@@ -308,7 +308,7 @@ begin
   if coalesce((payload#>>'{manifest,counts,bondConfig}')::bigint,-1)<>jsonb_array_length(rows) then
     raise exception 'Conteo bondConfig no coincide con manifiesto';
   end if;
-  delete from public.galaxy_bond_config;
+  delete from public.galaxy_bond_config where true;
   insert into public.galaxy_bond_config
   select * from jsonb_populate_recordset(null::public.galaxy_bond_config,rows);
 
@@ -317,7 +317,7 @@ begin
   if coalesce((payload#>>'{manifest,counts,home}')::bigint,-1)<>jsonb_array_length(rows) then
     raise exception 'Conteo home no coincide con manifiesto';
   end if;
-  delete from public.galaxy_home;
+  delete from public.galaxy_home where true;
   insert into public.galaxy_home
   select * from jsonb_populate_recordset(null::public.galaxy_home,rows);
 
@@ -326,7 +326,7 @@ begin
   if coalesce((payload#>>'{manifest,counts,contextSettings}')::bigint,-1)<>jsonb_array_length(rows) then
     raise exception 'Conteo contextSettings no coincide con manifiesto';
   end if;
-  delete from public.galaxy_context_settings;
+  delete from public.galaxy_context_settings where true;
   insert into public.galaxy_context_settings
   select * from jsonb_populate_recordset(null::public.galaxy_context_settings,rows);
 
