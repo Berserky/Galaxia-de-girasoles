@@ -15,7 +15,8 @@ test('NG-QA-007 normal main pushes cannot mutate android-stable',()=>{
   assert.equal(ci.includes('gh release upload'),false);
   assert.equal(ci.includes('android-stable'),false);
   assert.equal(candidate.includes('gh release upload'),false);
-  assert.equal(candidate.includes('android-stable'),false);
+  assert.equal(candidate.includes('contents: write'),false);
+  assert.match(candidate,/gh release download android-stable/);
 });
 
 test('main creates a candidate only after required automated gates',()=>{
