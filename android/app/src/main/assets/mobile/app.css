@@ -980,7 +980,7 @@ body.chat-mode .chat-shell{
 .chat-pinned>div{display:flex}.chat-pinned>div button{width:38px;height:44px;border:0;background:transparent;color:var(--muted);display:grid;place-items:center;padding:0}.chat-pinned .ui-icon{width:15px;height:15px}
 .chat-scroll-wrap{position:relative;min-height:0;overflow:hidden}
 .chat-messages{
-  height:100%;min-height:0;padding:12px 3px 20px;scroll-padding-bottom:72px;overscroll-behavior:contain;contain:layout style;
+  height:100%;min-height:0;padding:12px 3px 20px;scroll-padding-bottom:72px;overscroll-behavior:contain;contain:layout style;overflow-anchor:none;
   -webkit-overflow-scrolling:touch
 }
 .chat-message{position:relative;margin:5px 0;max-width:86%;content-visibility:auto;contain-intrinsic-size:54px}

@@ -172,15 +172,18 @@ public class GalaxyDeviceClosureTest {
 
         runJs("chatState={messages:Array.from({length:420},(_,i)=>({id:'scroll-'+i,client_id:'scrollc-'+i,sender_person:String(i%2),body:'Scroll QA '+i,message_type:'text',attachments:[],server_seq:i+1,created_at:'2026-10-05T12:00:00Z',reactions:[]})),nextBeforeSeq:1,nextAfterSeq:null,pinnedIds:[]};chatStateSignature=chatSignature(chatState);chatMessageEngine.resetWindow(chatRows().length,{align:'end'});render();");
         awaitJs("document.querySelectorAll('.chat-message').length>0 && document.querySelectorAll('.chat-message').length<=84");
-        runJs("const e=document.querySelector('#chatMessages');e.scrollTop=Math.max(250,Math.floor(e.scrollHeight*.45));window.__phase1Anchor=chatCaptureAnchor(e);window.__phase1Top=e.scrollTop;");
-        SystemClock.sleep(250);
+        runJs("const e=document.querySelector('#chatMessages'),r=chatMessageEngine.range(chatRows());e.scrollTop=Math.max(0,r.topPx+Math.min(900,Math.max(220,e.clientHeight*.75)));chatHandleScroll(e);");
+        SystemClock.sleep(450);
+        runJs("const e=document.querySelector('#chatMessages');window.__phase1Anchor=chatCaptureAnchor(e);window.__phase1Top=e.scrollTop;window.__phase1Offset=window.__phase1Anchor?.offset||0;");
         String anchorId = js("window.__phase1Anchor?.id||''");
         double beforeTop = Double.parseDouble(js("window.__phase1Top||0"));
+        double beforeOffset = Double.parseDouble(js("window.__phase1Offset||0"));
         runJs("chatRenderMessages({anchor:window.__phase1Anchor,scroll:'preserve'})");
         SystemClock.sleep(450);
         double afterTop = Double.parseDouble(js("document.querySelector('#chatMessages')?.scrollTop||0"));
-        assertEquals(anchorId, js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.id||''"));
-        assertTrue("Window refresh must keep the reading position anchored", Math.abs(afterTop-beforeTop) < 220);
+        double afterOffset = Double.parseDouble(js("chatViewportOffsetFor(window.__phase1Anchor?.id)||0"));
+        assertTrue("Window refresh lost the anchored message", Math.abs(afterOffset) > 0d || Math.abs(beforeOffset) < 1d);
+        assertTrue("Window refresh must preserve the visual anchor offset", Math.abs(afterOffset-beforeOffset) < 4d);
         assertTrue(Integer.parseInt(js("document.querySelectorAll('.chat-message').length")) <= 84);
 
         runJs("chatState=null;chatStateSignature='';chatMessageEngine.resetWindow(0,{align:'end'});loadChat({quiet:true,force:true,present:true});");
@@ -214,6 +217,81 @@ public class GalaxyDeviceClosureTest {
             .put("windowing", windows)
             .put("perf", perf);
         System.out.println("GALAXY_CHAT_PHASE1_ANDROID=" + result);
+    }
+
+    @Test public void galaxyChat_phase2ScrollEngine_anchorRealtimeResizeAndNavigationAreStable() throws Exception {
+        launchChat();
+        runJs("window.GalaxyChatPerf?.enable(true);window.GalaxyChatPerf?.reset();");
+        long pssBefore = android.os.Debug.getPss();
+        long cpuBefore = android.os.Process.getElapsedCpuTime();
+
+        runJs("chatState={messages:Array.from({length:220},(_,i)=>({id:'p2-'+(i+100),client_id:'p2c-'+(i+100),sender_person:String(i%2),body:'Phase2 '+i,message_type:'text',attachments:[],server_seq:i+100,created_at:'2026-10-05T12:00:00Z',reactions:[]})),nextBeforeSeq:100,nextAfterSeq:null,pinnedIds:[]};chatStateSignature=chatSignature(chatState);chatMessageEngine.resetWindow(chatRows().length,{align:'end'});render();");
+        awaitJs("document.querySelectorAll('.chat-message').length>0 && document.querySelectorAll('.chat-message').length<=84");
+
+        runJs("const e=document.querySelector('#chatMessages'),r=chatMessageEngine.range(chatRows());window.__p2VirtualStart=r.start;e.scrollTop=Math.max(0,r.topPx+20);chatScrollEngine.onScroll(e);window.__p2VirtualAnchor=chatCaptureAnchor(e);window.__p2VirtualOffset=window.__p2VirtualAnchor?.offset||0;chatHandleScroll(e);");
+        SystemClock.sleep(550);
+        assertTrue("Virtual window did not rotate before entering the top spacer", Integer.parseInt(js("chatMessageEngine.range(chatRows()).start")) < Integer.parseInt(js("window.__p2VirtualStart||0")));
+        double virtualAfterOffset = Double.parseDouble(js("chatViewportOffsetFor(window.__p2VirtualAnchor?.id)||0"));
+        assertTrue("Virtual rotation drifted the anchored message", Math.abs(virtualAfterOffset-Double.parseDouble(js("window.__p2VirtualOffset||0"))) < 4d);
+
+        runJs("const e=document.querySelector('#chatMessages'),r=chatMessageEngine.range(chatRows());e.scrollTop=Math.max(0,r.topPx+Math.round(e.clientHeight*.30));chatScrollEngine.onScroll(e);window.__p2Anchor=chatCaptureAnchor(e);window.__p2Offset=window.__p2Anchor?.offset||0;");
+        SystemClock.sleep(250);
+        String anchorId = js("window.__p2Anchor?.id||''");
+        double anchorOffset = Double.parseDouble(js("window.__p2Offset||0"));
+        assertFalse("Phase 2 needs a stable visible anchor", anchorId.isBlank());
+
+        long prependStarted = SystemClock.elapsedRealtime();
+        runJs("const anchor=window.__p2Anchor;const older=Array.from({length:50},(_,i)=>({id:'p2-old-'+i,client_id:'p2-oldc-'+i,sender_person:String(i%2),body:'Older '+i,message_type:'text',attachments:[],server_seq:50+i,created_at:'2026-10-05T11:00:00Z',reactions:[]}));chatState={...chatState,messages:chatMessageEngine.mergeMessages(older,chatState.messages)};const idx=chatRows().findIndex(m=>String(m.id)===String(anchor.id));chatMessageEngine.focus(chatRows().length,idx);chatRenderMessages({anchor,scroll:'preserve'});");
+        SystemClock.sleep(500);
+        long prependMs = SystemClock.elapsedRealtime() - prependStarted;
+        double prependOffset = Double.parseDouble(js("chatViewportOffsetFor(window.__p2Anchor?.id)||0"));
+        assertTrue("Prepend drifted the anchored message: " + prependOffset, Math.abs(prependOffset-anchorOffset) < 4d);
+
+        runJs("const e=document.querySelector('#chatMessages'),anchor=chatCaptureAnchor(e);window.__p2RealtimeAnchor=anchor;const incoming={id:'p2-live',client_id:'p2-livec',sender_person:'1',body:'Realtime while reading',message_type:'text',attachments:[],server_seq:9999,created_at:'2026-10-05T12:01:00Z',reactions:[]};chatState=chatMessageEngine.applySingle(chatState,incoming);chatStateSignature=chatSignature(chatState);chatNewCount=1;chatRenderMessages({anchor,scroll:'preserve'});");
+        SystemClock.sleep(450);
+        double realtimeBeforeOffset = Double.parseDouble(js("window.__p2RealtimeAnchor?.offset||0"));
+        double realtimeAfterOffset = Double.parseDouble(js("chatViewportOffsetFor(window.__p2RealtimeAnchor?.id)||0"));
+        assertTrue("Realtime drifted the visual anchor", Math.abs(realtimeAfterOffset-realtimeBeforeOffset) < 4d);
+        assertEquals("1", js("chatNewCount"));
+        assertEquals("true", js("!!document.querySelector('.chat-new-button')"));
+        assertEquals("false", js("chatNearBottom(document.querySelector('#chatMessages'))"));
+
+        runJs("const e=document.querySelector('#chatMessages');chatScrollEngine.toBottom(e,{reason:'qa-bottom'});");
+        SystemClock.sleep(250);
+        assertEquals("true", js("chatNearBottom(document.querySelector('#chatMessages'))"));
+
+        runJs("const e=document.querySelector('#chatMessages'),r=chatMessageEngine.range(chatRows());e.scrollTop=Math.max(0,r.topPx+Math.min(900,Math.max(220,e.clientHeight*.75)));chatHandleScroll(e);");
+        SystemClock.sleep(450);
+        runJs("const e=document.querySelector('#chatMessages');window.__p2ResizeAnchor=chatCaptureAnchor(e);window.__p2ResizeOffset=window.__p2ResizeAnchor?.offset||0;const t=document.querySelector('#chatForm textarea');t.style.height='110px';t.value='linea 1\\nlinea 2\\nlinea 3';t.dispatchEvent(new Event('input',{bubbles:true}));");
+        SystemClock.sleep(550);
+        double resizeAfterOffset = Double.parseDouble(js("chatViewportOffsetFor(window.__p2ResizeAnchor?.id)||0"));
+        assertTrue("Composer resize drifted the anchored message", Math.abs(Double.parseDouble(js("window.__p2ResizeOffset||0"))-resizeAfterOffset) < 4d);
+
+        runJs("chatScrollEngine.remember(document.querySelector('#chatMessages'),'chat');window.__p2NavAnchor=chatCaptureAnchor(document.querySelector('#chatMessages'));go('home');");
+        awaitJs("!document.querySelector('.chat-shell')");
+        runJs("go('chat')");
+        awaitJs("!!document.querySelector('.chat-shell')");
+        SystemClock.sleep(500);
+        double navBeforeOffset = Double.parseDouble(js("window.__p2NavAnchor?.offset||0"));
+        double navAfterOffset = Double.parseDouble(js("chatViewportOffsetFor(window.__p2NavAnchor?.id)||0"));
+        assertTrue("Navigation return drifted the anchored message", Math.abs(navAfterOffset-navBeforeOffset) < 4d);
+        assertTrue(Integer.parseInt(js("document.querySelectorAll('.chat-message').length")) <= 84);
+
+        long pssAfter = android.os.Debug.getPss();
+        long cpuAfter = android.os.Process.getElapsedCpuTime();
+        JSONObject perf = new JSONObject(js("JSON.stringify(window.GalaxyChatPerf?.report?.()||{})"));
+        JSONObject result = new JSONObject()
+            .put("prepend50MsLocalQa", prependMs)
+            .put("anchorBeforeOffset", anchorOffset)
+            .put("anchorAfterOffset", prependOffset)
+            .put("realtimeAnchorBeforeOffset", realtimeBeforeOffset)
+            .put("realtimeAnchorAfterOffset", realtimeAfterOffset)
+            .put("pssBeforeKb", pssBefore)
+            .put("pssAfterKb", pssAfter)
+            .put("cpuMs", Math.max(0, cpuAfter-cpuBefore))
+            .put("renderedMessages", Integer.parseInt(js("document.querySelectorAll('.chat-message').length")))
+            .put("perf", perf);
+        System.out.println("GALAXY_CHAT_PHASE2_ANDROID=" + result);
     }
 
     @Test public void dailyGoalsPlansEventsCapsulesMapContextBackupAndUpdate_areReachable() throws Exception {
