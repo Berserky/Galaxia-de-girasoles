@@ -132,6 +132,39 @@ La app empaqueta su UI móvil local, usa bridge nativo y consume `android-compan
 8. Aprobar el environment `android-stable` si tiene reviewer configurado.
 9. Verificar después de la promoción que `update.json` y el APK publicado comparten checksum y versión esperados.
 
+
+## Rollback y recuperación
+
+Una promoción estable debe tener una salida definida antes de publicar.
+
+### Android
+
+Android no admite un rollback operativo fiable instalando un `versionCode` inferior sobre una versión ya instalada. Por eso la recuperación es **forward rollback**:
+
+1. antes de sustituir `android-stable`, el workflow archiva el APK, `update.json` y SHA-256 estables vigentes como artefacto `android-stable-prepromotion-<runId>`;
+2. si el candidate publicado resulta defectuoso, se toma el último código conocido como bueno y se recompila con un `versionCode` **mayor** al defectuoso;
+3. ese recovery build debe conservar el mismo certificado de firma y recorrer nuevamente candidate, staging, upgrade install y aprobación;
+4. nunca se vuelve a publicar un `versionCode` menor ni se intenta forzar downgrade en dispositivos.
+
+### Supabase Edge
+
+Antes de esta release, el `android-companion` productivo v24 coincide byte por byte con el commit:
+
+`72b10c94a683d4cbec506d8e143b3db1bd997310` — Fase 3: Multimedia & Android.
+
+Ese commit es el rollback backend conocido. Si el despliegue del Edge final falla el smoke productivo:
+
+1. no publicar el APK estable;
+2. redeplegar `android-companion` desde ese commit conocido;
+3. validar estado ACTIVE y ejecutar smoke no destructivo;
+4. investigar/corregir el Edge nuevo antes de intentar otra promoción.
+
+### Base de datos
+
+Este RC no agrega una migración nueva. Las migraciones de Fase 1 y Fase 2 ya tienen replay y rollback/re-apply automatizados. Cualquier migración adicional descubierta antes de stable debe incorporar rollback probado antes de ser elegible para promoción.
+
+La publicación del APK ocurre **después** del despliegue y smoke backend. Si falla Edge o base de datos, se aborta la promoción Android.
+
 ## Regla de esta fase
 
 La Fase 6 modifica únicamente la gobernanza de release y su documentación/pruebas. No incrementa `versionCode`/`versionName` y no ejecuta la promoción estable.
