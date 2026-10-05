@@ -273,24 +273,44 @@ begin
 
   perform pg_advisory_xact_lock(hashtextextended('nuestra-galaxia-backup-restore-v5',0));
 
-  -- Settings and the Bond widget have seeded singleton rows on a fresh replay.
+  -- Seeded state must be replaced exactly, not silently kept. These deletes
+  -- and inserts are inside this RPC transaction, so any later verification error
+  -- restores their previous state automatically.
   rows:=payload#>'{sections,settings}';
   if jsonb_typeof(rows)<>'array' then raise exception 'Sección settings inválida'; end if;
   if coalesce((payload#>>'{manifest,counts,settings}')::bigint,-1)<>jsonb_array_length(rows) then
     raise exception 'Conteo settings no coincide con manifiesto';
   end if;
-  insert into public.galaxy_settings as current
-  select * from jsonb_populate_recordset(null::public.galaxy_settings,rows)
-  on conflict(id) do update set data=excluded.data,version=excluded.version;
+  delete from public.galaxy_settings;
+  insert into public.galaxy_settings
+  select * from jsonb_populate_recordset(null::public.galaxy_settings,rows);
 
   rows:=payload#>'{sections,bondConfig}';
   if jsonb_typeof(rows)<>'array' then raise exception 'Sección bondConfig inválida'; end if;
   if coalesce((payload#>>'{manifest,counts,bondConfig}')::bigint,-1)<>jsonb_array_length(rows) then
     raise exception 'Conteo bondConfig no coincide con manifiesto';
   end if;
-  insert into public.galaxy_bond_config as current
-  select * from jsonb_populate_recordset(null::public.galaxy_bond_config,rows)
-  on conflict(id) do update set photo_path=excluded.photo_path;
+  delete from public.galaxy_bond_config;
+  insert into public.galaxy_bond_config
+  select * from jsonb_populate_recordset(null::public.galaxy_bond_config,rows);
+
+  rows:=payload#>'{sections,home}';
+  if jsonb_typeof(rows)<>'array' then raise exception 'Sección home inválida'; end if;
+  if coalesce((payload#>>'{manifest,counts,home}')::bigint,-1)<>jsonb_array_length(rows) then
+    raise exception 'Conteo home no coincide con manifiesto';
+  end if;
+  delete from public.galaxy_home;
+  insert into public.galaxy_home
+  select * from jsonb_populate_recordset(null::public.galaxy_home,rows);
+
+  rows:=payload#>'{sections,contextSettings}';
+  if jsonb_typeof(rows)<>'array' then raise exception 'Sección contextSettings inválida'; end if;
+  if coalesce((payload#>>'{manifest,counts,contextSettings}')::bigint,-1)<>jsonb_array_length(rows) then
+    raise exception 'Conteo contextSettings no coincide con manifiesto';
+  end if;
+  delete from public.galaxy_context_settings;
+  insert into public.galaxy_context_settings
+  select * from jsonb_populate_recordset(null::public.galaxy_context_settings,rows);
 
   -- Every remaining section is restored in this same database transaction.
   -- ON CONFLICT DO NOTHING is followed by an exact typed deep-compare. A
@@ -298,7 +318,6 @@ begin
   for spec in
     select value from jsonb_array_elements(
       '[
-        {"s":"home","t":"galaxy_home"},
         {"s":"rewards","t":"galaxy_rewards"},
         {"s":"items","t":"galaxy_items"},
         {"s":"daily","t":"galaxy_daily"},
@@ -317,7 +336,6 @@ begin
         {"s":"goalLinks","t":"galaxy_goal_links"},
         {"s":"goalContributions","t":"galaxy_goal_contributions"},
         {"s":"bondGestures","t":"galaxy_bond_gestures"},
-        {"s":"contextSettings","t":"galaxy_context_settings"},
         {"s":"voiceTranscripts","t":"galaxy_voice_transcripts"},
         {"s":"photoContext","t":"galaxy_photo_context"},
         {"s":"chatMessages","t":"galaxy_chat_messages"},
@@ -372,18 +390,26 @@ begin
     end if;
   end loop;
 
-  -- Verify the two singleton sections after their controlled upsert.
-  rows:=payload#>'{sections,settings}';
-  select count(*) into mismatches
-  from jsonb_populate_recordset(null::public.galaxy_settings,rows) e
-  where not exists(select 1 from public.galaxy_settings t where to_jsonb(t)=to_jsonb(e));
-  if mismatches<>0 then raise exception 'Restore settings no verificable'; end if;
-
-  rows:=payload#>'{sections,bondConfig}';
-  select count(*) into mismatches
-  from jsonb_populate_recordset(null::public.galaxy_bond_config,rows) e
-  where not exists(select 1 from public.galaxy_bond_config t where to_jsonb(t)=to_jsonb(e));
-  if mismatches<>0 then raise exception 'Restore bondConfig no verificable'; end if;
+  -- Verify seeded state after exact replacement.
+  for spec in
+    select value from jsonb_array_elements(
+      '[
+        {"s":"settings","t":"galaxy_settings"},
+        {"s":"bondConfig","t":"galaxy_bond_config"},
+        {"s":"home","t":"galaxy_home"},
+        {"s":"contextSettings","t":"galaxy_context_settings"}
+      ]'::jsonb
+    )
+  loop
+    section_name:=spec->>'s';
+    table_name:=spec->>'t';
+    rows:=payload->'sections'->section_name;
+    execute format(
+      'select count(*) from jsonb_populate_recordset(null::public.%1$I,$1) e where not exists (select 1 from public.%1$I t where to_jsonb(t)=to_jsonb(e))',
+      table_name
+    ) into mismatches using rows;
+    if mismatches<>0 then raise exception 'Restore % no verificable',section_name; end if;
+  end loop;
 
   -- Advance owned numeric sequences only after every row passed deep verification.
   -- No validation that can fail is intentionally placed after this block.
