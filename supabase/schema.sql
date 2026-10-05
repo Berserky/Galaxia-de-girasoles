@@ -1373,7 +1373,7 @@ revoke all on function public.galaxy_chat_poll_vote_guard() from public,anon,aut
 
 
 
--- Phase 0 Privacy Firewall — mirrors migration 20261004212500_qa_phase0_privacy_firewall.sql
+-- Phase 0 Privacy Firewall — mirrors migration 20261004232942_qa_phase0_privacy_firewall.sql
 begin;
 
 create or replace function public.galaxy_capsule_unlocked(
