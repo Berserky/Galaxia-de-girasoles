@@ -50,6 +50,16 @@ La rama de trabajo es `qa/phase-5-real-integration`, creada desde `main@96950e88
 | Dual user hermético | dos tokens/perfiles con envíos concurrentes y visibilidad mutua | Android instrumentation |
 | Dual user staging | dos tokens independientes, concurrencia y propagación remota | `scripts/qa-phase5-staging.mjs`; requiere staging |
 
+## Bugs reproducidos durante la Fase 5
+
+| ID | Reproducción real | Corrección | Regresión |
+|---|---|---|---|
+| NG-QA-006-001 | El botón **Reintentar** aparece mientras el flush fallido todavía termina; un toque rápido podía encontrar `chatOutboxFlushing=true` y perder el reintento. | Los flush concurrentes se serializan mediante una promesa activa; un retry espera al flush anterior y vuelve a ejecutar la cola. | `networkOfflineSlowTimeoutAndChatRetry_areExercised` |
+| NG-QA-006-002 | Al rotar el dispositivo dentro de Galaxy Chat, Android recreaba `MainActivity`/WebView y la navegación volvía a Inicio. | `MainActivity` conserva la sesión WebView para cambios de orientación/tamaño mediante `configChanges`. | `startNavigationModalKeyboardForegroundAndRotation_areReal` |
+| NG-QA-006-003 | Un `chat-state` iniciado antes del retry podía terminar después del envío y sobrescribir `chatState` con una instantánea antigua; además el refresh forzado se descartaba si había otro load activo. | Las cargas forzadas/older/aroundId se encolan cuando existe un `loadChat` activo y se ejecutan al finalizarlo. | `networkOfflineSlowTimeoutAndChatRetry_areExercised` |
+
+El estado definitivo **VERIFIED** de estos bugs depende de una ejecución verde posterior a sus fixes.
+
 ## Estados de verificación
 
 No se marca una fila como **VERIFIED** solo porque exista el test.
