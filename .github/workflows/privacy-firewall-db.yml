@@ -63,11 +63,12 @@ jobs:
           psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f supabase/migrations/20261004232942_qa_phase0_privacy_firewall.sql
           psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/privacy-firewall-db.sql
 
-      - name: Apply Phase 1 prerequisites for current Edge backup contract
+      - name: Apply current backend prerequisites for Edge privacy E2E
         run: |
           mv /tmp/phase1.sql supabase/migrations/20261005011401_qa_phase1_data_integrity.sql
           supabase migration up
           mv /tmp/phase2.sql supabase/migrations/20261005023000_qa_phase2_chat_correctness.sql
+          supabase migration up
 
       - name: Run delete-for-both and privacy Edge E2E
         run: bash tests/privacy-firewall-chat-e2e.sh
