@@ -50,7 +50,7 @@ public final class UpdateManager {
             try{
                 JSONObject manifest=new JSONObject(readText(MANIFEST_URL));
                 int versionCode=manifest.getInt("versionCode");
-                if(versionCode<=BuildConfig.VERSION_CODE){
+                if(!isNewerVersion(versionCode,BuildConfig.VERSION_CODE)){
                     emit(manual?"Ya tienes la versión más reciente.":"",100,false);
                     return;
                 }
@@ -82,21 +82,15 @@ public final class UpdateManager {
                 HttpURLConnection connection=open(url);
                 long total=connection.getContentLengthLong();
                 if(total>MAX_APK_BYTES)throw new IOException("El paquete supera el tamaño permitido");
-                long done=0;
-                byte[] buffer=new byte[65536];
-                try(InputStream in=connection.getInputStream();OutputStream os=new FileOutputStream(out)){
-                    int read;
-                    while((read=in.read(buffer))>0){
-                        os.write(buffer,0,read);
-                        done+=read;
-                        if(done>MAX_APK_BYTES)throw new IOException("El paquete supera el tamaño permitido");
-                        if(total>0)emit("Descargando actualización…",(int)Math.min(99,done*100/total),true);
-                    }
+                try(InputStream in=connection.getInputStream()){
+                    writeDownload(in,out,total,MAX_APK_BYTES,(done,length)->{
+                        if(length>0)emit("Descargando actualización…",(int)Math.min(99,done*100/length),true);
+                    });
                 }finally{
                     connection.disconnect();
                 }
                 emit("Verificando paquete…",99,true);
-                if(!sha256(out).equalsIgnoreCase(sha))throw new SecurityException("La verificación SHA-256 no coincide");
+                if(!hashMatches(out,sha))throw new SecurityException("La verificación SHA-256 no coincide");
                 validatePackage(out);
                 emit("Preparando instalación…",100,true);
                 activity.runOnUiThread(()->install(out));
@@ -115,7 +109,7 @@ public final class UpdateManager {
         if(info==null)throw new SecurityException("El archivo descargado no es un APK válido");
         if(!BuildConfig.APPLICATION_ID.equals(info.packageName))throw new SecurityException("El paquete no pertenece a Nuestra Galaxia");
         long version=Build.VERSION.SDK_INT>=28?info.getLongVersionCode():info.versionCode;
-        if(version<=BuildConfig.VERSION_CODE)throw new SecurityException("La actualización no contiene una versión superior");
+        if(!isNewerVersion(version,BuildConfig.VERSION_CODE))throw new SecurityException("La actualización no contiene una versión superior");
         PackageInfo installed=pm.getPackageInfo(BuildConfig.APPLICATION_ID,flags);
         Set<String> currentSigners=signerDigests(installed),updateSigners=signerDigests(info);
         if(currentSigners.isEmpty()||updateSigners.isEmpty()||java.util.Collections.disjoint(currentSigners,updateSigners)){
@@ -219,6 +213,43 @@ public final class UpdateManager {
         }finally{
             connection.disconnect();
         }
+    }
+
+    static boolean isNewerVersion(long candidate,long current){
+        return candidate>current;
+    }
+
+    interface DownloadProgress { void onProgress(long done,long total); }
+
+    static void writeDownload(InputStream in,File out,long total,long maxBytes,DownloadProgress progress)throws IOException{
+        File part=new File(out.getAbsolutePath()+".part");
+        if(part.exists()&&!part.delete())throw new IOException("No se pudo limpiar la descarga parcial anterior");
+        if(out.exists()&&!out.delete())throw new IOException("No se pudo reemplazar la actualización anterior");
+        long done=0;
+        byte[] buffer=new byte[65536];
+        try(OutputStream os=new FileOutputStream(part)){
+            int read;
+            while((read=in.read(buffer))>0){
+                os.write(buffer,0,read);
+                done+=read;
+                if(done>maxBytes)throw new IOException("El paquete supera el tamaño permitido");
+                if(progress!=null)progress.onProgress(done,total);
+            }
+            os.flush();
+        }catch(IOException|RuntimeException e){
+            part.delete();
+            out.delete();
+            throw e;
+        }
+        if(!part.renameTo(out)){
+            part.delete();
+            out.delete();
+            throw new IOException("No se pudo finalizar la descarga");
+        }
+    }
+
+    static boolean hashMatches(File file,String expected)throws Exception{
+        return sha256(file).equalsIgnoreCase(expected);
     }
 
     private static String sha256(File file)throws Exception{

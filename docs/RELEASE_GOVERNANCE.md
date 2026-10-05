@@ -31,23 +31,21 @@ Antes de producir el candidate se exigen:
 - Deno/type checks y tests;
 - replay limpio de migraciones Supabase/PostgreSQL;
 - RLS/chat DB smoke;
-- Android unit tests;
+- Android unit tests, incluidas regresiones del updater para downgrade, SHA corrupto e interrupción;
 - Android instrumentation y lifecycle;
 - Android Lint;
 - firma con el keystore de release;
 - verificación criptográfica de la firma;
-- SHA-256 del APK.
+- SHA-256 del APK;
+- instalación del APK estable actual y upgrade in-place al candidate firmado en un emulador limpio.
 
 El resultado es el artefacto privado de Actions `android-candidate`. No es una GitHub Release y no modifica `android-stable`.
 
 ### 3. candidate → staging/smoke
 
-El mismo run debe superar el smoke remoto usando un entorno QA separado de producción:
+El mismo run debe superar el smoke remoto usando un proyecto QA separado de producción. La URL y la publishable key del proyecto QA son públicas por diseño; las identidades de dispositivo **no** se almacenan en GitHub.
 
-- `QA_STAGING_EDGE_URL`;
-- `QA_STAGING_PUBLISHABLE_KEY`;
-- `QA_STAGING_TOKEN_0`;
-- `QA_STAGING_TOKEN_1`.
+El job solicita un token OIDC de GitHub con `id-token: write` y audiencia `nuestra-galaxia-qa`. La función QA-only `qa-github-bootstrap` valida firma y claims (`repository`, `repository_id`, `ref`, `event_name`, `workflow`, `workflow_ref`, `run_id` y `sha`) antes de emitir dos tokens de dispositivo efímeros. Los tokens se enmascaran en Actions y se revocan al finalizar el job.
 
 El smoke reutiliza el probe dual-user de Fase 5 y debe terminar con estado `VERIFIED`. La ausencia de staging ya no cuenta como éxito para un release candidate: el run queda bloqueado y por tanto no puede promoverse.
 
@@ -75,6 +73,7 @@ Antes de escribir la release vuelve a comprobar:
 - staging smoke `VERIFIED`;
 - checksum SHA-256;
 - firma APK válida;
+- upgrade install stable → candidate verificado;
 - continuidad del certificado de firma respecto al APK estable actual;
 - `versionCode` estrictamente mayor al publicado.
 
@@ -124,11 +123,44 @@ La app empaqueta su UI móvil local, usa bridge nativo y consume `android-compan
 2. Abrir Actions → **Android Release Candidate**.
 3. Confirmar que el run terminó `success`; si staging falta o falla, corregir staging y generar un nuevo candidate válido.
 4. Revisar Security Advisor/Auth. Si hay usuarios con contraseña, confirmar que Leaked Password Protection está habilitado.
-5. Comprobar que `versionCode` es mayor al stable actual.
+5. Comprobar que `versionCode` es mayor al stable actual y que el gate de upgrade install terminó PASS.
 6. Ejecutar manualmente **Android Stable Promotion** con el Run ID.
 7. Introducir las dos confirmaciones requeridas.
 8. Aprobar el environment `android-stable` si tiene reviewer configurado.
 9. Verificar después de la promoción que `update.json` y el APK publicado comparten checksum y versión esperados.
+
+
+## Rollback y recuperación
+
+Una promoción estable debe tener una salida definida antes de publicar.
+
+### Android
+
+Android no admite un rollback operativo fiable instalando un `versionCode` inferior sobre una versión ya instalada. Por eso la recuperación es **forward rollback**:
+
+1. antes de sustituir `android-stable`, el workflow archiva el APK, `update.json` y SHA-256 estables vigentes como artefacto `android-stable-prepromotion-<runId>`;
+2. si el candidate publicado resulta defectuoso, se toma el último código conocido como bueno y se recompila con un `versionCode` **mayor** al defectuoso;
+3. ese recovery build debe conservar el mismo certificado de firma y recorrer nuevamente candidate, staging, upgrade install y aprobación;
+4. nunca se vuelve a publicar un `versionCode` menor ni se intenta forzar downgrade en dispositivos.
+
+### Supabase Edge
+
+Antes de esta release, el `android-companion` productivo v24 coincide byte por byte con el commit:
+
+`72b10c94a683d4cbec506d8e143b3db1bd997310` — Fase 3: Multimedia & Android.
+
+Ese commit es el rollback backend conocido. Si el despliegue del Edge final falla el smoke productivo:
+
+1. no publicar el APK estable;
+2. redeplegar `android-companion` desde ese commit conocido;
+3. validar estado ACTIVE y ejecutar smoke no destructivo;
+4. investigar/corregir el Edge nuevo antes de intentar otra promoción.
+
+### Base de datos
+
+Este RC no agrega una migración nueva. Las migraciones de Fase 1 y Fase 2 ya tienen replay y rollback/re-apply automatizados. Cualquier migración adicional descubierta antes de stable debe incorporar rollback probado antes de ser elegible para promoción.
+
+La publicación del APK ocurre **después** del despliegue y smoke backend. Si falla Edge o base de datos, se aborta la promoción Android.
 
 ## Regla de esta fase
 
