@@ -233,7 +233,8 @@ public final class MainActivity extends FragmentActivity {
             state.put("driveFolderConnected",cloudMedia!=null&&cloudMedia.connected());
             state.put("driveFolderName",cloudMedia==null?"":cloudMedia.driveName());
             state.put("chatLockEnabled",getSharedPreferences(CHAT_SECURITY_PREFS,MODE_PRIVATE).getBoolean(CHAT_LOCK_ENABLED,false));
-            state.put("giphyConfigured",BuildConfig.GIPHY_API_KEY!=null&&!BuildConfig.GIPHY_API_KEY.isBlank());
+            state.put("giphyConfigured",true);
+            state.put("giphyMode","server");
             BatteryManager battery=getSystemService(BatteryManager.class);
             int batteryPct=battery==null?-1:battery.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
             state.put("battery",batteryPct>=0&&batteryPct<=100?batteryPct:JSONObject.NULL);
@@ -872,8 +873,11 @@ public final class MainActivity extends FragmentActivity {
     void searchGiphy(String requestId,String query,boolean stickers){
         if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
         io.execute(()->{
-            try{resolve(requestId,MobileApiClient.giphySearch(BuildConfig.GIPHY_API_KEY,query,stickers));}
-            catch(Exception e){reject(requestId,e.getMessage()==null?"No pudimos buscar en GIPHY.":e.getMessage());}
+            try{
+                String token=store.token();
+                if(token==null)throw new ApiClient.ApiException(401,"El vínculo del dispositivo ya no es válido.");
+                resolve(requestId,MobileApiClient.giphySearch(token,query,stickers));
+            }catch(Exception e){reject(requestId,e.getMessage()==null?"No pudimos buscar en GIPHY.":e.getMessage());}
         });
     }
 
@@ -1135,7 +1139,9 @@ public final class MainActivity extends FragmentActivity {
                 }
                 if(total<1)throw new IOException("El archivo está vacío.");
                 File ready=target;
-                String mime=rawMime==null||rawMime.isBlank()?"application/octet-stream":rawMime;
+                String declaredMime=rawMime==null||rawMime.isBlank()?"application/octet-stream":rawMime;
+                String inspectedMime=MediaSniffer.sniff(ready,declaredMime);
+                String mime=inspectedMime==null||inspectedMime.isBlank()||"application/octet-stream".equals(inspectedMime)?declaredMime:inspectedMime;
                 runOnUiThread(()->{
                     try{
                         Uri content=FileProvider.getUriForFile(this,getPackageName()+".files",ready);
