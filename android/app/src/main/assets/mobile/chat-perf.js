@@ -4,7 +4,7 @@ const KEY='galaxy.chat.perf';
 const MAX=400;
 let enabled=false,seq=0,openAt=0;
 let events=[],apiCalls=[],renders=[],loads=[],frames={samples:0,janky:0,worstMs:0,fps:0},longTasks={count:0,totalMs:0,maxMs:0};
-let optimistic=new Map(),confirm=new Map(),frameRun=null,lastScrollIntent=0;
+let optimistic=new Map(),confirm=new Map(),frameRun=null,lastScrollIntent=0,layoutShifts={count:0,value:0,max:0};
 const now=()=>performance.now();
 const safeAction=value=>String(value||'').replace(/[^a-z0-9-]/gi,'').slice(0,48);
 const push=(type,data={})=>{
@@ -29,7 +29,7 @@ const snapshot=()=>{
 function readEnabled(){try{return localStorage.getItem(KEY)==='1';}catch{return false;}}
 function reset(){
  seq=0;openAt=0;events=[];apiCalls=[];renders=[];loads=[];frames={samples:0,janky:0,worstMs:0,fps:0};
- longTasks={count:0,totalMs:0,maxMs:0};optimistic.clear();confirm.clear();frameRun=null;
+ longTasks={count:0,totalMs:0,maxMs:0};layoutShifts={count:0,value:0,max:0};optimistic.clear();confirm.clear();frameRun=null;
 }
 function enable(value=true){
  enabled=!!value;
@@ -84,6 +84,10 @@ function optimisticVisible(clientId){
  const key=String(clientId),at=optimistic.get(key);if(at==null)return;
  push('send-visual',{ms:Number((now()-at).toFixed(2))});
 }
+function programmaticScroll(reason,delta){
+ if(!enabled)return;
+ push('programmatic-scroll',{reason:safeAction(reason),delta:Number(delta||0)});
+}
 function confirmed(clientId){
  if(!enabled||!clientId)return;
  const key=String(clientId),at=optimistic.get(key);if(at==null)return;
@@ -113,16 +117,27 @@ try{
   });
   observer.observe({type:'longtask',buffered:true});
  }
+ try{
+  const shiftObserver=new PerformanceObserver(list=>{
+   if(!enabled)return;
+   for(const entry of list.getEntries()){
+    if(entry.hadRecentInput)continue;
+    const value=Number(entry.value||0);layoutShifts.count++;layoutShifts.value+=value;layoutShifts.max=Math.max(layoutShifts.max,value);
+   }
+  });
+  shiftObserver.observe({type:'layout-shift',buffered:true});
+ }catch{}
 }catch{}
 enabled=readEnabled();
 window.GalaxyChatPerf={
  enable,enabled:()=>enabled,reset,beginOpen,apiStart,apiEnd,renderStart,renderEnd,loadStart,loadEnd,
- optimisticStart,optimisticVisible,confirmed,snapshot,
+ optimisticStart,optimisticVisible,confirmed,programmaticScroll,snapshot,
  note:(type,data={})=>push(safeAction(type),Object.fromEntries(Object.entries(data).filter(([,v])=>typeof v==='number'||typeof v==='boolean'))),
  report:()=>({
   enabled,generatedAt:new Date().toISOString(),
   events:[...events],apiCalls:[...apiCalls],renders:[...renders],loads:[...loads],frames:{...frames},
   longTasks:{count:longTasks.count,totalMs:Number(longTasks.totalMs.toFixed(2)),maxMs:Number(longTasks.maxMs.toFixed(2))},
+  layoutShifts:{count:layoutShifts.count,value:Number(layoutShifts.value.toFixed(4)),max:Number(layoutShifts.max.toFixed(4))},
   dom:snapshot()
  })
 };
