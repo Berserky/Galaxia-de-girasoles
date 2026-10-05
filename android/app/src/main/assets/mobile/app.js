@@ -1652,8 +1652,10 @@ async function loadChat({older=false,newer=false,quiet=false,force=false,aroundI
   }else{
    direction=aroundId?'around':present||!hadState?'latest':older?'older':newer?'newer':'refresh';
    nextState=chatMessageEngine.applyPage(chatState||{messages:[]},result,{direction,focusId:aroundId});
+   // NG-QA-006-004: preserve confirmations that land while this request is in flight.
+   // The current chatState may advance after oldLastSeq even though the response is stale.
    if(direction==='refresh'&&hadState){
-    const confirmedAfterLoad=oldMessages.filter(m=>Number(m.server_seq||0)>oldLastSeq);
+    const confirmedAfterLoad=(chatState?.messages||[]).filter(m=>Number(m.server_seq||0)>oldLastSeq);
     if(confirmedAfterLoad.length)nextState={...nextState,messages:chatMessageEngine.mergeMessages(nextState.messages||[],confirmedAfterLoad)};
    }
   }
