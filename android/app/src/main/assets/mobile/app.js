@@ -1456,8 +1456,7 @@ function chatCaptureAnchor(el=document.querySelector('#chatMessages')){
  const probe=Math.max(0,el.scrollTop+Math.min(180,el.clientHeight*.35)),index=chatMessageEngine.indexAtOffset(list,probe);
  if(index<0)return null;
  const message=list[index],id=String(message?.id||message?.client_id||'');if(!id)return null;
- chatMessageEngine.focus(list.length,index);
- return {id,offset:chatMessageEngine.offsetBefore(list,index)-el.scrollTop,virtual:true};
+ return {id,offset:chatMessageEngine.offsetBefore(list,index)-el.scrollTop,virtual:true,index};
 }
 function chatAnchorToEngine(anchor){
  if(!anchor)return null;
@@ -1548,6 +1547,10 @@ function chatMessagesMarkup(){
 function chatRenderMessages({anchor=null,scroll='preserve',highlightId='',effect=null}={}){
  const el=document.querySelector('#chatMessages');if(!el)return false;
  const stableAnchor=anchor||chatCaptureAnchor(el),playback=chatCapturePlayback();
+ if(stableAnchor?.virtual&&stableAnchor.id){
+  const list=chatRows(),index=list.findIndex(m=>String(m.id||m.client_id||'')===String(stableAnchor.id));
+  if(index>=0)chatMessageEngine.focus(list.length,index);
+ }
  chatResizeObserver?.disconnect();chatResizeObserver=null;
  el.innerHTML=chatMessagesMarkup();refreshIcons();chatUpdateNewButton();
  requestAnimationFrame(()=>{
@@ -1812,7 +1815,7 @@ function queueChatMessage({body='',messageType='text',attachments=[],attachment=
   chatMessageEngine.resetWindow(chatRows().length,{align:'end'});chatRenderMessages({scroll:'bottom'});
   requestAnimationFrame(()=>window.GalaxyChatPerf?.optimisticVisible?.(clientId));
  }
- flushChatOutbox().then(()=>loadChat({quiet:true,force:true})).catch(()=>{});
+ flushChatOutbox().catch(()=>{});
 }
 function queueGalaxyCard(cardType,entityKind,entityId,localCard={}){
  if(!entityId)return;
