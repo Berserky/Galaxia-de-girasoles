@@ -148,7 +148,7 @@ test('keyboard, composer and orientation resize use anchor/bottom restoration',(
  const sync=block(app,'function syncChatViewportHeight(){','function go(next)');
  assert.ok(sync.includes('beforeViewportChange'));
  assert.ok(sync.includes('afterViewportChange'));
- const observe=block(app,'function chatObserveWindow(){','function chatUpdateVirtualSpacers');
+ const observe=block(app,'function chatObserveWindow','function chatUpdateVirtualSpacers');
  assert.ok(observe.includes("document.querySelector('#chatForm')"));
  assert.ok(observe.includes('chatScrollEngine.stabilize'));
  assert.ok(observe.includes('ResizeObserver'));
@@ -168,6 +168,9 @@ test('Realtime at bottom and own sends use explicit bottom policy',()=>{
  assert.ok(load.includes('const shouldBottom=!aroundId&&!older&&!newer&&(present||chatInitialScroll||wasNear)'));
  const queue=block(app,'function queueChatMessage(','function queueGalaxyCard');
  assert.ok(queue.includes("chatRenderMessages({scroll:'bottom'})"));
+ const flush=block(app,'async function flushChatOutbox','function queueChatMessage');
+ assert.ok(flush.includes("resetWindow(chatRows().length,{align:'end'})"));
+ assert.ok(flush.includes("chatRenderMessages({scroll:'bottom'})"));
  assert.ok(app.includes("if(a==='chat-jump-present')"));
 });
 
@@ -179,7 +182,7 @@ test('new message indicator is local, accumulates and clears at bottom',()=>{
 });
 
 test('late image/card/composer resize stabilizes the live anchor',()=>{
- const observe=block(app,'function chatObserveWindow(){','function chatUpdateVirtualSpacers');
+ const observe=block(app,'function chatObserveWindow','function chatUpdateVirtualSpacers');
  assert.ok(observe.includes("new ResizeObserver(()=>{chatScrollEngine.stabilize(el,'content-resize');chatScheduleMeasure();})"));
  assert.ok(app.includes('chatMediaRatioStyle'));
  assert.ok(app.includes('aspect-ratio:'));
@@ -187,8 +190,8 @@ test('late image/card/composer resize stabilizes the live anchor',()=>{
 });
 
 test('virtualization measurement preserves anchor while spacer estimates change',()=>{
- const measure=block(app,'function chatMeasureRendered(){','function chatScheduleMeasure');
- assert.ok(measure.includes("captureState(el,'measure')"));
+ const measure=block(app,'function chatMeasureRendered','function chatScheduleMeasure');
+ assert.ok(measure.includes("chatCapturePositionState(el,'measure')"));
  assert.ok(measure.includes("restoreState(el,stable,{reason:'virtual-measure',fallbackBottom:true})"));
  assert.ok(measure.includes('chatUpdateVirtualSpacers'));
 });
