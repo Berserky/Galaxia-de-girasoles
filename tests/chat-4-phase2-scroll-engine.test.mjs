@@ -197,6 +197,21 @@ test('virtual window rotates at rendered boundaries instead of absolute scroll c
  assert.ok(handler.includes('chatScrollEngine.isProgrammatic()'));
 });
 
+test('fast scroll into a virtual spacer recenters the existing window instead of leaving blank space',()=>{
+ const handler=block(app,'function chatHandleScroll(','function chatDraftAttachmentMarkup');
+ assert.ok(handler.includes('viewportAnchor?.virtual'));
+ assert.ok(app.includes('chatMessageEngine.indexAtOffset'));
+ assert.ok(app.includes('chatMessageEngine.offsetBefore'));
+ assert.ok(messageSource.includes('function indexAtOffset'));
+ assert.ok(messageSource.includes('function offsetBefore'));
+});
+
+test('keyboard viewport restoration coalesces competing animation-frame corrections',()=>{
+ assert.ok(scrollSource.includes('viewportRaf'));
+ assert.ok(scrollSource.includes('cancelAnimationFrame(viewportRaf)'));
+ assert.ok(scrollSource.includes("if(!viewportToken)viewportToken=el?captureState(el,'viewport'):null"));
+});
+
 test('history/search/deep contextual navigation does not force present',()=>{
  const load=block(app,'async function loadChat(','async function refreshChatBadge');
  assert.ok(load.includes("direction=aroundId?'around'"));
