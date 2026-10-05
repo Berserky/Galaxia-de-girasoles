@@ -375,10 +375,10 @@ function render(){
   requestAnimationFrame(()=>{
    if(renderGeneration!==chatRenderGeneration||!chatEl?.isConnected)return;
    let stable=chatRenderState;
-   if(stable)chatScrollEngine.restoreState(chatEl,stable,{reason:'render-preserve',fallbackBottom:true});
+   if(chatRenderState)chatScrollEngine.restoreState(chatEl,chatRenderState,{reason:'render-preserve',fallbackBottom:true});
    else if(chatRestoreOnRender){
     stable=chatScrollEngine.recalled('chat');
-    if(stable)chatScrollEngine.restoreState(chatEl,stable,{reason:'navigation-restore',fallbackBottom:true});
+    if(stable)chatScrollEngine.restoreMemory(chatEl,'chat');
     else if(chatState){chatScrollEngine.toBottom(chatEl,{reason:'fresh-chat-open'});stable={anchor:null,atBottom:true,context:'chat',capturedAt:Date.now()};}
     chatRestoreOnRender=false;
    }
