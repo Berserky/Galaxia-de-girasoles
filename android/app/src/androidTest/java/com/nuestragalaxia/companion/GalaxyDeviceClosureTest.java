@@ -185,12 +185,20 @@ public class GalaxyDeviceClosureTest {
         SystemClock.sleep(300);
 
         long pssAfter = android.os.Debug.getPss();
+        for (int i=0;i<3;i++) {
+            runJs("document.querySelector('[data-action=\\\"chat-close\\\"]')?.click()");
+            awaitJs("!document.querySelector('.chat-shell')");
+            runJs("document.querySelector('#chatFab')?.click()");
+            awaitJs("!!document.querySelector('.chat-shell') && document.querySelectorAll('.chat-message').length>0");
+        }
+        long pssAfterCycles = android.os.Debug.getPss();
         long cpuAfter = android.os.Process.getElapsedCpuTime();
         JSONObject perf = new JSONObject(js("JSON.stringify(window.GalaxyChatPerf?.report?.()||{})"));
         JSONObject result = new JSONObject()
             .put("openMsLocalQa", openMs)
             .put("pssBeforeKb", pssBefore)
             .put("pssAfterKb", pssAfter)
+            .put("pssAfterThreeReentriesKb", pssAfterCycles)
             .put("cpuMs", Math.max(0, cpuAfter-cpuBefore))
             .put("scrollBefore", beforeTop)
             .put("scrollAfter", afterTop)
