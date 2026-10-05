@@ -2724,326 +2724,329 @@ async function presenceSet(req:Request,body:any){
   return json({ok:true,presence:saved});
 }
 
+const BACKUP_VERSION=5;
+const BACKUP_SCHEMA_VERSION="20261004235446";
+const BACKUP_PAYLOAD_BUCKET="galaxy-backups";
+const BACKUP_PAGE_SIZE=1000;
+const BACKUP_MAX_ROWS_PER_SECTION=100000;
+const BACKUP_MAX_MEDIA_OBJECTS=10000;
+const BACKUP_MAX_PAYLOAD_BYTES=60*1024*1024;
+const BACKUP_MEDIA_BUCKETS=["galaxy-photos","galaxy-music","galaxy-voice","galaxy-chat-media"] as const;
+const BACKUP_SECTION_NAMES=[
+ "settings","items","daily","home","rewards","places","locationHistory","tripHistory","placeEvents","destinations","encounters",
+ "bond","bondConfig","bondParticipation","dailyQuestions","goals","goalParticipants","goalSteps","goalLinks","goalContributions",
+ "bondGestures","contextSettings","voiceTranscripts","photoContext","chatMessages","chatReadState","chatReactions","chatHidden",
+ "chatPins","chatFavorites","chatEdits","chatAttachments","chatPreferences","chatTranscripts","chatTranslations","chatAlbums",
+ "chatAlbumItems","chatStickers","chatStickerFavorites","chatStickerRecents","chatLiveLocations","chatEntityRefs","chatPolls",
+ "chatPollOptions","chatPollVotes","chatChecklists","chatChecklistItems"
+] as const;
+
+function backupObjectSize(file:any){return Math.max(0,Number(file?.metadata?.size??file?.metadata?.contentLength??0)||0);}
+function backupObjectMime(file:any){return text(file?.metadata?.mimetype||file?.metadata?.contentType||"",160);}
+function backupObjectFingerprint(rows:any[]){
+ return JSON.stringify((rows||[]).map((x:any)=>[
+  String(x.bucket||""),String(x.path||""),Number(x.size)||0,String(x.mime||""),String(x.updatedAt||"")
+ ]).sort((a:any,b:any)=>String(a[0]+"\n"+a[1]).localeCompare(String(b[0]+"\n"+b[1]))));
+}
+async function backupSha256(bytes:Uint8Array){
+ const digest=new Uint8Array(await crypto.subtle.digest("SHA-256",bytes));
+ return [...digest].map(x=>x.toString(16).padStart(2,"0")).join("");
+}
+async function backupStorageObjects(bucket:string,prefix="",includeReserved=false){
+ const found:any[]=[],queue=[prefix],seen=new Set<string>();
+ while(queue.length){
+  const dir=queue.shift()||"";
+  if(seen.has(dir))continue;seen.add(dir);
+  let offset=0;
+  for(;;){
+   const {data,error}=await db.storage.from(bucket).list(dir,{limit:BACKUP_PAGE_SIZE,offset,sortBy:{column:"name",order:"asc"}});
+   if(error)throw new Error("No se pudo enumerar Storage "+bucket+": "+String(error.message||error));
+   const page=data||[];
+   for(const file of page){
+    if(!file?.name||file.name===".emptyFolderPlaceholder")continue;
+    const objectPath=dir?dir+"/"+file.name:file.name;
+    if(!includeReserved&&(objectPath==="__backup"||objectPath.startsWith("__backup/")))continue;
+    if(file.id){
+     found.push({
+      bucket,path:objectPath,size:backupObjectSize(file),mime:backupObjectMime(file),
+      updatedAt:String(file.updated_at||file.created_at||"")
+     });
+     if(found.length>BACKUP_MAX_MEDIA_OBJECTS)throw new Error("Storage supera el límite explícito de "+BACKUP_MAX_MEDIA_OBJECTS+" objetos por bucket.");
+    }else if(includeReserved||!objectPath.startsWith("__backup")){
+     queue.push(objectPath);
+    }
+   }
+   if(page.length<BACKUP_PAGE_SIZE)break;
+   offset+=page.length;
+  }
+ }
+ found.sort((x:any,y:any)=>String(x.path).localeCompare(String(y.path)));
+ return found;
+}
+async function backupAllOriginalMedia(){
+ const all:any[]=[];
+ for(const bucket of BACKUP_MEDIA_BUCKETS){
+  const rows=await backupStorageObjects(bucket);
+  all.push(...rows);
+  if(all.length>BACKUP_MAX_MEDIA_OBJECTS)throw new Error("La multimedia supera el límite explícito de "+BACKUP_MAX_MEDIA_OBJECTS+" objetos.");
+ }
+ return all;
+}
+function backupCounts(sections:any){
+ if(!sections||typeof sections!=="object"||Array.isArray(sections))throw new Error("Snapshot de datos inválido.");
+ const counts:Record<string,number>={};
+ for(const name of BACKUP_SECTION_NAMES){
+  const rows=sections[name];
+  if(!Array.isArray(rows))throw new Error("Falta la sección de backup "+name+".");
+  if(rows.length>BACKUP_MAX_ROWS_PER_SECTION)throw new Error("La sección "+name+" supera el límite explícito de "+BACKUP_MAX_ROWS_PER_SECTION+" filas.");
+  counts[name]=rows.length;
+ }
+ const unknown=Object.keys(sections).filter(k=>!(BACKUP_SECTION_NAMES as readonly string[]).includes(k));
+ if(unknown.length)throw new Error("El snapshot contiene secciones no reconocidas: "+unknown.join(", "));
+ return counts;
+}
+function backupAssertMediaReferences(sections:any,media:any[]){
+ const available=new Set((media||[]).map((x:any)=>String(x.bucket)+"\n"+String(x.path)));
+ const requirePath=(bucket:any,path:any,label:string)=>{
+  const b=String(bucket||""),p=String(path||"");
+  if(!p)return;
+  if(!(BACKUP_MEDIA_BUCKETS as readonly string[]).includes(b)||p.startsWith("__backup/")||!available.has(b+"\n"+p)){
+   throw new Error("Referencia multimedia inválida en "+label+": "+b+"/"+p);
+  }
+ };
+ for(const row of sections.items||[]){
+  requirePath("galaxy-photos",row?.data?.photoPath,"items.photoPath");
+  requirePath("galaxy-voice",row?.data?.audioPath,"items.audioPath");
+ }
+ for(const row of sections.bond||[])if(row?.type==="voice")requirePath("galaxy-voice",row?.data?.audioPath,"bond.audioPath");
+ for(const row of sections.bondConfig||[])requirePath("galaxy-photos",row?.photo_path,"bondConfig.photo_path");
+ for(const row of sections.photoContext||[])requirePath("galaxy-photos",row?.path,"photoContext.path");
+ for(const row of sections.chatAttachments||[]){
+  const bucket=String(row?.bucket||"galaxy-chat-media");
+  requirePath(bucket,row?.path,"chatAttachments.path");
+  requirePath(bucket,row?.thumbnail_path,"chatAttachments.thumbnail_path");
+ }
+ for(const row of sections.chatStickers||[])requirePath(row?.bucket||"galaxy-chat-media",row?.path,"chatStickers.path");
+}
+async function backupRemoveObjects(entries:any[]){
+ let complete=true;
+ const groups=new Map<string,string[]>();
+ for(const entry of entries||[]){
+  const bucket=String(entry?.bucket||""),path=String(entry?.path||entry?.snapshotPath||"");
+  if(!bucket||!path)continue;
+  if(!groups.has(bucket))groups.set(bucket,[]);
+  groups.get(bucket)!.push(path);
+ }
+ for(const [bucket,paths] of groups){
+  for(let i=0;i<paths.length;i+=100){
+   const {error}=await db.storage.from(bucket).remove(paths.slice(i,i+100));
+   if(error)complete=false;
+  }
+ }
+ return complete;
+}
+async function backupCopySnapshots(backupId:string,originals:any[]){
+ const copied:any[]=[];
+ try{
+  for(const object of originals){
+   const snapshotPath="__backup/"+backupId+"/"+String(object.path);
+   const {error}=await db.storage.from(String(object.bucket)).copy(String(object.path),snapshotPath);
+   if(error)throw new Error("No se pudo preservar "+object.bucket+"/"+object.path+": "+String(error.message||error));
+   copied.push({...object,snapshotPath});
+  }
+  for(const bucket of BACKUP_MEDIA_BUCKETS){
+   const expected=copied.filter(x=>x.bucket===bucket);
+   if(!expected.length)continue;
+   const snapshots=await backupStorageObjects(bucket,"__backup/"+backupId,true);
+   const byPath=new Map(snapshots.map((x:any)=>[String(x.path),x]));
+   for(const row of expected){
+    const snap=byPath.get(String(row.snapshotPath));
+    if(!snap||Number(snap.size)!==Number(row.size)||String(snap.mime||"")!==String(row.mime||"")){
+     throw new Error("Snapshot multimedia no verificable para "+row.bucket+"/"+row.path+".");
+    }
+   }
+  }
+  return copied;
+ }catch(e){
+  await backupRemoveObjects(copied.map((x:any)=>({bucket:x.bucket,path:x.snapshotPath})));
+  throw e;
+ }
+}
+function backupPayloadDescriptor(backup:any){
+ return backup&&typeof backup==="object"&&!Array.isArray(backup)?backup:null;
+}
 async function backupExport(req:Request){
-  const d=await device(req),person=String(d.person);
-  await chatReconcileDeletedMedia();
-  const [settings,items,daily,bond,bondGestures,places,goals,goalParticipants,goalSteps,goalLinks,goalContributions,voiceTranscripts,photoContext,chatMessages,chatReactions,chatPins,chatFavorites,chatAttachments,chatPreferences,chatTranscripts,chatTranslations,chatAlbums,chatAlbumItems,chatStickers,chatStickerFavorites,chatStickerRecents,chatLiveLocations,chatEntityRefs,chatPolls,chatPollOptions,chatPollVotes,chatChecklists,chatChecklistItems]=await Promise.all([
-    ok(db.from("galaxy_settings").select("data").eq("id",1).single()),
-    ok(db.from("galaxy_items").select("id,kind,data,author,created").order("created",{ascending:true}).limit(2000)),
-    ok(db.from("galaxy_daily").select("day,person,mood,answer").order("day",{ascending:true}).limit(1000)),
-    ok(db.from("galaxy_bond").select("id,type,author,data,created").order("created",{ascending:true}).limit(2000)),
-    ok(db.from("galaxy_bond_gestures").select("*").order("created_at",{ascending:true}).limit(100)),
-    ok(db.from("galaxy_places").select("id,owner,name,kind,latitude,longitude,note,created_at").order("created_at",{ascending:true}).limit(500)),
-    ok(db.from("galaxy_goals").select("*").order("created_at",{ascending:true}).limit(1000)),
-    ok(db.from("galaxy_goal_participants").select("*").limit(2000)),
-    ok(db.from("galaxy_goal_steps").select("*").order("position",{ascending:true}).limit(5000)),
-    ok(db.from("galaxy_goal_links").select("*").order("created_at",{ascending:true}).limit(5000)),
-    ok(db.from("galaxy_goal_contributions").select("*").order("contribution_date",{ascending:true}).limit(10000)),
-    ok(db.from("galaxy_voice_transcripts").select("*").order("created_at",{ascending:true}).limit(500)),
-    ok(db.from("galaxy_photo_context").select("*").order("created_at",{ascending:true}).limit(500)),
-    ok(db.from("galaxy_chat_messages").select("*").order("server_seq",{ascending:true}).limit(10000)),
-    ok(db.from("galaxy_chat_reactions").select("*").limit(20000)),
-    ok(db.from("galaxy_chat_pins").select("*").limit(1000)),
-    ok(db.from("galaxy_chat_favorites").select("*").limit(10000)),
-    ok(db.from("galaxy_chat_attachments").select("*").order("created_at",{ascending:true}).limit(20000)),
-    ok(db.from("galaxy_chat_preferences").select("*").limit(2)),
-    ok(db.from("galaxy_chat_transcripts").select("*").limit(5000)),
-    ok(db.from("galaxy_chat_translations").select("*").limit(10000)),
-    ok(db.from("galaxy_chat_albums").select("*").order("created_at",{ascending:true}).limit(1000)),
-    ok(db.from("galaxy_chat_album_items").select("*").limit(20000)),
-    ok(db.from("galaxy_chat_stickers").select("*").order("created_at",{ascending:true}).limit(2000)),
-    ok(db.from("galaxy_chat_sticker_favorites").select("*").limit(4000)),
-    ok(db.from("galaxy_chat_sticker_recents").select("*").limit(4000)),
-    ok(db.from("galaxy_chat_live_locations").select("*").order("started_at",{ascending:true}).limit(5000)),
-    ok(db.from("galaxy_chat_entity_refs").select("*").limit(10000)),
-    ok(db.from("galaxy_chat_polls").select("*").order("created_at",{ascending:true}).limit(2000)),
-    ok(db.from("galaxy_chat_poll_options").select("*").limit(20000)),
-    ok(db.from("galaxy_chat_poll_votes").select("*").limit(20000)),
-    ok(db.from("galaxy_chat_checklists").select("*").order("created_at",{ascending:true}).limit(2000)),
-    ok(db.from("galaxy_chat_checklist_items").select("*").limit(20000))
-  ]);
-  const privacyLocations=await ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude,updated_at").order("person"));
-  const hiddenCapsules=new Set((items||[]).filter((row:any)=>row.kind==="capsule"&&chatCapsuleAccess(row.data||{},person,privacyLocations||[]).locked).map((row:any)=>String(row.id)));
-  const safeItems=await Promise.all((items||[]).map(async(row:any)=>{
-    if(row.kind!=="capsule")return row;
-    const safe=await privacyItemResponse(row,person);
-    if(safe?.data){delete safe.data.photoUrl;delete safe.data.audioUrl;delete safe.data.song;}
-    return safe;
-  }));
-  const hiddenBondIds=new Set((bond||[]).filter((row:any)=>row.type==="voice"&&hiddenCapsules.has(String(row.data?.referenceId||""))).map((row:any)=>String(row.id)));
-  const safeBond=(bond||[]).filter((row:any)=>!hiddenBondIds.has(String(row.id)));
-  const safeVoiceTranscripts=(voiceTranscripts||[]).filter((row:any)=>!hiddenBondIds.has(String(row.bond_id||"")));
-  const capsuleContext={capsules:(items||[]).filter((row:any)=>row.kind==="capsule"),locations:(privacyLocations||[]).filter((row:any)=>String(row.person)===person)};
-  const safePhotoContext=(photoContext||[]).filter((row:any)=>capsuleObjectVisible("galaxy-photos",String(row.path||""),person,capsuleContext));
-  const safeChatMessages=(chatMessages||[]).filter((row:any)=>!row.deleted_at);
-  const safeChatIds=new Set(safeChatMessages.map((row:any)=>String(row.id)));
-  const safeChatAttachments=(chatAttachments||[]).filter((row:any)=>safeChatIds.has(String(row.message_id)));
-  return json({format:"nuestra-galaxia-backup",version:4,exportedAt:new Date().toISOString(),settings:settings?.data||{},items:safeItems,daily:daily||[],bond:safeBond,bondGestures:bondGestures||[],places:places||[],goals:goals||[],goalParticipants:goalParticipants||[],goalSteps:goalSteps||[],goalLinks:goalLinks||[],goalContributions:goalContributions||[],voiceTranscripts:safeVoiceTranscripts,photoContext:safePhotoContext,chat:{messages:safeChatMessages,reactions:chatReactions||[],pins:chatPins||[],favorites:chatFavorites||[],attachments:safeChatAttachments,preferences:chatPreferences||[],transcripts:chatTranscripts||[],translations:chatTranslations||[],albums:chatAlbums||[],albumItems:chatAlbumItems||[],stickers:chatStickers||[],stickerFavorites:chatStickerFavorites||[],stickerRecents:chatStickerRecents||[],liveLocations:chatLiveLocations||[],entityRefs:chatEntityRefs||[],polls:chatPolls||[],pollOptions:chatPollOptions||[],pollVotes:chatPollVotes||[],checklists:chatChecklists||[],checklistItems:chatChecklistItems||[]}});
+ const d=await device(req),person=String(d.person),backupId=crypto.randomUUID(),exportedAt=new Date().toISOString();
+ await chatReconcileDeletedMedia();
+ let snapshots:any[]=[];
+ let payloadPath="";
+ try{
+  const sections=await ok(db.rpc("galaxy_backup_export_v5"));
+  const counts=backupCounts(sections);
+  const before=await backupAllOriginalMedia();
+  backupAssertMediaReferences(sections,before);
+  snapshots=await backupCopySnapshots(backupId,before);
+  const after=await backupAllOriginalMedia();
+  if(backupObjectFingerprint(before)!==backupObjectFingerprint(after))throw new Error("Storage cambió durante el backup; vuelve a intentarlo para obtener un snapshot consistente.");
+  const mediaBytes=snapshots.reduce((sum:number,x:any)=>sum+(Number(x.size)||0),0);
+  const manifest={
+   schemaVersion:BACKUP_SCHEMA_VERSION,
+   counts,
+   limits:{
+    maxRowsPerSection:BACKUP_MAX_ROWS_PER_SECTION,
+    maxMediaObjects:BACKUP_MAX_MEDIA_OBJECTS,
+    maxPayloadBytes:BACKUP_MAX_PAYLOAD_BYTES,
+    storageListPageSize:BACKUP_PAGE_SIZE
+   },
+   media:{
+    strategy:"same-project-storage-snapshot-v1",
+    count:snapshots.length,
+    bytes:mediaBytes,
+    buckets:Object.fromEntries(BACKUP_MEDIA_BUCKETS.map(bucket=>[bucket,snapshots.filter(x=>x.bucket===bucket).length])),
+    failureDomain:"same-supabase-project",
+    guarantee:"Los binarios se duplican y verifican en Storage del mismo proyecto. Este backup resiste borrado lógico o accidental dentro de la app, pero no la pérdida total del proyecto Supabase."
+   },
+   consistency:"single-postgres-snapshot + stable-storage-set-verified",
+   restoreMode:"empty-or-compatible",
+   exclusions:[
+    "auth users and membership/invitation credentials",
+    "device tokens/pair codes/push credentials and delivery logs",
+    "current presence/live GPS/trip runtime",
+    "derived Intelligence indexes/usage/cleanup queue",
+    "derived Context runtime/events/suggestions/ETA",
+    "chat presence/metrics/runtime and notification delivery state",
+    "static home catalog",
+    "deleted-for-both chat tombstones and their deleted media"
+   ]
+  };
+  const payload={
+   format:"nuestra-galaxia-backup-payload",version:BACKUP_VERSION,backupId,exportedAt,
+   manifest,sections,media:snapshots
+  };
+  const raw=JSON.stringify(payload),bytes=new TextEncoder().encode(raw);
+  if(bytes.length>BACKUP_MAX_PAYLOAD_BYTES)throw new Error("El payload supera el límite explícito de "+BACKUP_MAX_PAYLOAD_BYTES+" bytes; no se generó una copia truncada.");
+  const sha256=await backupSha256(bytes);
+  payloadPath=person+"/"+backupId+".json";
+  const {error}=await db.storage.from(BACKUP_PAYLOAD_BUCKET).upload(payloadPath,bytes,{contentType:"application/json",cacheControl:"0",upsert:false});
+  if(error)throw new Error("No se pudo guardar el payload íntegro del backup: "+String(error.message||error));
+  return json({
+   format:"nuestra-galaxia-backup",version:BACKUP_VERSION,backupId,exportedAt,
+   manifest:{
+    ...manifest,
+    payload:{bucket:BACKUP_PAYLOAD_BUCKET,path:payloadPath,sizeBytes:bytes.length,sha256,algorithm:"SHA-256"}
+   }
+  });
+ }catch(e){
+  if(payloadPath)await backupRemoveObjects([{bucket:BACKUP_PAYLOAD_BUCKET,path:payloadPath}]);
+  if(snapshots.length)await backupRemoveObjects(snapshots.map((x:any)=>({bucket:x.bucket,path:x.snapshotPath})));
+  const message=e instanceof Error?e.message:String(e);
+  console.error("backup-export",{backupId,message});
+  return json({error:"No se pudo crear un backup verificable.",detail:text(message,500),code:"BACKUP_EXPORT_FAILED"},409);
+ }
 }
 
 function uuidish(v:unknown){return /^[0-9a-f-]{36}$/i.test(String(v||""));}
 
+function backupValidatePayload(payload:any,descriptor:any){
+ if(!payload||typeof payload!=="object"||Array.isArray(payload)
+    ||payload.format!=="nuestra-galaxia-backup-payload"||Number(payload.version)!==BACKUP_VERSION
+    ||String(payload.backupId||"")!==String(descriptor.backupId||"")
+    ||payload?.manifest?.schemaVersion!==BACKUP_SCHEMA_VERSION)throw new Error("Payload v5 inválido o incompatible.");
+ const counts=backupCounts(payload.sections);
+ const declared=payload?.manifest?.counts;
+ if(!declared||typeof declared!=="object"||Array.isArray(declared))throw new Error("El manifiesto de conteos no existe.");
+ for(const name of BACKUP_SECTION_NAMES)if(Number(declared[name])!==counts[name])throw new Error("Conteo corrupto en "+name+".");
+ if(!Array.isArray(payload.media)||payload.media.length>BACKUP_MAX_MEDIA_OBJECTS)throw new Error("Manifiesto multimedia inválido.");
+ if(Number(payload?.manifest?.media?.count)!==payload.media.length)throw new Error("Conteo multimedia corrupto.");
+ const mediaBytes=payload.media.reduce((sum:number,x:any)=>sum+(Number(x?.size)||0),0);
+ if(Number(payload?.manifest?.media?.bytes)!==mediaBytes)throw new Error("Tamaño multimedia corrupto.");
+ for(const row of payload.media){
+  const bucket=String(row?.bucket||""),path=String(row?.path||""),snapshotPath=String(row?.snapshotPath||"");
+  if(!(BACKUP_MEDIA_BUCKETS as readonly string[]).includes(bucket)||!path||path.startsWith("__backup/")
+     ||snapshotPath!=="__backup/"+String(payload.backupId)+"/"+path||Number(row?.size)<0){
+   throw new Error("Entrada multimedia malformada.");
+  }
+ }
+ backupAssertMediaReferences(payload.sections,payload.media);
+ return counts;
+}
+async function backupLoadPayload(descriptor:any){
+ const pointer=descriptor?.manifest?.payload;
+ if(!pointer||pointer.bucket!==BACKUP_PAYLOAD_BUCKET||typeof pointer.path!=="string"
+    ||!pointer.path.endsWith("/"+String(descriptor.backupId)+".json")
+    ||!Number.isInteger(Number(pointer.sizeBytes))||Number(pointer.sizeBytes)<1||Number(pointer.sizeBytes)>BACKUP_MAX_PAYLOAD_BYTES
+    ||!/^[0-9a-f]{64}$/i.test(String(pointer.sha256||"")))throw new Error("Puntero de payload inválido.");
+ const {data,error}=await db.storage.from(BACKUP_PAYLOAD_BUCKET).download(pointer.path);
+ if(error||!data)throw new Error("El payload del backup ya no está disponible.");
+ const bytes=new Uint8Array(await data.arrayBuffer());
+ if(bytes.length!==Number(pointer.sizeBytes))throw new Error("El tamaño del payload no coincide con el manifiesto.");
+ const digest=await backupSha256(bytes);
+ if(digest.toLowerCase()!==String(pointer.sha256).toLowerCase())throw new Error("El hash SHA-256 del payload no coincide.");
+ let payload:any;
+ try{payload=JSON.parse(new TextDecoder().decode(bytes));}catch{throw new Error("El payload JSON está corrupto.");}
+ backupValidatePayload(payload,descriptor);
+ return payload;
+}
+async function backupVerifySnapshots(payload:any){
+ const verified=new Map<string,any>();
+ for(const bucket of BACKUP_MEDIA_BUCKETS){
+  const expected=payload.media.filter((x:any)=>x.bucket===bucket);
+  if(!expected.length)continue;
+  const rows=await backupStorageObjects(bucket,"__backup/"+String(payload.backupId),true);
+  for(const row of rows)verified.set(bucket+"\n"+row.path,row);
+  for(const media of expected){
+   const row=verified.get(bucket+"\n"+media.snapshotPath);
+   if(!row||Number(row.size)!==Number(media.size)||String(row.mime||"")!==String(media.mime||"")){
+    throw new Error("Falta o difiere el snapshot de "+bucket+"/"+media.path+".");
+   }
+  }
+ }
+}
+async function backupRestoreMedia(payload:any){
+ const current=await backupAllOriginalMedia();
+ const currentByPath=new Map(current.map((x:any)=>[x.bucket+"\n"+x.path,x]));
+ const created:any[]=[];
+ for(const media of payload.media){
+  const key=String(media.bucket)+"\n"+String(media.path),existing=currentByPath.get(key);
+  if(existing){
+   if(Number(existing.size)!==Number(media.size)||String(existing.mime||"")!==String(media.mime||"")){
+    throw Object.assign(new Error("El destino ya contiene una multimedia distinta en "+media.bucket+"/"+media.path+"."),{created});
+   }
+   continue;
+  }
+  const {error}=await db.storage.from(String(media.bucket)).copy(String(media.snapshotPath),String(media.path));
+  if(error)throw Object.assign(new Error("No se pudo restaurar "+media.bucket+"/"+media.path+": "+String(error.message||error)),{created});
+  created.push({bucket:media.bucket,path:media.path});
+ }
+ return created;
+}
 async function backupRestore(req:Request,body:any){
-  await device(req);
-  const backup=body?.backup;
-  if(!backup||backup.format!=="nuestra-galaxia-backup"||![1,2,3,4].includes(Number(backup.version)))return json({error:"La copia no pertenece a Nuestra Galaxia."},400);
-  const items=Array.isArray(backup.items)?backup.items.slice(0,2000):[];
-  const daily=Array.isArray(backup.daily)?backup.daily.slice(0,1000):[];
-  const bond=Array.isArray(backup.bond)?backup.bond.slice(0,2000):[];
-  const bondGestures=Array.isArray(backup.bondGestures)?backup.bondGestures.slice(0,100):[];
-  const places=Array.isArray(backup.places)?backup.places.slice(0,500):[];
-  const goals=Array.isArray(backup.goals)?backup.goals.slice(0,1000):[];
-  const goalParticipants=Array.isArray(backup.goalParticipants)?backup.goalParticipants.slice(0,2000):[];
-  const goalSteps=Array.isArray(backup.goalSteps)?backup.goalSteps.slice(0,5000):[];
-  const goalLinks=Array.isArray(backup.goalLinks)?backup.goalLinks.slice(0,5000):[];
-  const goalContributions=Array.isArray(backup.goalContributions)?backup.goalContributions.slice(0,10000):[];
-  const voiceTranscripts=Array.isArray(backup.voiceTranscripts)?backup.voiceTranscripts.slice(0,500):[];
-  const photoContext=Array.isArray(backup.photoContext)?backup.photoContext.slice(0,500):[];
-  const chat=backup.chat&&typeof backup.chat==="object"&&!Array.isArray(backup.chat)?backup.chat:{};
-  const chatMessages=Array.isArray(chat.messages)?chat.messages.slice(0,10000):[];
-  const chatReactions=Array.isArray(chat.reactions)?chat.reactions.slice(0,20000):[];
-  const chatPins=Array.isArray(chat.pins)?chat.pins.slice(0,1000):[];
-  const chatFavorites=Array.isArray(chat.favorites)?chat.favorites.slice(0,10000):[];
-  const chatAttachments=Array.isArray(chat.attachments)?chat.attachments.slice(0,20000):[];
-  const chatPreferences=Array.isArray(chat.preferences)?chat.preferences.slice(0,2):[];
-  const chatTranscripts=Array.isArray(chat.transcripts)?chat.transcripts.slice(0,5000):[];
-  const chatTranslations=Array.isArray(chat.translations)?chat.translations.slice(0,10000):[];
-  const chatAlbums=Array.isArray(chat.albums)?chat.albums.slice(0,1000):[];
-  const chatAlbumItems=Array.isArray(chat.albumItems)?chat.albumItems.slice(0,20000):[];
-  const chatStickers=Array.isArray(chat.stickers)?chat.stickers.slice(0,2000):[];
-  const chatStickerFavorites=Array.isArray(chat.stickerFavorites)?chat.stickerFavorites.slice(0,4000):[];
-  const chatStickerRecents=Array.isArray(chat.stickerRecents)?chat.stickerRecents.slice(0,4000):[];
-  const chatLiveLocations=Array.isArray(chat.liveLocations)?chat.liveLocations.slice(0,5000):[];
-  const chatEntityRefs=Array.isArray(chat.entityRefs)?chat.entityRefs.slice(0,10000):[];
-  const chatPolls=Array.isArray(chat.polls)?chat.polls.slice(0,2000):[];
-  const chatPollOptions=Array.isArray(chat.pollOptions)?chat.pollOptions.slice(0,20000):[];
-  const chatPollVotes=Array.isArray(chat.pollVotes)?chat.pollVotes.slice(0,20000):[];
-  const chatChecklists=Array.isArray(chat.checklists)?chat.checklists.slice(0,2000):[];
-  const chatChecklistItems=Array.isArray(chat.checklistItems)?chat.checklistItems.slice(0,20000):[];
-  let restoredItems=0,restoredDaily=0,restoredBond=0,restoredBondGestures=0,restoredPlaces=0,restoredGoals=0,restoredGoalParticipants=0,restoredGoalSteps=0,restoredGoalLinks=0,restoredGoalContributions=0,restoredVoiceTranscripts=0,restoredPhotoContext=0,restoredChat=0;
-
-  if(backup.settings&&typeof backup.settings==="object"&&!Array.isArray(backup.settings)){
-    const current=await ok(db.from("galaxy_settings").select("data").eq("id",1).single());
-    const names=Array.isArray(backup.settings.names)?backup.settings.names.slice(0,2).map((x:any)=>text(x,40)):[];
-    const startDate=text(backup.settings.startDate,10),albumUrl=text(backup.settings.albumUrl,500);
-    const data={...(current?.data||{}),...(names.length===2?{names}:{}),...(startDate&&validDate(startDate)?{startDate}:{}),albumUrl};
-    await ok(db.from("galaxy_settings").update({data}).eq("id",1));
-  }
-
-  for(const row of places){
-    const id=Number(row?.id),owner=String(row?.owner||""),name=text(row?.name,80),kind=String(row?.kind||"memory"),latitude=Number(row?.latitude),longitude=Number(row?.longitude);
-    if(!Number.isFinite(id)||!["0","1"].includes(owner)||!name||!["home","work","memory","adventure"].includes(kind)||!Number.isFinite(latitude)||!Number.isFinite(longitude))continue;
-    await ok(db.from("galaxy_places").upsert({id,owner,name,kind,latitude,longitude,note:text(row?.note,300)||null},{onConflict:"id",ignoreDuplicates:true}));
-    restoredPlaces++;
-  }
-
-  for(const row of items){
-    const id=String(row?.id||""),kind=String(row?.kind||""),author=String(row?.author||"");
-    if(!uuidish(id)||!allowedKinds.has(kind)||!["0","1"].includes(author))continue;
-    let data;try{data=cleanItem(kind,row.data);}catch{continue;}
-    await ok(db.from("galaxy_items").upsert({id,kind,data,author,created:row.created||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
-    restoredItems++;
-  }
-
-  for(const row of goals){
-    const id=String(row?.id||""),createdBy=String(row?.created_by||"");
-    if(!uuidish(id)||!["0","1"].includes(createdBy))continue;
-    let normalized;try{normalized=normalizeGoalInput({...row,targetAmount:row.target_amount,targetDate:row.target_date,participants:["0"]});}catch{continue;}
-    await ok(db.from("galaxy_goals").upsert({
-      id,kind:normalized.kind,title:normalized.title,description:normalized.description,category:normalized.category,
-      target_date:normalized.target_date,status:normalized.status,target_amount:normalized.target_amount,created_by:createdBy,
-      completed_at:row.completed_at||null,created_at:row.created_at||new Date().toISOString(),updated_at:row.updated_at||row.created_at||new Date().toISOString()
-    },{onConflict:"id",ignoreDuplicates:true}));
-    restoredGoals++;
-  }
-
-  for(const row of goalParticipants){
-    const goalId=String(row?.goal_id||""),person=String(row?.person||"");
-    if(!uuidish(goalId)||!["0","1"].includes(person))continue;
-    await ok(db.from("galaxy_goal_participants").upsert({goal_id:goalId,person},{onConflict:"goal_id,person",ignoreDuplicates:true}));
-    restoredGoalParticipants++;
-  }
-
-  for(const row of goalSteps){
-    const id=String(row?.id||""),goalId=String(row?.goal_id||""),title=text(row?.title,300),position=Number(row?.position);
-    if(!uuidish(id)||!uuidish(goalId)||!title||!Number.isInteger(position)||position<0)continue;
-    const completedBy=row.completed_by==null?null:String(row.completed_by);
-    if(completedBy!==null&&!["0","1"].includes(completedBy))continue;
-    await ok(db.from("galaxy_goal_steps").upsert({id,goal_id:goalId,title,position,completed_at:row.completed_at||null,completed_by:completedBy,created_at:row.created_at||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
-    restoredGoalSteps++;
-  }
-
-  for(const row of goalContributions){
-    const id=String(row?.id||""),goalId=String(row?.goal_id||""),contributor=String(row?.contributor||"");
-    if(!uuidish(id)||!uuidish(goalId)||!["0","1"].includes(contributor))continue;
-    let value;try{value=normalizeContribution({amount:row.amount,date:row.contribution_date,note:row.note},contributor);}catch{continue;}
-    await ok(db.from("galaxy_goal_contributions").upsert({id,goal_id:goalId,...value,created_at:row.created_at||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
-    restoredGoalContributions++;
-  }
-
-  for(const row of goalLinks){
-    const id=String(row?.id||""),goalId=String(row?.goal_id||""),itemId=String(row?.item_id||""),relation=String(row?.relation||"");
-    if(!uuidish(id)||!uuidish(goalId)||!uuidish(itemId)||!["note","memory","plan","source-plan","source-wish"].includes(relation))continue;
-    const expected=relation==="note"?"note":relation==="memory"?"memory":relation==="plan"||relation==="source-plan"?"plan":"wish";
-    const linked=(await ok(db.from("galaxy_items").select("id,kind").eq("id",itemId).limit(1)))?.[0];
-    if(!linked||String(linked.kind)!==expected)continue;
-    await ok(db.from("galaxy_goal_links").upsert({id,goal_id:goalId,item_id:itemId,relation,created_at:row.created_at||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
-    restoredGoalLinks++;
-  }
-
-  for(const row of bondGestures){
-    const id=String(row?.id||""),createdBy=String(row?.created_by||"");
-    if(!uuidish(id)||!["0","1"].includes(createdBy))continue;
-    let value;try{value=normalizeCustomGesture(row);}catch{continue;}
-    await ok(db.from("galaxy_bond_gestures").upsert({
-      id,...value,created_by:createdBy,enabled:row.enabled!==false,
-      created_at:row.created_at||new Date().toISOString(),updated_at:row.updated_at||row.created_at||new Date().toISOString()
-    },{onConflict:"id",ignoreDuplicates:true}));
-    restoredBondGestures++;
-  }
-
-  for(const row of daily){
-    const day=String(row?.day||""),person=String(row?.person||""),mood=text(row?.mood,30),answer=text(row?.answer,3000);
-    if(!validDate(day)||!["0","1"].includes(person))continue;
-    const value:any={day,person};
-    if(["feliz","tranquilo","cansado","sensible","abrazo"].includes(mood))value.mood=mood;
-    if(answer)value.answer=answer;
-    if(Object.keys(value).length>2){await ok(db.from("galaxy_daily").upsert(value,{onConflict:"day,person",ignoreDuplicates:true}));restoredDaily++;}
-  }
-
-  for(const row of bond){
-    const id=String(row?.id||""),type=String(row?.type||""),author=String(row?.author||"");
-    if(!uuidish(id)||!["0","1"].includes(author))continue;
-    let data;try{data=validateBond(type,row.data);}catch{continue;}
-    await ok(db.from("galaxy_bond").upsert({id,type,author,data,created:row.created||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
-    restoredBond++;
-  }
-  for(const row of voiceTranscripts){
-    const bondId=String(row?.bond_id||""),transcript=text(row?.transcript,30000);
-    if(!uuidish(bondId)||!transcript)continue;
-    const voice=(await ok(db.from("galaxy_bond").select("id").eq("id",bondId).eq("type","voice").limit(1)))?.[0];
-    if(!voice)continue;
-    await ok(db.from("galaxy_voice_transcripts").upsert({
-      bond_id:bondId,transcript,segments:sanitizeTranscriptSegments(row?.segments||[]),
-      provider:text(row?.provider||"backup",40)||"backup",model:text(row?.model||"restored",120)||"restored",
-      status:"ready",last_error:null,created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()
-    },{onConflict:"bond_id"}));
-    restoredVoiceTranscripts++;
-  }
-  for(const row of photoContext){
-    const path=text(row?.path,300),author=String(row?.author||"");
-    if(!path||!["0","1"].includes(author))continue;
-    await ok(db.from("galaxy_photo_context").upsert({
-      path,author,caption:text(row?.caption,3000)||null,context:text(row?.context,5000)||null,
-      taken_on:validDate(row?.taken_on)?String(row.taken_on):null,
-      created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()
-    },{onConflict:"path"}));
-    restoredPhotoContext++;
-  }
-
-  for(const row of chatMessages){
-    const id=String(row?.id||""),clientId=String(row?.client_id||""),sender=String(row?.sender_person||"");
-    if(!uuidish(id)||!uuidish(clientId)||!["0","1"].includes(sender))continue;
-    const type=CHAT_MESSAGE_TYPES.has(String(row?.message_type||"text"))?String(row.message_type):"text";
-    await ok(db.from("galaxy_chat_messages").upsert({
-      id,client_id:clientId,sender_person:sender,body:text(row?.body,4000),reply_to:uuidish(row?.reply_to)?String(row.reply_to):null,
-      deleted_at:row?.deleted_at||null,created_at:row?.created_at||new Date().toISOString(),client_created_at:row?.client_created_at||row?.created_at||new Date().toISOString(),
-      server_received_at:row?.server_received_at||row?.created_at||new Date().toISOString(),sent_at:row?.sent_at||null,delivered_at:row?.delivered_at||null,read_at:row?.read_at||null,edited_at:row?.edited_at||null,
-      message_type:type,attachment:chatSafeObject(row?.attachment,4096),link_preview:chatSafeObject(row?.link_preview,8192),
-      silent:row?.silent===true,scheduled_at:row?.scheduled_at||null,schedule_state:["pending","processing","sent","cancelled"].includes(String(row?.schedule_state))?String(row.schedule_state):"sent",
-      expires_at:row?.expires_at||null,view_once:row?.view_once===true,opened_at:row?.opened_at||null,
-      effect:["hearts","confetti","stars","kiss","sunflowers","galaxy"].includes(String(row?.effect))?String(row.effect):null,format_version:1
-    },{onConflict:"id",ignoreDuplicates:true}));
-    restoredChat++;
-  }
-  const pollClosedAt=new Map<string,string>();
-  for(const row of chatPolls){
-    const id=String(row?.id||""),createdBy=String(row?.created_by||""),question=text(row?.question,500);
-    if(!uuidish(id)||!["0","1"].includes(createdBy)||!question)continue;
-    const closesAt=row?.closes_at&&Number.isFinite(Date.parse(String(row.closes_at)))?new Date(String(row.closes_at)).toISOString():null;
-    await ok(db.from("galaxy_chat_polls").upsert({
-      id,message_id:uuidish(row?.message_id)?String(row.message_id):null,created_by:createdBy,question,
-      allow_multiple:row?.allow_multiple===true,closes_at:closesAt,closed_at:null,
-      created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()
-    },{onConflict:"id",ignoreDuplicates:true}));
-    if(row?.closed_at&&Number.isFinite(Date.parse(String(row.closed_at))))pollClosedAt.set(id,new Date(String(row.closed_at)).toISOString());
-  }
-  for(const row of chatPollOptions){
-    const id=String(row?.id||""),pollId=String(row?.poll_id||""),label=text(row?.label,240),position=Number(row?.position);
-    if(!uuidish(id)||!uuidish(pollId)||!label||!Number.isInteger(position)||position<0||position>9)continue;
-    await ok(db.from("galaxy_chat_poll_options").upsert({id,poll_id:pollId,label,position,created_at:row?.created_at||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
-  }
-  for(const row of chatPollVotes){
-    const pollId=String(row?.poll_id||""),optionId=String(row?.option_id||""),person=String(row?.person||"");
-    if(!uuidish(pollId)||!uuidish(optionId)||!["0","1"].includes(person))continue;
-    try{await ok(db.from("galaxy_chat_poll_votes").upsert({poll_id:pollId,option_id:optionId,person,voted_at:row?.voted_at||new Date().toISOString()},{onConflict:"poll_id,option_id,person",ignoreDuplicates:true}));}catch{}
-  }
-  for(const [id,closedAt] of pollClosedAt)await ok(db.from("galaxy_chat_polls").update({closed_at:closedAt}).eq("id",id).is("closed_at",null));
-
-  for(const row of chatChecklists){
-    const id=String(row?.id||""),createdBy=String(row?.created_by||""),title=text(row?.title,300);
-    if(!uuidish(id)||!["0","1"].includes(createdBy)||!title)continue;
-    await ok(db.from("galaxy_chat_checklists").upsert({
-      id,message_id:uuidish(row?.message_id)?String(row.message_id):null,created_by:createdBy,title,
-      version:Math.max(1,Number(row?.version)||1),created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()
-    },{onConflict:"id",ignoreDuplicates:true}));
-  }
-  for(const row of chatChecklistItems){
-    const id=String(row?.id||""),checklistId=String(row?.checklist_id||""),label=text(row?.label,300),position=Number(row?.position),updatedBy=row?.updated_by==null?null:String(row.updated_by);
-    if(!uuidish(id)||!uuidish(checklistId)||!label||!Number.isInteger(position)||position<0||position>99||(updatedBy!==null&&!["0","1"].includes(updatedBy)))continue;
-    await ok(db.from("galaxy_chat_checklist_items").upsert({
-      id,checklist_id:checklistId,label,position,checked:row?.checked===true,updated_by:updatedBy,version:Math.max(1,Number(row?.version)||1),
-      created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()
-    },{onConflict:"id",ignoreDuplicates:true}));
-  }
-  for(const row of chatEntityRefs){
-    const messageId=String(row?.message_id||"");
-    const normalized=chatNormalizeEntityRef({cardType:row?.card_type,entityKind:row?.entity_kind,entityId:row?.entity_id});
-    const createdBy=String(row?.created_by||"");
-    if(!uuidish(messageId)||!normalized||!["0","1"].includes(createdBy))continue;
-    await ok(db.from("galaxy_chat_entity_refs").upsert({
-      message_id:messageId,card_type:normalized.cardType,entity_kind:normalized.entityKind,entity_id:normalized.entityId,
-      snapshot:chatSafeObject(row?.snapshot,2048),created_by:createdBy,created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()
-    },{onConflict:"message_id",ignoreDuplicates:true}));
-  }
-
-  for(const row of chatAttachments){
-    const id=String(row?.id||""),messageId=String(row?.message_id||""),kind=String(row?.kind||"file");
-    if(!uuidish(id)||!uuidish(messageId)||!["photo","video","audio","file"].includes(kind))continue;
-    await ok(db.from("galaxy_chat_attachments").upsert({id,message_id:messageId,kind,bucket:text(row?.bucket||"galaxy-chat-media",80)||"galaxy-chat-media",path:text(row?.path,400),mime:text(row?.mime,120),name:text(row?.name,240),size_bytes:Math.max(0,Number(row?.size_bytes)||0),duration_ms:row?.duration_ms||null,width:row?.width||null,height:row?.height||null,thumbnail_path:text(row?.thumbnail_path,400)||null,caption:text(row?.caption,1000),media_quality:["optimized","hd","original"].includes(String(row?.media_quality))?String(row.media_quality):"optimized",waveform:Array.isArray(row?.waveform)?row.waveform.slice(0,256):[],created_at:row?.created_at||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
-  }
-  for(const row of chatReactions)if(uuidish(row?.message_id)&&["0","1"].includes(String(row?.person))&&CHAT_REACTIONS.has(String(row?.emoji)))await ok(db.from("galaxy_chat_reactions").upsert({message_id:String(row.message_id),person:String(row.person),emoji:String(row.emoji),created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()},{onConflict:"message_id,person",ignoreDuplicates:true}));
-  for(const row of chatPins)if(uuidish(row?.message_id)&&["0","1"].includes(String(row?.pinned_by)))await ok(db.from("galaxy_chat_pins").upsert({message_id:String(row.message_id),pinned_by:String(row.pinned_by),pinned_at:row?.pinned_at||new Date().toISOString()},{onConflict:"message_id",ignoreDuplicates:true}));
-  for(const row of chatFavorites)if(uuidish(row?.message_id)&&["0","1"].includes(String(row?.person)))await ok(db.from("galaxy_chat_favorites").upsert({message_id:String(row.message_id),person:String(row.person),saved_at:row?.saved_at||new Date().toISOString()},{onConflict:"message_id,person",ignoreDuplicates:true}));
-  for(const row of chatPreferences){
-    const person=String(row?.person||"");if(!["0","1"].includes(person))continue;
-    await ok(db.from("galaxy_chat_preferences").upsert({person,partner_nickname:text(row?.partner_nickname,40)||null,theme:["galaxy","sunflowers","night","cyberpunk","romantic","minimal"].includes(String(row?.theme))?String(row.theme):"galaxy",notification_privacy:["full","name","generic"].includes(String(row?.notification_privacy))?String(row.notification_privacy):"full",show_read:row?.show_read!==false,show_last_seen:row?.show_last_seen!==false,show_typing:row?.show_typing!==false,default_ttl_seconds:Number(row?.default_ttl_seconds)||null,updated_at:new Date().toISOString()},{onConflict:"person"}));
-  }
-  for(const row of chatTranscripts)if(uuidish(row?.attachment_id)&&["0","1"].includes(String(row?.requested_by))&&text(row?.transcript,30000))await ok(db.from("galaxy_chat_transcripts").upsert({attachment_id:String(row.attachment_id),requested_by:String(row.requested_by),transcript:text(row.transcript,30000),segments:sanitizeTranscriptSegments(row?.segments||[]),provider:text(row?.provider||"backup",40)||"backup",model:text(row?.model||"restored",120)||"restored",created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()},{onConflict:"attachment_id"}));
-  for(const row of chatTranslations)if(uuidish(row?.message_id)&&["0","1"].includes(String(row?.person))&&text(row?.target_language,24)&&text(row?.translated_text,8000))await ok(db.from("galaxy_chat_translations").upsert({message_id:String(row.message_id),person:String(row.person),target_language:text(row.target_language,24),translated_text:text(row.translated_text,8000),provider:text(row?.provider||"backup",40)||"backup",model:text(row?.model||"restored",120)||"restored",created_at:row?.created_at||new Date().toISOString()},{onConflict:"message_id,person,target_language",ignoreDuplicates:true}));
-  for(const row of chatStickers){
-    if(!uuidish(row?.id)||!["0","1"].includes(String(row?.created_by))||!text(row?.path,400))continue;
-    await ok(db.from("galaxy_chat_stickers").upsert({id:String(row.id),created_by:String(row.created_by),bucket:text(row?.bucket||"galaxy-chat-media",80)||"galaxy-chat-media",path:text(row.path,400),name:text(row?.name||"Sticker",80)||"Sticker",created_at:row?.created_at||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
-  }
-  for(const row of chatStickerFavorites)if(uuidish(row?.sticker_id)&&["0","1"].includes(String(row?.person)))await ok(db.from("galaxy_chat_sticker_favorites").upsert({sticker_id:String(row.sticker_id),person:String(row.person),last_used_at:row?.last_used_at||null,saved_at:row?.saved_at||new Date().toISOString()},{onConflict:"sticker_id,person",ignoreDuplicates:true}));
-  for(const row of chatStickerRecents)if(uuidish(row?.sticker_id)&&["0","1"].includes(String(row?.person)))await ok(db.from("galaxy_chat_sticker_recents").upsert({sticker_id:String(row.sticker_id),person:String(row.person),last_used_at:row?.last_used_at||new Date().toISOString()},{onConflict:"sticker_id,person",ignoreDuplicates:true}));
-  for(const row of chatLiveLocations){
-    const id=String(row?.id||""),sender=String(row?.sender_person||"");
-    if(!uuidish(id)||!["0","1"].includes(sender))continue;
-    const duration=row?.duration_seconds==null?null:Number(row.duration_seconds);
-    if(duration!==null&&![900,3600,28800].includes(duration))continue;
-    await ok(db.from("galaxy_chat_live_locations").upsert({
-      id,sender_person:sender,message_id:uuidish(row?.message_id)?String(row.message_id):null,duration_seconds:duration,
-      started_at:row?.started_at||new Date().toISOString(),ends_at:row?.ends_at||null,stopped_at:row?.stopped_at||null,created_at:row?.created_at||new Date().toISOString()
-    },{onConflict:"id",ignoreDuplicates:true}));
-  }
-  for(const row of chatAlbums){
-    if(!uuidish(row?.id)||!["0","1"].includes(String(row?.created_by))||!text(row?.name,80))continue;
-    await ok(db.from("galaxy_chat_albums").upsert({id:String(row.id),name:text(row.name,80),cover_attachment_id:uuidish(row?.cover_attachment_id)?String(row.cover_attachment_id):null,album_date:validDate(row?.album_date)?String(row.album_date):null,created_by:String(row.created_by),created_at:row?.created_at||new Date().toISOString(),updated_at:row?.updated_at||new Date().toISOString()},{onConflict:"id",ignoreDuplicates:true}));
-  }
-  for(const row of chatAlbumItems)if(uuidish(row?.album_id)&&uuidish(row?.attachment_id)&&["0","1"].includes(String(row?.added_by)))await ok(db.from("galaxy_chat_album_items").upsert({album_id:String(row.album_id),attachment_id:String(row.attachment_id),added_by:String(row.added_by),added_at:row?.added_at||new Date().toISOString()},{onConflict:"album_id,attachment_id",ignoreDuplicates:true}));
-
-  return json({ok:true,restored:{items:restoredItems,daily:restoredDaily,bond:restoredBond,bondGestures:restoredBondGestures,places:restoredPlaces,goals:restoredGoals,goalParticipants:restoredGoalParticipants,goalSteps:restoredGoalSteps,goalLinks:restoredGoalLinks,goalContributions:restoredGoalContributions,voiceTranscripts:restoredVoiceTranscripts,photoContext:restoredPhotoContext,chatMessages:restoredChat,entityRefs:chatEntityRefs.length,polls:chatPolls.length,checklists:chatChecklists.length},restoredGoals});
+ await device(req);
+ const backup=backupPayloadDescriptor(body?.backup);
+ if(!backup||backup.format!=="nuestra-galaxia-backup")return json({error:"La copia no pertenece a Nuestra Galaxia.",code:"BACKUP_FORMAT_INVALID"},400);
+ const version=Number(backup.version);
+ if(version!==BACKUP_VERSION){
+  if([1,2,3,4].includes(version))return json({error:"Este backup usa un formato anterior sin garantías de integridad. Crea una copia v5 antes de restaurar.",code:"BACKUP_LEGACY_UNSAFE"},409);
+  return json({error:"Versión de backup no compatible.",code:"BACKUP_VERSION_UNSUPPORTED"},400);
+ }
+ if(!uuidish(backup.backupId)||backup?.manifest?.schemaVersion!==BACKUP_SCHEMA_VERSION)return json({error:"Manifiesto v5 malformado o incompatible.",code:"BACKUP_MANIFEST_INVALID"},400);
+ let created:any[]=[];
+ try{
+  const payload=await backupLoadPayload(backup);
+  await backupVerifySnapshots(payload);
+  try{created=await backupRestoreMedia(payload);}
+  catch(e:any){created=Array.isArray(e?.created)?e.created:created;throw e;}
+  const restored=await ok(db.rpc("galaxy_backup_restore_v5",{payload}));
+  return json({ok:true,verified:restored?.verified===true,restored:restored?.counts||payload.manifest.counts,media:{verified:payload.media.length,created:created.length}});
+ }catch(e){
+  const cleanupComplete=await backupRemoveObjects(created);
+  const message=e instanceof Error?e.message:String(e);
+  console.error("backup-restore",{backupId:String(backup.backupId||""),message,cleanupComplete});
+  return json({
+   error:"La restauración no pudo verificarse y no se reportó como exitosa.",
+   detail:text(message,500),code:"BACKUP_RESTORE_FAILED",mediaRollbackComplete:cleanupComplete
+  },409);
+ }
 }
 
 async function recordParticipation(person:string){
@@ -3698,7 +3701,7 @@ async function mediaList(req:Request,body:any){
 async function mediaDelete(req:Request,body:any){
   const d=await device(req),kind=String(body.kind||""),path=text(body.path,400);
   const bucket=kind==="photo"?"galaxy-photos":kind==="music"?"galaxy-music":kind==="voice"?"galaxy-voice":"";
-  if(!bucket||!path)return json({error:"Archivo no válido."},400);
+  if(!bucket||!path||path.startsWith("__backup/"))return json({error:"Archivo no válido."},400);
   if(kind==="voice"&&!path.startsWith(String(d.person)+"/"))return json({error:"Solo puedes borrar tus audios."},403);
   await ok(db.storage.from(bucket).remove([path]));
   if(kind==="photo"){await ok(db.from("galaxy_bond_config").update({photo_path:""}).eq("photo_path",path));await ok(db.from("galaxy_photo_context").delete().eq("path",path));await intelligenceBestEffort("photo-delete",()=>deleteIntelligenceSource("photo",path));}
