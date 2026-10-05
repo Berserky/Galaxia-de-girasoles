@@ -11,6 +11,7 @@
     "dev": "node --env-file-if-exists=.env app/server.mjs --demo",
     "test": "node --test tests/*.test.mjs",
     "build": "node scripts/build-pages.mjs",
-    "bench:chat4:phase0": "node scripts/chat-4-phase0-baseline.mjs"
+    "bench:chat4:phase0": "node scripts/chat-4-phase0-baseline.mjs",
+    "bench:chat4:phase1": "node scripts/chat-4-phase1-message-engine.mjs"
   }
 }
