@@ -265,11 +265,14 @@ jobs:
     name: Candidate staging smoke
     needs: [build_candidate, upgrade_install_smoke]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     env:
-      QA_STAGING_EDGE_URL: ${{ vars.QA_STAGING_EDGE_URL }}
-      QA_STAGING_PUBLISHABLE_KEY: ${{ secrets.QA_STAGING_PUBLISHABLE_KEY }}
-      QA_STAGING_TOKEN_0: ${{ secrets.QA_STAGING_TOKEN_0 }}
-      QA_STAGING_TOKEN_1: ${{ secrets.QA_STAGING_TOKEN_1 }}
+      QA_STAGING_EDGE_URL: https://vwtcncvmwjfywrzjmskw.supabase.co/functions/v1/android-companion
+      QA_STAGING_PUBLISHABLE_KEY: sb_publishable_H2wISjcUmDX3FmL0j6IxEw_ntJwm_JG
+      QA_BOOTSTRAP_URL: https://vwtcncvmwjfywrzjmskw.supabase.co/functions/v1/qa-github-bootstrap
+      QA_OIDC_AUDIENCE: nuestra-galaxia-qa
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v5
@@ -278,6 +281,26 @@ jobs:
           path: candidate
       - name: Verify downloaded candidate checksum
         run: (cd candidate && sha256sum -c NuestraGalaxia.apk.sha256)
+      - name: Obtain ephemeral QA identities through GitHub OIDC
+        shell: bash
+        run: |
+          set -euo pipefail
+          OIDC_RESPONSE=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${QA_OIDC_AUDIENCE}")
+          OIDC_TOKEN=$(jq -r '.value' <<<"$OIDC_RESPONSE")
+          test -n "$OIDC_TOKEN"
+          test "$OIDC_TOKEN" != "null"
+          BOOTSTRAP=$(curl -fsS -X POST "$QA_BOOTSTRAP_URL" \
+            -H "authorization: Bearer $OIDC_TOKEN" \
+            -H "content-type: application/json" \
+            --data "$(jq -nc --arg runId "$GITHUB_RUN_ID" --arg sourceSha "$GITHUB_SHA" '{runId:$runId,sourceSha:$sourceSha}')")
+          TOKEN0=$(jq -r '.token0' <<<"$BOOTSTRAP")
+          TOKEN1=$(jq -r '.token1' <<<"$BOOTSTRAP")
+          test -n "$TOKEN0" && test "$TOKEN0" != "null"
+          test -n "$TOKEN1" && test "$TOKEN1" != "null"
+          echo "::add-mask::$TOKEN0"
+          echo "::add-mask::$TOKEN1"
+          echo "QA_STAGING_TOKEN_0=$TOKEN0" >> "$GITHUB_ENV"
+          echo "QA_STAGING_TOKEN_1=$TOKEN1" >> "$GITHUB_ENV"
       - name: Strict remote staging smoke
         shell: bash
         run: |
@@ -289,6 +312,18 @@ jobs:
           test -n "$QA_STAGING_TOKEN_1"
           node scripts/qa-phase5-staging.mjs 2>&1 | tee candidate-evidence/staging-smoke.txt
           grep -q '^VERIFIED: remote staging dual-user concurrency/realtime/map/backup' candidate-evidence/staging-smoke.txt
+      - name: Revoke ephemeral QA identities
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          OIDC_RESPONSE=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${QA_OIDC_AUDIENCE}")
+          OIDC_TOKEN=$(jq -r '.value' <<<"$OIDC_RESPONSE")
+          CLEANUP=$(curl -fsS -X POST "$QA_BOOTSTRAP_URL" \
+            -H "authorization: Bearer $OIDC_TOKEN" \
+            -H "content-type: application/json" \
+            --data "$(jq -nc --arg runId "$GITHUB_RUN_ID" --arg sourceSha "$GITHUB_SHA" '{action:"cleanup",runId:$runId,sourceSha:$sourceSha}')")
+          test "$(jq -r '.ok' <<<"$CLEANUP")" = "true"
       - name: Release gate ledger
         run: |
           cat > candidate-evidence/release-gates.json <<EOF
