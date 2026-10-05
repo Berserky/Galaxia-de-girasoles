@@ -557,7 +557,7 @@ public final class MainActivity extends FragmentActivity {
                 String id=idIx>=0?cursor.getString(idIx):null,mime=mimeIx>=0?cursor.getString(mimeIx):null;
                 if(id==null)continue;
                 if(DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)){collectDriveImages(tree,id,out,depth+1);continue;}
-                if(!Set.of("image/jpeg","image/png","image/webp").contains(mime))continue;
+                if(!Set.of("image/jpeg","image/png","image/webp","image/heic","image/heif").contains(mime))continue;
                 long size=sizeIx>=0&&!cursor.isNull(sizeIx)?cursor.getLong(sizeIx):-1;
                 if(size>12L*1024L*1024L)continue;
                 long modified=modifiedIx>=0&&!cursor.isNull(modifiedIx)?cursor.getLong(modifiedIx):0;
