@@ -2876,19 +2876,73 @@ async function backupCopySnapshots(backupId:string,originals:any[]){
 function backupPayloadDescriptor(backup:any){
  return backup&&typeof backup==="object"&&!Array.isArray(backup)?backup:null;
 }
+function backupErrorMessage(error:any){
+ if(error instanceof Error)return error.message;
+ if(error&&typeof error==="object"){
+  const parts=[error.message,error.details,error.hint,error.code].map((x:any)=>String(x||"").trim()).filter(Boolean);
+  if(parts.length)return parts.join(" | ");
+  try{return JSON.stringify(error);}catch{}
+ }
+ return String(error||"Error desconocido");
+}
+async function backupPrivacySnapshot(sections:any,person:string){
+ const safe=structuredClone(sections);
+ const privacyLocations=await ok(db.from("galaxy_locations").select("person,sharing,latitude,longitude,updated_at").order("person"));
+ const originalCapsules=(sections?.items||[]).filter((row:any)=>row?.kind==="capsule");
+ const hiddenCapsules=new Set(
+  originalCapsules
+   .filter((row:any)=>chatCapsuleAccess(row?.data||{},person,privacyLocations||[]).locked)
+   .map((row:any)=>String(row.id))
+ );
+ safe.items=await Promise.all((safe.items||[]).map(async(row:any)=>{
+  if(row?.kind!=="capsule")return row;
+  const sanitized=await privacyItemResponse(row,person);
+  if(sanitized?.data){
+   delete sanitized.data.photoUrl;
+   delete sanitized.data.audioUrl;
+   delete sanitized.data.song;
+  }
+  return sanitized;
+ }));
+ const hiddenBondIds=new Set(
+  (safe.bond||[])
+   .filter((row:any)=>row?.type==="voice"&&hiddenCapsules.has(String(row?.data?.referenceId||"")))
+   .map((row:any)=>String(row.id))
+ );
+ safe.bond=(safe.bond||[]).filter((row:any)=>!hiddenBondIds.has(String(row?.id)));
+ safe.voiceTranscripts=(safe.voiceTranscripts||[]).filter((row:any)=>!hiddenBondIds.has(String(row?.bond_id)));
+ const capsuleContext={
+  capsules:originalCapsules,
+  locations:(privacyLocations||[]).filter((row:any)=>String(row?.person)===person)
+ };
+ safe.photoContext=(safe.photoContext||[]).filter((row:any)=>
+  capsuleObjectVisible("galaxy-photos",String(row?.path||""),person,capsuleContext)
+ );
+ return {sections:safe,capsuleContext};
+}
+function backupVisibleMedia(rows:any[],person:string,capsuleContext:any){
+ return (rows||[]).filter((row:any)=>{
+  const bucket=String(row?.bucket||"");
+  if(bucket!=="galaxy-photos"&&bucket!=="galaxy-voice")return true;
+  return capsuleObjectVisible(bucket,String(row?.path||""),person,capsuleContext);
+ });
+}
 async function backupExport(req:Request){
  const d=await device(req),person=String(d.person),backupId=crypto.randomUUID(),exportedAt=new Date().toISOString();
  await chatReconcileDeletedMedia();
  let snapshots:any[]=[];
  let payloadPath="";
  try{
-  const sections=await ok(db.rpc("galaxy_backup_export_v5"));
+  const rawSections=await ok(db.rpc("galaxy_backup_export_v5"));
+  const privacy=await backupPrivacySnapshot(rawSections,person);
+  const sections=privacy.sections;
   const counts=backupCounts(sections);
-  const before=await backupAllOriginalMedia();
+  const beforeAll=await backupAllOriginalMedia();
+  const before=backupVisibleMedia(beforeAll,person,privacy.capsuleContext);
   backupAssertMediaReferences(sections,before);
   snapshots=await backupCopySnapshots(backupId,before);
-  const after=await backupAllOriginalMedia();
-  if(backupObjectFingerprint(before)!==backupObjectFingerprint(after))throw new Error("Storage cambió durante el backup; vuelve a intentarlo para obtener un snapshot consistente.");
+  const afterAll=await backupAllOriginalMedia();
+  if(backupObjectFingerprint(beforeAll)!==backupObjectFingerprint(afterAll))throw new Error("Storage cambió durante el backup; vuelve a intentarlo para obtener un snapshot consistente.");
   const mediaBytes=snapshots.reduce((sum:number,x:any)=>sum+(Number(x.size)||0),0);
   const manifest={
    schemaVersion:BACKUP_SCHEMA_VERSION,
@@ -2940,7 +2994,7 @@ async function backupExport(req:Request){
  }catch(e){
   if(payloadPath)await backupRemoveObjects([{bucket:BACKUP_PAYLOAD_BUCKET,path:payloadPath}]);
   if(snapshots.length)await backupRemoveObjects(snapshots.map((x:any)=>({bucket:x.bucket,path:x.snapshotPath})));
-  const message=e instanceof Error?e.message:String(e);
+  const message=backupErrorMessage(e);
   console.error("backup-export",{backupId,message});
   return json({error:"No se pudo crear un backup verificable.",detail:text(message,500),code:"BACKUP_EXPORT_FAILED"},409);
  }
@@ -3037,11 +3091,12 @@ async function backupRestore(req:Request,body:any){
   await backupVerifySnapshots(payload);
   try{created=await backupRestoreMedia(payload);}
   catch(e:any){created=Array.isArray(e?.created)?e.created:created;throw e;}
-  const restored=await ok(db.rpc("galaxy_backup_restore_v5",{payload}));
+  const {data:restored,error:restoreError}=await db.rpc("galaxy_backup_restore_v5",{payload});
+  if(restoreError)throw new Error("DB restore: "+backupErrorMessage(restoreError));
   return json({ok:true,verified:restored?.verified===true,restored:restored?.counts||payload.manifest.counts,media:{verified:payload.media.length,created:created.length}});
  }catch(e){
   const cleanupComplete=await backupRemoveObjects(created);
-  const message=e instanceof Error?e.message:String(e);
+  const message=backupErrorMessage(e);
   console.error("backup-restore",{backupId:String(backup.backupId||""),message,cleanupComplete});
   return json({
    error:"La restauración no pudo verificarse y no se reportó como exitosa.",
