@@ -1,0 +1,82 @@
+name: Chat Correctness DB
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'supabase/migrations/20261005023000_qa_phase2_chat_correctness.sql'
+      - 'supabase/rollbacks/20261005023000_qa_phase2_chat_correctness_rollback.sql'
+      - 'supabase/schema.sql'
+      - 'supabase/functions/android-companion/**'
+      - 'android/app/src/main/assets/mobile/app.js'
+      - 'tests/chat-correctness-**'
+      - 'tests/android-chat-universe.test.mjs'
+      - 'tests/migration-history.test.mjs'
+      - 'tests/production-migration-manifest.json'
+      - '.github/workflows/chat-correctness-db.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chat-correctness-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  chat-correctness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: 'v2.x'
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.119.0
+
+      - name: Verify canonical migration history
+        run: node --test tests/migration-history.test.mjs
+
+      - name: Replay clean database through Phase 2
+        run: |
+          if [ ! -f supabase/config.toml ]; then
+            supabase init
+          fi
+          supabase start
+
+      - name: Validate deep search and deterministic mutations
+        run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/chat-correctness-db.sql
+
+      - name: Validate concurrency and idempotency
+        run: DB_URL='postgresql://postgres:postgres@127.0.0.1:54322/postgres' bash tests/chat-correctness-concurrency.sh
+
+      - name: Typecheck Android companion Edge Function
+        run: deno check --node-modules-dir=auto supabase/functions/android-companion/index.ts
+
+      - name: Run Node regression suite
+        run: npm test
+
+      - name: Validate Phase 2 rollback and re-apply
+        run: |
+          DB='postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+          psql "$DB" -v ON_ERROR_STOP=1 -f supabase/rollbacks/20261005023000_qa_phase2_chat_correctness_rollback.sql
+          test "$(psql "$DB" -Atqc "select to_regprocedure('public.galaxy_chat_search_page(text,text,text,text,date,bigint,integer)') is null")" = "t"
+          test "$(psql "$DB" -Atqc "select to_regprocedure('public.galaxy_chat_poll_mutate(uuid,text,text,uuid,boolean)') is null")" = "t"
+          test "$(psql "$DB" -Atqc "select to_regprocedure('public.galaxy_chat_poll_winner(uuid)') is null")" = "t"
+          test "$(psql "$DB" -Atqc "select to_regprocedure('public.galaxy_chat_checklist_set(uuid,uuid,text,boolean,integer)') is null")" = "t"
+          psql "$DB" -v ON_ERROR_STOP=1 -f supabase/migrations/20261005023000_qa_phase2_chat_correctness.sql
+          psql "$DB" -v ON_ERROR_STOP=1 -f tests/chat-correctness-db.sql
+
+      - name: Stop isolated Supabase
+        if: always()
+        run: supabase stop --no-backup
