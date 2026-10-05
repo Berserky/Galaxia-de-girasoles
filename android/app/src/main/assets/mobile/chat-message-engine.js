@@ -138,8 +138,20 @@ function create(options={}){
   let messages;
   if(direction==='latest'||direction==='around')messages=[...incoming].sort(compareMessages);
   else messages=mergeMessages(existing,incoming);
-  let nextBeforeSeq=result?.nextBeforeSeq??current?.nextBeforeSeq??null;
-  let nextAfterSeq=result?.nextAfterSeq??current?.nextAfterSeq??null;
+  const hasBefore=Object.prototype.hasOwnProperty.call(result||{},'nextBeforeSeq');
+  const hasAfter=Object.prototype.hasOwnProperty.call(result||{},'nextAfterSeq');
+  let nextBeforeSeq=current?.nextBeforeSeq??null,nextAfterSeq=current?.nextAfterSeq??null;
+  if(direction==='latest'||direction==='around'){
+   nextBeforeSeq=hasBefore?result.nextBeforeSeq:null;
+   nextAfterSeq=hasAfter?result.nextAfterSeq:null;
+  }else if(direction==='older'){
+   if(hasBefore)nextBeforeSeq=result.nextBeforeSeq;
+  }else if(direction==='newer'){
+   if(hasAfter)nextAfterSeq=result.nextAfterSeq;
+  }else{
+   if(nextBeforeSeq==null&&hasBefore)nextBeforeSeq=result.nextBeforeSeq;
+   if(nextAfterSeq==null&&hasAfter)nextAfterSeq=result.nextAfterSeq;
+  }
   const maxCache=Math.max(Number(config.pageSize||60)*3,Number(config.maxCache||420));
   if(messages.length>maxCache){
    if(direction==='older'){
