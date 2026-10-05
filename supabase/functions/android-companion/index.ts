@@ -1240,20 +1240,32 @@ async function chatVisibleRows(person:string,query:any){
 }
 
 async function chatState(req:Request,body:any={}){
- const d=await device(req),person=String(d.person),target=person==="0"?"1":"0",limit=clampInt(body.limit,20,100,60),beforeSeq=Number(body.beforeSeq||0),aroundId=text(body.aroundId||"",80);
+ const d=await device(req),person=String(d.person),target=person==="0"?"1":"0",limit=clampInt(body.limit,20,100,60);
+ const beforeSeq=Number(body.beforeSeq||0),afterSeq=Number(body.afterSeq||0),aroundId=text(body.aroundId||"",80),messageId=text(body.messageId||"",80);
+ if(beforeSeq>0&&afterSeq>0)return json({error:"Cursor de chat inválido."},400);
  await chatReconcileDeletedMedia();
- let query:any;
- if(aroundId){
+ let query:any,mode="latest";
+ if(messageId){
+  mode="single";
+  query=db.from("galaxy_chat_messages").select("*").eq("id",messageId).limit(1);
+ }else if(aroundId){
+  mode="around";
   const anchor=(await ok(db.from("galaxy_chat_messages").select("server_seq").eq("id",aroundId).is("deleted_at",null).limit(1)))?.[0];
   if(!anchor)return json({error:"Mensaje no encontrado."},404);
   const seq=Number(anchor.server_seq);
   query=db.from("galaxy_chat_messages").select("*").gte("server_seq",Math.max(1,seq-35)).lte("server_seq",seq+35).order("server_seq",{ascending:true}).limit(100);
+ }else if(Number.isFinite(afterSeq)&&afterSeq>0){
+  mode="after";
+  query=db.from("galaxy_chat_messages").select("*").gt("server_seq",afterSeq).order("server_seq",{ascending:true}).limit(Math.min(200,limit+50));
  }else{
+  mode=Number.isFinite(beforeSeq)&&beforeSeq>0?"before":"latest";
   query=db.from("galaxy_chat_messages").select("*").order("server_seq",{ascending:false}).limit(Math.min(200,limit+50));
-  if(Number.isFinite(beforeSeq)&&beforeSeq>0)query=query.lt("server_seq",beforeSeq);
+  if(mode==="before")query=query.lt("server_seq",beforeSeq);
  }
  let rows=await chatVisibleRows(person,query);
- if(!aroundId)rows=rows.slice(0,limit).reverse();
+ if(mode==="latest"||mode==="before")rows=rows.slice(0,limit).reverse();
+ else if(mode==="after")rows=rows.slice(0,limit);
+ else if(mode==="single")rows=rows.slice(0,1);
  const incoming=rows.filter((x:any)=>String(x.sender_person)!==person&&String(x.schedule_state||"sent")==="sent"&&!x.delivered_at&&!x.deleted_at).map((x:any)=>String(x.id));
  const deliveredAt=new Date().toISOString();
  if(incoming.length){
@@ -1262,11 +1274,15 @@ async function chatState(req:Request,body:any={}){
   await chatSignal(d,target,String(incoming[incoming.length-1]||""));
  }
  const messages=await chatHydrate(rows,person);
+ const seqs=messages.map((x:any)=>Number(x.server_seq||0)).filter((x:number)=>Number.isFinite(x)&&x>0);
+ const minLoaded=seqs.length?Math.min(...seqs):0,maxLoaded=seqs.length?Math.max(...seqs):0;
+ if(mode==="single")return json({messages,cursorMode:mode});
  const {count,error}=await db.from("galaxy_chat_messages").select("id",{count:"exact",head:true}).neq("sender_person",person).is("read_at",null).is("deleted_at",null);
  if(error)throw error;
- const nextBeforeSeq=!aroundId&&messages.length>=limit?Math.min(...messages.map((x:any)=>Number(x.server_seq||Number.MAX_SAFE_INTEGER))):null;
+ const nextBeforeSeq=(mode==="latest"||mode==="before")&&messages.length>=limit?minLoaded:(mode==="around"&&minLoaded?minLoaded:null);
+ const nextAfterSeq=mode==="after"?(messages.length>=limit?maxLoaded:null):(mode==="around"&&maxLoaded?maxLoaded:null);
  const pins=await ok(db.from("galaxy_chat_pins").select("message_id,pinned_by,pinned_at").order("pinned_at",{ascending:false}).limit(100));
- return json({messages,unread:Number(count||0),nextBeforeSeq,partnerPresence:await chatPartnerPresence(person),pinnedIds:(pins||[]).map((x:any)=>String(x.message_id))});
+ return json({messages,unread:Number(count||0),nextBeforeSeq:nextBeforeSeq||null,nextAfterSeq:nextAfterSeq||null,cursorMode:mode,partnerPresence:await chatPartnerPresence(person),pinnedIds:(pins||[]).map((x:any)=>String(x.message_id))});
 }
 async function chatAttachmentClaimProblem(files:any[],person:string,messageId:string=""){
  const claims=new Map<string,Set<string>>();
