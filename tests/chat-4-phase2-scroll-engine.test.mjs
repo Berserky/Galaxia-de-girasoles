@@ -238,3 +238,17 @@ test('phase0 spontaneous jump regression is encoded as anchor restoration',()=>{
  engine.restoreState(el,state,{reason:'render-preserve'});
  assert.equal(engine.captureAnchor(el).messageId,old);
 });
+
+
+test('anchor fallback survives deletion of the primary visible message',()=>{
+ const {engine}=runtime(),el=fakeList(30);
+ el.scrollTop=1000;engine.bind(el);
+ const anchor=engine.captureAnchor(el),fallback=anchor.fallbacks?.[0];
+ assert.ok(fallback?.messageId);
+ el._rows=el._rows.filter(row=>row.dataset.chatId!==anchor.messageId);
+ el.scrollHeight=el._rows.length*100;
+ assert.ok(engine.restoreAnchor(el,anchor,'delete-race'));
+ const after=engine.captureAnchor(el);
+ assert.equal(after.messageId,fallback.messageId);
+ assert.ok(Math.abs(after.viewportOffset-fallback.viewportOffset)<1);
+});
