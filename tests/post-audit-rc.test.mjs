@@ -74,3 +74,14 @@ test('candidate staging uses GitHub OIDC and ephemeral QA identities',()=>{
   assert.equal(workflow.includes('secrets.QA_STAGING_TOKEN_0'),false);
   assert.equal(workflow.includes('secrets.QA_STAGING_TOKEN_1'),false);
 });
+
+
+test('upgrade smoke is executed by Bash with pipefail preserved',()=>{
+  const workflow=read('.github/workflows/android-release-candidate.yml');
+  const script=read('scripts/qa-candidate-upgrade.sh');
+  assert.match(workflow,/script: bash scripts\/qa-candidate-upgrade\.sh/);
+  assert.match(script,/^#!\/usr\/bin\/env bash/m);
+  assert.match(script,/set -euo pipefail/);
+  assert.match(script,/adb install previous\/NuestraGalaxia\.apk \| tee/);
+  assert.match(script,/adb install -r candidate\/NuestraGalaxia\.apk \| tee -a/);
+});
