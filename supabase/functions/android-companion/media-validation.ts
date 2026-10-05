@@ -104,7 +104,9 @@ export function sniffMedia(bytes:Uint8Array,declaredMime=""):MediaInspection{
 
 function compatible(actual:string,declared:string){
   if(!declared||declared===OCTET)return true;
-  return canonicalMime(actual)===canonicalMime(declared);
+  const real=canonicalMime(actual),hint=canonicalMime(declared);
+  if((real===DOCX_MIME||real===XLSX_MIME)&&hint==="application/zip")return true;
+  return real===hint;
 }
 function allowed(kind:string,mime:string){
   const image=new Set(["image/jpeg","image/png","image/webp"]);
@@ -132,9 +134,11 @@ export function validateUploadMedia(kind:string,declaredMime:string,originalName
     return {ok:false,status:415,message:"El contenido real del archivo no es compatible con este tipo de envío."};
   }
   if(inspected.mime===OCTET){
-    return kind==="chat-file"
-      ?{ok:true,mime:OCTET,extension:safeOriginalExtension(originalName)}
-      :{ok:false,status:415,message:"No pudimos reconocer el formato real del archivo."};
+    if(kind!=="chat-file")return {ok:false,status:415,message:"No pudimos reconocer el formato real del archivo."};
+    if(declared!==OCTET&&canonicalExt[declared]){
+      return {ok:false,status:415,message:"El MIME declarado no coincide con el contenido real del archivo."};
+    }
+    return {ok:true,mime:OCTET,extension:safeOriginalExtension(originalName)};
   }
   if(!compatible(inspected.mime,declared)){
     return {ok:false,status:415,message:"El MIME declarado no coincide con el contenido real del archivo."};
