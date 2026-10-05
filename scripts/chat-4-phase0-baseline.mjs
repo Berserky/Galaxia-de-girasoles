@@ -85,6 +85,8 @@ const result={
   nativePhotoPicker:main.includes('PickMultipleVisualMedia(30)'),
   nativeCameraIntent:main.includes('MediaStore.ACTION_IMAGE_CAPTURE'),
   nativeVoiceRecorder:main.includes('new MediaRecorder'),
+  nativeChatSyncEmitted:main.includes('event("chat-sync"'),
+  nativeChatSyncConsumed:app.includes("name==='chat-sync'"),
   serverSeqPagination:edge.includes('.order("server_seq"')&&edge.includes('beforeSeq')
  },
  p0:{
