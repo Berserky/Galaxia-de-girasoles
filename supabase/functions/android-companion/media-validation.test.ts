@@ -51,6 +51,22 @@ Deno.test("chat-file acepta PDF TXT ZIP DOCX XLSX y sanea extensión extraña",(
   assertEquals(unknown,{ok:true,mime:"application/octet-stream",extension:"bin"});
 });
 
+Deno.test("chat-file rechaza MIME conocido falso y tolera Office reportado como ZIP",()=>{
+  const lied=validateUploadMedia("chat-file","image/png","disfraz.png",bytes(1,2,3,4,5,6));
+  assertEquals(lied.ok,false);
+  if(!lied.ok)assertMatch(lied.message,/MIME declarado/i);
+
+  const docx=validateUploadMedia("chat-file","application/zip","informe.docx",
+    concat(bytes(0x50,0x4b,0x03,0x04),ascii("[Content_Types].xml word/document.xml")));
+  assertEquals(docx.ok,true);
+  if(docx.ok)assertEquals(docx.mime,DOCX_MIME);
+
+  const xlsx=validateUploadMedia("chat-file","application/zip","tabla.xlsx",
+    concat(bytes(0x50,0x4b,0x03,0x04),ascii("[Content_Types].xml xl/workbook.xml")));
+  assertEquals(xlsx.ok,true);
+  if(xlsx.ok)assertEquals(xlsx.mime,XLSX_MIME);
+});
+
 Deno.test("HEIC/HEIF crudo en chat-photo exige normalización Android",()=>{
   for(const brand of ["heic","mif1"]){
     const result=validateUploadMedia("chat-photo",brand==="heic"?"image/heic":"image/heif","foto."+brand,ftyp(brand));
