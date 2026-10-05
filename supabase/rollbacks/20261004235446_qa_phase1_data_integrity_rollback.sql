@@ -18,6 +18,46 @@ begin;
 drop function if exists public.galaxy_backup_restore_v5(jsonb);
 drop function if exists public.galaxy_backup_export_v5();
 
+-- Restore the exact Phase-0 trigger behavior if Phase 1 is rolled back.
+create or replace function public.galaxy_capsule_protect_unlock_state()
+returns trigger
+language plpgsql
+set search_path=''
+as $
+begin
+  if new.kind='capsule' then
+    if tg_op='INSERT' then
+      new.data:=new.data-'unlockedFor'-'unlocked_for';
+    elsif old.kind='capsule' and current_user<>'postgres' then
+      new.data:=new.data-'unlockedFor'-'unlocked_for';
+      if jsonb_typeof(old.data->'unlockedFor')='array' then
+        new.data:=jsonb_set(new.data,'{unlockedFor}',old.data->'unlockedFor',true);
+      end if;
+    end if;
+  end if;
+  return new;
+end $;
+
+create or replace function public.galaxy_goal_version()
+returns trigger
+language plpgsql
+set search_path=''
+as $
+begin
+ if tg_op='UPDATE' then
+  new.id:=old.id;
+  new.created_by:=old.created_by;
+  new.created_at:=old.created_at;
+  new.version:=old.version+1;
+ else
+  new.version:=coalesce(new.version,1);
+ end if;
+ new.updated_at:=now();
+ if new.status='completed' and new.completed_at is null then new.completed_at:=now(); end if;
+ if new.status<>'completed' then new.completed_at:=null; end if;
+ return new;
+end $;
+
 drop index if exists public.galaxy_chat_album_items_attachment_id_idx;
 drop index if exists public.galaxy_chat_albums_cover_attachment_id_idx;
 drop index if exists public.galaxy_chat_live_locations_message_id_idx;
