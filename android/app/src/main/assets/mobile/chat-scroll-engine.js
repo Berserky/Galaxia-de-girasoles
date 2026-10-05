@@ -10,7 +10,7 @@ const DEFAULTS={
 
 function create(options={}){
  const config={...DEFAULTS,...options};
- let programmaticDepth=0,programmaticRaf=0,resizeRaf=0,lastUserScrollAt=0;
+ let programmaticDepth=0,programmaticRaf=0,resizeRaf=0,viewportRaf=0,lastUserScrollAt=0;
  let liveAnchor=null,liveBottom=true,bound=null,viewportToken=null;
 
  const now=()=>Date.now();
@@ -163,14 +163,17 @@ function create(options={}){
  function clearMemory(){try{sessionStorage.removeItem(config.memoryKey);}catch{}}
 
  function beforeViewportChange(el=bound){
-  viewportToken=el?captureState(el,'viewport'):null;
+  if(!viewportToken)viewportToken=el?captureState(el,'viewport'):null;
   return viewportToken;
  }
 
  function afterViewportChange(el=bound){
-  const token=viewportToken;viewportToken=null;
-  if(!el||!token)return false;
-  requestAnimationFrame(()=>{if(el.isConnected)restoreState(el,token,{reason:'viewport-resize',fallbackBottom:true});});
+  if(!el||!viewportToken)return false;
+  cancelAnimationFrame(viewportRaf);
+  viewportRaf=requestAnimationFrame(()=>{
+   viewportRaf=0;const token=viewportToken;viewportToken=null;
+   if(el.isConnected&&token)restoreState(el,token,{reason:'viewport-resize',fallbackBottom:true});
+  });
   return true;
  }
 
