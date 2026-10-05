@@ -7,6 +7,10 @@ on:
         description: "Run ID exitoso de Android Release Candidate"
         required: true
         type: string
+      auth_review:
+        description: "Escribe GOOGLE_ONLY_OR_LEAK_PROTECTION_ENABLED tras revisar Auth"
+        required: true
+        type: string
       confirmation:
         description: "Escribe PROMOTE_ANDROID_STABLE para aprobar la promoción"
         required: true
@@ -31,8 +35,11 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+      AUTH_REVIEW: ${{ inputs.auth_review }}
       CONFIRMATION: ${{ inputs.confirmation }}
     steps:
+      - name: Explicit Auth posture acknowledgement
+        run: test "$AUTH_REVIEW" = "GOOGLE_ONLY_OR_LEAK_PROTECTION_ENABLED"
       - name: Explicit operator approval token
         run: test "$CONFIRMATION" = "PROMOTE_ANDROID_STABLE"
 
