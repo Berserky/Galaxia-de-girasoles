@@ -19,6 +19,11 @@ test('performance instrumentation is opt-in and content-blind',()=>{
  assert.ok(perf.includes('window.GalaxyChatPerf'));
  assert.equal(/messageBody|bodyText|latitude|longitude|attachmentUrl|payloadContent/.test(perf),false);
 });
+test('Realtime baseline records the current native chat-sync bridge gap',()=>{
+ const main=read('android/app/src/main/java/com/nuestragalaxia/companion/MainActivity.java');
+ assert.ok(main.includes('event("chat-sync"'));
+ assert.equal(app.includes("name==='chat-sync'"),false);
+});
 test('P0 scroll jump mechanism is characterized without fixing it',()=>{
  assert.ok(app.includes("app.innerHTML=chatView()"));
  assert.ok(app.includes("oldTop+(el.scrollHeight-oldHeight)"));
