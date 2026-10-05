@@ -1545,18 +1545,23 @@ function chatRenderMessages({anchor=null,scroll='preserve',highlightId='',effect
 function chatHandleScroll(el){
  if(!el||chatVirtualRaf)return;
  chatVirtualRaf=requestAnimationFrame(()=>{
-  chatVirtualRaf=0;chatScrollEngine.onScroll(el);
+  chatVirtualRaf=0;
+  const programmatic=chatScrollEngine.isProgrammatic();chatScrollEngine.onScroll(el);
+  if(programmatic)return;
   const list=chatRows();if(!list.length)return;
   const range=chatMessageEngine.range(list),remaining=el.scrollHeight-el.scrollTop-el.clientHeight;
-  if(el.scrollTop<760&&range.start>0){
+  const rendered=[...el.querySelectorAll('.chat-message')],box=el.getBoundingClientRect(),first=rendered[0],last=rendered[rendered.length-1];
+  const firstDistance=first?first.getBoundingClientRect().top-box.top:Infinity;
+  const lastDistance=last?last.getBoundingClientRect().bottom-box.bottom:Infinity;
+  if(range.start>0&&firstDistance>-760){
    const anchor=chatCaptureAnchor(el);chatMessageEngine.shift(list.length,-1);chatRenderMessages({anchor});return;
   }
-  if(remaining<760&&range.end<list.length){
+  if(range.end<list.length&&lastDistance<760){
    const anchor=chatCaptureAnchor(el);chatMessageEngine.shift(list.length,1);chatRenderMessages({anchor});return;
   }
   if(el.scrollTop<1100&&range.start===0&&chatState?.nextBeforeSeq&&!chatLoading){loadChat({older:true,quiet:true}).catch(()=>{});}
   if(remaining<1100&&range.end===list.length&&chatState?.nextAfterSeq&&!chatLoading){loadChat({newer:true,quiet:true}).catch(()=>{});}
-  if(remaining<110&&!chatState?.nextAfterSeq){
+  if(chatScrollEngine.isAtBottom(el)&&!chatState?.nextAfterSeq){
    if(chatNewCount){chatNewCount=0;chatUpdateNewButton();}
    markChatReadIfVisible().catch(()=>{});
   }
