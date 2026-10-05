@@ -210,7 +210,10 @@ test('backend-only changes cannot publish android-stable from Android CI',()=>{
   assert.equal(workflow.includes('android-stable'),false);
 });
 
-test('privacy firewall does not bump or replace Android stable 3.5.0',()=>{
-  const gradle=read('android/app/build.gradle.kts');
-  assert.match(gradle,/versionCode = 34; versionName = "3\.5\.0"/);
+test('privacy firewall remains independent from Android stable promotion',()=>{
+  const candidate=read('.github/workflows/android-release-candidate.yml');
+  const stable=read('.github/workflows/android-release-stable.yml');
+  assert.equal(candidate.includes('gh release upload android-stable'),false);
+  assert.match(stable,/workflow_dispatch:/);
+  assert.match(stable,/gh release upload android-stable/);
 });
