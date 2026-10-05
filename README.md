@@ -44,8 +44,10 @@ El código de las integraciones Google está preparado, pero la conexión con la
 
 ## Arquitectura
 
-`app/server.mjs`: servidor HTTP, sesiones, OAuth, API y archivos privados. `app/store.mjs`: SQLite y control de versiones. `app/google.mjs`: tokens cifrados y clientes Google. `app/domain.mjs`: validación, actividades y calendario. `app/public/`: interfaz adaptable sin frameworks. `tests/`: pruebas de datos, persistencia y controles de acceso.
+La producción web gratuita usa **GitHub Pages + Supabase**: `scripts/build-pages.mjs` genera la interfaz desde `app/public`, `app/cloud/adapter.js` conecta Auth/datos y Supabase/PostgreSQL/Storage conserva el estado compartido. El Edge Function `android-companion` expone el contrato móvil.
 
-Una pareja por instalación; una instancia Node con volumen persistente. Datos y fotos nunca se guardan en el repositorio. El modo local y el privado usan bases separadas. Se requiere respaldo del directorio de datos y de la clave del servidor.
+Android empaqueta su interfaz local dentro del APK y conserva servicios nativos para bridge, ubicación, multimedia, notificaciones, archivos y actualizaciones. El canal `android-stable` ya no se publica desde un push normal a `main`: `main` produce un candidate y la promoción estable exige gates y aprobación explícita. Ver **[docs/RELEASE_GOVERNANCE.md](docs/RELEASE_GOVERNANCE.md)**.
+
+La implementación Node (`app/server.mjs`, `app/store.mjs`, `app/google.mjs`) sigue disponible como variante privada/autohospedada descrita en **[docs/ACTIVAR.md](docs/ACTIVAR.md)**; no es el runtime de GitHub Pages.
 
 La visión de producto y las fases futuras están en **[docs/PRODUCTO.md](docs/PRODUCTO.md)**.
