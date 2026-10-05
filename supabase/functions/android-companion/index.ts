@@ -936,14 +936,14 @@ async function chatHydrateEntityRefs(refEntries:any[],person:string){
    needsLocations?ok(db.from("galaxy_locations").select("person,status,sharing,latitude,longitude,transport_preference,updated_at").order("person")):Promise.resolve([])
   ]);
 
-  const itemMap=new Map((itemRows||[]).map((x:any)=>[String(x.kind)+"|"+String(x.id),x]));
-  const goalMap=new Map((goalRows||[]).map((x:any)=>[String(x.id),x]));
-  const placeMap=new Map((placeRows||[]).map((x:any)=>[String(x.id),x]));
-  const dailyMap=new Map((dailyRows||[]).map((x:any)=>[String(x.day),x]));
-  const contextMap=new Map((contextRows||[]).map((x:any)=>[String(x.id),x]));
-  const pollMap=new Map((pollRows||[]).map((x:any)=>[String(x.id),x]));
-  const checklistMap=new Map((checklistRows||[]).map((x:any)=>[String(x.id),x]));
-  const locationMap=new Map((locationRows||[]).map((x:any)=>[String(x.person),x]));
+  const itemMap=new Map<string,any>((itemRows||[]).map((x:any)=>[String(x.kind)+"|"+String(x.id),x] as [string,any]));
+  const goalMap=new Map<string,any>((goalRows||[]).map((x:any)=>[String(x.id),x] as [string,any]));
+  const placeMap=new Map<string,any>((placeRows||[]).map((x:any)=>[String(x.id),x] as [string,any]));
+  const dailyMap=new Map<string,any>((dailyRows||[]).map((x:any)=>[String(x.day),x] as [string,any]));
+  const contextMap=new Map<string,any>((contextRows||[]).map((x:any)=>[String(x.id),x] as [string,any]));
+  const pollMap=new Map<string,any>((pollRows||[]).map((x:any)=>[String(x.id),x] as [string,any]));
+  const checklistMap=new Map<string,any>((checklistRows||[]).map((x:any)=>[String(x.id),x] as [string,any]));
+  const locationMap=new Map<string,any>((locationRows||[]).map((x:any)=>[String(x.person),x] as [string,any]));
   const etaMap=new Map<string,any>();
   for(const row of etaRows||[]){const key=String(row.session_id);if(!etaMap.has(key))etaMap.set(key,row);}
   const answersByDay=new Map<string,any[]>();
@@ -975,7 +975,7 @@ async function chatHydrateEntityRefs(refEntries:any[],person:string){
    signedMany("galaxy-photos",photoPaths,900),
    signedMany("galaxy-voice",audioPaths,900)
   ]);
-  const capsuleSongMap=new Map((songRows||[]).map((x:any)=>[String(x.id),x]));
+  const capsuleSongMap=new Map<string,any>((songRows||[]).map((x:any)=>[String(x.id),x] as [string,any]));
 
   const cards=new Map<string,any>();
   for(const entry of refs){
