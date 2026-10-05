@@ -50,8 +50,8 @@ let presenceLastSignature='',voiceTimer=null,voiceSeconds=0,intelligenceSearchNo
 let chatState=null,chatLoading=false,chatQueuedLoad=null,chatReply=null,chatStateSignature='',chatPreferencesState=null,chatUnlockedSession=false,notificationState=null,pendingDeepLink=null;
 const chatMessageEngine=window.GalaxyMessageEngine.create({pageSize:60,maxCache:420,windowSize:84,windowStep:28,estimatedHeight:92});
 const chatScrollEngine=window.GalaxyScrollEngine.create({bottomTolerance:110,memoryKey:'galaxy.chat.scroll.position.v1'});
-let chatResizeObserver=null,chatVirtualRaf=0,chatMeasureRaf=0,chatRestoreOnRender=false;
-let chatAttachmentsDraft=[],chatNewCount=0,chatPinIndex=0,chatTypingTimer=null,chatPresenceTimer=null,chatOutboxFlushing=false,chatOutboxFlushPromise=null,chatInitialScroll=true,chatVoiceState={recording:false,paused:false,ready:false,durationMs:0},chatHoldRecord=null;
+let chatResizeObserver=null,chatVirtualRaf=0,chatMeasureRaf=0,chatRestoreOnRender=false,chatResumeRefreshPromise=null;
+let chatAttachmentsDraft=[],chatNewCount=0,chatResumeUnread=0,chatResumeNewCount=0,chatPinIndex=0,chatTypingTimer=null,chatPresenceTimer=null,chatOutboxFlushing=false,chatOutboxFlushPromise=null,chatInitialScroll=true,chatVoiceState={recording:false,paused:false,ready:false,durationMs:0},chatHoldRecord=null;
 let welcomeStep=0,welcomePreview=false,welcomeGift=true,welcomeEntering=false,tourStep=-1;
 const welcomeMusic=new Audio('../musica.mp3');welcomeMusic.loop=true;welcomeMusic.volume=.32;
 const globalPlayer=document.getElementById('globalPlayer'),providerPlayer=document.getElementById('providerPlayer');
@@ -1731,6 +1731,30 @@ async function refreshChatBadge(){
  if(!native.paired)return;
  try{const result=await api('chat-state',{limit:20});if(cloud?.chat)cloud.chat.unread=Number(result.unread||0);renderChatFab();}catch{}
 }
+function chatSnapshotResumeBaseline(){
+ chatResumeUnread=Math.max(0,Number(cloud?.chat?.unread??chatState?.unread??0));
+ chatResumeNewCount=Math.max(0,Number(chatNewCount||0));
+}
+function refreshChatAfterResume(){
+ if(chatResumeRefreshPromise)return chatResumeRefreshPromise;
+ chatResumeRefreshPromise=(async()=>{
+  if(view!=='chat')return;
+  const el=document.querySelector('#chatMessages'),readingHistory=!!chatState?.nextAfterSeq||!chatNearBottom(el);
+  if(!chatState||!readingHistory){await loadChat({quiet:true,force:true});return;}
+  try{
+   const result=await api('chat-state',{limit:60}),unread=Math.max(0,Number(result.unread||0));
+   const delta=Math.max(0,unread-chatResumeUnread);
+   if(delta){
+    chatNewCount=Math.max(chatNewCount,chatResumeNewCount+delta);
+    chatUpdateNewButton();
+   }
+   chatState={...(chatState||{}),unread};chatStateSignature=chatSignature(chatState);
+   if(cloud?.chat)cloud.chat.unread=unread;
+   chatResumeUnread=unread;chatResumeNewCount=chatNewCount;
+  }catch{}
+ })().finally(()=>{chatResumeRefreshPromise=null;});
+ return chatResumeRefreshPromise;
+}
 function patchLocalMessage(clientId,patch){
  const rows=readChatOutbox(),i=rows.findIndex(x=>String(x.client_id)===String(clientId));
  if(i>=0){rows[i]={...rows[i],...patch};writeChatOutbox(rows);}
@@ -2864,7 +2888,7 @@ document.addEventListener('visibilitychange',()=>{
  if(document.visibilityState==='visible'&&native.paired){
    refreshStateIfChanged().catch(()=>{});
    if(view==='map')refreshMap({quiet:true,detail:false}).catch(()=>{});
-   if(view==='chat'){requestAnimationFrame(()=>chatScrollEngine.restoreMemory(document.querySelector('#chatMessages'),'chat'));setChatPresence('ONLINE');loadChat({quiet:true,force:true}).catch(()=>{});flushChatOutbox({retryFailed:true}).catch(()=>{});}
+   if(view==='chat'){requestAnimationFrame(()=>chatScrollEngine.restoreMemory(document.querySelector('#chatMessages'),'chat'));setChatPresence('ONLINE');refreshChatAfterResume().catch(()=>{});flushChatOutbox({retryFailed:true}).catch(()=>{});}
    if(native.momentNotifications)GalaxyNative.call('refreshMoments').catch(()=>{});
  }
 });
@@ -2872,7 +2896,7 @@ document.addEventListener('visibilitychange',()=>{
 window.visualViewport?.addEventListener('resize',syncChatViewportHeight);
 window.visualViewport?.addEventListener('scroll',syncChatViewportHeight);
 window.addEventListener('resize',syncChatViewportHeight);
-window.addEventListener('online',()=>{if(native.paired){flushChatOutbox({retryFailed:true}).then(()=>view==='chat'&&loadChat({quiet:true,force:true})).catch(()=>{});}});
+window.addEventListener('online',()=>{if(native.paired){flushChatOutbox({retryFailed:true}).then(()=>view==='chat'&&refreshChatAfterResume()).catch(()=>{});}});
 window.addEventListener('offline',()=>{if(view==='chat')toast('Sin conexión. Tus mensajes quedarán pendientes.');});
 document.addEventListener('scroll',e=>{
  if(e.target?.id==='chatMessages')chatHandleScroll(e.target);
@@ -2909,7 +2933,7 @@ document.addEventListener('pointercancel',e=>{
 document.addEventListener('click',e=>{if(chatSendSuppress&&e.target.closest?.('.chat-send[type="submit"]')){e.preventDefault();e.stopImmediatePropagation();chatSendSuppress=false;}},true);
 document.addEventListener('touchstart',e=>{const row=e.target.closest?.('.chat-message[data-id]'),t=e.touches?.[0];if(row&&row.dataset.id&&t)chatSwipe={id:row.dataset.id,x:t.clientX,y:t.clientY};},{passive:true});
 document.addEventListener('touchend',e=>{if(!chatSwipe)return;const t=e.changedTouches?.[0],swipe=chatSwipe;chatSwipe=null;if(!t)return;const dx=t.clientX-swipe.x,dy=Math.abs(t.clientY-swipe.y);if(dx>58&&dy<45){const m=(chatState?.messages||[]).find(x=>String(x.id)===String(swipe.id));if(m){chatReply=m;render();requestAnimationFrame(()=>document.querySelector('#chatForm textarea')?.focus());}}},{passive:true});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){chatUnlockedSession=false;if(view==='chat'){chatRememberPosition(document.querySelector('#chatMessages'),'chat');setChatPresence('OFFLINE');}}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){chatUnlockedSession=false;if(view==='chat'){chatSnapshotResumeBaseline();chatRememberPosition(document.querySelector('#chatMessages'),'chat');setChatPresence('OFFLINE');}}});
 
 render();
 if(native.paired)refreshState().then(()=>{syncPresence();flushChatOutbox({retryFailed:true}).catch(()=>{});}).catch(()=>{});
