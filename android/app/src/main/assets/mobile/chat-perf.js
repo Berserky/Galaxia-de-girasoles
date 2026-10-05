@@ -65,8 +65,9 @@ function renderEnd(token){
   const row={reason:token.reason,syncMs:Number(syncMs.toFixed(2)),settledMs:Number(totalMs.toFixed(2)),before:token.before,after,jumped};
   renders.push(row);if(renders.length>MAX)renders.shift();
   if(jumped)push('scroll-jump',{from:token.before.scrollTop,to:after.scrollTop,reason:token.reason});
-  if(openAt){
-   push('first-visible',{ms:Number((totalMs+(token.at-openAt)).toFixed(2))});
+  if(openAt&&after.messages>0){
+   const openMs=Number((totalMs+(token.at-openAt)).toFixed(2));
+   push('first-visible',{ms:openMs});push('interactive',{ms:openMs});
    openAt=0;
   }
  }));
