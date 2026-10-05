@@ -359,7 +359,7 @@ begin
     end if;
     if actual>0 then
       execute format(
-        'insert into public.%1$I select * from jsonb_populate_recordset(null::public.%1$I,$1) on conflict do nothing',
+        'insert into public.%1$I overriding system value select * from jsonb_populate_recordset(null::public.%1$I,$1) on conflict do nothing',
         table_name
       ) using rows;
       execute format(
@@ -394,7 +394,7 @@ begin
     join pg_namespace n on n.oid=c.relnamespace and n.nspname='public'
     join pg_attribute a on a.attrelid=c.oid and a.attnum>0 and not a.attisdropped
     where c.relname in (
-      'galaxy_places','galaxy_location_history','galaxy_trip_history','galaxy_place_events','galaxy_encounters'
+      'galaxy_rewards','galaxy_places','galaxy_location_history','galaxy_trip_history','galaxy_place_events','galaxy_encounters','galaxy_chat_edits'
     )
   loop
     if seq.sequence_name is not null then
