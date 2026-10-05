@@ -1,0 +1,51 @@
+name: Galaxy Chat 4 Phase 1 Message Engine
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "android/app/src/main/assets/mobile/**"
+      - "android/app/src/androidTest/**"
+      - "supabase/functions/android-companion/**"
+      - "scripts/chat-4-phase1-message-engine.mjs"
+      - "tests/chat-4-phase1-message-engine.test.mjs"
+      - "docs/qa/chat-4-phase1-message-engine.md"
+      - "package.json"
+      - ".github/workflows/chat-4-phase1-message-engine.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chat4-phase1-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  message-engine:
+    name: Cursor + windowing + 20k benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      - name: Syntax
+        run: |
+          node --check android/app/src/main/assets/mobile/chat-message-engine.js
+          node --check android/app/src/main/assets/mobile/app.js
+      - name: Message Engine regression
+        run: node --test tests/chat-4-phase1-message-engine.test.mjs
+      - name: Full Node regression
+        run: npm test
+      - name: Benchmark
+        run: |
+          mkdir -p qa-artifacts
+          npm run bench:chat4:phase1 -- qa-artifacts/chat-4-phase1-node.json | tee qa-artifacts/chat-4-phase1-node.log
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: galaxy-chat-4-phase1-message-engine
+          path: qa-artifacts/**
+          retention-days: 14

@@ -153,7 +153,7 @@ public class GalaxyDeviceClosureTest {
         awaitJs("document.querySelector('#chatMessages')?.innerText.includes('Mensaje E2E QA')");
     }
 
-    @Test public void galaxyChat_phase0Baseline_runtimeAndScrollAreMeasured() throws Exception {
+    @Test public void galaxyChat_phase1MessageEngine_windowingAndLifecycleAreMeasured() throws Exception {
         launch();
         runJs("window.GalaxyChatPerf?.enable(true);window.GalaxyChatPerf?.reset();");
         long pssBefore = android.os.Debug.getPss();
@@ -163,48 +163,57 @@ public class GalaxyDeviceClosureTest {
         awaitJs("!!document.querySelector('.chat-shell') && document.querySelectorAll('.chat-message').length>0");
         long openMs = SystemClock.elapsedRealtime() - openStarted;
 
-        String markupJson = js("JSON.stringify((()=>{const out={};for(const n of [100,500,5000]){chatState={messages:Array.from({length:n},(_,i)=>({id:'phase0-'+n+'-'+i,client_id:'phase0c-'+n+'-'+i,sender_person:String(i%2),body:'QA '+i,message_type:i%10===3?'photo':i%10===4?'video':i%10===5?'audio':'text',attachments:i%10===3?[{kind:'photo',name:'qa.jpg',url:'data:image/gif;base64,R0lGODlhAQABAAAAACw='}]:[],server_seq:i+1,created_at:'2026-10-05T12:00:00Z',reactions:[]})),nextBeforeSeq:n>60?n-60:null};const t=performance.now();const html=chatMessagesMarkup();out[n]={markupMs:performance.now()-t,htmlBytes:html.length};}return out;})())");
-        JSONObject markup = new JSONObject(markupJson);
+        String windowJson = js("JSON.stringify((()=>{const out={};for(const n of [100,500,5000,20000]){const engine=GalaxyMessageEngine.create({pageSize:60,maxCache:420,windowSize:84,windowStep:28,estimatedHeight:92});const rows=Array.from({length:n},(_,i)=>({id:'phase1-'+n+'-'+i,client_id:'phase1c-'+n+'-'+i,sender_person:String(i%2),body:'QA '+i,message_type:i%10===3?'photo':i%10===4?'video':i%10===5?'audio':'text',attachments:[],server_seq:i+1,created_at:'2026-10-05T12:00:00Z',reactions:[]}));engine.resetWindow(rows.length,{align:'end'});const t=performance.now();const range=engine.range(rows);out[n]={rangeMs:performance.now()-t,rendered:range.messages.length,logical:n};}return out;})())");
+        JSONObject windows = new JSONObject(windowJson);
+        assertTrue(windows.getJSONObject("100").getInt("rendered") <= 84);
+        assertTrue(windows.getJSONObject("500").getInt("rendered") <= 84);
+        assertTrue(windows.getJSONObject("5000").getInt("rendered") <= 84);
+        assertTrue(windows.getJSONObject("20000").getInt("rendered") <= 84);
 
-        runJs("chatState={messages:Array.from({length:500},(_,i)=>({id:'scroll-'+i,client_id:'scrollc-'+i,sender_person:String(i%2),body:'Scroll QA '+i,message_type:'text',attachments:[],server_seq:i+1,created_at:'2026-10-05T12:00:00Z',reactions:[]})),nextBeforeSeq:440,pinnedIds:[]};chatStateSignature=chatSignature(chatState);render();");
-        awaitJs("document.querySelectorAll('.chat-message').length===500");
-        runJs("const e=document.querySelector('#chatMessages');e.scrollTop=Math.max(250,Math.floor(e.scrollHeight*.45));window.__phase0Before=e.scrollTop;");
+        runJs("chatState={messages:Array.from({length:420},(_,i)=>({id:'scroll-'+i,client_id:'scrollc-'+i,sender_person:String(i%2),body:'Scroll QA '+i,message_type:'text',attachments:[],server_seq:i+1,created_at:'2026-10-05T12:00:00Z',reactions:[]})),nextBeforeSeq:1,nextAfterSeq:null,pinnedIds:[]};chatStateSignature=chatSignature(chatState);chatMessageEngine.resetWindow(chatRows().length,{align:'end'});render();");
+        awaitJs("document.querySelectorAll('.chat-message').length>0 && document.querySelectorAll('.chat-message').length<=84");
+        runJs("const e=document.querySelector('#chatMessages');e.scrollTop=Math.max(250,Math.floor(e.scrollHeight*.45));window.__phase1Anchor=chatCaptureAnchor(e);window.__phase1Top=e.scrollTop;");
         SystemClock.sleep(250);
-        double beforeTop = Double.parseDouble(js("window.__phase0Before||0"));
-        runJs("render()");
+        String anchorId = js("window.__phase1Anchor?.id||''");
+        double beforeTop = Double.parseDouble(js("window.__phase1Top||0"));
+        runJs("chatRenderMessages({anchor:window.__phase1Anchor,scroll:'preserve'})");
         SystemClock.sleep(450);
         double afterTop = Double.parseDouble(js("document.querySelector('#chatMessages')?.scrollTop||0"));
-        assertTrue("Phase 0 must reproduce the current P0 scroll reset before a later phase fixes it", beforeTop > 100 && afterTop < 45);
+        assertEquals(anchorId, js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.id||''"));
+        assertTrue("Window refresh must keep the reading position anchored", Math.abs(afterTop-beforeTop) < 220);
+        assertTrue(Integer.parseInt(js("document.querySelectorAll('.chat-message').length")) <= 84);
 
-        runJs("const e=document.querySelector('#chatMessages');e.scrollTop=Math.floor(e.scrollHeight*.25);e.dispatchEvent(new Event('scroll'));requestAnimationFrame(()=>{e.scrollTop=Math.floor(e.scrollHeight*.75);e.dispatchEvent(new Event('scroll'));});");
-        SystemClock.sleep(1200);
+        runJs("chatState=null;chatStateSignature='';chatMessageEngine.resetWindow(0,{align:'end'});loadChat({quiet:true,force:true,present:true});");
+        awaitJs("document.querySelectorAll('.chat-galaxy-card').length===13 && document.querySelectorAll('.chat-message').length<=84");
 
-        sendChat("Phase0 visual send");
+        sendChat("Phase1 visual send");
         awaitCondition(() -> backend.sentCount() == 1, UI_TIMEOUT_MS);
-        awaitJs("document.querySelector('#chatMessages')?.innerText.includes('Phase0 visual send')");
-        SystemClock.sleep(300);
+        awaitJs("document.querySelector('#chatMessages')?.innerText.includes('Phase1 visual send')");
+        assertTrue(Integer.parseInt(js("document.querySelectorAll('.chat-message').length")) <= 86);
+
+        scenario.moveToState(Lifecycle.State.CREATED);
+        scenario.moveToState(Lifecycle.State.RESUMED);
+        awaitJs("!!document.querySelector('.chat-shell')");
+        assertTrue(Integer.parseInt(js("document.querySelectorAll('.chat-message').length")) <= 86);
+
+        runJs("document.querySelector('[data-action=\"chat-close\"]')?.click()");
+        awaitJs("!document.querySelector('.chat-shell')");
+        runJs("document.querySelector('#chatFab')?.click()");
+        awaitJs("!!document.querySelector('.chat-shell') && document.querySelectorAll('.chat-message').length>0");
 
         long pssAfter = android.os.Debug.getPss();
-        for (int i=0;i<3;i++) {
-            runJs("document.querySelector('[data-action=\\\"chat-close\\\"]')?.click()");
-            awaitJs("!document.querySelector('.chat-shell')");
-            runJs("document.querySelector('#chatFab')?.click()");
-            awaitJs("!!document.querySelector('.chat-shell') && document.querySelectorAll('.chat-message').length>0");
-        }
-        long pssAfterCycles = android.os.Debug.getPss();
         long cpuAfter = android.os.Process.getElapsedCpuTime();
         JSONObject perf = new JSONObject(js("JSON.stringify(window.GalaxyChatPerf?.report?.()||{})"));
         JSONObject result = new JSONObject()
             .put("openMsLocalQa", openMs)
             .put("pssBeforeKb", pssBefore)
             .put("pssAfterKb", pssAfter)
-            .put("pssAfterThreeReentriesKb", pssAfterCycles)
             .put("cpuMs", Math.max(0, cpuAfter-cpuBefore))
-            .put("scrollBefore", beforeTop)
-            .put("scrollAfter", afterTop)
-            .put("markup", markup)
+            .put("anchorBefore", beforeTop)
+            .put("anchorAfter", afterTop)
+            .put("windowing", windows)
             .put("perf", perf);
-        System.out.println("GALAXY_CHAT_PHASE0_ANDROID=" + result);
+        System.out.println("GALAXY_CHAT_PHASE1_ANDROID=" + result);
     }
 
     @Test public void dailyGoalsPlansEventsCapsulesMapContextBackupAndUpdate_areReachable() throws Exception {

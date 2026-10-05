@@ -921,6 +921,7 @@ html:not([data-theme="daylight"]) .gmap-attrib{backdrop-filter:blur(6px)}
 .chat-back{width:40px;height:40px;border:1px solid var(--border);border-radius:14px;background:var(--surface);color:var(--text);display:grid;place-items:center}
 .chat-avatar{width:40px;height:40px;border-radius:15px;background:linear-gradient(145deg,var(--soft-accent),var(--surface2));display:grid;place-items:center;font-weight:900;color:var(--accent)}
 .chat-messages{min-height:0;overflow:auto;overscroll-behavior:contain;padding:14px 3px 10px;scrollbar-width:none}.chat-messages::-webkit-scrollbar{display:none}
+.chat-virtual-spacer{width:1px;min-height:0;pointer-events:none;visibility:hidden;contain:strict}
 .chat-empty{min-height:60%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:var(--muted);padding:30px}.chat-empty>.ui-icon{width:34px;height:34px;color:var(--accent);margin-bottom:10px}.chat-empty h3,.chat-empty p{margin:4px 0}
 .chat-day{display:flex;justify-content:center;margin:10px 0}.chat-day span{padding:5px 9px;border-radius:99px;background:var(--surface2);color:var(--muted);font-size:9px}
 .chat-message{display:flex;flex-direction:column;align-items:flex-start;margin:7px 0;max-width:84%}.chat-message.own{margin-left:auto;align-items:flex-end}
