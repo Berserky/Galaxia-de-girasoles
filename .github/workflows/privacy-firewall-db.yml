@@ -39,7 +39,7 @@ jobs:
             supabase init
           fi
           mv supabase/migrations/20261004232942_qa_phase0_privacy_firewall.sql /tmp/phase0.sql
-          mv supabase/migrations/20261004235446_qa_phase1_data_integrity.sql /tmp/phase1.sql
+          mv supabase/migrations/20261005011401_qa_phase1_data_integrity.sql /tmp/phase1.sql
           supabase start
 
       - name: Seed pre-Phase-0 orphan
@@ -64,7 +64,7 @@ jobs:
 
       - name: Apply Phase 1 prerequisites for current Edge backup contract
         run: |
-          mv /tmp/phase1.sql supabase/migrations/20261004235446_qa_phase1_data_integrity.sql
+          mv /tmp/phase1.sql supabase/migrations/20261005011401_qa_phase1_data_integrity.sql
           supabase migration up
 
       - name: Run delete-for-both and privacy Edge E2E
