@@ -100,7 +100,8 @@ public class GalaxyDeviceClosureTest {
         awaitJs("document.querySelector('#modal')?.open===false");
 
         runJs("const t=document.querySelector('#chatForm textarea');t.focus();t.value='';");
-        shell("input text QA_keyboard");
+        awaitJs("document.activeElement===document.querySelector('#chatForm textarea')");
+        instrumentation.sendStringSync("QA_keyboard");
         awaitJs("(document.querySelector('#chatForm textarea')?.value||'').includes('QA_keyboard')");
         assertEquals("TEXTAREA", js("document.activeElement?.tagName||''"));
 
@@ -119,13 +120,23 @@ public class GalaxyDeviceClosureTest {
     @Test public void galaxyChat_renders13Cards_pollChecklistAndSend() throws Exception {
         launchChat();
         awaitJs("document.querySelectorAll('.chat-galaxy-card').length===13");
-        String text = js("document.querySelector('#chatMessages')?.innerText||''");
-        for (String marker : new String[]{
-                "Recuerdo QA","Plan QA","Objetivo QA","Lugar QA","Canción QA",
-                "Casa QA","Universidad QA","¿Plan A o B?","Checklist QA","Cápsula QA",
-                "¿Qué construimos después?","Evento QA","Todo bien"}) {
-            assertTrue("Missing card: " + marker, text.contains(marker));
+        awaitJs("new Set((chatState?.messages||[]).map(m=>m.card?.type).filter(Boolean)).size===13");
+        for (String selector : new String[]{
+                ".chat-galaxy-card.memory",
+                ".chat-galaxy-card.plan",
+                ".chat-galaxy-card.goal",
+                ".chat-galaxy-card.place",
+                ".chat-galaxy-card.song",
+                ".chat-galaxy-card.poll",
+                ".chat-galaxy-card.checklist",
+                ".chat-galaxy-card.locked",
+                ".chat-galaxy-card.daily",
+                ".chat-galaxy-card.event",
+                ".chat-galaxy-card.status"}) {
+            assertEquals("Missing rendered card selector: " + selector, "true", js("!!document.querySelector('" + selector + "')"));
         }
+        assertEquals("ETA and CHECK_IN must both render through the ETA card surface", "2",
+                js("document.querySelectorAll('.chat-galaxy-card.eta').length"));
 
         runJs("document.querySelector('[data-action=\"chat-poll-vote\"]')?.click()");
         awaitCondition(() -> backend.actions().contains("chat-poll"), UI_TIMEOUT_MS);
