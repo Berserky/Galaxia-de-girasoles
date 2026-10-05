@@ -40,3 +40,15 @@ test('stable promotion remains explicit and provenance-bound',()=>{
   assert.match(workflow,/upgradeInstall/);
   assert.match(workflow,/gh release upload android-stable/);
 });
+
+
+test('rollback assets are preserved and backend rollback source is explicit',()=>{
+  const stable=read('.github/workflows/android-release-stable.yml');
+  const docs=read('docs/RELEASE_GOVERNANCE.md');
+  assert.match(stable,/Archive current stable before clobber/);
+  assert.match(stable,/android-stable-prepromotion-/);
+  assert.match(stable,/sha256sum prepromotion-stable\/NuestraGalaxia\.apk/);
+  assert.match(docs,/forward rollback/i);
+  assert.match(docs,/72b10c94a683d4cbec506d8e143b3db1bd997310/);
+  assert.match(docs,/versionCode.*mayor/i);
+});
