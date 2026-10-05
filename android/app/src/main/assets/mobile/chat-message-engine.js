@@ -175,7 +175,13 @@ function create(options={}){
  }
  function applySingle(current,message){
   if(!message)return current;
-  return {...(current||{}),messages:mergeMessages(current?.messages||[],[message])};
+  let messages=mergeMessages(current?.messages||[],[message]);
+  const maxCache=Math.max(Number(config.pageSize||60)*3,Number(config.maxCache||420));
+  if(messages.length>maxCache){
+   const index=messages.findIndex(row=>messageKey(row)===messageKey(message)||String(row.client_id||'')===String(message.client_id||''));
+   messages=index>=0&&index<Math.floor(messages.length/2)?messages.slice(0,maxCache):messages.slice(-maxCache);
+  }
+  return {...(current||{}),messages};
  }
  function report(messages=[]){
   const r=range(messages);
