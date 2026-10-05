@@ -56,7 +56,7 @@ jobs:
           if [ ! -f supabase/config.toml ]; then
             supabase init
           fi
-          mv supabase/migrations/20261004235446_qa_phase1_data_integrity.sql /tmp/phase1.sql
+          mv supabase/migrations/20261005011401_qa_phase1_data_integrity.sql /tmp/phase1.sql
           supabase start
 
       - name: Compare clean replay against production Phase-0 schema
@@ -64,7 +64,7 @@ jobs:
 
       - name: Apply Phase 1 through migration history
         run: |
-          mv /tmp/phase1.sql supabase/migrations/20261004235446_qa_phase1_data_integrity.sql
+          mv /tmp/phase1.sql supabase/migrations/20261005011401_qa_phase1_data_integrity.sql
           supabase migration up
 
       - name: Validate Phase 1 DB invariants
@@ -90,7 +90,7 @@ jobs:
       - name: Validate Phase 1 rollback and re-apply
         run: |
           DB='postgresql://postgres:postgres@127.0.0.1:54322/postgres'
-          psql "$DB" -v ON_ERROR_STOP=1 -f supabase/rollbacks/20261004235446_qa_phase1_data_integrity_rollback.sql
+          psql "$DB" -v ON_ERROR_STOP=1 -f supabase/rollbacks/20261005011401_qa_phase1_data_integrity_rollback.sql
           test "$(psql "$DB" -Atqc "select to_regprocedure('public.galaxy_backup_export_v5()') is null")" = "t"
           test "$(psql "$DB" -Atqc "select to_regclass('public.galaxy_chat_album_items_attachment_id_idx') is null")" = "t"
           psql "$DB" -v ON_ERROR_STOP=1 <<'SQL'
@@ -123,7 +123,7 @@ jobs:
           end $rollback_probe_goal$;
           rollback;
           SQL
-          psql "$DB" -v ON_ERROR_STOP=1 -f supabase/migrations/20261004235446_qa_phase1_data_integrity.sql
+          psql "$DB" -v ON_ERROR_STOP=1 -f supabase/migrations/20261005011401_qa_phase1_data_integrity.sql
           psql "$DB" -v ON_ERROR_STOP=1 -f tests/data-integrity-db.sql
 
       - name: Stop isolated Supabase
