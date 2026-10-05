@@ -126,6 +126,20 @@ test('50 image attachments use one Storage signing batch per bucket',async()=>{
  assert.equal(h.stats().storageSingle,0);
 });
 
+test('batch keeps ETA and CHECK_IN distinct for the same context session',async()=>{
+ const h=harness({
+  galaxy_context_sessions:[{id:'ctx',person:'0',label:'Camino',status:'active',destination_kind:'person',target_person:'1',place_id:null,last_distance_m:500,last_eta_s:300,progress_pct:50,started_at:'2026-10-04T20:00:00Z',arrived_at:null,ended_at:null,updated_at:'2026-10-04T20:01:00Z'}],
+  galaxy_context_eta_history:[{session_id:'ctx',captured_at:'2026-10-04T20:02:00Z',distance_m:400,eta_s:240,progress_pct:60}],
+  galaxy_locations:[{person:'0',status:'Bien',sharing:true,latitude:4.6,longitude:-74.1,transport_preference:'motorcycle',updated_at:'2026-10-04T20:00:00Z'}]
+ });
+ const batch=await h.api.chatHydrateEntityRefs([
+  ['eta',{card_type:'ETA',entity_kind:'context_session',entity_id:'ctx'}],
+  ['check',{card_type:'CHECK_IN',entity_kind:'context_session',entity_id:'ctx'}]
+ ],'0');
+ assert.equal(batch.get('eta').type,'ETA');
+ assert.equal(batch.get('check').type,'CHECK_IN');
+});
+
 test('batch card payload matches direct hydration for representative domains',async()=>{
  const fixtures={
   galaxy_items:[
