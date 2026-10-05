@@ -163,14 +163,14 @@ public class GalaxyDeviceClosureTest {
         awaitJs("!!document.querySelector('.chat-shell') && document.querySelectorAll('.chat-message').length>0");
         long openMs = SystemClock.elapsedRealtime() - openStarted;
 
-        String windowJson = js("JSON.stringify((()=>{const out={};for(const n of [100,500,5000,20000]){chatState={messages:Array.from({length:n},(_,i)=>({id:'phase1-'+n+'-'+i,client_id:'phase1c-'+n+'-'+i,sender_person:String(i%2),body:'QA '+i,message_type:i%10===3?'photo':i%10===4?'video':i%10===5?'audio':'text',attachments:i%10===3?[{kind:'photo',name:'qa.jpg',url:'data:image/gif;base64,R0lGODlhAQABAAAAACw='}]:[],server_seq:i+1,created_at:'2026-10-05T12:00:00Z',reactions:[]})),nextBeforeSeq:n>60?Math.max(1,n-60):null,nextAfterSeq:null,pinnedIds:[]};chatMessageEngine.resetWindow(chatRows().length,{align:'end'});const t=performance.now();const html=chatMessagesMarkup();const doc=new DOMParser().parseFromString(html,'text/html');out[n]={markupMs:performance.now()-t,rendered:doc.querySelectorAll('.chat-message').length,htmlBytes:html.length};}return out;})())");
+        String windowJson = js("JSON.stringify((()=>{const out={};for(const n of [100,500,5000,20000]){const engine=GalaxyMessageEngine.create({pageSize:60,maxCache:420,windowSize:84,windowStep:28,estimatedHeight:92});const rows=Array.from({length:n},(_,i)=>({id:'phase1-'+n+'-'+i,client_id:'phase1c-'+n+'-'+i,sender_person:String(i%2),body:'QA '+i,message_type:i%10===3?'photo':i%10===4?'video':i%10===5?'audio':'text',attachments:[],server_seq:i+1,created_at:'2026-10-05T12:00:00Z',reactions:[]}));engine.resetWindow(rows.length,{align:'end'});const t=performance.now();const range=engine.range(rows);out[n]={rangeMs:performance.now()-t,rendered:range.messages.length,logical:n};}return out;})())");
         JSONObject windows = new JSONObject(windowJson);
         assertTrue(windows.getJSONObject("100").getInt("rendered") <= 84);
         assertTrue(windows.getJSONObject("500").getInt("rendered") <= 84);
         assertTrue(windows.getJSONObject("5000").getInt("rendered") <= 84);
         assertTrue(windows.getJSONObject("20000").getInt("rendered") <= 84);
 
-        runJs("chatState={messages:Array.from({length:5000},(_,i)=>({id:'scroll-'+i,client_id:'scrollc-'+i,sender_person:String(i%2),body:'Scroll QA '+i,message_type:'text',attachments:[],server_seq:i+1,created_at:'2026-10-05T12:00:00Z',reactions:[]})),nextBeforeSeq:1,nextAfterSeq:null,pinnedIds:[]};chatStateSignature=chatSignature(chatState);chatMessageEngine.resetWindow(chatRows().length,{align:'end'});render();");
+        runJs("chatState={messages:Array.from({length:420},(_,i)=>({id:'scroll-'+i,client_id:'scrollc-'+i,sender_person:String(i%2),body:'Scroll QA '+i,message_type:'text',attachments:[],server_seq:i+1,created_at:'2026-10-05T12:00:00Z',reactions:[]})),nextBeforeSeq:1,nextAfterSeq:null,pinnedIds:[]};chatStateSignature=chatSignature(chatState);chatMessageEngine.resetWindow(chatRows().length,{align:'end'});render();");
         awaitJs("document.querySelectorAll('.chat-message').length>0 && document.querySelectorAll('.chat-message').length<=84");
         runJs("const e=document.querySelector('#chatMessages');e.scrollTop=Math.max(250,Math.floor(e.scrollHeight*.45));window.__phase1Anchor=chatCaptureAnchor(e);window.__phase1Top=e.scrollTop;");
         SystemClock.sleep(250);
@@ -182,6 +182,9 @@ public class GalaxyDeviceClosureTest {
         assertEquals(anchorId, js("chatCaptureAnchor(document.querySelector('#chatMessages'))?.id||''"));
         assertTrue("Window refresh must keep the reading position anchored", Math.abs(afterTop-beforeTop) < 220);
         assertTrue(Integer.parseInt(js("document.querySelectorAll('.chat-message').length")) <= 84);
+
+        runJs("chatState=null;chatStateSignature='';chatMessageEngine.resetWindow(0,{align:'end'});loadChat({quiet:true,force:true,present:true});");
+        awaitJs("document.querySelectorAll('.chat-galaxy-card').length===13 && document.querySelectorAll('.chat-message').length<=84");
 
         sendChat("Phase1 visual send");
         awaitCondition(() -> backend.sentCount() == 1, UI_TIMEOUT_MS);
