@@ -52,3 +52,12 @@ test('rollback assets are preserved and backend rollback source is explicit',()=
   assert.match(docs,/72b10c94a683d4cbec506d8e143b3db1bd997310/);
   assert.match(docs,/versionCode.*mayor/i);
 });
+
+
+test('NG-QA-006-004 preserves retry success against stale chat-state snapshots',()=>{
+  const app=read('android/app/src/main/assets/mobile/app.js');
+  assert.match(app,/NG-QA-006-004/);
+  assert.match(app,/confirmedAfterLoad/);
+  assert.match(app,/server_seq\|\|0\)>oldLastSeq/);
+  assert.match(app,/chatStateSignature=chatSignature\(chatState\)/);
+});
