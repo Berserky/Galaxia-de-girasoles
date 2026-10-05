@@ -11,11 +11,13 @@ test('renewed Android layout keeps every interactive control used by the activit
 });
 
 test('stable update metadata is derived from the Android package version',()=>{
- const gradle=read('android/app/build.gradle.kts'),workflow=read('.github/workflows/android-companion.yml');
+ const gradle=read('android/app/build.gradle.kts');
+ const candidate=read('.github/workflows/android-release-candidate.yml');
+ const stable=read('.github/workflows/android-release-stable.yml');
  const code=Number(gradle.match(/versionCode = (\d+)/)[1]);
  const name=gradle.match(/versionName = "([^"]+)"/)[1];
- assert.ok(workflow.includes("VERSION_CODE=$(printf '%s'")&&workflow.includes('versionCode = ([0-9]+)'));
- assert.ok(workflow.includes('VERSION_NAME=$(printf')&&workflow.includes('versionName = "([^"]+)"'));
- assert.ok(workflow.includes('"versionCode":%s')&&workflow.includes('"versionName":"%s'));
+ assert.ok(candidate.includes("VERSION_CODE=$(printf '%s'")&&candidate.includes('versionCode = ([0-9]+)'));
+ assert.ok(candidate.includes('VERSION_NAME=$(printf')&&candidate.includes('versionName = "([^"]+)"'));
+ assert.ok(stable.includes('versionCode:$versionCode')&&stable.includes('versionName:$versionName'));
  assert.ok(code>2&&name.length>0,'existing signed installs must detect this update');
 });
