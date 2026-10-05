@@ -20,7 +20,8 @@ test('candidate requires the full automated release gate set',()=>{
     'testDebugUnitTest','lintDebug','qa-phase5-emulator.sh','sha256sum',
     'apksigner','qa-phase5-staging.mjs','android-candidate','release-gates.json'
   ]) assert.ok(workflow.includes(marker),marker);
-  assert.ok(workflow.includes('adb install -r candidate/NuestraGalaxia.apk'),'candidate must prove in-place upgrade over stable');
+  const upgrade=read('scripts/qa-candidate-upgrade.sh');
+  assert.ok(upgrade.includes('adb install -r candidate/NuestraGalaxia.apk'),'candidate must prove in-place upgrade over stable');
   assert.ok(workflow.includes('"upgradeInstall": "PASS"'),'candidate ledger must record upgrade install');
   assert.equal(workflow.includes('gh release upload android-stable'),false);
 });
@@ -73,4 +74,15 @@ test('candidate staging uses GitHub OIDC and ephemeral QA identities',()=>{
   assert.match(workflow,/Revoke ephemeral QA identities/);
   assert.equal(workflow.includes('secrets.QA_STAGING_TOKEN_0'),false);
   assert.equal(workflow.includes('secrets.QA_STAGING_TOKEN_1'),false);
+});
+
+
+test('upgrade smoke is executed by Bash with pipefail preserved',()=>{
+  const workflow=read('.github/workflows/android-release-candidate.yml');
+  const script=read('scripts/qa-candidate-upgrade.sh');
+  assert.match(workflow,/script: bash scripts\/qa-candidate-upgrade\.sh/);
+  assert.match(script,/^#!\/usr\/bin\/env bash/m);
+  assert.match(script,/set -euo pipefail/);
+  assert.match(script,/adb install previous\/NuestraGalaxia\.apk \| tee/);
+  assert.match(script,/adb install -r candidate\/NuestraGalaxia\.apk \| tee -a/);
 });
