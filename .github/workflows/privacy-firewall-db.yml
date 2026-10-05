@@ -40,7 +40,7 @@ jobs:
           fi
           mv supabase/migrations/20261004232942_qa_phase0_privacy_firewall.sql /tmp/phase0.sql
           mv supabase/migrations/20261005011401_qa_phase1_data_integrity.sql /tmp/phase1.sql
-          mv supabase/migrations/20261005023000_qa_phase2_chat_correctness.sql /tmp/phase2.sql
+          mv supabase/migrations/20261005023031_qa_phase2_chat_correctness.sql /tmp/phase2.sql
           supabase start
 
       - name: Seed pre-Phase-0 orphan
@@ -67,7 +67,7 @@ jobs:
         run: |
           mv /tmp/phase1.sql supabase/migrations/20261005011401_qa_phase1_data_integrity.sql
           supabase migration up
-          mv /tmp/phase2.sql supabase/migrations/20261005023000_qa_phase2_chat_correctness.sql
+          mv /tmp/phase2.sql supabase/migrations/20261005023031_qa_phase2_chat_correctness.sql
           supabase migration up
 
       - name: Run delete-for-both and privacy Edge E2E
