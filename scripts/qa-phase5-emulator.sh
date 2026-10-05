@@ -10,6 +10,12 @@ gradle -p android --no-daemon :app:connectedDebugAndroidTest \
   2>&1 | tee qa-artifacts/instrumentation.txt
 
 PACKAGE=com.nuestragalaxia.companion
+DEBUG_APK="android/app/build/outputs/apk/debug/app-debug.apk"
+
+# connectedDebugAndroidTest cleans the target package after instrumentation.
+# Reinstall the exact debug APK just exercised so lifecycle checks run against
+# the same build instead of failing because the Activity no longer exists.
+adb install -r "$DEBUG_APK" | tee qa-artifacts/lifecycle-install.txt
 
 echo "=== killed -> cold start ===" | tee qa-artifacts/lifecycle.txt
 adb shell am force-stop "$PACKAGE"
