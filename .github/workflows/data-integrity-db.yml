@@ -113,7 +113,7 @@ jobs:
             'c4000000-0000-4000-8000-000000000002','goal','rollback goal','','project','active','0',3,
             '2026-09-01T00:00:00Z','2020-01-01T00:00:00Z'
           );
-          do $rollback_probe_capsule$
+          do $rollback_probe_goal$
           begin
             if exists(
               select 1 from public.galaxy_goals
