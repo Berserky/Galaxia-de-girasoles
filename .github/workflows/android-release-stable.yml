@@ -83,7 +83,7 @@ jobs:
           set -euo pipefail
           test "$(jq -r '.sourceSha' candidate/candidate.json)" = "$CANDIDATE_SHA"
           test "$(jq -r '.runId' candidate/candidate.json)" = "$CANDIDATE_RUN_ID"
-          for gate in node denoTypeChecks security dbMigrationReplay androidUnit androidInstrumentation androidLint signedCandidate checksum stagingSmoke; do
+          for gate in node denoTypeChecks security dbMigrationReplay androidUnit androidInstrumentation androidLint signedCandidate checksum upgradeInstall stagingSmoke; do
             test "$(jq -r --arg gate "$gate" '.[$gate]' candidate-evidence/release-gates.json)" = "PASS"
           done
           grep -q '^VERIFIED: remote staging dual-user concurrency/realtime/map/backup' candidate-evidence/staging-smoke.txt
