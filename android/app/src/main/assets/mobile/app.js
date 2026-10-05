@@ -1518,6 +1518,16 @@ async function loadChat({older=false,quiet=false,force=false,aroundId=''}={}){
    const map=new Map([...(result.messages||[]),...(chatState.messages||[])].map(m=>[String(m.id),m]));
    nextState={...result,messages:[...map.values()].sort((a,b)=>Number(a.server_seq||0)-Number(b.server_seq||0)),pinnedIds:result.pinnedIds||chatState.pinnedIds||[]};
   }
+  // NG-QA-006-004: a chat-state request can start before a retry/send succeeds and
+  // return afterwards with an older snapshot. Preserve messages confirmed locally
+  // after this load began so the stale snapshot cannot make a sent message disappear.
+  if(!older&&chatState){
+   const confirmedAfterLoad=(chatState.messages||[]).filter(m=>Number(m.server_seq||0)>oldLastSeq);
+   if(confirmedAfterLoad.length){
+    const map=new Map([...(nextState.messages||[]),...confirmedAfterLoad].map(m=>[String(m.id),m]));
+    nextState={...nextState,messages:[...map.values()].sort((a,b)=>Number(a.server_seq||0)-Number(b.server_seq||0))};
+   }
+  }
   const newIncoming=(nextState.messages||[]).filter(m=>Number(m.server_seq||0)>oldLastSeq&&!chatOwn(m));
   const added=newIncoming.length,effectToPlay=[...newIncoming].reverse().find(m=>m.effect)?.effect||null;
   const nextSignature=chatSignature(nextState),changed=force||older||aroundId||nextSignature!==chatStateSignature||!chatState;
@@ -1567,7 +1577,13 @@ async function flushChatOutbox({retryFailed=false}={}){
     try{
      const result=await api('chat-send',{clientId:item.client_id,clientCreatedAt:item.client_created_at,body:item.body||'',replyTo:item.reply_to||null,messageType:item.message_type||'text',attachments:item.attachments||[],attachment:item.attachment||{},entityRef:item.entityRef||null,scheduledAt:item.scheduled_at||null,silent:item.silent===true,ttlSeconds:item.ttl_seconds||null,viewOnce:item.view_once===true,effect:item.effect||null,retryCount:Number(item.retryCount||0)});
      rows=readChatOutbox().filter(x=>String(x.client_id)!==String(item.client_id));writeChatOutbox(rows);
-     if(result?.message){chatState=chatState||{messages:[],unread:0,pinnedIds:[]};const map=new Map([...(chatState.messages||[]),result.message].map(x=>[String(x.id),x]));chatState.messages=[...map.values()].sort((a,b)=>Number(a.server_seq||0)-Number(b.server_seq||0));}
+     if(result?.message){
+      chatState=chatState||{messages:[],unread:0,pinnedIds:[]};
+      const map=new Map([...(chatState.messages||[]),result.message].map(x=>[String(x.id),x]));
+      chatState.messages=[...map.values()].sort((a,b)=>Number(a.server_seq||0)-Number(b.server_seq||0));
+      chatStateSignature=chatSignature(chatState);
+      if(view==='chat')render();
+     }
      try{await api('chat-metric',{event:'sent',messageId:result?.message?.id,retryCount:Number(item.retryCount||0)});}catch{}
      if(view==='chat')render();
     }catch(error){
