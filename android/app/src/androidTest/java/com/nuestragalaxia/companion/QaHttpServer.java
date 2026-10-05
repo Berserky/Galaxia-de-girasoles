@@ -60,7 +60,9 @@ final class QaHttpServer implements Closeable {
         });
     }
 
-    void reset() { networkMode = NetworkMode.NORMAL; actions.clear(); sentMessages.clear(); sequence.set(200); }\n    void setNetworkMode(NetworkMode mode) { networkMode = mode == null ? NetworkMode.NORMAL : mode; }\n    List<String> actions() { return Collections.unmodifiableList(new ArrayList<>(actions)); }
+    void reset() { networkMode = NetworkMode.NORMAL; actions.clear(); sentMessages.clear(); sequence.set(200); }
+    void setNetworkMode(NetworkMode mode) { networkMode = mode == null ? NetworkMode.NORMAL : mode; }
+    List<String> actions() { return Collections.unmodifiableList(new ArrayList<>(actions)); }
     long sentCount() { return sentMessages.size(); }
 
     @Override public void close() {
