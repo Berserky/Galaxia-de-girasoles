@@ -46,4 +46,4 @@ adb shell dumpsys activity activities | grep -m1 -E "mResumedActivity|topResumed
 adb shell dumpsys activity activities | grep -m1 -E "mResumedActivity|topResumedActivity" | grep -q "$PACKAGE"
 
 echo "VERIFIED: killed/cold-start/background/foreground" | tee -a qa-artifacts/lifecycle.txt
-adb logcat -d > qa-artifacts/logcat.txt
+adb logcat -d > qa-artifacts/logcat.txt || true
