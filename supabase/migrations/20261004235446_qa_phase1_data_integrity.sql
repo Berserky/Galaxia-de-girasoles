@@ -81,6 +81,24 @@ using(
   and public.galaxy_capsule_object_access(bucket_id,name)
 );
 
+create or replace function public.galaxy_bond_widget(photo_path text) returns jsonb
+language plpgsql security definer set search_path='' as $$
+begin
+ if public.galaxy_person() is null then raise exception 'No autorizado';end if;
+ if photo_path is null or length(photo_path)>300 or photo_path like '__backup/%'
+    or (photo_path<>'' and not exists(
+      select 1 from storage.objects o
+      where o.bucket_id='galaxy-photos' and o.name=photo_path
+        and o.metadata->>'mimetype' in ('image/jpeg','image/png','image/webp')
+    )) then
+   raise exception 'Elige una foto de su álbum';
+ end if;
+ update public.galaxy_bond_config
+ set photo_path=galaxy_bond_widget.photo_path
+ where id=1;
+ return jsonb_build_object('photoPath',photo_path);
+end $$;
+
 create or replace function public.galaxy_backup_export_v5()
 returns jsonb
 language sql
