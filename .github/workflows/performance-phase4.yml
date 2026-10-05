@@ -102,6 +102,9 @@ jobs:
         if: always()
         with:
           name: phase4-android-runtime
-          path: /tmp/android-phase4.md
+          path: |
+            /tmp/android-phase4.md
+            /tmp/phase4-baseline-batterystats.txt
+            /tmp/phase4-after-batterystats.txt
           if-no-files-found: warn
           retention-days: 14
