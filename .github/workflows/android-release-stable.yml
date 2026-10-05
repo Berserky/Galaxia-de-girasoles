@@ -117,6 +117,26 @@ jobs:
           SHA256=$(jq -r '.sha256' candidate/candidate.json)
           jq -n             --argjson versionCode "$VERSION_CODE"             --arg versionName "$VERSION_NAME"             --arg apkUrl "https://github.com/Berserky/Galaxia-de-girasoles/releases/download/android-stable/NuestraGalaxia.apk"             --arg sha256 "$SHA256"             --arg sourceSha "$CANDIDATE_SHA"             --argjson candidateRunId "$CANDIDATE_RUN_ID"             '{versionCode:$versionCode,versionName:$versionName,apkUrl:$apkUrl,sha256:$sha256,sourceSha:$sourceSha,candidateRunId:$candidateRunId,notes:("Nuestra Galaxia "+$versionName+" · promoción gobernada desde candidate verificado.")}'             > candidate/update.json
 
+      - name: Archive current stable before clobber
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p prepromotion-stable
+          if gh release view android-stable >/dev/null 2>&1; then
+            gh release download android-stable -p update.json -p NuestraGalaxia.apk -D prepromotion-stable --clobber
+            test -s prepromotion-stable/NuestraGalaxia.apk
+            test -s prepromotion-stable/update.json
+            sha256sum prepromotion-stable/NuestraGalaxia.apk > prepromotion-stable/NuestraGalaxia.apk.sha256
+            jq -n --arg archivedAt "$(date -u +%FT%TZ)" --arg candidateRunId "$CANDIDATE_RUN_ID" --arg candidateSha "$CANDIDATE_SHA" '{archivedAt:$archivedAt,candidateRunId:$candidateRunId,candidateSha:$candidateSha}' > prepromotion-stable/archive.json
+          else
+            echo "No existing android-stable release to archive." > prepromotion-stable/README.txt
+          fi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-stable-prepromotion-${{ inputs.candidate_run_id }}
+          path: prepromotion-stable/**
+          retention-days: 90
+          if-no-files-found: error
       - name: Publish android-stable
         shell: bash
         run: |
