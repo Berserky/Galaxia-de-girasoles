@@ -190,7 +190,7 @@ begin
   end if;
 
   t:=public.galaxy_chat_poll_winner('92000000-0000-4000-8000-000000000030');
-  if not (t->>'tie')::boolean or t->'winner' is not null then
+  if not (t->>'tie')::boolean or t->>'winner' is not null then
     raise exception 'NG-QA-010 tie is not explicit: %',t;
   end if;
 
