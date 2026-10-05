@@ -1705,14 +1705,26 @@ async function openChatAlbumPicker(attachmentId){
 }
 async function openChatStickerPicker(){
  const result=await api('chat-stickers',{operation:'list'}),stickers=result.stickers||[];
- showModal('Stickers y GIFs','<div class="chat-sticker-tools">'+(native.giphyConfigured?'<form id="chatGifSearchForm"><input class="input" name="query" maxlength="50" placeholder="Buscar GIF en GIPHY"><button class="btn small" type="submit">'+ico('search')+'</button></form><small>Powered by GIPHY</small>':'<div class="chat-giphy-disabled"><b>GIFs online no configurados</b><small>Los stickers privados siguen disponibles. Para activar búsqueda GIF se configura GIPHY_API_KEY en el build.</small></div>')+'</div><div id="chatGifResults"></div><div class="chat-sticker-grid">'+(stickers.length?stickers.map(x=>'<div class="chat-sticker-cell"><button type="button" data-action="chat-sticker-send" data-id="'+attr(x.id)+'"><img loading="lazy" src="'+attr(x.url)+'" alt="'+attr(x.name||'Sticker')+'"></button><button type="button" class="chat-sticker-fav '+(x.favorite?'active':'')+'" data-action="chat-sticker-favorite" data-id="'+attr(x.id)+'" data-favorite="'+(x.favorite?'true':'false')+'" aria-label="Favorito">'+ico('star')+'</button></div>').join(''):'<div class="empty">Todavía no han creado stickers. Mantén pulsada una foto del chat y elige “Crear sticker”.</div>')+'</div>','chat-stickers');
+ showModal('Stickers y GIFs','<div class="chat-sticker-tools"><form id="chatGifSearchForm"><input class="input" name="query" maxlength="50" placeholder="Buscar GIF en GIPHY"><button class="btn small" type="submit">'+ico('search')+'</button></form><small>Powered by GIPHY · clave protegida en servidor</small></div><div id="chatGifResults"></div><div class="chat-sticker-grid">'+(stickers.length?stickers.map(x=>'<div class="chat-sticker-cell"><button type="button" data-action="chat-sticker-send" data-id="'+attr(x.id)+'"><img loading="lazy" src="'+attr(x.url)+'" alt="'+attr(x.name||'Sticker')+'"></button><button type="button" class="chat-sticker-fav '+(x.favorite?'active':'')+'" data-action="chat-sticker-favorite" data-id="'+attr(x.id)+'" data-favorite="'+(x.favorite?'true':'false')+'" aria-label="Favorito">'+ico('star')+'</button></div>').join(''):'<div class="empty">Todavía no han creado stickers. Mantén pulsada una foto del chat y elige “Crear sticker”.</div>')+'</div>','chat-stickers');
  refreshIcons();
 }
 async function runChatGifSearch(form){
- const query=String(new FormData(form).get('query')||'');
- const result=await GalaxyNative.call('searchGiphy',query,false),box=modal.querySelector('#chatGifResults');
- if(box)box.innerHTML='<div class="chat-gif-grid">'+((result.items||[]).length?(result.items||[]).map(x=>'<button type="button" data-action="chat-gif-pick" data-url="'+attr(x.url)+'" data-title="'+attr(x.title||'GIF')+'"><img loading="lazy" src="'+attr(x.previewUrl)+'" alt="'+attr(x.title||'GIF')+'"></button>').join(''):'<div class="empty">Sin GIFs para esa búsqueda.</div>')+'</div><small class="chat-giphy-credit">Powered by GIPHY</small>';
- refreshIcons();
+ const query=String(new FormData(form).get('query')||''),box=modal.querySelector('#chatGifResults'),submit=form.querySelector('button[type="submit"]');
+ if(submit)submit.disabled=true;
+ if(box)box.innerHTML='<div class="monthly-loading">'+loading('Buscando GIFs')+'</div>';
+ try{
+  const result=await GalaxyNative.call('searchGiphy',query,false);
+  if(!result?.configured){
+   if(box)box.innerHTML='<div class="chat-giphy-disabled"><b>GIFs online no configurados</b><small>Los stickers privados siguen disponibles. GIPHY se activa con una clave protegida en el servidor.</small></div>';
+   return;
+  }
+  if(box)box.innerHTML='<div class="chat-gif-grid">'+((result.items||[]).length?(result.items||[]).map(x=>'<button type="button" data-action="chat-gif-pick" data-url="'+attr(x.url)+'" data-title="'+attr(x.title||'GIF')+'"><img loading="lazy" src="'+attr(x.previewUrl)+'" alt="'+attr(x.title||'GIF')+'"></button>').join(''):'<div class="empty">Sin GIFs para esa búsqueda.</div>')+'</div><small class="chat-giphy-credit">Powered by GIPHY</small>';
+ }catch(error){
+  if(box)box.innerHTML='<div class="chat-giphy-disabled"><b>GIPHY no respondió</b><small>'+esc(error?.message||'Puedes seguir usando tus stickers privados e intentar de nuevo.')+'</small></div>';
+ }finally{
+  if(submit)submit.disabled=false;
+  refreshIcons();
+ }
 }
 async function openChatLocationMenu(){
  if(!mapData)await refreshMap({quiet:true,detail:true}).catch(()=>{});
@@ -1777,8 +1789,8 @@ function openChatPermissionHelp(kind){
  showModal('Permiso necesario','<div class="chat-permission-help">'+ico(video?'video':'camera')+'<h3>Autoriza '+label+'</h3><p>Nuestra Galaxia necesita este permiso solo cuando quieras '+(video?'grabar un video':'tomar una foto')+'. Puedes volver a solicitarlo o abrir los ajustes de Android.</p><div class="chat-permission-actions"><button class="btn" type="button" data-action="chat-permission-retry" data-kind="'+kind+'">Volver a pedir permiso</button><button class="btn secondary" type="button" data-action="chat-open-app-settings">Abrir ajustes</button></div></div>','chat-permission');
 }
 function normalizeChatUpload(upload,kind,durationMs=null,mediaQuality='optimized'){
- const mime=String(upload?.mime||'').toLowerCase();
- const resolvedKind=kind==='file'?(mime.startsWith('image/')?'photo':mime.startsWith('video/')?'video':mime.startsWith('audio/')?'audio':'file'):kind;
+ const mime=String(upload?.mime||'').toLowerCase(),browserImage=mime.startsWith('image/')&&!['image/heic','image/heif'].includes(mime);
+ const resolvedKind=kind==='file'?(browserImage?'photo':mime.startsWith('video/')?'video':mime.startsWith('audio/')?'audio':'file'):kind;
  return {kind:resolvedKind,bucket:upload?.bucket||'galaxy-chat-media',path:upload.path,mime,name:upload.name||upload.originalName||resolvedKind,size:Number(upload.size||0),durationMs:durationMs||upload.durationMs||null,url:upload.url||'',waveform:Array.isArray(upload?.waveform)?upload.waveform:[],mediaQuality,videoMessage:upload?.videoMessage===true,gif:upload?.gif===true,thumbnailPath:upload?.thumbnailPath||null};
 }
 async function addChatNativeMedia(method,args,kind){
@@ -1792,6 +1804,7 @@ async function addChatNativeMedia(method,args,kind){
   setChatPresence('ONLINE');
   const message=String(e?.message||'');
   if(message.includes('PERMISSION_CAMERA')||message.includes('PERMISSION_MICROPHONE')){openChatPermissionHelp(kind==='video'?'video':'photo');return;}
+  if(/cancelad[ao]/i.test(message)){closeModal();return;}
   toast(message||'No pudimos adjuntar el archivo.');
  }
 }
