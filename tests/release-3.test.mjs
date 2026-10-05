@@ -14,12 +14,12 @@ test('Mega 3.0 release migration is canonical and non-destructive',()=>{
  assert.equal(new Set(tables).size,tables.length,'migration must not repeat table blocks');
 });
 
-test('Android stable metadata is aligned to Galaxy Chat Universe 3.5.0',()=>{
+test('Android release candidate metadata is 3.5.1 with versionCode 35',()=>{
  const gradle=read('android/app/build.gradle.kts');
  const candidate=read('.github/workflows/android-release-candidate.yml');
  const stable=read('.github/workflows/android-release-stable.yml');
- assert.match(gradle,/versionCode = 34/);
- assert.match(gradle,/versionName = "3\.5\.0"/);
+ assert.match(gradle,/versionCode = 35/);
+ assert.match(gradle,/versionName = "3\.5\.1"/);
  assert.match(candidate,/VERSION_CODE=.*versionCode/);
  assert.match(candidate,/VERSION_NAME=.*versionName/);
  assert.match(stable,/versionCode:\$versionCode/);
