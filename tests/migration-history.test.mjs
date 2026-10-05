@@ -9,7 +9,7 @@ const files=readdirSync(dir).filter(x=>/^\d{14}_.+\.sql$/.test(x)).sort();
 const normalizedMd5=text=>createHash('md5').update(text.replace(/\r\n/g,'\n').trimEnd()).digest('hex');
 
 test('NG-QA-004 checked-in history exactly preserves every production migration before Phase 1',()=>{
-  const phase1='20261004235446_qa_phase1_data_integrity.sql';
+  const phase1='20261005011401_qa_phase1_data_integrity.sql';
   assert.ok(files.includes(phase1),'Phase 1 migration missing');
   const historical=files.filter(x=>x!==phase1);
   assert.equal(historical.length,manifest.migrations.length,'historical migration count drifted');
