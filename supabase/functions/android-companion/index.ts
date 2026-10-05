@@ -2725,7 +2725,7 @@ async function presenceSet(req:Request,body:any){
 }
 
 const BACKUP_VERSION=5;
-const BACKUP_SCHEMA_VERSION="20261004235446";
+const BACKUP_SCHEMA_VERSION="20261005011401";
 const BACKUP_PAYLOAD_BUCKET="galaxy-backups";
 const BACKUP_PAGE_SIZE=1000;
 const BACKUP_MAX_ROWS_PER_SECTION=100000;
