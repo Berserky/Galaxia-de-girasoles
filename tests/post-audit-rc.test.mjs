@@ -61,3 +61,16 @@ test('NG-QA-006-004 preserves retry success against stale chat-state snapshots',
   assert.match(app,/server_seq\|\|0\)>oldLastSeq/);
   assert.match(app,/chatStateSignature=chatSignature\(chatState\)/);
 });
+
+
+test('candidate staging uses GitHub OIDC and ephemeral QA identities',()=>{
+  const workflow=read('.github/workflows/android-release-candidate.yml');
+  assert.match(workflow,/id-token: write/);
+  assert.match(workflow,/ACTIONS_ID_TOKEN_REQUEST_URL/);
+  assert.match(workflow,/qa-github-bootstrap/);
+  assert.match(workflow,/QA_OIDC_AUDIENCE: nuestra-galaxia-qa/);
+  assert.match(workflow,/::add-mask::\$TOKEN0/);
+  assert.match(workflow,/Revoke ephemeral QA identities/);
+  assert.equal(workflow.includes('secrets.QA_STAGING_TOKEN_0'),false);
+  assert.equal(workflow.includes('secrets.QA_STAGING_TOKEN_1'),false);
+});
