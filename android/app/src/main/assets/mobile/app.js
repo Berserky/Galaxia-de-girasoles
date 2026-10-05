@@ -48,7 +48,7 @@ let dateContext=null,dateContextLoadedAt=0,dateQuestionNonce=0,dateMode=null,dat
 let goalsState=null,goalsLoadedAt=0,goalsFilter='active';
 let presenceLastSignature='',voiceTimer=null,voiceSeconds=0,intelligenceSearchNonce=0;
 let chatState=null,chatLoading=false,chatReply=null,chatStateSignature='',chatPreferencesState=null,chatUnlockedSession=false,notificationState=null,pendingDeepLink=null;
-let chatAttachmentsDraft=[],chatNewCount=0,chatPinIndex=0,chatTypingTimer=null,chatPresenceTimer=null,chatOutboxFlushing=false,chatInitialScroll=true,chatVoiceState={recording:false,paused:false,ready:false,durationMs:0},chatHoldRecord=null;
+let chatAttachmentsDraft=[],chatNewCount=0,chatPinIndex=0,chatTypingTimer=null,chatPresenceTimer=null,chatOutboxFlushing=false,chatOutboxFlushPromise=null,chatInitialScroll=true,chatVoiceState={recording:false,paused:false,ready:false,durationMs:0},chatHoldRecord=null;
 let welcomeStep=0,welcomePreview=false,welcomeGift=true,welcomeEntering=false,tourStep=-1;
 const welcomeMusic=new Audio('../musica.mp3');welcomeMusic.loop=true;welcomeMusic.volume=.32;
 const globalPlayer=document.getElementById('globalPlayer'),providerPlayer=document.getElementById('providerPlayer');
@@ -1550,27 +1550,37 @@ function patchLocalMessage(clientId,patch){
  if(view==='chat')render();
 }
 async function flushChatOutbox({retryFailed=false}={}){
- if(chatOutboxFlushing||!native.paired||!navigator.onLine)return;
- chatOutboxFlushing=true;
- try{
-  let rows=readChatOutbox();
-  for(const item of rows.slice()){
-   if(item._localState==='FAILED'&&!retryFailed)continue;
-   if(item.retryCount>=8&&item._localState==='FAILED')continue;
-   patchLocalMessage(item.client_id,{_localState:'SENDING'});
-   try{
-    const result=await api('chat-send',{clientId:item.client_id,clientCreatedAt:item.client_created_at,body:item.body||'',replyTo:item.reply_to||null,messageType:item.message_type||'text',attachments:item.attachments||[],attachment:item.attachment||{},entityRef:item.entityRef||null,scheduledAt:item.scheduled_at||null,silent:item.silent===true,ttlSeconds:item.ttl_seconds||null,viewOnce:item.view_once===true,effect:item.effect||null,retryCount:Number(item.retryCount||0)});
-    rows=readChatOutbox().filter(x=>String(x.client_id)!==String(item.client_id));writeChatOutbox(rows);
-    if(result?.message){chatState=chatState||{messages:[],unread:0,pinnedIds:[]};const map=new Map([...(chatState.messages||[]),result.message].map(x=>[String(x.id),x]));chatState.messages=[...map.values()].sort((a,b)=>Number(a.server_seq||0)-Number(b.server_seq||0));}
-    try{await api('chat-metric',{event:'sent',messageId:result?.message?.id,retryCount:Number(item.retryCount||0)});}catch{}
-    if(view==='chat')render();
-   }catch(error){
-    const nextRetry=Number(item.retryCount||0)+1;
-    patchLocalMessage(item.client_id,{_localState:'FAILED',retryCount:nextRetry,failureCode:String(error?.message||'send_failed').slice(0,80)});
-    try{await api('chat-metric',{event:'failed',retryCount:nextRetry,failureCode:String(error?.message||'send_failed').slice(0,80)});}catch{}
+ if(!native.paired||!navigator.onLine)return;
+ if(chatOutboxFlushPromise){
+  await chatOutboxFlushPromise;
+  if(retryFailed)return flushChatOutbox({retryFailed:true});
+  return;
+ }
+ const run=(async()=>{
+  chatOutboxFlushing=true;
+  try{
+   let rows=readChatOutbox();
+   for(const item of rows.slice()){
+    if(item._localState==='FAILED'&&!retryFailed)continue;
+    if(item.retryCount>=8&&item._localState==='FAILED')continue;
+    patchLocalMessage(item.client_id,{_localState:'SENDING'});
+    try{
+     const result=await api('chat-send',{clientId:item.client_id,clientCreatedAt:item.client_created_at,body:item.body||'',replyTo:item.reply_to||null,messageType:item.message_type||'text',attachments:item.attachments||[],attachment:item.attachment||{},entityRef:item.entityRef||null,scheduledAt:item.scheduled_at||null,silent:item.silent===true,ttlSeconds:item.ttl_seconds||null,viewOnce:item.view_once===true,effect:item.effect||null,retryCount:Number(item.retryCount||0)});
+     rows=readChatOutbox().filter(x=>String(x.client_id)!==String(item.client_id));writeChatOutbox(rows);
+     if(result?.message){chatState=chatState||{messages:[],unread:0,pinnedIds:[]};const map=new Map([...(chatState.messages||[]),result.message].map(x=>[String(x.id),x]));chatState.messages=[...map.values()].sort((a,b)=>Number(a.server_seq||0)-Number(b.server_seq||0));}
+     try{await api('chat-metric',{event:'sent',messageId:result?.message?.id,retryCount:Number(item.retryCount||0)});}catch{}
+     if(view==='chat')render();
+    }catch(error){
+     const nextRetry=Number(item.retryCount||0)+1;
+     patchLocalMessage(item.client_id,{_localState:'FAILED',retryCount:nextRetry,failureCode:String(error?.message||'send_failed').slice(0,80)});
+     try{await api('chat-metric',{event:'failed',retryCount:nextRetry,failureCode:String(error?.message||'send_failed').slice(0,80)});}catch{}
+    }
    }
-  }
- }finally{chatOutboxFlushing=false;}
+  }finally{chatOutboxFlushing=false;}
+ })();
+ chatOutboxFlushPromise=run;
+ try{return await run;}
+ finally{if(chatOutboxFlushPromise===run)chatOutboxFlushPromise=null;}
 }
 function queueChatMessage({body='',messageType='text',attachments=[],attachment={},entityRef=null,card=null,scheduledAt=null,silent=false,ttlSeconds=null,viewOnce=false,effect=null}={}){
  const text=String(body||'').trim();
