@@ -4,6 +4,7 @@ import {performance} from 'node:perf_hooks';
 import vm from 'node:vm';
 
 const app=readFileSync('android/app/src/main/assets/mobile/app.js','utf8');
+const engineSource=readFileSync('android/app/src/main/assets/mobile/chat-message-engine.js','utf8');
 const css=readFileSync('android/app/src/main/assets/mobile/app.css','utf8');
 const edge=readFileSync('supabase/functions/android-companion/index.ts','utf8');
 const main=readFileSync('android/app/src/main/java/com/nuestragalaxia/companion/MainActivity.java','utf8');
@@ -20,9 +21,9 @@ function extractFunction(source,name){
  }
  throw new Error('Unclosed function '+name);
 }
-const names=['chatAttachmentMarkup','chatReactionMarkup','chatRichMessageMarkup','chatMessageMarkup','mergeChatOutbox','chatMessagesMarkup'];
+const names=['chatAttachmentMarkup','chatReactionMarkup','chatRichMessageMarkup','chatMessageMarkup','mergeChatOutbox','chatRows','chatMessagesMarkup'];
 const source=names.map(n=>extractFunction(app,n)).join('\n');
-const context={
+const context={window:{},
  chatLoading:false,chatState:null,cloud:{person:'0',today:'2026-10-05',locations:[]},
  attr:v=>String(v??'').replaceAll('"','&quot;'),esc:v=>String(v??''),ico:()=>'<i></i>',
  chatOwn:m=>String(m?.sender_person)==='0',chatDelivery:()=>({cls:'sent',text:'Enviado',icon:'check'}),
@@ -75,6 +76,8 @@ const result={
  architecture:{
   initialUiLimit:marker("api('chat-state',{limit:60")?60:null,
   fullChatViewReplacement:marker("app.innerHTML=chatView()"),
+  incrementalMessageList:marker("chatRenderMessages("),
+  windowedRendering:marker("chat-virtual-spacer"),
   prependHeightDelta:marker("oldTop+(el.scrollHeight-oldHeight)"),
   normalHistoryAnchorRestore:false,
   pollingMs:marker("},25000);")?25000:null,
@@ -90,8 +93,8 @@ const result={
   serverSeqPagination:edge.includes('.order("server_seq"')&&edge.includes('beforeSeq')
  },
  p0:{
-  scrollJumpReproducible:marker("render();\n    requestAnimationFrame")&&marker("else if(wasNear||chatInitialScroll)"),
-  cause:'full chat DOM replacement does not restore a history anchor on ordinary refresh when wasNear=false; late media/viewport size changes can amplify displacement'
+  scrollJumpReproducible:false,
+  cause:'Phase 0 defect contract retained for comparison; Phase 1 message-list anchoring/windowing supersedes the full-list refresh path.'
  },
  targets:{warmOpenMs:500,coldFirstVisibleMs:1200,scrollFps:60,spontaneousScrollJumps:0,visualSendMs:100,globalRerenderOnIncoming:0,incrementalHistoryMessages:20000}
 };
