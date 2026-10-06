@@ -33,6 +33,7 @@ public final class GalaxyBridge {
                 case "captureChatPhoto" -> captureChatPhoto(requestId);
                 case "captureChatVideo" -> captureChatVideo(requestId);
                 case "captureChatVideoMessage" -> captureChatVideoMessage(requestId,args.optInt(0,30));
+                case "cancelChatMediaUpload" -> cancelChatMediaUpload(requestId);
                 case "searchGiphy" -> searchGiphy(requestId,args.optString(0,""),args.optBoolean(1,false));
                 case "getChatLocation" -> getChatLocation(requestId);
                 case "pickDriveFolder" -> pickDriveFolder(requestId);
@@ -104,6 +105,7 @@ public final class GalaxyBridge {
     public void captureChatPhoto(String requestId){ activity.captureChatPhoto(requestId); }
     public void captureChatVideo(String requestId){ activity.captureChatVideo(requestId); }
     public void captureChatVideoMessage(String requestId,int seconds){ activity.captureChatVideoMessage(requestId,seconds); }
+    public void cancelChatMediaUpload(String requestId){ activity.cancelChatMediaUpload(requestId); }
     public void searchGiphy(String requestId,String query,boolean stickers){ activity.searchGiphy(requestId,query,stickers); }
     public void getChatLocation(String requestId){ activity.getChatLocation(requestId); }
     public void pickDriveFolder(String requestId){ activity.pickDriveFolder(requestId); }
