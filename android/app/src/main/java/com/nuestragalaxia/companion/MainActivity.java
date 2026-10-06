@@ -121,6 +121,7 @@ public final class MainActivity extends FragmentActivity {
 
     @Override protected void onCreate(Bundle savedInstanceState){
         super.onCreate(savedInstanceState);
+        pruneCameraMediaCache();
         getOnBackPressedDispatcher().addCallback(this,new OnBackPressedCallback(true){
             @Override public void handleOnBackPressed(){
                 if(pageReady)evaluate("window.GalaxyNative&&window.GalaxyNative.back&&window.GalaxyNative.back();");
@@ -1239,6 +1240,12 @@ public final class MainActivity extends FragmentActivity {
                 resolve(requestId,new JSONObject().put("theme",key));
             }catch(Exception e){reject(requestId,"No pudimos sincronizar el tema con Android.");}
         });
+    }
+
+    private void pruneCameraMediaCache(){
+        File dir=new File(getCacheDir(),"camera-media"),files[]=dir.listFiles();
+        if(files==null)return;
+        for(File file:files)if(file.isFile())try{file.delete();}catch(Exception ignored){}
     }
 
     private static void pruneChatFileCache(File dir){
