@@ -1188,6 +1188,8 @@ body.chat-mode .chat-composer-v2{
   .chat-attachment-sheet-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 }
 @media(prefers-reduced-motion:reduce){
+  .plan-roulette,.plan-roulette.result,.wrapped-card{animation:none!important}
+  .wrapped-deck{scroll-behavior:auto}
   .chat-composer-v2 .chat-send{transition:none}
   #modal.chat-bottom-sheet::backdrop{backdrop-filter:none}
 }
