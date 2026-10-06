@@ -925,13 +925,21 @@ public final class MainActivity extends FragmentActivity {
             voiceRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
             voiceRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
             voiceRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
-            voiceRecorder.setAudioEncodingBitRate(96000);voiceRecorder.setAudioSamplingRate(44100);
-            voiceRecorder.setMaxDuration(60000);voiceRecorder.setMaxFileSize(5L*1024L*1024L);
+            voiceRecorder.setAudioChannels(1);voiceRecorder.setAudioEncodingBitRate(64000);voiceRecorder.setAudioSamplingRate(32000);
+            voiceRecorder.setMaxDuration(300000);voiceRecorder.setMaxFileSize(8L*1024L*1024L);
             voiceRecorder.setOutputFile(voiceFile.getAbsolutePath());
             voiceRecorder.setOnInfoListener((r,what,extra)->{if(what==MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED||what==MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED)stopVoiceRecording(null);});
             voiceRecorder.prepare();voiceRecorder.start();voiceStartedAt=System.currentTimeMillis();voicePausedAt=0;voicePausedTotal=0;
             resolve(requestId,new JSONObject().put("recording",true));
         }catch(Exception e){cleanupVoice(true);reject(requestId,"No pudimos iniciar el micrófono.");}
+    }
+
+    void getVoiceRecordingLevel(String requestId){
+        runOnUiThread(()->{
+            if(voiceRecorder==null){reject(requestId,"No hay una grabación activa.");return;}
+            try{resolve(requestId,new JSONObject().put("amplitude",Math.min(1d,voiceRecorder.getMaxAmplitude()/32767d)));}
+            catch(Exception e){reject(requestId,"No pudimos medir el nivel del micrófono.");}
+        });
     }
 
     void stopVoiceRecording(String requestId){

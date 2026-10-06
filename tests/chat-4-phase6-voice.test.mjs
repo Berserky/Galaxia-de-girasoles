@@ -1,0 +1,20 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const source=fs.readFileSync(new URL('../android/app/src/main/assets/mobile/chat-voice-engine.js',import.meta.url),'utf8');
+function engine(){const window={};vm.runInNewContext(source,{window});let t=1000;return {voice:window.GalaxyChatVoice.create({now:()=>t,maxDurationMs:300000}),tick:n=>t+=n};}
+test('voice state machine hold lock pause preview reset',()=>{const {voice,tick}=engine();assert.equal(voice.snapshot().state,'idle');voice.requestPermission();assert.equal(voice.snapshot().state,'requesting_permission');voice.startHold();tick(1200);voice.sample(.5);assert.equal(voice.snapshot().state,'recording_hold');assert.equal(voice.snapshot().durationMs,1200);voice.lock();assert.equal(voice.snapshot().state,'recording_locked');voice.pause();tick(500);assert.equal(voice.elapsed(),1200);voice.resume();tick(800);voice.preview();assert.equal(voice.snapshot().state,'preview');assert.equal(voice.snapshot().durationMs,2000);voice.reset();assert.equal(voice.snapshot().state,'idle');});
+test('waveform stays bounded and duration respects max',()=>{const {voice,tick}=engine();voice.startHold();for(let i=0;i<80;i++){tick(5000);voice.sample(i%2);}assert.equal(voice.snapshot().waveform.length,48);assert.equal(voice.elapsed(),300000);});
+test('cancel and failure are explicit terminal UI states',()=>{const {voice}=engine();voice.startHold();voice.cancel();assert.equal(voice.snapshot().state,'cancelled');voice.fail('permission denied');assert.equal(voice.snapshot().state,'failed');assert.equal(voice.snapshot().error,'permission denied');});
+
+const app=fs.readFileSync(new URL('../android/app/src/main/assets/mobile/app.js',import.meta.url),'utf8');
+const main=fs.readFileSync(new URL('../android/app/src/main/java/com/nuestragalaxia/companion/MainActivity.java',import.meta.url),'utf8');
+const bridge=fs.readFileSync(new URL('../android/app/src/main/java/com/nuestragalaxia/companion/GalaxyBridge.java',import.meta.url),'utf8');
+test('voice recorder is integrated in Composer without mandatory recording modal',()=>{assert.match(app,/chatVoiceComposerMarkup/);const finish=app.slice(app.indexOf('async function finishChatHoldRecording'),app.indexOf('async function beginChatHoldRecording'));assert.doesNotMatch(finish,/showModal\(/);assert.match(finish,/chatVoiceEngine\.preview/);});
+test('hold cancel lock pause preview delete send are wired to one recorder',()=>{for(const token of ['chat-hold-record','chatHoldRecord.cancel','chatVoiceEngine.lock()','pauseVoiceRecording','resumeVoiceRecording','playVoiceRecording','discardVoiceRecording','saveChatVoiceRecording'])assert.match(app,new RegExp(token.replace(/[()]/g,'\\$&')));});
+test('native voice capture is mono AAC M4A and bounded to five minutes',()=>{assert.match(main,/voice-.*\.m4a/);assert.match(main,/AudioEncoder\.AAC/);assert.match(main,/setAudioChannels\(1\)/);assert.match(main,/setAudioEncodingBitRate\(64000\)/);assert.match(main,/setAudioSamplingRate\(32000\)/);assert.match(main,/setMaxDuration\(300000\)/);});
+test('microphone permission stays contextual and amplitude bridge drives waveform',()=>{assert.match(main,/RECORD_AUDIO/);assert.match(main,/getMaxAmplitude/);assert.match(bridge,/getVoiceRecordingLevel/);assert.match(app,/GalaxyNative\.call\('getVoiceRecordingLevel'\)/);});
+test('audio playback remains exclusive and cycles 1x 1.5x 2x',()=>{assert.match(app,/querySelectorAll\('\.chat-audio-card audio'\).*x!==audio.*x\.pause/);assert.match(app,/current===1\?1\.5:current===1\.5\?2:1/);});
+test('temporary audio cleanup and retry-safe upload semantics remain native',()=>{assert.match(main,/cleanupVoice\(true\)/);assert.match(main,/if\(file\.delete\(\)\)voiceFile=null/);const save=main.slice(main.indexOf('private void saveVoiceRecordingAs'),main.indexOf('private void cleanupVoice'));assert.doesNotMatch(save,/catch\(Exception e\).*voiceFile=null/s);});
+test('composer height changes remain owned by Scroll Engine',()=>{assert.match(app,/function chatRenderComposer[\s\S]{0,1400}beforeViewportChange[\s\S]{0,1400}afterViewportChange/);});
