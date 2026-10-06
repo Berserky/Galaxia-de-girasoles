@@ -65,7 +65,7 @@ public final class MainActivity extends FragmentActivity {
         "map-state","place-save","place-delete","status-set","transport-set","destination-save","trip","context-state","context-settings","context-session","context-events","context-suggestion","context-recap",
         "intelligence-search","intelligence-ask","intelligence-connections","intelligence-narrate","intelligence-book","intelligence-transcribe","intelligence-transcript-delete","intelligence-index",
         "media-list","media-delete","presence-set","backup-export","backup-import",
-        "pair-code-create","profile-repair","device-revoke","push-token-register","push-token-unregister","push-preferences","chat-state","chat-send","chat-poll","chat-checklist","chat-read","chat-edit","chat-delete","chat-react","chat-pin","chat-favorite","chat-pins","chat-saved","chat-search","chat-presence","chat-metric","chat-schedule-update","chat-preferences","chat-open-once","chat-transcript","chat-transcript-delete","chat-translate","chat-shared","chat-albums","chat-stickers","chat-live-location","chat-gif-import","notifications-list","notifications-read","goals-engine","date-engine","insights-summary","monthly-summary","today-history","encounter-stats","frequent-places","gps-history-export","gps-history-delete"
+        "pair-code-create","profile-repair","device-revoke","push-token-register","push-token-unregister","push-preferences","chat-state","chat-send","chat-media-discard","chat-poll","chat-checklist","chat-read","chat-edit","chat-delete","chat-react","chat-pin","chat-favorite","chat-pins","chat-saved","chat-search","chat-presence","chat-metric","chat-schedule-update","chat-preferences","chat-open-once","chat-transcript","chat-transcript-delete","chat-translate","chat-shared","chat-albums","chat-stickers","chat-live-location","chat-gif-import","notifications-list","notifications-read","goals-engine","date-engine","insights-summary","monthly-summary","today-history","encounter-stats","frequent-places","gps-history-export","gps-history-delete"
     );
 
     private DeviceStore store;
@@ -1361,8 +1361,10 @@ public final class MainActivity extends FragmentActivity {
             pendingCameraPermissionRequest=null;pendingCameraPermissionKind="photo";
             boolean granted=checkSelfPermission(Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED;
             if(request!=null){
-                if(granted)capturePhotoWithKind(request,kind);
-                else reject(request,"PERMISSION_CAMERA: Autoriza la cámara para tomar fotos desde el chat.");
+                if(granted){
+                    if("chat-native".equals(kind))captureIntegratedChatCamera(request,"photo",120,false);
+                    else capturePhotoWithKind(request,kind);
+                }else reject(request,"PERMISSION_CAMERA: Autoriza la cámara para tomar fotos desde el chat.");
             }
         }else if(requestCode==REQ_CHAT_VIDEO_PERMISSION){
             String request=pendingVideoPermissionRequest;int duration=pendingVideoPermissionDuration;boolean videoMessage=pendingVideoPermissionMessage;
