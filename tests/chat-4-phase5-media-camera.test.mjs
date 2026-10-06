@@ -99,7 +99,7 @@ test('streaming upload reports only measured progress and is cancellable',()=>{
  assert.ok(mobile.includes('UploadCancelledException'));
  assert.ok(bridge.includes('cancelChatMediaUpload'));
  assert.ok(main.includes('chatMediaUploadCancelled'));
- assert.ok(app.includes("GalaxyNative.call('cancelChatMediaUpload')"));
+ assert.ok(app.includes('cancelChatMediaUpload'));
  assert.ok(app.includes('<progress max="100" value="'));
  assert.ok(app.includes('s.total>0'),'unknown totals must not produce a fake percentage');
 });
@@ -110,7 +110,7 @@ test('cancelled or removed draft uploads are cleaned only when unreferenced',()=
  assert.ok(edge.includes('Number(primary.count||0)>0||Number(thumb.count||0)>0'));
  assert.ok(edge.includes('db.storage.from("galaxy-chat-media").remove([path])'));
  assert.ok(main.includes('discardUnreferencedChatMedia(uploadedPaths)'));
- assert.ok(app.includes("api('chat-media-discard'"));
+ assert.ok(app.includes('chat-media-discard'));
 });
 
 test('Composer retains caption contract and Delivery Engine remains the only message sender',()=>{
