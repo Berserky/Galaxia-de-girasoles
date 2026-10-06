@@ -47,9 +47,10 @@ let toastTimer,refreshing=false,updateState={text:'La app está al día.',progre
 let dateContext=null,dateContextLoadedAt=0,dateQuestionNonce=0,dateMode=null,dateModeTimer=null,dateLastExperience=null;
 let goalsState=null,goalsLoadedAt=0,goalsFilter='active';
 let presenceLastSignature='',voiceTimer=null,voiceSeconds=0,intelligenceSearchNonce=0;
-let chatState=null,chatLoading=false,chatQueuedLoad=null,chatReply=null,chatStateSignature='',chatPreferencesState=null,chatUnlockedSession=false,notificationState=null,pendingDeepLink=null;
+let chatState=null,chatLoading=false,chatQueuedLoad=null,chatStateSignature='',chatPreferencesState=null,chatUnlockedSession=false,notificationState=null,pendingDeepLink=null;
 const chatMessageEngine=window.GalaxyMessageEngine.create({pageSize:60,maxCache:420,windowSize:84,windowStep:28,estimatedHeight:92});
 const chatScrollEngine=window.GalaxyScrollEngine.create({bottomTolerance:110,memoryKey:'galaxy.chat.scroll.position.v1'});
+const chatComposer=window.GalaxyChatComposer.create({draftPrefix:'nuestra-galaxia.chat-draft.v4',maxHeight:120,minHeight:44,doubleTapGuardMs:280});
 let chatResizeObserver=null,chatVirtualRaf=0,chatMeasureRaf=0,chatRenderGeneration=0,chatRestoreOnRender=false,chatResumeRefreshPromise=null;
 let chatAttachmentsDraft=[],chatNewCount=0,chatResumeUnread=0,chatResumeNewCount=0,chatPinIndex=0,chatTypingTimer=null,chatPresenceTimer=null,chatDeliveryEngine=null,chatRecentSyncIds=new Map(),chatSyncInFlight=new Set(),chatInitialScroll=true,chatVoiceState={recording:false,paused:false,ready:false,durationMs:0},chatHoldRecord=null;
 let welcomeStep=0,welcomePreview=false,welcomeGift=true,welcomeEntering=false,tourStep=-1;
@@ -1290,7 +1291,6 @@ function themeSettingsCard(){
 
 function chatTime(value){try{return new Intl.DateTimeFormat('es-CO',{hour:'numeric',minute:'2-digit'}).format(new Date(value));}catch{return'';}}
 const CHAT_OUTBOX_KEY='nuestra-galaxia.chat-outbox.v3';
-const CHAT_DRAFT_KEY='nuestra-galaxia.chat-draft.v3';
 const CHAT_REACTIONS=['\u2764\uFE0F','\uD83D\uDE02','\uD83E\uDD79','\uD83D\uDE2E','\uD83D\uDE22','\uD83D\uDC4D'];
 
 function chatDay(value){
@@ -1307,8 +1307,30 @@ function readChatOutbox(){
  try{const rows=JSON.parse(localStorage.getItem(CHAT_OUTBOX_KEY)||'[]');return Array.isArray(rows)?rows.map(x=>({...x,_localState:x._localState||'PENDING'})):[];}catch{return[];}
 }
 function writeChatOutbox(rows){try{localStorage.setItem(CHAT_OUTBOX_KEY,JSON.stringify((rows||[]).slice(-120)));}catch{}}
-function readChatDraft(){try{return localStorage.getItem(CHAT_DRAFT_KEY)||'';}catch{return'';}}
-function writeChatDraft(value){try{localStorage.setItem(CHAT_DRAFT_KEY,String(value||''));}catch{}}
+function chatComposerConversationKey(){
+ const me=String(cloud?.person??native.person??'unknown'),other=me==='0'?'1':me==='1'?'0':'partner';
+ return 'pair:'+([me,other].sort().join('-'));
+}
+function ensureChatComposer(){
+ const key=chatComposerConversationKey(),current=chatComposer.snapshot();
+ if(current.conversationKey!==key){
+  const next=chatComposer.hydrate(key);
+  if(!next.text){
+   try{
+    const legacy=localStorage.getItem('nuestra-galaxia.chat-draft.v3')||'';
+    if(legacy){chatComposer.setText(legacy);localStorage.removeItem('nuestra-galaxia.chat-draft.v3');}
+   }catch{}
+  }
+ }
+ return chatComposer;
+}
+function chatReplyTarget(){return ensureChatComposer().snapshot().replyTarget;}
+function chatReplyFragment(m){
+ if(!m)return'Mensaje';
+ if(m.deleted_at)return'Mensaje eliminado';
+ const body=String(m.body||'').trim();if(body)return body;
+ return {photo:'Foto',video:'Video',video_message:'Videomensaje',audio:'Audio',file:'Archivo',location:'Ubicación',card:'Galaxy Card',gif:'GIF'}[m.message_type]||'Mensaje';
+}
 function chatOwn(m){return String(m.sender_person)===String(cloud?.person);}
 function chatPartnerLabel(){return chatPreferencesState?.partner_nickname||partnerName();}
 function chatDelivery(m){
@@ -1643,16 +1665,35 @@ function chatPinnedBar(){
  const label=m?(m.deleted_at?'Mensaje eliminado':m.body||({photo:'Foto',video:'Video',audio:'Audio',file:'Archivo'}[m.message_type]||'Mensaje fijado')):'Mensaje fijado';
  return '<div class="chat-pinned"><button type="button" data-action="chat-pin-jump" data-id="'+attr(id)+'">'+ico('pin')+'<span><b>Fijado '+(chatPinIndex+1)+'/'+ids.length+'</b><small>'+esc(label)+'</small></span></button><div><button type="button" data-action="chat-pin-prev" aria-label="Anterior">'+ico('chevron-up')+'</button><button type="button" data-action="chat-pin-next" aria-label="Siguiente">'+ico('chevron-down')+'</button><button type="button" data-action="chat-pins-open" aria-label="Ver fijados">'+ico('list')+'</button></div></div>';
 }
+function chatComposerMarkup(){
+ const composer=ensureChatComposer(),state=composer.snapshot(),reply=state.replyTarget,mode=composer.rightMode(chatAttachmentsDraft.length);
+ return '<form id="chatForm" class="chat-composer chat-composer-v2" autocomplete="off">'+
+ (reply?'<div class="chat-compose-reply chat-compose-reply-v2"><span class="chat-reply-icon">'+ico('reply')+'</span><span class="chat-reply-content"><b>'+esc(chatOwn(reply)?'Tú':partnerName())+'</b><small>'+esc(chatReplyFragment(reply))+'</small></span><button type="button" data-action="chat-reply-cancel" aria-label="Cancelar respuesta">'+ico('x')+'</button></div>':'')+
+ chatDraftAttachmentMarkup()+
+ '<div class="chat-compose-row"><button class="chat-plus" type="button" data-action="chat-attach-open" aria-label="Adjuntar">'+ico('plus')+'</button><textarea name="body" maxlength="4000" rows="1" placeholder="Escribe un mensaje…" aria-label="Escribe un mensaje" inputmode="text" enterkeyhint="enter">'+esc(state.text)+'</textarea>'+
+ (mode==='send'?'<button class="chat-send composer-right" type="submit" aria-label="Enviar">'+ico('send')+'</button>':'<button class="chat-send composer-right chat-mic-hold" type="button" data-action="chat-hold-record" aria-label="Mantén pulsado para grabar">'+ico('mic')+'</button>')+
+ '</div><div class="chat-hold-hint" aria-live="polite" hidden></div></form>';
+}
+function chatRenderComposer({focus=false}={}){
+ if(view!=='chat')return;
+ const current=document.querySelector('#chatForm');if(!current)return;
+ const chatEl=document.querySelector('#chatMessages'),active=document.activeElement===current.querySelector('textarea'),oldTextarea=current.querySelector('textarea');
+ const selection=active&&oldTextarea?{start:oldTextarea.selectionStart,end:oldTextarea.selectionEnd}:null;
+ if(chatEl)chatScrollEngine.beforeViewportChange(chatEl);
+ current.outerHTML=chatComposerMarkup();
+ const textarea=document.querySelector('#chatForm textarea');
+ if(textarea)ensureChatComposer().applyInput(textarea,{persist:false});
+ if((focus||active)&&textarea){textarea.focus({preventScroll:true});if(selection)try{textarea.setSelectionRange(selection.start,selection.end);}catch{}}
+ refreshIcons();
+ if(chatEl)chatScrollEngine.afterViewportChange(chatEl);
+}
 function chatView(){
- const draft=readChatDraft();
+ ensureChatComposer();
  return '<section class="chat-shell chat-theme-'+attr(chatPreferencesState?.theme||'galaxy')+'">'+
  '<header class="chat-shell-head"><button class="chat-back" type="button" data-action="chat-close" aria-label="Volver">'+ico('arrow-left')+'</button><div class="chat-avatar">'+esc(chatPartnerLabel().slice(0,1).toUpperCase())+'</div><div class="chat-contact"><p class="eyebrow">GALAXY CHAT</p><h2>'+esc(chatPartnerLabel())+'</h2><small>'+esc(chatPresenceLabel())+'</small></div><button class="chat-head-action" type="button" data-action="chat-search-open" aria-label="Buscar">'+ico('search')+'</button><button class="chat-head-action" type="button" data-action="chat-shared-open" aria-label="Contenido compartido">'+ico('layout-grid')+'</button><button class="chat-head-action" type="button" data-action="chat-saved-open" aria-label="Guardados">'+ico('bookmark')+'</button><button class="chat-head-action" type="button" data-action="chat-settings-open" aria-label="Ajustes del chat">'+ico('settings-2')+'</button></header>'+
  '<div class="chat-pinned-slot">'+chatPinnedBar()+'</div>'+
  '<div class="chat-scroll-wrap"><div id="chatMessages" class="chat-messages" tabindex="0" aria-label="Mensajes">'+chatMessagesMarkup()+'</div>'+(chatNewCount?'<button class="chat-new-button" type="button" data-action="chat-jump-present">'+ico('arrow-down')+' '+chatNewCount+' mensaje'+(chatNewCount===1?'':'s')+' nuevo'+(chatNewCount===1?'':'s')+'</button>':'')+'</div>'+
- '<form id="chatForm" class="chat-composer" autocomplete="off">'+
- (chatReply?'<div class="chat-compose-reply"><span>'+ico('reply')+' Respondiendo a '+esc(chatOwn(chatReply)?'ti':partnerName())+'<small>'+esc(chatReply.body||'Mensaje')+'</small></span><button type="button" data-action="chat-reply-cancel" aria-label="Cancelar respuesta">'+ico('x')+'</button></div>':'')+
- chatDraftAttachmentMarkup()+
- '<div class="chat-compose-row"><button class="chat-plus" type="button" data-action="chat-attach-open" aria-label="Adjuntar">'+ico('plus')+'</button><textarea name="body" maxlength="4000" rows="1" placeholder="Mensaje para '+attr(chatPartnerLabel())+'" aria-label="Mensaje">'+esc(draft)+'</textarea><button class="chat-camera" type="button" data-action="chat-camera-open" aria-label="Abrir cámara">'+ico('camera')+'</button>'+(draft||chatAttachmentsDraft.length?'<button class="chat-send" type="submit" aria-label="Enviar">'+ico('send')+'</button>':'<button class="chat-send chat-mic-hold" type="button" data-action="chat-hold-record" aria-label="Mantén pulsado para grabar">'+ico('mic')+'</button>')+'</div><div class="chat-hold-hint" aria-live="polite" hidden></div></form></section>';
+ chatComposerMarkup()+'</section>';
 }
 async function loadChatPreferences(){
  try{const result=await api('chat-preferences',{operation:'get'});chatPreferencesState=result.preferences||null;if(view==='chat')render();}catch{}
@@ -1669,9 +1710,13 @@ function openChatSendMenu(){
  showModal('Opciones de envío','<div class="chat-send-options"><button class="card" type="button" data-action="chat-send-mode" data-mode="now">'+ico('send')+'<span><b>Enviar ahora</b><small>Envío normal.</small></span></button><button class="card" type="button" data-action="chat-send-mode" data-mode="silent">'+ico('bell-off')+'<span><b>Enviar en silencio</b><small>Sin sonido ni vibración.</small></span></button></div><form id="chatPremiumSendForm" class="stack"><div class="field"><label>Programar</label><input class="input" type="datetime-local" name="scheduledAt" min="'+attr(local)+'" value="'+attr(local)+'"></div><div class="field"><label>Mensaje temporal</label><select class="input" name="ttlSeconds" data-role="chat-ttl"><option value="">No</option><option value="3600">1 hora</option><option value="86400">24 horas</option><option value="604800">7 días</option><option value="2592000">30 días</option><option value="custom">Personalizado</option></select></div><div class="field" data-role="chat-ttl-custom" hidden><label>Horas</label><input class="input" type="number" name="ttlCustomHours" min="1" max="8760" value="48"></div>'+(hasViewOnce?'<label class="chat-setting-toggle"><input type="checkbox" name="viewOnce"> Ver una vez</label>':'')+(hasMedia?'<div class="field"><label>Calidad de envío</label><select class="input" name="mediaQuality"><option value="optimized">Optimizado</option><option value="hd">HD</option><option value="original">Original</option></select></div>':'')+'<div class="field"><label>Efecto</label><select class="input" name="effect"><option value="">Sin efecto</option><option value="hearts">Corazones</option><option value="confetti">Confeti</option><option value="stars">Estrellas</option><option value="kiss">Beso</option><option value="sunflowers">Girasoles</option><option value="galaxy">Galaxia</option></select></div><button class="btn" type="submit">'+ico('calendar-clock')+' Programar envío</button></form>','chat-send-options');
 }
 function queueCurrentChat(extra={}){
- const body=readChatDraft().trim(),attachments=chatAttachmentsDraft.slice();if(!body&&!attachments.length)return;
+ const composer=ensureChatComposer(),state=composer.snapshot(),attachments=chatAttachmentsDraft.slice(),body=state.text.trim();
+ if(!body&&!attachments.length)return false;
+ if(!composer.beginSubmit({attachmentCount:attachments.length}))return false;
  const messageType=attachments.length?(attachments[0].videoMessage?'video_message':attachments[0].gif?'gif':(attachments[0].kind||'file')):'text';
- queueChatMessage({body,messageType,attachments,...extra});
+ const row=queueChatMessage({body,messageType,attachments,...extra});
+ if(!row){composer.releaseSubmit();return false;}
+ return true;
 }
 function chatSignature(state){
  const messages=(state?.messages||[]).map(m=>[m.id,m.body,m.deleted_at,m.edited_at,m.delivered_at,m.read_at,m.reply_to,m.server_seq,m.schedule_state,m.expires_at,m.opened_at,m.effect,JSON.stringify(m.reactions||[]),!!m.pin,!!m.favorite,JSON.stringify(m.attachments||[]),JSON.stringify(m.sticker||null),JSON.stringify(m.liveLocation||null),JSON.stringify(m.card||null)]);
@@ -1882,14 +1927,16 @@ function queueChatMessage({body='',messageType='text',attachments=[],attachment=
  if(!text&&messageType==='text'&&!attachments.length)return;
  if(messageType==='card'&&!entityRef)return;
  const clientId=crypto.randomUUID(),created=new Date().toISOString();window.GalaxyChatPerf?.optimisticStart?.(clientId);
- const row={client_id:clientId,client_created_at:created,body:text,reply_to:chatReply?.id||null,message_type:messageType,attachments,attachment,entityRef,card,scheduled_at:scheduledAt,silent,ttl_seconds:ttlSeconds,view_once:viewOnce,effect,_localState:'PENDING',retryCount:0,local_order:Date.now()};
+ const row={client_id:clientId,client_created_at:created,body:text,reply_to:chatReplyTarget()?.id||null,message_type:messageType,attachments,attachment,entityRef,card,scheduled_at:scheduledAt,silent,ttl_seconds:ttlSeconds,view_once:viewOnce,effect,_localState:'PENDING',retryCount:0,local_order:Date.now()};
  chatDeliveryEngine.queue(row);
- chatReply=null;chatAttachmentsDraft=[];writeChatDraft('');
+ ensureChatComposer().accepted();chatAttachmentsDraft=[];
  if(view==='chat'){
   chatMessageEngine.resetWindow(chatRows().length,{align:'end'});chatRenderMessages({scroll:'bottom'});
   requestAnimationFrame(()=>window.GalaxyChatPerf?.optimisticVisible?.(clientId));
  }
+ if(view==='chat')chatRenderComposer();
  flushChatOutbox().catch(()=>{});
+ return row;
 }
 function queueGalaxyCard(cardType,entityKind,entityId,localCard={}){
  if(!entityId)return;
