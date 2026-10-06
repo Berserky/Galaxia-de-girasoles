@@ -1571,7 +1571,7 @@ async function chatEdit(req:Request,body:any){
 async function chatMediaDiscard(req:Request,body:any){
  const d=await device(req),person=String(d.person);
  const values=Array.isArray(body?.paths)?body.paths:[];
- const paths=[...new Set(values.map((value:any)=>text(value,400)).filter(Boolean))].slice(0,20);
+ const paths:string[]=Array.from(new Set<string>(values.map((value:any)=>String(text(value,400))).filter((value:string)=>Boolean(value)))).slice(0,20);
  let removed=0,skipped=0;
  for(const path of paths){
   if(!path.startsWith(person+"/")||path.includes("..")||path.startsWith("__backup/")){skipped++;continue;}
