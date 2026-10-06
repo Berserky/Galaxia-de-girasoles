@@ -294,6 +294,79 @@ public class GalaxyDeviceClosureTest {
         System.out.println("GALAXY_CHAT_PHASE2_ANDROID=" + result);
     }
 
+    @Test public void chatPhase4Composer2_realWebViewInputReplyDraftSheetAnd20k_areStable() throws Exception {
+        launchChat();
+        runJs("ensureChatComposer().accepted();chatAttachmentsDraft=[];chatRenderComposer();");
+        awaitJs("!!window.GalaxyChatComposer&&!!document.querySelector('.chat-composer-v2')");
+        assertEquals("button", js("document.querySelector('.chat-send')?.type||''"));
+        assertEquals("chat-hold-record", js("document.querySelector('.chat-send')?.dataset.action||''"));
+
+        runJs("const t=document.querySelector('#chatForm textarea');t.value='Hola 🌻';t.dispatchEvent(new Event('input',{bubbles:true}));t.setSelectionRange(0,4);");
+        awaitJs("document.querySelector('.chat-send')?.type==='submit'");
+        assertEquals("Hola 🌻", js("ensureChatComposer().snapshot().text"));
+        assertEquals("4", js("document.querySelector('#chatForm textarea')?.selectionEnd||0"));
+
+        runJs("const t=document.querySelector('#chatForm textarea');t.value='uno\\ndos\\ntres\\ncuatro\\ncinco\\nseis\\nsiete\\nocho\\nnueve\\ndiez';t.dispatchEvent(new Event('input',{bubbles:true}));");
+        awaitJs("ensureChatComposer().snapshot().multiline===true");
+        assertTrue(Double.parseDouble(js("parseFloat(document.querySelector('#chatForm textarea').style.height)||0")) <= 120d);
+        assertEquals("auto", js("document.querySelector('#chatForm textarea').style.overflowY"));
+
+        runJs("const m=(chatState?.messages||[])[0];if(m){ensureChatComposer().setReply(m);chatRenderComposer({focus:true});}");
+        awaitJs("!!document.querySelector('.chat-compose-reply-v2')");
+        String replyDraft = js("document.querySelector('#chatForm textarea')?.value||''");
+        runJs("document.querySelector('[data-action=\"chat-reply-cancel\"]')?.click()");
+        awaitJs("!document.querySelector('.chat-compose-reply-v2')");
+        assertEquals(replyDraft, js("document.querySelector('#chatForm textarea')?.value||''"));
+
+        runJs("const t=document.querySelector('#chatForm textarea');t.value='draft navegación';t.dispatchEvent(new Event('input',{bubbles:true}));go('home');go('chat');");
+        awaitJs("(document.querySelector('#chatForm textarea')?.value||'')==='draft navegación'");
+
+        runJs("document.querySelector('[data-action=\"chat-attach-open\"]')?.click()");
+        awaitJs("document.querySelector('#modal')?.open===true&&document.querySelector('#modal')?.classList.contains('chat-bottom-sheet')");
+        assertTrue(js("document.querySelector('#modal')?.innerText||''").contains("Cámara"));
+        assertTrue(js("document.querySelector('#modal')?.innerText||''").contains("Fotos"));
+        runJs("document.querySelector('[data-action=\"modal-close\"]')?.click()");
+        awaitJs("document.querySelector('#modal')?.open===false");
+
+        tapWebElement("#chatForm textarea");
+        awaitJs("document.activeElement===document.querySelector('#chatForm textarea')");
+        shell("input text _IME");
+        awaitJs("(document.querySelector('#chatForm textarea')?.value||'').includes('_IME')");
+        assertEquals("true", js("ensureChatComposer().snapshot().keyboard.open"));
+
+        int sentBefore = backend.sentCount();
+        runJs("const t=document.querySelector('#chatForm textarea');t.value='Phase4 once';t.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#chatForm').requestSubmit();document.querySelector('#chatForm')?.requestSubmit();");
+        awaitCondition(() -> backend.sentCount() == sentBefore + 1, UI_TIMEOUT_MS);
+        awaitJs("(document.querySelector('#chatForm textarea')?.value||'')===''");
+        assertEquals("false", js("!!ensureChatComposer().snapshot().replyTarget"));
+
+        runJs("const t=document.querySelector('#chatForm textarea');t.value='Realtime no borra esto';t.dispatchEvent(new Event('input',{bubbles:true}));const incoming={id:'p4-live',client_id:'p4-livec',sender_person:'1',body:'Mientras escribes',message_type:'text',attachments:[],server_seq:999999,created_at:'2026-10-05T22:00:00Z',reactions:[]};chatState=chatMessageEngine.applySingle(chatState||{messages:[]},incoming);chatStateSignature=chatSignature(chatState);chatRenderMessages({scroll:'preserve'});");
+        assertEquals("Realtime no borra esto", js("document.querySelector('#chatForm textarea')?.value||''"));
+
+        shell("settings put system font_scale 1.30");
+        scenario.recreate();
+        awaitCondition(() -> context.getResources().getConfiguration().fontScale >= 1.25f, UI_TIMEOUT_MS);
+        awaitJs("!!document.querySelector('#app')");
+        launchChat();
+        awaitJs("!!document.querySelector('.chat-composer-v2')");
+        double minTarget = Double.parseDouble(js("Math.min(document.querySelector('.chat-plus').getBoundingClientRect().width,document.querySelector('.chat-plus').getBoundingClientRect().height,document.querySelector('.chat-send').getBoundingClientRect().width,document.querySelector('.chat-send').getBoundingClientRect().height)"));
+        assertTrue("Composer touch target below 44 CSS px: " + minTarget, minTarget >= 44d);
+
+        runJs("chatState={...(chatState||{}),messages:Array.from({length:20000},(_,i)=>({id:'p4-'+i,client_id:'p4c-'+i,sender_person:String(i%2),body:'Mensaje '+i,message_type:'text',attachments:[],server_seq:i+1,created_at:'2026-10-05T20:00:00Z',reactions:[]})),nextBeforeSeq:null,nextAfterSeq:null};chatMessageEngine.resetWindow(20000,{align:'end'});chatRenderMessages({scroll:'bottom'});");
+        awaitJs("document.querySelectorAll('.chat-message').length<=84");
+        runJs("const t=document.querySelector('#chatForm textarea');t.value='20k fluido';t.dispatchEvent(new Event('input',{bubbles:true}));");
+        assertEquals("20k fluido", js("ensureChatComposer().snapshot().text"));
+        assertTrue(Integer.parseInt(js("document.querySelectorAll('.chat-message').length")) <= 84);
+
+        JSONObject result = new JSONObject()
+            .put("composer", "ChatComposer")
+            .put("sentDelta", backend.sentCount() - sentBefore)
+            .put("touchTargetPx", minTarget)
+            .put("renderedMessagesWith20k", Integer.parseInt(js("document.querySelectorAll('.chat-message').length")))
+            .put("draft", js("ensureChatComposer().snapshot().text"));
+        System.out.println("GALAXY_CHAT_PHASE4_ANDROID=" + result);
+    }
+
     @Test public void dailyGoalsPlansEventsCapsulesMapContextBackupAndUpdate_areReachable() throws Exception {
         launch();
         awaitJs("document.body.innerText.includes('¿Qué construimos después?')");
