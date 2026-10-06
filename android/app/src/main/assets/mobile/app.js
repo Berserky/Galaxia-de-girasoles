@@ -1699,6 +1699,13 @@ function chatVoiceComposerMarkup(){
  const paused=v.state==='paused',locked=v.state==='recording_locked'||paused;
  return '<div class="chat-voice-inline recording '+(paused?'paused':'')+'" role="group" aria-label="'+(paused?'Grabación pausada':'Grabando nota de voz')+'"><button type="button" data-action="chat-voice-discard" aria-label="Cancelar grabación">'+ico('trash-2')+'</button><b class="chat-voice-time">'+time+'</b>'+chatVoiceWaveformMarkup()+(locked?'<button type="button" data-action="'+(paused?'chat-voice-resume':'chat-voice-pause')+'" aria-label="'+(paused?'Reanudar':'Pausar')+'">'+ico(paused?'play':'pause')+'</button><button class="chat-voice-send" type="button" data-action="chat-hold-stop" aria-label="Detener grabación">'+ico('square')+'</button>':'<small>Desliza ← cancelar · ↑ bloquear</small>')+'</div>';
 }
+function chatVoiceRefreshInline(){
+ const form=document.querySelector('#chatForm'),row=form?.querySelector('.chat-compose-row');if(!form||!row)return;
+ const markup=chatVoiceComposerMarkup(),current=form.querySelector('.chat-voice-inline');
+ if(current){if(markup)current.outerHTML=markup;else current.remove();}
+ else if(markup)row.insertAdjacentHTML('beforebegin',markup);
+ refreshIcons();
+}
 function chatComposerMarkup(){
  const composer=ensureChatComposer(),state=composer.snapshot(),reply=state.replyTarget,mode=composer.rightMode(chatAttachmentsDraft.length),voiceMarkup=chatVoiceComposerMarkup();
  return '<form id="chatForm" class="chat-composer chat-composer-v2" autocomplete="off">'+
@@ -2240,8 +2247,8 @@ function startChatVoiceTicker(){
  stopChatVoiceTicker();
  chatVoiceTimer=setInterval(()=>{
   const v=chatVoiceEngine.snapshot();if(!['recording_hold','recording_locked','paused'].includes(v.state)){stopChatVoiceTicker();return;}
-  if(v.state!=='paused')GalaxyNative.call('getVoiceRecordingLevel').then(level=>{chatVoiceEngine.sample(Number(level?.amplitude||0));chatRenderComposer();}).catch(()=>{chatVoiceEngine.sample(.12);chatRenderComposer();});
-  else chatRenderComposer();
+  if(v.state!=='paused')GalaxyNative.call('getVoiceRecordingLevel').then(level=>{chatVoiceEngine.sample(Number(level?.amplitude||0));chatVoiceRefreshInline();}).catch(()=>{chatVoiceEngine.sample(.12);chatVoiceRefreshInline();});
+  else chatVoiceRefreshInline();
   if(chatVoiceEngine.elapsed()>=v.maxDurationMs)finishChatHoldRecording().catch(()=>{});
  },250);
 }
@@ -2266,27 +2273,11 @@ async function beginChatHoldRecording(e,button){
   setChatPresence('RECORDING_AUDIO');
   chatHoldRecord={pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,cancel:false,locked:false};
   try{button.setPointerCapture(e.pointerId);}catch{}
-  button.classList.add('recording');startChatVoiceTicker();chatRenderComposer();
+  button.classList.add('recording');startChatVoiceTicker();chatVoiceRefreshInline();
   chatHoldHint('Suelta para enviar · desliza a la izquierda para cancelar · arriba para bloquear','recording');
  }catch(err){chatHoldRecord=null;chatVoiceEngine.fail(err.message);ensureChatComposer().setRecordingIntent('idle');setChatPresence('ONLINE');chatRenderComposer();toast(err.message||'No pudimos iniciar la grabación.');}
 }
 
-function openChatVoice(){
- chatVoiceState={recording:false,paused:false,ready:false,durationMs:0};
- showModal('Nota de voz','<div class="chat-voice-panel"><div class="chat-voice-orb">'+ico('mic')+'</div><b data-role="chat-voice-status">Lista para grabar</b><div class="chat-voice-actions"><button class="btn" type="button" data-action="chat-voice-start">Grabar</button><button class="btn secondary" type="button" data-action="chat-voice-pause" hidden>Pausar</button><button class="btn secondary" type="button" data-action="chat-voice-resume" hidden>Reanudar</button><button class="btn danger" type="button" data-action="chat-voice-stop" hidden>Detener</button><button class="btn ghost" type="button" data-action="chat-voice-preview" hidden>'+ico('play')+' Escuchar</button><button class="btn ghost" type="button" data-action="chat-voice-discard" hidden>Eliminar</button><button class="btn" type="button" data-action="chat-voice-send" hidden>Enviar</button></div></div>','chat-voice');
-}
-function updateChatVoiceUi(){
- const status=modal.querySelector('[data-role="chat-voice-status"]');if(status)status.textContent=chatVoiceState.recording?(chatVoiceState.paused?'Grabación pausada':'Grabando…'):chatVoiceState.ready?'Lista para enviar':'Lista para grabar';
- const show=(sel,v)=>{const x=modal.querySelector(sel);if(x)x.toggleAttribute('hidden',!v);};
- show('[data-action="chat-voice-start"]',!chatVoiceState.recording&&!chatVoiceState.ready);
- show('[data-action="chat-voice-pause"]',chatVoiceState.recording&&!chatVoiceState.paused);
- show('[data-action="chat-voice-resume"]',chatVoiceState.recording&&chatVoiceState.paused);
- show('[data-action="chat-voice-stop"]',chatVoiceState.recording);
- show('[data-action="chat-voice-preview"]',chatVoiceState.ready);
- show('[data-action="chat-voice-discard"]',chatVoiceState.recording||chatVoiceState.ready);
- show('[data-action="chat-voice-send"]',chatVoiceState.ready);
- refreshIcons();
-}
 function notificationIcon(type){
  return type==='chat_message'?'message-circle':type==='status_changed'?'message-circle':type==='mood_changed'?'heart':type==='daily_answer'?'message-circle':type==='goal_update'?'target':type==='nearby'?'map-pin':type==='arrived_safe'?'house':type==='memory_shared'?'images':type==='plan_update'?'calendar':type==='gesture'?'hand-heart':'bell';
 }
