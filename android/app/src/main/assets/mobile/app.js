@@ -1485,11 +1485,11 @@ function chatReactionMarkup(m){
  for(const r of reactions){const e=String(r.emoji||'');if(!groups.has(e))groups.set(e,[]);groups.get(e).push(String(r.person));}
  return '<div class="chat-reactions">'+[...groups.entries()].map(([emoji,people])=>'<button type="button" data-action="chat-react-quick" data-id="'+attr(m.id)+'" data-emoji="'+attr(emoji)+'" class="'+(people.includes(String(cloud.person))?'mine':'')+'">'+esc(emoji)+(people.length>1?'<small>'+people.length+'</small>':'')+'</button>').join('')+'</div>';
 }
-function chatMessageMarkup(m,{newDivider=false}={}){
+function chatMessageMarkup(m,{newDivider=false,grouped=false}={}){
  const own=chatOwn(m),d=chatDelivery(m),reply=m.reply;
  const local=m._localState;
  return (newDivider?'<div class="chat-new-divider" role="separator"><span>Mensajes nuevos</span></div>':'')+
- '<article class="chat-message '+(own?'own':'partner')+(local?' local':'')+'" data-chat-id="'+attr(m.id||m.client_id)+'" data-id="'+attr(m.id||'')+'" data-client-id="'+attr(m.client_id||'')+'">'+
+ '<article class="chat-message '+(own?'own':'partner')+(local?' local':'')+(grouped?' grouped-next':'')+'" data-chat-id="'+attr(m.id||m.client_id)+'" data-id="'+attr(m.id||'')+'" data-client-id="'+attr(m.client_id||'')+'">'+
  (reply?'<button type="button" class="chat-reply-preview" data-action="chat-jump" data-id="'+attr(reply.id)+'"><b>'+esc(String(reply.sender_person)===String(cloud.person)?'Tú':partnerName())+'</b><span>'+esc(reply.deleted_at?'Mensaje eliminado':reply.body||({photo:'Foto',video:'Video',audio:'Audio',file:'Archivo'}[reply.message_type]||'Mensaje'))+'</span></button>':'')+
  '<div class="chat-bubble">'+chatRichMessageMarkup(m)+(m.edited_at&&!m.deleted_at?'<span class="chat-edited">Editado</span>':'')+'</div>'+
  chatReactionMarkup(m)+
@@ -1598,9 +1598,11 @@ function chatMessagesMarkup(){
  if(range.start===0&&chatState?.nextBeforeSeq)out+='<button class="chat-load-more" data-action="chat-load-more">'+ico('history')+' Cargar mensajes anteriores</button>';
  if(range.topPx)out+='<div class="chat-virtual-spacer" data-chat-spacer="top" style="height:'+range.topPx+'px" aria-hidden="true"></div>';
  for(let i=range.start;i<range.end;i++){
-  const m=list[i],day=chatDay(m.created_at||m.client_created_at);
+  const m=list[i],day=chatDay(m.created_at||m.client_created_at),prev=i>0?list[i-1]:null;
+  const gap=prev?Math.abs(new Date(m.created_at||m.client_created_at||0)-new Date(prev.created_at||prev.client_created_at||0)):Infinity;
+  const grouped=!!(prev&&day===last&&String(prev.sender_person)===String(m.sender_person)&&gap<=5*60*1000&&!m.reply&&!prev.deleted_at&&!m.deleted_at&&m.message_type!=='card'&&prev.message_type!=='card');
   if(day!==last){out+='<div class="chat-day"><span>'+esc(day)+'</span></div>';last=day;}
-  out+=chatMessageMarkup(m,{newDivider:i===unreadIndex});
+  out+=chatMessageMarkup(m,{newDivider:i===unreadIndex,grouped});
  }
  if(range.bottomPx)out+='<div class="chat-virtual-spacer" data-chat-spacer="bottom" style="height:'+range.bottomPx+'px" aria-hidden="true"></div>';
  return out;
