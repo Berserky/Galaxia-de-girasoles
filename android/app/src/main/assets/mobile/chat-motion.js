@@ -5,12 +5,13 @@ function create(options={}){
  let nativeReduced=false;
  const reduced=options.reduced||(()=>nativeReduced||!!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
  const slow=options.slow||(()=>navigator.deviceMemory>0&&navigator.deviceMemory<=2);
- const pending=new Map(),active=new Set(),elementAnimations=new WeakMap();
+ const pending=new Map(),active=new Set(),elementAnimations=new WeakMap(),tokens=new Map();
  let burstAt=-Infinity,burstCount=0,slowUntil=0,frameRaf=0,previousFrame=0,badFrames=0;
  const constrained=()=>slow()||now()<slowUntil;
- const permitted=()=>{const limited=constrained();const root=document.documentElement;if(root&&root.getAttribute('data-chat-motion-slow')!==String(limited))root.setAttribute('data-chat-motion-slow',String(limited));return document.visibilityState==='visible'&&!limited;};
+ const permitted=()=>{const limited=constrained();const root=document.documentElement;if(root&&root.getAttribute('data-chat-motion-slow')!==String(limited)){root.setAttribute('data-chat-motion-slow',String(limited));tokens.clear();}return document.visibilityState==='visible'&&!limited;};
  function token(name,fallback){
-  try{return getComputedStyle(document.documentElement).getPropertyValue('--chat-motion-'+name).trim()||fallback;}catch{return fallback;}
+  if(tokens.has(name))return tokens.get(name);
+  try{const value=getComputedStyle(document.documentElement).getPropertyValue('--chat-motion-'+name).trim()||fallback;tokens.set(name,value);return value;}catch{return fallback;}
  }
  function duration(name='normal'){
   const raw=token('duration-'+name,{fast:'100ms',normal:'160ms',slow:'220ms'}[name]||'160ms');
@@ -32,8 +33,7 @@ function create(options={}){
  function animate(el,kind='enter'){
   if(!el?.animate||!permitted())return null;
   elementAnimations.get(el)?.cancel();
-  let style;try{style=getComputedStyle(document.documentElement);}catch{}
-  const value=(name,fallback)=>style?.getPropertyValue('--chat-motion-'+name).trim()||fallback;
+  const value=token;
   const fade=reduced(),distance=value('distance','6px'),scale=value('scale-feedback','0.97'),opacity=Number(value('opacity','.75'));
   const frames=kind==='fade'?[{opacity},{opacity:1}]:kind==='feedback'?(fade?[{opacity},{opacity:1}]:[{transform:'scale('+scale+')'},{transform:'scale(1)'}]):
    kind==='exit'?(fade?[{opacity:1},{opacity:0}]:[{opacity:1,transform:'translateY(0)'},{opacity:0,transform:'translateY('+distance+')'}]):
@@ -76,9 +76,9 @@ function create(options={}){
   if(animation)animation.finished.then(()=>ghost.remove(),()=>ghost.remove());else ghost.remove();
  }
  function cancel(){for(const animation of active)animation.cancel();active.clear();if(frameRaf)cancelAnimationFrame(frameRaf);frameRaf=0;}
- function suspend(){pending.clear();cancel();}
+ function suspend(){pending.clear();tokens.clear();cancel();}
  function frame(ms){if(ms>33)badFrames++;else badFrames=Math.max(0,badFrames-1);if(badFrames>=3){slowUntil=now()+5000;permitted();suspend();}}
- function setNativeReduced(value){nativeReduced=!!value;document.documentElement?.setAttribute('data-chat-motion-reduced',String(nativeReduced));if(nativeReduced)suspend();}
+ function setNativeReduced(value){tokens.clear();nativeReduced=!!value;document.documentElement?.setAttribute('data-chat-motion-reduced',String(nativeReduced));if(nativeReduced)suspend();}
  return {offer,consume,animate,entries,depart,duration,suspend,frame,reduced,constrained,setNativeReduced};
 }
 const runtime=create();

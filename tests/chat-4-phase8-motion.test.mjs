@@ -74,3 +74,20 @@ test('full render consumes bottom intent and it cannot affect a replacement elem
  assert.equal(context.render().atBottom,true);assert.equal(context.chatBottomRenderPending,null);
  context.document.querySelector=()=>replacement;assert.equal(context.render().atBottom,false);
 });
+
+test('cached tokens invalidate when the native reduced-motion preference changes',()=>{
+ const attrs=new Map();let reads=0;
+ const root={setAttribute:(k,v)=>attrs.set(k,v),getAttribute:k=>attrs.get(k)};
+ const context={window:{},document:{visibilityState:'visible',documentElement:root},navigator:{},performance:{now:()=>1000},getComputedStyle:()=>{reads++;return {getPropertyValue:()=>attrs.get('data-chat-motion-reduced')==='true'?'0ms':'100ms'};}};
+ vm.createContext(context);vm.runInContext(fs.readFileSync(new URL('../android/app/src/main/assets/mobile/chat-motion.js',import.meta.url),'utf8'),context);
+ const motion=context.window.GalaxyChatMotion;assert.equal(motion.duration('fast'),100);assert.equal(motion.duration('fast'),100);assert.equal(reads,1);
+ motion.setNativeReduced(true);assert.equal(motion.duration('fast'),0);
+ motion.setNativeReduced(false);assert.equal(motion.duration('fast'),100);
+});
+
+test('rapid feedback replaces the animation on one element instead of accumulating layers',()=>{
+ const motion=engine(),animations=[];
+ const el={animate:()=>{const animation={cancelled:false,finished:new Promise(()=>{}),cancel(){this.cancelled=true;}};animations.push(animation);return animation;}};
+ motion.animate(el,'feedback');motion.animate(el,'feedback');
+ assert.equal(animations[0].cancelled,true);assert.equal(animations[1].cancelled,false);
+});

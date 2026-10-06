@@ -2266,7 +2266,7 @@ function chatComposerRightMode(textarea){
  if(mode==='send'){delete button.dataset.action;button.classList.remove('chat-mic-hold');button.setAttribute('aria-label','Enviar');button.innerHTML=ico('send');}
  else{button.dataset.action='chat-hold-record';button.classList.add('chat-mic-hold');button.setAttribute('aria-label','Mantén pulsado para grabar');button.innerHTML=ico('mic');}
  refreshIcons();
- if(prior!==button.type)window.GalaxyChatMotion?.animate(button,'fade');
+ if(prior!==button.type)window.GalaxyChatMotion?.animate(button.querySelector('.ui-icon'),'fade');
 }
 function chatHoldHint(text='',kind=''){
  const hint=document.querySelector('.chat-hold-hint');if(!hint)return;

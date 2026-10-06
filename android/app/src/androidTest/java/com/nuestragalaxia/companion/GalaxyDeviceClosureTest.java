@@ -402,6 +402,10 @@ public class GalaxyDeviceClosureTest {
         SystemClock.sleep(300);
         assertEquals("recycled mount replays entry","0",js("GalaxyChatPerf.report().events.filter(e=>e.type==='motion-entry').length"));
 
+        runJs("window.__p8timings=[];(async()=>{for(const kind of ['feedback','enter','sheet']){const configured=GalaxyChatMotion.duration(kind==='feedback'?'fast':kind==='sheet'?'slow':'normal'),started=performance.now(),a=GalaxyChatMotion.animate(document.querySelector('.chat-plus'),kind);if(a)await a.finished.catch(()=>{});window.__p8timings.push({kind,configured,actualMs:performance.now()-started,suppressed:!a});}})();");
+        awaitJs("window.__p8timings.length===3");
+        assertEquals("motion token exceeds budget","false",js("window.__p8timings.some(t=>t.configured>300)"));
+        if(isPhysicalDevice())assertEquals("motion actual duration exceeds budget","false",js("window.__p8timings.some(t=>!t.suppressed&&t.actualMs>300)"));
         runJs("document.querySelector('[data-action=\"chat-attach-open\"]').click();window.__p8sheet=modal.querySelector('.modal-inner').getAnimations().map(a=>a.effect.getTiming().duration);closeModal();");
         assertEquals("sheet close waits for exit","false",js("modal.open"));
         assertEquals("sheet token or low-device suppression","true",js("window.__p8sheet[0]===220||(!window.__p8sheet.length&&GalaxyChatMotion.constrained())"));
@@ -460,6 +464,7 @@ public class GalaxyDeviceClosureTest {
         JSONObject metrics=new JSONObject().put("frames",frames).put("cpuMs",android.os.Process.getElapsedCpuTime()-cpuBefore)
             .put("pssBeforeKb",pssBefore).put("pssAfterKb",android.os.Debug.getPss()).put("sendVisualMs",send.getDouble("ms"))
             .put("logicalMessages",20000).put("renderedMessages",Integer.parseInt(js("document.querySelectorAll('.chat-message').length")))
+            .put("motionTimings",new JSONArray(js("JSON.stringify(window.__p8timings||[])")))
             .put("perf",new JSONObject(js("JSON.stringify((()=>{const p=GalaxyChatPerf.report();return {...p,events:p.events.slice(-8)};})())")));
         System.out.println("GALAXY_CHAT_PHASE8_ANDROID="+metrics);
     }
