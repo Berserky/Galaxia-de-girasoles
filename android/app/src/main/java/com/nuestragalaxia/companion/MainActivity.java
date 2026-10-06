@@ -1245,7 +1245,8 @@ public final class MainActivity extends FragmentActivity {
     private void pruneCameraMediaCache(){
         File dir=new File(getCacheDir(),"camera-media"),files[]=dir.listFiles();
         if(files==null)return;
-        for(File file:files)if(file.isFile())try{file.delete();}catch(Exception ignored){}
+        long cutoff=System.currentTimeMillis()-24L*60L*60L*1000L;
+        for(File file:files)if(file.isFile()&&file.lastModified()<cutoff)try{file.delete();}catch(Exception ignored){}
     }
 
     private static void pruneChatFileCache(File dir){
