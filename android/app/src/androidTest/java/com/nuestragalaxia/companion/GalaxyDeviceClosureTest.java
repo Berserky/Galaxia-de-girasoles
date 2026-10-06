@@ -347,6 +347,7 @@ public class GalaxyDeviceClosureTest {
         scenario.recreate();
         awaitCondition(() -> context.getResources().getConfiguration().fontScale >= 1.25f, UI_TIMEOUT_MS);
         awaitJs("!!document.querySelector('#app')");
+        awaitJs("!!document.querySelector('#chatFab')&&!document.querySelector('#chatFab').classList.contains('hidden')");
         launchChat();
         awaitJs("!!document.querySelector('.chat-composer-v2')");
         double minTarget = Double.parseDouble(js("Math.min(document.querySelector('.chat-plus').getBoundingClientRect().width,document.querySelector('.chat-plus').getBoundingClientRect().height,document.querySelector('.chat-send').getBoundingClientRect().width,document.querySelector('.chat-send').getBoundingClientRect().height)"));
