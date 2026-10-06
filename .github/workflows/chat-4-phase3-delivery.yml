@@ -1,0 +1,50 @@
+name: Galaxy Chat 4 Phase 3 Delivery Engine
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "android/app/src/main/assets/mobile/**"
+      - "android/app/src/androidTest/**"
+      - "scripts/chat-4-phase3-delivery-engine.mjs"
+      - "tests/chat-4-phase3-delivery-engine.test.mjs"
+      - "docs/qa/chat-4-phase3-delivery-engine.md"
+      - "package.json"
+      - ".github/workflows/chat-4-phase3-delivery.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chat4-phase3-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  delivery-engine:
+    name: Delivery races + offline + burst benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      - name: Syntax
+        run: |
+          node --check android/app/src/main/assets/mobile/chat-delivery-engine.js
+          node --check android/app/src/main/assets/mobile/app.js
+      - name: Delivery Engine regression
+        run: node --test tests/chat-4-phase3-delivery-engine.test.mjs
+      - name: Full Node regression
+        run: npm test
+      - name: Benchmark
+        run: |
+          mkdir -p qa-artifacts
+          npm run bench:chat4:phase3 -- qa-artifacts/chat-4-phase3-delivery-node.json | tee qa-artifacts/chat-4-phase3-delivery-node.log
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: galaxy-chat-4-phase3-delivery-engine
+          path: qa-artifacts/**
+          retention-days: 14
