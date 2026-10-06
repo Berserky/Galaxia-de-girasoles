@@ -2621,11 +2621,11 @@ document.addEventListener('click',async e=>{
   if(a==='welcome-replay'){welcomePreview=true;welcomeStep=0;welcomeGift=true;welcomeEntering=false;tourStep=-1;render();window.scrollTo(0,0);return;}
   if(a==='modal-close'){closeModal();return;}
   if(a==='chat-open'){window.GalaxyChatPerf?.beginOpen?.(chatState?'warm':'cold');if(native.chatLockEnabled&&!chatUnlockedSession){await GalaxyNative.call('unlockChat');chatUnlockedSession=true;}chatScrollEngine.clearMemory();chatRestoreOnRender=false;chatState=null;chatInitialScroll=true;go('chat');setChatPresence('ONLINE');await loadChat({quiet:true,force:true});flushChatOutbox({retryFailed:true}).catch(()=>{});return;}
-  if(a==='chat-close'){chatReply=null;chatResizeObserver?.disconnect();chatResizeObserver=null;setChatPresence('OFFLINE');go('home');return;}
+  if(a==='chat-close'){ensureChatComposer().cancelReply();chatResizeObserver?.disconnect();chatResizeObserver=null;setChatPresence('OFFLINE');go('home');return;}
   if(a==='chat-load-more'){await loadChat({older:true});return;}
-  if(a==='chat-reply'){const id=btn.dataset.id;chatReply=(chatState?.messages||[]).find(m=>String(m.id)===String(id))||null;closeModal();render();requestAnimationFrame(()=>document.querySelector('#chatForm textarea')?.focus());return;}
-  if(a==='chat-reply-menu'){const id=btn.dataset.id;chatReply=(chatState?.messages||[]).find(m=>String(m.id)===String(id))||null;closeModal();render();requestAnimationFrame(()=>document.querySelector('#chatForm textarea')?.focus());return;}
-  if(a==='chat-reply-cancel'){chatReply=null;render();return;}
+  if(a==='chat-reply'){const id=btn.dataset.id,m=(chatState?.messages||[]).find(x=>String(x.id)===String(id))||null;if(m)ensureChatComposer().setReply(m);closeModal();chatRenderComposer({focus:true});return;}
+  if(a==='chat-reply-menu'){const id=btn.dataset.id,m=(chatState?.messages||[]).find(x=>String(x.id)===String(id))||null;if(m)ensureChatComposer().setReply(m);closeModal();chatRenderComposer({focus:true});return;}
+  if(a==='chat-reply-cancel'){ensureChatComposer().cancelReply();chatRenderComposer({focus:true});return;}
   if(a==='chat-jump'){await jumpToChatMessage(btn.dataset.id);return;}
   if(a==='chat-pin-jump'){await jumpToChatMessage(btn.dataset.id);return;}
   if(a==='chat-jump-present'){chatNewCount=0;if(chatState?.nextAfterSeq)await loadChat({quiet:true,force:true,present:true});else{chatMessageEngine.resetWindow(chatRows().length,{align:'end'});chatRenderMessages({scroll:'bottom'});}chatUpdateNewButton();setTimeout(()=>markChatReadIfVisible(),250);return;}
@@ -2718,10 +2718,11 @@ document.addEventListener('click',async e=>{
   if(a==='chat-camera-open'){openChatCameraMenu();return;}
   if(a==='chat-permission-retry'){const kind=btn.dataset.kind==='video'?'video':'photo';closeModal();await addChatNativeMedia(kind==='video'?'captureChatVideo':'captureChatPhoto',[],kind);return;}
   if(a==='chat-open-app-settings'){await GalaxyNative.call('openAppSettings');return;}
-  if(a==='chat-attachment-remove'){chatAttachmentsDraft.splice(Number(btn.dataset.index),1);render();return;}
-  if(a==='chat-attach-camera'){await addChatNativeMedia('captureChatPhoto',[],'photo');return;}
-  if(a==='chat-attach-video-camera'){await addChatNativeMedia('captureChatVideo',[],'video');return;}
-  if(a==='chat-attach-file'){await addChatNativeMedia('pickMedia',['chat-file'],'file');return;}
+  if(a==='chat-attachment-remove'){chatAttachmentsDraft.splice(Number(btn.dataset.index),1);chatRenderComposer({focus:true});return;}
+  if(a==='chat-attach-camera'){ensureChatComposer().setAttachmentIntent('camera');await addChatNativeMedia('captureChatPhoto',[],'photo');return;}
+  if(a==='chat-attach-gallery'){ensureChatComposer().setAttachmentIntent('gallery');await addChatNativeMedia('pickChatPhotos',[],'photo');return;}
+  if(a==='chat-attach-video-camera'){ensureChatComposer().setAttachmentIntent('video');await addChatNativeMedia('captureChatVideo',[],'video');return;}
+  if(a==='chat-attach-file'){ensureChatComposer().setAttachmentIntent('file');await addChatNativeMedia('pickMedia',['chat-file'],'file');return;}
   if(a==='chat-attach-location'){await openChatLocationMenu();return;}
   if(a==='chat-attach-song'){openChatSongPicker();return;}
    if(a==='chat-song-pick'){const song=songItems().find(x=>String(x.id)===String(btn.dataset.id));if(song){closeModal();queueGalaxyCard('SONG','song',song.id,{title:song.title});}return;}
@@ -2746,7 +2747,7 @@ document.addEventListener('click',async e=>{
    if(a==='chat-card-song-add'){const song=(cloud?.items||[]).find(x=>x.kind==='song'&&String(x.id)===String(btn.dataset.id));if(song){toast('Esta canción ya está en Nuestra Música.');return;}toast('La canción ya no está disponible para añadir.');return;}
    if(a==='chat-card-status-reply'){
     const m=(chatState?.messages||[]).find(x=>x.card?.type==='STATUS'&&String(x.card.entityId)===String(btn.dataset.id));if(!m)return;
-    chatReply=m;render();requestAnimationFrame(()=>document.querySelector('#chatForm textarea')?.focus());return;
+    ensureChatComposer().setReply(m);chatRenderComposer({focus:true});return;
    }
    if(a==='chat-card-event-plan'){const event=(cloud?.items||[]).find(x=>x.kind==='event'&&String(x.id)===String(btn.dataset.id));if(event&&confirm('¿Abrir un plan con este evento?')){closeModal();chatOpenItemDraft('plan',event.data?.title||'Plan',event.data?.body||'',{date:event.data?.date||''});}return;}
    if(a==='chat-card-event-remind'){if(!native.momentNotifications){if(!confirm('¿Activar recordatorios de momentos para este teléfono?'))return;native=await GalaxyNative.call('setMomentNotifications',true);}await GalaxyNative.call('refreshMoments');toast('Recordatorio sincronizado con las notificaciones existentes.');return;}
@@ -2948,8 +2949,7 @@ document.addEventListener('input',e=>{
  if(e.target.id==='universalSearchInput')renderUniversalSearchResults(e.target.value);
  if(e.target.matches('#chatForm textarea')){
    const chatEl=document.querySelector('#chatMessages');if(chatEl)chatScrollEngine.beforeViewportChange(chatEl);
-   writeChatDraft(e.target.value);
-   e.target.style.height='auto';e.target.style.height=Math.min(120,e.target.scrollHeight)+'px';
+   ensureChatComposer().applyInput(e.target);
    chatComposerRightMode(e.target);
    chatTyping();
    if(chatEl)chatScrollEngine.afterViewportChange(chatEl);
@@ -3081,7 +3081,7 @@ document.addEventListener('pointercancel',e=>{
 });
 document.addEventListener('click',e=>{if(chatSendSuppress&&e.target.closest?.('.chat-send[type="submit"]')){e.preventDefault();e.stopImmediatePropagation();chatSendSuppress=false;}},true);
 document.addEventListener('touchstart',e=>{const row=e.target.closest?.('.chat-message[data-id]'),t=e.touches?.[0];if(row&&row.dataset.id&&t)chatSwipe={id:row.dataset.id,x:t.clientX,y:t.clientY};},{passive:true});
-document.addEventListener('touchend',e=>{if(!chatSwipe)return;const t=e.changedTouches?.[0],swipe=chatSwipe;chatSwipe=null;if(!t)return;const dx=t.clientX-swipe.x,dy=Math.abs(t.clientY-swipe.y);if(dx>58&&dy<45){const m=(chatState?.messages||[]).find(x=>String(x.id)===String(swipe.id));if(m){chatReply=m;render();requestAnimationFrame(()=>document.querySelector('#chatForm textarea')?.focus());}}},{passive:true});
+document.addEventListener('touchend',e=>{if(!chatSwipe)return;const t=e.changedTouches?.[0],swipe=chatSwipe;chatSwipe=null;if(!t)return;const dx=t.clientX-swipe.x,dy=Math.abs(t.clientY-swipe.y);if(dx>58&&dy<45){const m=(chatState?.messages||[]).find(x=>String(x.id)===String(swipe.id));if(m){ensureChatComposer().setReply(m);chatRenderComposer({focus:true});}}},{passive:true});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){chatUnlockedSession=false;if(view==='chat'){chatSnapshotResumeBaseline();chatRememberPosition(document.querySelector('#chatMessages'),'chat');setChatPresence('OFFLINE');}}});
 
 render();
