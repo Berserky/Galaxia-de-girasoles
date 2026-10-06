@@ -2088,7 +2088,19 @@ async function openChatLocationMenu(){
  showModal('Compartir ubicación','<div class="chat-location-options"><button class="card" type="button" data-action="chat-location-current">'+ico('locate-fixed')+'<span><b>Ubicación actual</b><small>Una posición puntual obtenida ahora.</small></span></button><div class="chat-live-options"><b>Ubicación en vivo</b><small>Reutiliza el GPS de Nuestra Galaxia. Android mantendrá una notificación visible mientras esté activa.</small><div><button class="btn small secondary" type="button" data-action="chat-location-live" data-duration="900">15 min</button><button class="btn small secondary" type="button" data-action="chat-location-live" data-duration="3600">1 h</button><button class="btn small secondary" type="button" data-action="chat-location-live" data-duration="28800">8 h</button><button class="btn small secondary" type="button" data-action="chat-location-live" data-duration="">Hasta detener</button></div></div>'+(places.length?'<div class="chat-place-list"><b>Lugares guardados</b>'+places.slice(0,30).map(p=>'<button type="button" data-action="chat-location-place" data-lat="'+attr(p.latitude)+'" data-lon="'+attr(p.longitude)+'" data-label="'+attr(p.name)+'">'+ico('map-pin')+'<span>'+esc(p.name)+'</span></button>').join('')+'</div>':'')+'</div>','chat-location');
 }
 function openChatAttachMenu(){
- showModal('Adjuntar','<div class="chat-attach-grid"><button type="button" data-action="chat-attach-file">'+ico('paperclip')+'<span>Archivos</span></button><button type="button" data-action="chat-attach-location">'+ico('map-pin')+'<span>Ubicación</span></button><button type="button" data-action="chat-context-open">'+ico('route')+'<span>Acompáñame</span></button><button type="button" data-action="chat-galaxy-open">'+ico('orbit')+'<span>Nuestra Galaxia</span></button><button type="button" data-action="chat-poll-open">'+ico('list-checks')+'<span>Encuesta</span></button><button type="button" data-action="chat-check-open">'+ico('list-todo')+'<span>Checklist</span></button><button type="button" data-action="chat-stickers-open">'+ico('sticker')+'<span>GIF / stickers</span></button></div>','chat-attach');
+ ensureChatComposer().setAttachmentIntent('launcher');
+ showBottomSheet('Adjuntar','<div class="chat-attachment-sheet-grid">'+
+ '<button type="button" data-action="chat-attach-camera">'+ico('camera')+'<span>Cámara</span></button>'+
+ '<button type="button" data-action="chat-attach-gallery">'+ico('images')+'<span>Fotos</span></button>'+
+ '<button type="button" data-action="chat-attach-video-camera">'+ico('video')+'<span>Video</span></button>'+
+ '<button type="button" data-action="chat-attach-file">'+ico('paperclip')+'<span>Archivo</span></button>'+
+ '<button type="button" data-action="chat-attach-location">'+ico('map-pin')+'<span>Ubicación</span></button>'+
+ '<button type="button" data-action="chat-galaxy-open">'+ico('orbit')+'<span>Galaxy Card</span></button>'+
+ '<button type="button" data-action="chat-context-open">'+ico('route')+'<span>Acompáñame</span></button>'+
+ '<button type="button" data-action="chat-poll-open">'+ico('list-checks')+'<span>Encuesta</span></button>'+
+ '<button type="button" data-action="chat-check-open">'+ico('list-todo')+'<span>Checklist</span></button>'+
+ '<button type="button" data-action="chat-stickers-open">'+ico('sticker')+'<span>GIF / stickers</span></button>'+
+ '</div>','chat-attach-sheet');
 }
 async function openChatContextMenu(){
  if(!mapData)await refreshMap({quiet:true,detail:true}).catch(()=>{});
@@ -2151,11 +2163,12 @@ function normalizeChatUpload(upload,kind,durationMs=null,mediaQuality='optimized
 }
 async function addChatNativeMedia(method,args,kind){
  try{
+  ensureChatComposer().setAttachmentIntent(kind||'file');
   setChatPresence('UPLOADING_MEDIA');
   const result=await GalaxyNative.call(method,...(args||[]));
   const uploads=Array.isArray(result?.items)?result.items:[result];
   for(const item of uploads)if(item?.path)chatAttachmentsDraft.push(normalizeChatUpload(item,kind));
-  closeModal();render();setChatPresence('ONLINE');
+  closeModal();ensureChatComposer().setAttachmentIntent(null);chatRenderComposer({focus:true});setChatPresence('ONLINE');
  }catch(e){
   setChatPresence('ONLINE');
   const message=String(e?.message||'');
@@ -2170,9 +2183,10 @@ function openChatSongPicker(){
 }
 function chatComposerRightMode(textarea){
  const row=textarea?.closest('.chat-compose-row'),button=row?.querySelector('.chat-send');if(!button)return;
- const sending=String(textarea?.value||'').trim().length>0||chatAttachmentsDraft.length>0;
- button.type=sending?'submit':'button';
- if(sending){delete button.dataset.action;button.classList.remove('chat-mic-hold');button.setAttribute('aria-label','Enviar');button.innerHTML=ico('send');}
+ const composer=ensureChatComposer(),state=composer.snapshot(),mode=composer.rightMode(chatAttachmentsDraft.length);
+ button.disabled=state.disabled||state.sending;
+ button.type=mode==='send'?'submit':'button';
+ if(mode==='send'){delete button.dataset.action;button.classList.remove('chat-mic-hold');button.setAttribute('aria-label','Enviar');button.innerHTML=ico('send');}
  else{button.dataset.action='chat-hold-record';button.classList.add('chat-mic-hold');button.setAttribute('aria-label','Mantén pulsado para grabar');button.innerHTML=ico('mic');}
  refreshIcons();
 }
@@ -2302,13 +2316,21 @@ function drawMap({fit=true}={}){
 }
 
 function showModal(title,body,formId=''){
+ modal.classList.remove('chat-bottom-sheet');
  modal.innerHTML='<div class="modal-inner"><button class="close" data-action="modal-close" aria-label="Cerrar">'+ico('x')+'</button><h2>'+esc(title)+'</h2>'+body+'</div>';
  if(formId)modal.dataset.form=formId;else delete modal.dataset.form;
  modal.showModal();
  refreshIcons();
 }
+function showBottomSheet(title,body,formId=''){
+ modal.classList.add('chat-bottom-sheet');
+ modal.innerHTML='<div class="modal-inner" role="region" aria-label="'+attr(title)+'"><button class="close" data-action="modal-close" aria-label="Cerrar">'+ico('x')+'</button><h2>'+esc(title)+'</h2>'+body+'</div>';
+ if(formId)modal.dataset.form=formId;else delete modal.dataset.form;
+ modal.showModal();
+ refreshIcons();
+}
 async function resetVoiceDraft(){stopVoiceTimer();if(voiceRecording||voiceReady){try{await GalaxyNative.call('discardVoiceRecording');}catch{}}voiceRecording=false;voiceReady=false;if(voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}}
-function closeModal(){if(modal.dataset.form==='voice'&&pendingVoiceDraft!==null)resetVoiceDraft();if(dateModeTimer){clearInterval(dateModeTimer);dateModeTimer=null;}if(modal.open)modal.close();delete modal.dataset.editId;delete modal.dataset.version;delete modal.dataset.kind;delete modal.dataset.form;}
+function closeModal(){const form=modal.dataset.form;if(form==='voice'&&pendingVoiceDraft!==null)resetVoiceDraft();if(form==='chat-attach-sheet')ensureChatComposer().setAttachmentIntent(null);if(dateModeTimer){clearInterval(dateModeTimer);dateModeTimer=null;}if(modal.open)modal.close();modal.classList.remove('chat-bottom-sheet');delete modal.dataset.editId;delete modal.dataset.version;delete modal.dataset.kind;delete modal.dataset.form;}
 function openItemForm(kind,item){
  const d=item?.data||{},meta=kindMeta[kind]||['sparkles','Contenido'],editing=!!item?.id,places=mapData?.places||[],songs=items('song');
  modal.dataset.editId=item?.id||'';modal.dataset.version=item?.version||'';modal.dataset.kind=kind;
