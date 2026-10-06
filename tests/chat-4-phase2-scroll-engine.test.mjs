@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
 const scrollSource=readFileSync('android/app/src/main/assets/mobile/chat-scroll-engine.js','utf8');
-const app=readFileSync('android/app/src/main/assets/mobile/app.js','utf8');
+const app=readFileSync('android/app/src/main/assets/mobile/app.js','utf8').replaceAll('\r\n','\n');
 const index=readFileSync('android/app/src/main/assets/mobile/index.html','utf8');
 const css=readFileSync('android/app/src/main/assets/mobile/app.css','utf8');
 const messageSource=readFileSync('android/app/src/main/assets/mobile/chat-message-engine.js','utf8');

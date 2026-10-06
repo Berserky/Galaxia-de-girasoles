@@ -1,0 +1,31 @@
+{
+  "measuredAt": "2026-10-06T21:16:04.876Z",
+  "benchmark": "deterministic transfer model + virtual-window contract",
+  "dataset": {
+    "logicalMessages": 20000,
+    "images": 500,
+    "videos": 60,
+    "renderWindow": 84
+  },
+  "phase8Contract": {
+    "bubbleVariant": "original URL in media element",
+    "requests": 3,
+    "bytes": 26635303,
+    "originalDownloads": 3
+  },
+  "phase9Contract": {
+    "bubbleVariant": "thumbnail only",
+    "requests": 3,
+    "bytes": 300351,
+    "originalDownloads": 0,
+    "maxConcurrent": 4,
+    "cacheEntries": 96,
+    "preloadMarginPx": 720
+  },
+  "delta": {
+    "bytesSaved": 26334952,
+    "percentSaved": 98.87,
+    "originalDownloadsAvoided": 3
+  },
+  "note": "Transfer values are deterministic dataset modelling, not carrier/network telemetry. Physical FPS/PSS/CPU are measured by Android instrumentation."
+}
