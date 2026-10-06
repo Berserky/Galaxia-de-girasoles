@@ -47,7 +47,7 @@ public class GalaxyMediaExperienceTest {
 
     @After public void cleanup(){
         deleteTree(new File(context.getCacheDir(),"camera-media"));
-        deleteTree(new File(context.getCacheDir(),"qa-media"));
+        deleteTree(new File(context.getCacheDir(),"chat-files/qa-media"));
     }
 
     @Test public void nativeGalleryReview_previewsRemovesAndCancelsWithoutUpload() throws Exception {
@@ -62,7 +62,7 @@ public class GalaxyMediaExperienceTest {
             onView(withContentDescription("Confirmar selección")).check(matches(isDisplayed()));
             onView(withContentDescription("Quitar elemento")).check(matches(isDisplayed()));
         }
-        assertTrue("Review must not delete picker-owned content.",new File(context.getCacheDir(),"qa-media/qa.jpg").exists());
+        assertTrue("Review must not delete picker-owned content.",new File(context.getCacheDir(),"chat-files/qa-media/qa.jpg").exists());
     }
 
     @Test public void cameraX_photoRearFrontReviewRetakeAndCancel_whenVirtualCameraExists() throws Exception {
@@ -116,7 +116,7 @@ public class GalaxyMediaExperienceTest {
     }
 
     private Uri createJpeg() throws Exception {
-        File dir=new File(context.getCacheDir(),"qa-media");assertTrue(dir.exists()||dir.mkdirs());
+        File dir=new File(context.getCacheDir(),"chat-files/qa-media");assertTrue(dir.exists()||dir.mkdirs());
         File file=new File(dir,"qa.jpg");
         Bitmap bitmap=Bitmap.createBitmap(64,48,Bitmap.Config.ARGB_8888);
         try(FileOutputStream out=new FileOutputStream(file)){assertTrue(bitmap.compress(Bitmap.CompressFormat.JPEG,90,out));}
