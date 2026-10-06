@@ -1675,7 +1675,7 @@ function chatComposerMarkup(){
  return '<form id="chatForm" class="chat-composer chat-composer-v2" autocomplete="off">'+
  (reply?'<div class="chat-compose-reply chat-compose-reply-v2"><span class="chat-reply-icon">'+ico('reply')+'</span><span class="chat-reply-content"><b>'+esc(chatOwn(reply)?'Tú':partnerName())+'</b><small>'+esc(chatReplyFragment(reply))+'</small></span><button type="button" data-action="chat-reply-cancel" aria-label="Cancelar respuesta">'+ico('x')+'</button></div>':'')+
  chatDraftAttachmentMarkup()+
- '<div class="chat-compose-row"><button class="chat-plus" type="button" data-action="chat-attach-open" aria-label="Adjuntar">'+ico('plus')+'</button><textarea name="body" maxlength="4000" rows="1" placeholder="Escribe un mensaje…" aria-label="Escribe un mensaje" inputmode="text" enterkeyhint="enter">'+esc(state.text)+'</textarea>'+
+ '<div class="chat-compose-row"><button class="chat-plus" type="button" data-action="chat-attach-open" aria-label="Adjuntar">'+ico('plus')+'</button><textarea name="body" maxlength="4000" rows="1" placeholder="Escribe un mensaje…" aria-label="Escribe un mensaje" inputmode="text" enterkeyhint="enter" autocapitalize="sentences" spellcheck="true">'+esc(state.text)+'</textarea>'+
  (mode==='send'?'<button class="chat-send composer-right" type="submit" aria-label="Enviar">'+ico('send')+'</button>':'<button class="chat-send composer-right chat-mic-hold" type="button" data-action="chat-hold-record" aria-label="Mantén pulsado para grabar">'+ico('mic')+'</button>')+
  '</div><div class="chat-hold-hint" aria-live="polite" hidden></div></form>';
 }
@@ -2210,7 +2210,7 @@ async function finishChatHoldRecording({cancel=false}={}){
   ensureChatComposer().setRecordingIntent('ready');
   chatVoiceState={recording:false,paused:false,ready:true,durationMs:Number(info?.durationMs||0)};
   showModal('Nota de voz','<div class="chat-voice-panel"><div class="chat-voice-orb ready">'+ico('audio-lines')+'</div><b data-role="chat-voice-status">Grabación lista · '+Math.max(1,Math.round(chatVoiceState.durationMs/1000))+' s</b><p class="muted">Escúchala antes de enviarla o elimínala para repetir.</p><div class="chat-voice-actions"><button class="btn secondary" type="button" data-action="chat-voice-preview">'+ico('play')+' Escuchar</button><button class="btn ghost" type="button" data-action="chat-voice-discard">Eliminar</button><button class="btn" type="button" data-action="chat-voice-send">'+ico('send')+' Enviar</button></div></div>','chat-voice-ready');
- }catch(e){setChatPresence('ONLINE');toast(e.message||'No pudimos terminar la grabación.');}
+ }catch(e){ensureChatComposer().setRecordingIntent('idle');setChatPresence('ONLINE');toast(e.message||'No pudimos terminar la grabación.');}
 }
 async function beginChatHoldRecording(e,button){
  if(chatHoldRecord)return;
@@ -2324,6 +2324,7 @@ function drawMap({fit=true}={}){
 }
 
 function showModal(title,body,formId=''){
+ if(modal.dataset.form==='chat-attach-sheet')ensureChatComposer().setAttachmentIntent(null);
  modal.classList.remove('chat-bottom-sheet');
  modal.innerHTML='<div class="modal-inner"><button class="close" data-action="modal-close" aria-label="Cerrar">'+ico('x')+'</button><h2>'+esc(title)+'</h2>'+body+'</div>';
  if(formId)modal.dataset.form=formId;else delete modal.dataset.form;
