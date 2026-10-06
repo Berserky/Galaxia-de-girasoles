@@ -51,7 +51,7 @@ let chatState=null,chatLoading=false,chatQueuedLoad=null,chatStateSignature='',c
 const chatMessageEngine=window.GalaxyMessageEngine.create({pageSize:60,maxCache:420,windowSize:84,windowStep:28,estimatedHeight:92});
 const chatScrollEngine=window.GalaxyScrollEngine.create({bottomTolerance:110,memoryKey:'galaxy.chat.scroll.position.v1'});
 const chatComposer=window.GalaxyChatComposer.create({draftPrefix:'nuestra-galaxia.chat-draft.v4',maxHeight:120,minHeight:44,doubleTapGuardMs:280});
-let chatResizeObserver=null,chatVirtualRaf=0,chatMeasureRaf=0,chatRenderGeneration=0,chatRestoreOnRender=false,chatResumeRefreshPromise=null;
+let chatResizeObserver=null,chatVirtualRaf=0,chatMeasureRaf=0,chatRenderGeneration=0,chatBottomRenderPending=null,chatRestoreOnRender=false,chatResumeRefreshPromise=null;
 let chatAttachmentsDraft=[],chatMediaUploadState={state:'idle',index:0,count:0,sent:0,total:0},chatNewCount=0,chatResumeUnread=0,chatResumeNewCount=0,chatPinIndex=0,chatTypingTimer=null,chatPresenceTimer=null,chatDeliveryEngine=null,chatRecentSyncIds=new Map(),chatSyncInFlight=new Set(),chatInitialScroll=true,chatVoiceState={recording:false,paused:false,ready:false,durationMs:0},chatVoiceEngine=window.GalaxyChatVoice.create({maxDurationMs:300000}),chatVoiceTimer=null,chatHoldRecord=null;
 let welcomeStep=0,welcomePreview=false,welcomeGift=true,welcomeEntering=false,tourStep=-1;
 const welcomeMusic=new Audio('../musica.mp3');welcomeMusic.loop=true;welcomeMusic.volume=.32;
@@ -109,7 +109,7 @@ window.GalaxyNative={
  },
  event(name,json){
    let data={};try{data=JSON.parse(json||'{}');}catch{}
-   if(name==='native'){native=data;render();}
+   if(name==='native'){native=data;window.GalaxyChatMotion?.setNativeReduced(data.reducedMotion);render();}
    if(name==='update'){updateState=data;renderUpdateOnly();}
    if(name==='deep-link'){pendingDeepLink=data;if(cloud)setTimeout(()=>consumeDeepLink(),0);}
    if(name==='chat-sync'&&native.paired){consumeChatSync(String(data.entityId||'')).catch(()=>{});}
@@ -362,6 +362,8 @@ function syncSystemTheme(themeState){
 function render(){
  const previousChatEl=view==='chat'?document.querySelector('#chatMessages'):null;
  const chatRenderState=previousChatEl?chatCapturePositionState(previousChatEl,'render'):null;
+ if(chatRenderState&&chatBottomRenderPending===previousChatEl)chatRenderState.atBottom=true;
+ chatBottomRenderPending=null;
  const currentMemoriesTabs=$('.memories-tabs');
  if(currentMemoriesTabs)memoriesTabsScroll=currentMemoriesTabs.scrollLeft;
  const themeState=window.GalaxyTheme?.applyTheme(window.GalaxyTheme.getChoice());
@@ -1579,8 +1581,8 @@ function chatNewButtonMarkup(){
 function chatUpdateNewButton(){
  const wrap=document.querySelector('.chat-scroll-wrap');if(!wrap)return;
  let button=wrap.querySelector('.chat-new-button');
- if(!chatNewCount){button?.remove();return;}
- if(!button){wrap.insertAdjacentHTML('beforeend',chatNewButtonMarkup());button=wrap.querySelector('.chat-new-button');}
+ if(!chatNewCount){window.GalaxyChatMotion?.depart(button);button?.remove();return;}
+ if(!button){wrap.insertAdjacentHTML('beforeend',chatNewButtonMarkup());button=wrap.querySelector('.chat-new-button');window.GalaxyChatMotion?.animate(button);}
  else button.innerHTML=ico('arrow-down')+' '+chatNewCount+' mensaje'+(chatNewCount===1?'':'s')+' nuevo'+(chatNewCount===1?'':'s');
  refreshIcons();
 }
@@ -1609,8 +1611,10 @@ function chatMessagesMarkup(){
 }
 function chatRenderMessages({anchor=null,scroll='preserve',highlightId='',effect=null}={}){
  const el=document.querySelector('#chatMessages');if(!el)return false;
+ if(scroll==='bottom')chatBottomRenderPending=el;
+ else if(scroll==='preserve'&&chatBottomRenderPending===el)scroll='bottom';
  const stableAnchor=anchor||chatCaptureAnchor(el),playback=chatCapturePlayback(),renderGeneration=++chatRenderGeneration;
- if(stableAnchor?.virtual&&stableAnchor.id){
+ if(scroll==='preserve'&&stableAnchor?.virtual&&stableAnchor.id){
   const list=chatRows(),index=list.findIndex(m=>String(m.id||m.client_id||'')===String(stableAnchor.id));
   if(index>=0)chatMessageEngine.focus(list.length,index);
  }
@@ -1637,6 +1641,8 @@ function chatRenderMessages({anchor=null,scroll='preserve',highlightId='',effect
   if(scroll==='bottom')chatScrollEngine.toBottom(el,{reason:'render-bottom-settle'});
   else if(scroll==='preserve'&&stableAnchor)chatRestoreAnchor(el,stableAnchor);
   chatScrollEngine.bind(el);chatRestorePlayback(playback);chatObserveWindow({measure:false});
+  chatBottomRenderPending=null;
+  window.GalaxyChatMotion?.entries(el);
   if(effect)setTimeout(()=>runChatEffect(effect),80);
  });
  return true;
@@ -1645,6 +1651,7 @@ function chatHandleScroll(el){
  if(!el||chatVirtualRaf)return;
  chatVirtualRaf=requestAnimationFrame(()=>{
   chatVirtualRaf=0;
+  if(!el.isConnected||el!==document.querySelector('#chatMessages'))return;
   const programmatic=chatScrollEngine.isProgrammatic();chatScrollEngine.onScroll(el);
   if(programmatic)return;
   const list=chatRows();if(!list.length)return;
@@ -1689,8 +1696,8 @@ function chatPinnedBar(){
  return '<div class="chat-pinned"><button type="button" data-action="chat-pin-jump" data-id="'+attr(id)+'">'+ico('pin')+'<span><b>Fijado '+(chatPinIndex+1)+'/'+ids.length+'</b><small>'+esc(label)+'</small></span></button><div><button type="button" data-action="chat-pin-prev" aria-label="Anterior">'+ico('chevron-up')+'</button><button type="button" data-action="chat-pin-next" aria-label="Siguiente">'+ico('chevron-down')+'</button><button type="button" data-action="chat-pins-open" aria-label="Ver fijados">'+ico('list')+'</button></div></div>';
 }
 function chatVoiceWaveformMarkup(){
- const samples=chatVoiceEngine.snapshot().waveform,source=samples.length?samples:Array.from({length:24},(_,i)=>.18+((i*7)%8)/12);
- return '<div class="chat-voice-waveform" aria-hidden="true">'+source.slice(-32).map(v=>'<i style="height:'+Math.round(8+Math.max(.08,Number(v)||0)*24)+'px"></i>').join('')+'</div>';
+ const samples=chatVoiceEngine.snapshot().waveform,source=[...Array(32).fill(.08),...samples].slice(-32);
+ return '<div class="chat-voice-waveform" aria-hidden="true">'+source.slice(-32).map(v=>'<i style="--chat-wave-level:'+((8+Math.max(.08,Number(v)||0)*24)/32).toFixed(3)+'"></i>').join('')+'</div>';
 }
 function chatVoiceComposerMarkup(){
  const v=chatVoiceEngine.snapshot(),seconds=Math.max(0,Math.round((v.state==='preview'?v.durationMs:chatVoiceEngine.elapsed())/1000)),time=Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');
@@ -1704,13 +1711,24 @@ function chatVoiceComposerMarkup(){
 function chatVoiceRefreshInline(){
  const form=document.querySelector('#chatForm'),row=form?.querySelector('.chat-compose-row');if(!form||!row)return;
  const markup=chatVoiceComposerMarkup(),current=form.querySelector('.chat-voice-inline');
+ const snapshot=chatVoiceEngine.snapshot();
+ if(current&&form.dataset.motionVoice===snapshot.state&&(snapshot.recording||snapshot.ready)){
+  const samples=[...Array(32).fill(.08),...snapshot.waveform].slice(-32);
+  current.querySelectorAll('.chat-voice-waveform i').forEach((bar,i)=>bar.style.setProperty('--chat-wave-level',((8+Math.max(.08,samples[i])*24)/32).toFixed(3)));
+  const seconds=Math.max(0,Math.round((snapshot.ready?snapshot.durationMs:chatVoiceEngine.elapsed())/1000)),time=current.querySelector('b');
+  if(time)time.textContent=Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');
+  return;
+ }
  if(current){if(markup)current.outerHTML=markup;else current.remove();}
  else if(markup)row.insertAdjacentHTML('beforebegin',markup);
  refreshIcons();
+ const updated=form.querySelector('.chat-voice-inline'),state=chatVoiceEngine.snapshot().state;
+ if(updated&&form.dataset.motionVoice!==state)window.GalaxyChatMotion?.animate(updated);
+ form.dataset.motionVoice=state;
 }
 function chatComposerMarkup(){
  const composer=ensureChatComposer(),state=composer.snapshot(),reply=state.replyTarget,mode=composer.rightMode(chatAttachmentsDraft.length),voiceMarkup=chatVoiceComposerMarkup();
- return '<form id="chatForm" class="chat-composer chat-composer-v2" autocomplete="off">'+
+ return '<form id="chatForm" class="chat-composer chat-composer-v2" data-motion-voice="'+attr(chatVoiceEngine.snapshot().state)+'" autocomplete="off">'+
  (reply?'<div class="chat-compose-reply chat-compose-reply-v2"><span class="chat-reply-icon">'+ico('reply')+'</span><span class="chat-reply-content"><b>'+esc(chatOwn(reply)?'Tú':partnerName())+'</b><small>'+esc(chatReplyFragment(reply))+'</small></span><button type="button" data-action="chat-reply-cancel" aria-label="Cancelar respuesta">'+ico('x')+'</button></div>':'')+
  chatDraftAttachmentMarkup()+chatMediaUploadMarkup()+voiceMarkup+
  '<div class="chat-compose-row"><button class="chat-plus" type="button" data-action="chat-attach-open" aria-label="Adjuntar">'+ico('plus')+'</button><textarea name="body" maxlength="4000" rows="1" placeholder="Escribe un mensaje…" aria-label="Escribe un mensaje" inputmode="text" enterkeyhint="enter" autocapitalize="sentences" spellcheck="true">'+esc(state.text)+'</textarea>'+
@@ -1722,6 +1740,10 @@ function chatRenderComposer({focus=false}={}){
  const current=document.querySelector('#chatForm');if(!current)return;
  const chatEl=document.querySelector('#chatMessages'),active=document.activeElement===current.querySelector('textarea'),oldTextarea=current.querySelector('textarea');
  const selection=oldTextarea?{start:oldTextarea.selectionStart,end:oldTextarea.selectionEnd}:null;
+ const hadReply=!!current.querySelector('.chat-compose-reply');
+ const priorVoice=current.dataset.motionVoice;
+ if(current.querySelector('.chat-voice-inline')&&['idle','cancelled'].includes(chatVoiceEngine.snapshot().state))window.GalaxyChatMotion?.depart(current.querySelector('.chat-voice-inline'));
+ if(hadReply&&!ensureChatComposer().snapshot().replyTarget)window.GalaxyChatMotion?.depart(current.querySelector('.chat-compose-reply'));
  if(chatEl)chatScrollEngine.beforeViewportChange(chatEl);
  current.outerHTML=chatComposerMarkup();
  const textarea=document.querySelector('#chatForm textarea');
@@ -1729,6 +1751,8 @@ function chatRenderComposer({focus=false}={}){
  if(textarea&&selection)try{textarea.setSelectionRange(selection.start,selection.end);}catch{}
  if((focus||active)&&textarea)textarea.focus({preventScroll:true});
  refreshIcons();
+ if(!hadReply)window.GalaxyChatMotion?.animate(document.querySelector('.chat-compose-reply'));
+ if(priorVoice!==chatVoiceEngine.snapshot().state)window.GalaxyChatMotion?.animate(document.querySelector('.chat-voice-inline'));
  if(chatEl)chatScrollEngine.afterViewportChange(chatEl);
 }
 function chatView(){
@@ -1852,6 +1876,7 @@ async function loadChat({older=false,newer=false,quiet=false,force=false,aroundI
      const index=list.findIndex(m=>String(m.id)===String(anchor.id));if(index>=0)chatMessageEngine.focus(list.length,index);
     }else chatMessageEngine.ensureWindow(list.length);
     const shouldBottom=!aroundId&&!older&&!newer&&(present||chatInitialScroll||wasNear);
+    if(hadState&&!older&&!newer&&!aroundId&&!present)window.GalaxyChatMotion?.offer(newIncoming.map(m=>String(m.client_id||m.id)),{atBottom:wasNear});
     chatRenderMessages({anchor,scroll:aroundId?'none':shouldBottom?'bottom':'preserve',highlightId:aroundId||'',effect:effectToPlay});
     if(shouldBottom){chatNewCount=0;chatInitialScroll=false;chatUpdateNewButton();}
     setTimeout(()=>markChatReadIfVisible(),40);
@@ -1937,7 +1962,7 @@ function createChatDeliveryEngine(){
     const holder=document.createElement('div');holder.innerHTML=chatMessageMarkup(message);
     const confirmed=holder.firstElementChild;
     if(confirmed){
-     localNode.replaceWith(confirmed);refreshIcons();
+     localNode.replaceWith(confirmed);refreshIcons();window.GalaxyChatMotion?.animate(confirmed.querySelector('.chat-status'));
      if(chatResizeObserver)chatResizeObserver.observe(confirmed);
      chatScheduleMeasure();
      if(chatNearBottom(el))chatScrollEngine.toBottom(el,{reason:'delivery-confirmed'});
@@ -1978,11 +2003,12 @@ function queueChatMessage({body='',messageType='text',attachments=[],attachment=
  const row={client_id:clientId,client_created_at:created,body:text,reply_to:chatReplyTarget()?.id||null,message_type:messageType,attachments,attachment,entityRef,card,scheduled_at:scheduledAt,silent,ttl_seconds:ttlSeconds,view_once:viewOnce,effect,_localState:'PENDING',retryCount:0,local_order:Date.now()};
  chatDeliveryEngine.queue(row);
  ensureChatComposer().accepted();chatAttachmentsDraft=[];
+ if(view==='chat')chatRenderComposer();
  if(view==='chat'){
+  window.GalaxyChatMotion?.offer([clientId],{atBottom:true});
   chatMessageEngine.resetWindow(chatRows().length,{align:'end'});chatRenderMessages({scroll:'bottom'});
   requestAnimationFrame(()=>window.GalaxyChatPerf?.optimisticVisible?.(clientId));
  }
- if(view==='chat')chatRenderComposer();
  flushChatOutbox().catch(()=>{});
  return row;
 }
@@ -2235,11 +2261,13 @@ function openChatSongPicker(){
 function chatComposerRightMode(textarea){
  const row=textarea?.closest('.chat-compose-row'),button=row?.querySelector('.chat-send');if(!button)return;
  const composer=ensureChatComposer(),state=composer.snapshot(),mode=composer.rightMode(chatAttachmentsDraft.length);
+ const prior=button.type;
  button.disabled=state.disabled||state.sending;
  button.type=mode==='send'?'submit':'button';
  if(mode==='send'){delete button.dataset.action;button.classList.remove('chat-mic-hold');button.setAttribute('aria-label','Enviar');button.innerHTML=ico('send');}
  else{button.dataset.action='chat-hold-record';button.classList.add('chat-mic-hold');button.setAttribute('aria-label','Mantén pulsado para grabar');button.innerHTML=ico('mic');}
  refreshIcons();
+ if(prior!==button.type)window.GalaxyChatMotion?.animate(button.querySelector('.ui-icon'),'fade');
 }
 function chatHoldHint(text='',kind=''){
  const hint=document.querySelector('.chat-hold-hint');if(!hint)return;
@@ -2368,6 +2396,7 @@ function showModal(title,body,formId=''){
  modal.innerHTML='<div class="modal-inner"><button class="close" data-action="modal-close" aria-label="Cerrar">'+ico('x')+'</button><h2>'+esc(title)+'</h2>'+body+'</div>';
  if(formId)modal.dataset.form=formId;else delete modal.dataset.form;
  modal.showModal();
+ if(formId==='chat-message-menu')window.GalaxyChatMotion?.animate(modal.querySelector('.modal-inner'));
  refreshIcons();
 }
 function showBottomSheet(title,body,formId=''){
@@ -2375,10 +2404,11 @@ function showBottomSheet(title,body,formId=''){
  modal.innerHTML='<div class="modal-inner" role="region" aria-label="'+attr(title)+'"><button class="close" data-action="modal-close" aria-label="Cerrar">'+ico('x')+'</button><h2>'+esc(title)+'</h2>'+body+'</div>';
  if(formId)modal.dataset.form=formId;else delete modal.dataset.form;
  modal.showModal();
+ window.GalaxyChatMotion?.animate(modal.querySelector('.modal-inner'),'sheet');
  refreshIcons();
 }
 async function resetVoiceDraft(){stopVoiceTimer();if(voiceRecording||voiceReady){try{await GalaxyNative.call('discardVoiceRecording');}catch{}}voiceRecording=false;voiceReady=false;if(voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}}
-function closeModal(){const form=modal.dataset.form;if(form==='voice'&&pendingVoiceDraft!==null)resetVoiceDraft();if(form==='chat-attach-sheet')ensureChatComposer().setAttachmentIntent(null);if(dateModeTimer){clearInterval(dateModeTimer);dateModeTimer=null;}if(modal.open)modal.close();modal.classList.remove('chat-bottom-sheet');delete modal.dataset.editId;delete modal.dataset.version;delete modal.dataset.kind;delete modal.dataset.form;}
+function closeModal(){const form=modal.dataset.form;if(form==='voice'&&pendingVoiceDraft!==null)resetVoiceDraft();if(form==='chat-attach-sheet')ensureChatComposer().setAttachmentIntent(null);if(dateModeTimer){clearInterval(dateModeTimer);dateModeTimer=null;}if(modal.open){if(form==='chat-attach-sheet'||form==='chat-message-menu')window.GalaxyChatMotion?.depart(modal.querySelector('.modal-inner'));modal.close();}modal.classList.remove('chat-bottom-sheet');delete modal.dataset.editId;delete modal.dataset.version;delete modal.dataset.kind;delete modal.dataset.form;}
 function openItemForm(kind,item){
  const d=item?.data||{},meta=kindMeta[kind]||['sparkles','Contenido'],editing=!!item?.id,places=mapData?.places||[],songs=items('song');
  modal.dataset.editId=item?.id||'';modal.dataset.version=item?.version||'';modal.dataset.kind=kind;

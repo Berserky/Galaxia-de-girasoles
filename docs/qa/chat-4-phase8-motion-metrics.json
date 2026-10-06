@@ -1,0 +1,199 @@
+{
+  "measuredAt": "2026-10-06T16:33:36.816Z",
+  "device": "Moto G75 5G / Android 16",
+  "baseline": "origin/main 55686ade003003b726df922f2e832221f808fc45 (Phase 7)",
+  "workload": {
+    "logicalMessages": 20000,
+    "renderedMessages": 84,
+    "durationMs": 1200,
+    "jsWorkPerFrameMs": 4,
+    "scroll": "sinusoidal 100 px",
+    "composer": "empty/text every 6 frames",
+    "refreshHz": 60,
+    "refreshSettingsRestored": true,
+    "trials": 3,
+    "warmupMs": 1500
+  },
+  "phase7": [
+    {
+      "trial": 1,
+      "fps": 59.656972408650276,
+      "frameMs": 16.762499999999996,
+      "dropped": 0,
+      "worstMs": 20.399999999999636,
+      "cpuMs": 614,
+      "pssBeforeKb": 245725,
+      "pssAfterKb": 232775,
+      "longTasks": {
+        "count": 0,
+        "totalMs": 0,
+        "maxMs": 0
+      },
+      "layoutShifts": {
+        "count": 0,
+        "value": 0,
+        "max": 0
+      },
+      "actualMotionDurationsMs": []
+    },
+    {
+      "trial": 2,
+      "fps": 59.8404255319149,
+      "frameMs": 16.71111111111111,
+      "dropped": 0,
+      "worstMs": 16.800000000000182,
+      "cpuMs": 549,
+      "pssBeforeKb": 240205,
+      "pssAfterKb": 249002,
+      "longTasks": {
+        "count": 0,
+        "totalMs": 0,
+        "maxMs": 0
+      },
+      "layoutShifts": {
+        "count": 0,
+        "value": 0,
+        "max": 0
+      },
+      "actualMotionDurationsMs": []
+    },
+    {
+      "trial": 3,
+      "fps": 59.84042553191486,
+      "frameMs": 16.711111111111123,
+      "dropped": 0,
+      "worstMs": 16.800000000000182,
+      "cpuMs": 535,
+      "pssBeforeKb": 244142,
+      "pssAfterKb": 245611,
+      "longTasks": {
+        "count": 0,
+        "totalMs": 0,
+        "maxMs": 0
+      },
+      "layoutShifts": {
+        "count": 0,
+        "value": 0,
+        "max": 0
+      },
+      "actualMotionDurationsMs": []
+    }
+  ],
+  "phase8": [
+    {
+      "trial": 1,
+      "fps": 59.661915810407706,
+      "frameMs": 16.761111111111106,
+      "dropped": 0,
+      "worstMs": 20.300000000000182,
+      "cpuMs": 627,
+      "pssBeforeKb": 238795,
+      "pssAfterKb": 246065,
+      "longTasks": {
+        "count": 0,
+        "totalMs": 0,
+        "maxMs": 0
+      },
+      "layoutShifts": {
+        "count": 0,
+        "value": 0,
+        "max": 0
+      },
+      "actualMotionDurationsMs": [
+        106.09999999962747,
+        111.80000000074506,
+        111.59999999962747
+      ]
+    },
+    {
+      "trial": 2,
+      "fps": 59.8404255319149,
+      "frameMs": 16.71111111111111,
+      "dropped": 0,
+      "worstMs": 16.800000000000182,
+      "cpuMs": 567,
+      "pssBeforeKb": 246141,
+      "pssAfterKb": 247564,
+      "longTasks": {
+        "count": 0,
+        "totalMs": 0,
+        "maxMs": 0
+      },
+      "layoutShifts": {
+        "count": 0,
+        "value": 0,
+        "max": 0
+      },
+      "actualMotionDurationsMs": [
+        111.40000000037253,
+        111.60000000149012,
+        111.39999999850988
+      ]
+    },
+    {
+      "trial": 3,
+      "fps": 59.84042553191486,
+      "frameMs": 16.711111111111123,
+      "dropped": 0,
+      "worstMs": 16.800000000000182,
+      "cpuMs": 552,
+      "pssBeforeKb": 247640,
+      "pssAfterKb": 251603,
+      "longTasks": {
+        "count": 0,
+        "totalMs": 0,
+        "maxMs": 0
+      },
+      "layoutShifts": {
+        "count": 0,
+        "value": 0,
+        "max": 0
+      },
+      "actualMotionDurationsMs": [
+        104.59999999962747,
+        111.5,
+        111.59999999962747
+      ]
+    }
+  ],
+  "motionScenes": {
+    "fps": 59.840425531914946,
+    "frameMs": 16.711111111111094,
+    "dropped": 0,
+    "worst": 16.80000000000109,
+    "cpuMs": 323,
+    "pssBeforeKb": 244654,
+    "pssAfterKb": 224931,
+    "sendVisualMs": 29.399999998509884,
+    "motionTimings": [
+      {
+        "kind": "feedback",
+        "configured": 100,
+        "actualMs": 130.09999999962747,
+        "suppressed": false
+      },
+      {
+        "kind": "enter",
+        "configured": 160,
+        "actualMs": 183.19999999925494,
+        "suppressed": false
+      },
+      {
+        "kind": "sheet",
+        "configured": 220,
+        "actualMs": 250.40000000037253,
+        "suppressed": false
+      }
+    ],
+    "longTasks": {
+      "count": 0,
+      "totalMs": 0,
+      "maxMs": 0
+    },
+    "layoutShifts": {
+      "count": 0,
+      "value": 0,
+      "max": 0
+    }
+  }
+}

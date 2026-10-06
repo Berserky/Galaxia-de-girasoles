@@ -67,6 +67,8 @@ public class GalaxyDeviceClosureTest {
     }
 
     @Before public void setUp() throws Exception {
+        UiDevice.getInstance(instrumentation).wakeUp();
+        shell("wm dismiss-keyguard");
         backend.reset();
         new DeviceStore(context).clear();
         new DeviceStore(context).save("qa-token-0", "0", "QA Sebas");
@@ -228,6 +230,8 @@ public class GalaxyDeviceClosureTest {
         runJs("chatState={messages:Array.from({length:220},(_,i)=>({id:'p2-'+(i+100),client_id:'p2c-'+(i+100),sender_person:String(i%2),body:'Phase2 '+i,message_type:'text',attachments:[],server_seq:i+100,created_at:'2026-10-05T12:00:00Z',reactions:[]})),nextBeforeSeq:100,nextAfterSeq:null,pinnedIds:[]};chatStateSignature=chatSignature(chatState);chatMessageEngine.resetWindow(chatRows().length,{align:'end'});render();");
         awaitJs("document.querySelectorAll('.chat-message').length>0 && document.querySelectorAll('.chat-message').length<=84");
 
+        runJs("window.__p2settled=false;requestAnimationFrame(()=>requestAnimationFrame(()=>window.__p2settled=true));");
+        awaitJs("window.__p2settled && !chatScrollEngine.isProgrammatic() && !chatMeasureRaf");
         runJs("const e=document.querySelector('#chatMessages'),r=chatMessageEngine.range(chatRows());window.__p2VirtualStart=r.start;e.scrollTop=Math.max(0,r.topPx+20);chatScrollEngine.onScroll(e);window.__p2VirtualAnchor=chatCaptureAnchor(e);window.__p2VirtualOffset=window.__p2VirtualAnchor?.offset||0;chatHandleScroll(e);");
         SystemClock.sleep(550);
         assertTrue("Virtual window did not rotate before entering the top spacer", Integer.parseInt(js("chatMessageEngine.range(chatRows()).start")) < Integer.parseInt(js("window.__p2VirtualStart||0")));
@@ -368,6 +372,135 @@ public class GalaxyDeviceClosureTest {
         System.out.println("GALAXY_CHAT_PHASE4_ANDROID=" + result);
     }
 
+    @Test public void chatPhase8Motion_realWebViewEventsReducedMotionAnd20k() throws Exception {
+        launchChat();
+        awaitJs("!!window.GalaxyChatMotion");
+        runJs("GalaxyChatPerf.enable(true);GalaxyChatPerf.reset();GalaxyChatMotion.suspend();");
+        backend.setNetworkMode(QaHttpServer.NetworkMode.SLOW);
+        JSONObject send = new JSONObject(js("JSON.stringify((()=>{const t=performance.now();const row=queueChatMessage({body:'Phase8 immediate'});return {visible:!!document.querySelector('[data-client-id=\"'+row.client_id+'\"]'),ms:performance.now()-t};})())"));
+        assertTrue("optimistic send waits for server",send.getBoolean("visible"));
+        if(isPhysicalDevice())assertTrue("optimistic send is not immediate",send.getDouble("ms")<100);
+        SystemClock.sleep(600);
+        assertEquals("motion diagnostics "+js("JSON.stringify({perf:GalaxyChatPerf.report(),memory:navigator.deviceMemory,visible:document.visibilityState,constrained:GalaxyChatMotion.constrained(),box:document.querySelector('#chatMessages').getBoundingClientRect(),last:document.querySelector('.chat-message.local')?.getBoundingClientRect()})"),"true",js("GalaxyChatPerf.report().events.some(e=>e.type==='motion-entry')||GalaxyChatMotion.constrained()"));
+        awaitCondition(() -> backend.sentCount()>=1,UI_TIMEOUT_MS);
+        backend.setNetworkMode(QaHttpServer.NetworkMode.NORMAL);
+        SystemClock.sleep(600);
+
+        boolean memoryLimited=Boolean.parseBoolean(js("navigator.deviceMemory>0&&navigator.deviceMemory<=2"));
+        for(int count:new int[]{1,3,20}){
+            runJs("GalaxyChatPerf.reset();GalaxyChatMotion.suspend();chatScrollEngine.toBottom(document.querySelector('#chatMessages'));");
+            SystemClock.sleep(220);
+            backend.receivePartner(count);
+            runJs("loadChat({quiet:true,force:true});");
+            awaitJs("chatState.messages.length>="+(count+1));
+            SystemClock.sleep(450);
+            int entries=Integer.parseInt(js("GalaxyChatPerf.report().events.filter(e=>e.type==='motion-entry').reduce((s,e)=>s+e.count,0)"));
+            if(memoryLimited)assertEquals("low-memory device keeps fresh updates direct",0,entries);
+            if(count==20)assertEquals("burst animates individual rows",0,entries);
+            else assertTrue("visible incoming message should animate or degrade on slow devices",(entries>0&&entries<=count)||Boolean.parseBoolean(js("GalaxyChatMotion.constrained()")));
+            assertEquals("incoming "+count+" changes bottom continuity: "+js("JSON.stringify((()=>{const p=GalaxyChatPerf.report();return {...p,events:p.events.slice(-8)};})())"),"true",js("chatNearBottom()"));
+        }
+        runJs("GalaxyChatPerf.reset();chatRenderMessages({scroll:'bottom'});");
+        SystemClock.sleep(300);
+        assertEquals("recycled mount replays entry","0",js("GalaxyChatPerf.report().events.filter(e=>e.type==='motion-entry').length"));
+
+        runJs("window.__p8timings=[];(async()=>{for(const kind of ['feedback','enter','sheet']){const configured=GalaxyChatMotion.duration(kind==='feedback'?'fast':kind==='sheet'?'slow':'normal'),started=performance.now(),a=GalaxyChatMotion.animate(document.querySelector('.chat-plus'),kind);if(a)await a.finished.catch(()=>{});window.__p8timings.push({kind,configured,actualMs:performance.now()-started,suppressed:!a});}})();");
+        awaitJs("window.__p8timings.length===3");
+        assertEquals("motion token exceeds budget","false",js("window.__p8timings.some(t=>t.configured>300)"));
+        if(isPhysicalDevice())assertEquals("motion actual duration exceeds budget","false",js("window.__p8timings.some(t=>!t.suppressed&&t.actualMs>300)"));
+        runJs("document.querySelector('[data-action=\"chat-attach-open\"]').click();window.__p8sheet=modal.querySelector('.modal-inner').getAnimations().map(a=>a.effect.getTiming().duration);closeModal();");
+        assertEquals("sheet close waits for exit","false",js("modal.open"));
+        assertEquals("sheet token or low-device suppression","true",js("window.__p8sheet[0]===220||(!window.__p8sheet.length&&GalaxyChatMotion.constrained())"));
+        awaitJs("!document.querySelector('.chat-motion-ghost')");
+        runJs("openChatMessageMenu(chatState.messages[0].id);window.__p8menu=modal.querySelector('.modal-inner').getAnimations().map(a=>a.effect.getTiming().duration);closeModal();");
+        assertEquals("menu token or low-device suppression","true",js("window.__p8menu[0]===160||(!window.__p8menu.length&&GalaxyChatMotion.constrained())"));
+
+        InstrumentationRegistry.getInstrumentation().getUiAutomation().grantRuntimePermission(context.getPackageName(),Manifest.permission.RECORD_AUDIO);
+        runJs("ensureChatComposer().accepted();chatRenderComposer();beginChatHoldRecording({pointerId:123,clientX:100,clientY:100},document.querySelector('.chat-send'));");
+        awaitJs("chatVoiceEngine.snapshot().state==='recording_hold'");
+        SystemClock.sleep(800);
+        runJs("window.__p8wave=document.querySelector('.chat-voice-waveform i');chatVoiceEngine.lock();chatVoiceRefreshInline();");
+        assertEquals("recording_locked",js("chatVoiceEngine.snapshot().state"));
+        runJs("window.__p8wave=document.querySelector('.chat-voice-waveform i');chatVoiceRefreshInline();");
+        assertEquals("waveform recreates DOM on each sample","true",js("window.__p8wave===document.querySelector('.chat-voice-waveform i')"));
+        runJs("finishChatHoldRecording();");
+        awaitJs("chatVoiceEngine.snapshot().state==='preview'");
+        runJs("document.querySelector('[data-action=\"chat-voice-preview\"]').click();");
+        SystemClock.sleep(300);
+        runJs("document.querySelector('[data-action=\"chat-voice-discard\"]').click();");
+        awaitJs("chatVoiceEngine.snapshot().state==='idle'");
+        runJs("beginChatHoldRecording({pointerId:124,clientX:100,clientY:100},document.querySelector('.chat-send'));");
+        awaitJs("chatVoiceEngine.snapshot().state==='recording_hold'");
+        runJs("finishChatHoldRecording({cancel:true});");
+        awaitJs("!document.querySelector('.chat-voice-inline')");
+
+        String animatorScale=shell("settings get global animator_duration_scale").trim();
+        boolean initialReduced=Boolean.parseBoolean(js("nativeState().reducedMotion===true"));
+        try{
+            shell("settings put global animator_duration_scale 0");
+            scenario.moveToState(Lifecycle.State.CREATED);scenario.moveToState(Lifecycle.State.RESUMED);
+            awaitJs("nativeState().reducedMotion===true");
+            assertEquals("native reduced motion not applied","true",js("GalaxyChatMotion.reduced()"));
+            runJs("window.__p8reduced=GalaxyChatMotion.animate(document.querySelector('.chat-send'),'feedback')?.effect.getKeyframes()||[];");
+            assertEquals("reduced motion retains translation","false",js("window.__p8reduced.some(f=>f.transform&&f.transform!=='none')"));
+        }finally{shell("null".equals(animatorScale)?"settings delete global animator_duration_scale":"settings put global animator_duration_scale "+animatorScale);}
+        scenario.moveToState(Lifecycle.State.CREATED);scenario.moveToState(Lifecycle.State.RESUMED);
+        awaitJs("nativeState().reducedMotion==="+initialReduced);
+        awaitJs("!chatResumeRefreshPromise&&!chatLoading&&!chatVirtualRaf&&!chatMeasureRaf&&!chatScrollEngine.isProgrammatic()");
+        runJs("window.__p8resumeSettled=false;function settle(){if(chatResumeRefreshPromise||chatLoading||chatVirtualRaf||chatMeasureRaf||chatScrollEngine.isProgrammatic()){requestAnimationFrame(settle);return;}requestAnimationFrame(()=>requestAnimationFrame(()=>{if(chatResumeRefreshPromise||chatLoading||chatVirtualRaf||chatMeasureRaf||chatScrollEngine.isProgrammatic())settle();else window.__p8resumeSettled=true;}));}settle();");
+        awaitJs("window.__p8resumeSettled");
+        runJs("chatState={...(chatState||{}),messages:Array.from({length:20000},(_,i)=>({id:'p8-'+i,client_id:'p8c-'+i,sender_person:String(i%2),body:'Motion '+i,message_type:'text',attachments:[],server_seq:i+1,created_at:'2026-10-06T12:00:00Z',reactions:[]})),nextBeforeSeq:null,nextAfterSeq:null};chatMessageEngine.resetWindow(20000,{align:'end'});chatRenderMessages({scroll:'bottom'});");
+        awaitJs("document.querySelectorAll('.chat-message').length===84");
+        runJs("chatRenderMessages({scroll:'bottom'});render();window.__p8pendingReset=chatBottomRenderPending===null;");
+        assertEquals("full render leaked bottom intent","true",js("window.__p8pendingReset"));
+        runJs("window.__p8settled=false;requestAnimationFrame(()=>requestAnimationFrame(()=>window.__p8settled=true));");
+        awaitJs("window.__p8settled");
+        SystemClock.sleep(500);
+        runJs("GalaxyChatPerf.reset();const e=document.querySelector('#chatMessages');window.__p8before={children:[...e.children].slice(0,5).map(x=>({tag:x.tagName,id:x.dataset.chatId,spacer:x.dataset.chatSpacer,style:x.style.height,box:x.getBoundingClientRect().top})),range:chatMessageEngine.range(chatRows()).start,top:e.scrollTop,height:e.scrollHeight,box:e.getBoundingClientRect().toJSON(),first:e.querySelector('.chat-message').getBoundingClientRect().toJSON(),last:e.querySelector('.chat-message:last-child')?.getBoundingClientRect().toJSON()};window.__p8start=e.scrollTop;e.scrollTop-=200;chatScrollEngine.onScroll(e);window.__p8anchor=chatCaptureAnchor(e);chatRenderMessages({anchor:window.__p8anchor});");
+        SystemClock.sleep(350);
+        assertTrue("motion drifts anchor: "+js("JSON.stringify({before:window.__p8before,anchor:window.__p8anchor,offset:chatViewportOffsetFor(window.__p8anchor.id),range:chatMessageEngine.range(chatRows()).start,perf:GalaxyChatPerf.report()})"),Math.abs(Double.parseDouble(js("chatViewportOffsetFor(window.__p8anchor.id)"))-Double.parseDouble(js("window.__p8anchor.offset")))<4);
+        assertEquals("virtualization replays entries","0",js("GalaxyChatPerf.report().events.filter(e=>e.type==='motion-entry').length"));
+        long cpuBefore=android.os.Process.getElapsedCpuTime(),pssBefore=android.os.Debug.getPss();
+        runJs("window.__p8frames=[];window.__p8finished=false;const e=document.querySelector('#chatMessages'),base=e.scrollTop;let last=0,start=0;function sample(t){if(!start)start=t;if(last)window.__p8frames.push(t-last);last=t;const load=performance.now();while(performance.now()-load<4){}e.scrollTop=base+Math.sin((t-start)/90)*100;GalaxyChatMotion.animate(document.querySelector('.chat-send'),'feedback');if(t-start<1200)requestAnimationFrame(sample);else window.__p8finished=true;}requestAnimationFrame(sample);");
+        awaitJs("window.__p8finished");
+        JSONObject frames=new JSONObject(js("JSON.stringify((()=>{const a=window.__p8frames,total=a.reduce((s,v)=>s+v,0);return {fps:a.length*1000/total,frameMs:total/a.length,dropped:a.filter(v=>v>34).length,worst:Math.max(...a)};})())"));
+        if(isPhysicalDevice())assertTrue("motion repeatedly drops frames: "+frames,frames.getInt("dropped")<=3);
+        if(isPhysicalDevice())assertTrue("motion below 50 FPS: "+frames,frames.getDouble("fps")>=50);
+        JSONObject metrics=new JSONObject().put("frames",frames).put("cpuMs",android.os.Process.getElapsedCpuTime()-cpuBefore)
+            .put("pssBeforeKb",pssBefore).put("pssAfterKb",android.os.Debug.getPss()).put("sendVisualMs",send.getDouble("ms"))
+            .put("logicalMessages",20000).put("renderedMessages",Integer.parseInt(js("document.querySelectorAll('.chat-message').length")))
+            .put("motionTimings",new JSONArray(js("JSON.stringify(window.__p8timings||[])")))
+            .put("perf",new JSONObject(js("JSON.stringify((()=>{const p=GalaxyChatPerf.report();return {...p,events:p.events.slice(-8)};})())")));
+        System.out.println("GALAXY_CHAT_PHASE8_ANDROID="+metrics);
+    }
+
+    @Test public void chatMotionBenchmark20k_device() throws Exception {
+        String minimum=shell("settings get system min_refresh_rate").trim(),peak=shell("settings get system peak_refresh_rate").trim();
+        try {
+        shell("settings put system min_refresh_rate 60");shell("settings put system peak_refresh_rate 60");
+        launchChat();
+        runJs("chatState={...(chatState||{}),messages:Array.from({length:20000},(_,i)=>({id:'bench-'+i,client_id:'benchc-'+i,sender_person:String(i%2),body:'Benchmark '+i,message_type:'text',attachments:[],server_seq:i+1,created_at:'2026-10-06T12:00:00Z',reactions:[]})),nextBeforeSeq:null,nextAfterSeq:null};chatMessageEngine.resetWindow(20000,{align:'end'});chatRenderMessages({scroll:'bottom'});");
+        awaitJs("document.querySelectorAll('.chat-message').length===84");
+        SystemClock.sleep(1500);
+        for(int trial=1;trial<=3;trial++){
+        runJs("GalaxyChatPerf.enable(true);GalaxyChatPerf.reset();");
+        long cpu=android.os.Process.getElapsedCpuTime(),pss=android.os.Debug.getPss();
+        runJs("window.__benchResult=null;const frames=[],e=document.querySelector('#chatMessages'),input=document.querySelector('#chatForm textarea'),base=e.scrollTop;let start=0,last=0,count=0;function tick(t){if(!start)start=t;if(last)frames.push(t-last);last=t;const busy=performance.now();while(performance.now()-busy<4){}e.scrollTop=base+Math.sin((t-start)/90)*100;if(count++%6===0){input.value=input.value?'':'QA';input.dispatchEvent(new Event('input',{bubbles:true}));}if(t-start<1200)requestAnimationFrame(tick);else {const total=frames.reduce((s,v)=>s+v,0);window.__benchResult={fps:frames.length*1000/total,frameMs:total/frames.length,dropped:frames.filter(v=>v>34).length,worst:Math.max(...frames),motion:!!window.GalaxyChatMotion};}}requestAnimationFrame(tick);");
+        awaitJs("!!window.__benchResult");
+        JSONObject metrics=new JSONObject(js("JSON.stringify(window.__benchResult)"));
+        metrics.put("trial",trial).put("cpuMs",android.os.Process.getElapsedCpuTime()-cpu).put("pssBeforeKb",pss).put("pssAfterKb",android.os.Debug.getPss())
+            .put("logicalMessages",20000).put("renderedMessages",Integer.parseInt(js("document.querySelectorAll('.chat-message').length")))
+            .put("perf",new JSONObject(js("JSON.stringify((()=>{const p=GalaxyChatPerf.report();return {...p,events:p.events.slice(-8)};})())")));
+        System.out.println("GALAXY_CHAT_MOTION_BENCHMARK="+metrics);
+        if(isPhysicalDevice())assertTrue("scroll and Composer below 50 FPS: "+metrics,metrics.getDouble("fps")>=50);
+        if(isPhysicalDevice())assertTrue("recurrent dropped frames: "+metrics,metrics.getInt("dropped")<=3);
+        }
+        } finally {
+            shell("null".equals(minimum)?"settings delete system min_refresh_rate":"settings put system min_refresh_rate "+minimum);
+            shell("null".equals(peak)?"settings delete system peak_refresh_rate":"settings put system peak_refresh_rate "+peak);
+        }
+    }
+
     @Test public void dailyGoalsPlansEventsCapsulesMapContextBackupAndUpdate_areReachable() throws Exception {
         launch();
         awaitJs("document.body.innerText.includes('¿Qué construimos después?')");
@@ -489,6 +622,9 @@ public class GalaxyDeviceClosureTest {
         scenario = ActivityScenario.launch(intent);
         awaitJs("!!document.querySelector('.chat-shell')");
         awaitCondition(() -> backend.actions().contains("chat-state"), UI_TIMEOUT_MS);
+        runJs("document.activeElement?.blur();");
+        scenario.onActivity(activity -> ((android.view.inputmethod.InputMethodManager)activity.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(activity.getWindow().getDecorView().getWindowToken(),0));
+        SystemClock.sleep(300);
     }
 
     @Test public void cameraMicrophoneAndFilePicker_launchWhenEnvironmentSupportsThem() throws Exception {
@@ -521,10 +657,17 @@ public class GalaxyDeviceClosureTest {
         awaitJs("!!document.querySelector('#app')");
     }
 
+    private boolean isPhysicalDevice() {
+        return !android.os.Build.HARDWARE.equals("ranchu") && !android.os.Build.HARDWARE.equals("goldfish")
+            && !android.os.Build.MODEL.contains("sdk_gphone") && !android.os.Build.MODEL.contains("Emulator");
+    }
+
     private void launch() {
         scenario = ActivityScenario.launch(MainActivity.class);
+        scenario.onActivity(activity -> activity.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON));
         awaitJs("!!document.querySelector('#app')");
         awaitJs("document.body.innerText.includes('Nuestra Galaxia')");
+        awaitJs("document.visibilityState==='visible'");
     }
 
     private void launchChat() {
@@ -532,6 +675,9 @@ public class GalaxyDeviceClosureTest {
         runJs("document.querySelector('#chatFab')?.click()");
         awaitJs("!!document.querySelector('.chat-shell')");
         awaitCondition(() -> backend.actions().contains("chat-state"), UI_TIMEOUT_MS);
+        runJs("document.activeElement?.blur();");
+        scenario.onActivity(activity -> ((android.view.inputmethod.InputMethodManager)activity.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(activity.getWindow().getDecorView().getWindowToken(),0));
+        SystemClock.sleep(300);
     }
 
     private void sendChat(String body) {
@@ -575,9 +721,27 @@ public class GalaxyDeviceClosureTest {
         });
         int[] v = frame.get();
         int x = v[0] + (int)Math.round(g.getDouble("x") * v[2] / Math.max(1d, g.getDouble("vw")));
-        int y = v[1] + (int)Math.round(g.getDouble("y") * v[3] / Math.max(1d, g.getDouble("vh")));
+        // CSS pixels use one scale on both axes, including while IME insets settle.
+        int y = v[1] + (int)Math.round(g.getDouble("y") * v[2] / Math.max(1d, g.getDouble("vw")));
         assertTrue("Unable to tap WebView element: " + selector, UiDevice.getInstance(instrumentation).click(x, y));
         SystemClock.sleep(250);
+        if (!"true".equals(js("document.activeElement===document.querySelector(" + quoted + ")"))) {
+            // Headless emulator screen coordinates can lag the WebView's resized surface.
+            // Deliver an actual Android touch to the current view, never DOM focus().
+            JSONObject current = new JSONObject(js("JSON.stringify((()=>{const r=document.querySelector(" + quoted + ").getBoundingClientRect();return {x:(r.left+r.right)/2,y:(r.top+r.bottom)/2,vw:innerWidth};})())"));
+            scenario.onActivity(activity -> {
+                WebView web = activity.findViewById(R.id.webView);
+                float scale = (float)(web.getWidth()/Math.max(1d,current.optDouble("vw")));
+                float localX = (float)current.optDouble("x")*scale, localY = (float)current.optDouble("y")*scale;
+                long time = SystemClock.uptimeMillis();
+                android.view.MotionEvent down = android.view.MotionEvent.obtain(time,time,android.view.MotionEvent.ACTION_DOWN,localX,localY,0);
+                android.view.MotionEvent up = android.view.MotionEvent.obtain(time,time+80,android.view.MotionEvent.ACTION_UP,localX,localY,0);
+                try { web.dispatchTouchEvent(down);web.dispatchTouchEvent(up); }
+                finally { down.recycle();up.recycle(); }
+            });
+            SystemClock.sleep(250);
+            System.out.println("GALAXY_WEBVIEW_TAP="+js("JSON.stringify({selector:"+quoted+",focused:document.activeElement===document.querySelector("+quoted+"),active:document.activeElement?.tagName,visible:document.visibilityState,viewport:{w:innerWidth,h:innerHeight},rect:document.querySelector("+quoted+").getBoundingClientRect().toJSON()})"));
+        }
     }
 
     private void runJs(String script) {

@@ -1,0 +1,103 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+
+function engine(){
+ const file=new URL('../android/app/src/main/assets/mobile/chat-motion.js',import.meta.url);
+ assert.ok(fs.existsSync(file),'central motion runtime must exist');
+ const context={window:{},document:{visibilityState:'visible'},navigator:{},performance:{now:()=>1000}};
+ vm.createContext(context);vm.runInContext(fs.readFileSync(file,'utf8'),context);
+ return context.window.GalaxyChatMotion.create({now:()=>1000,reduced:()=>false,slow:()=>false});
+}
+test('only explicit fresh visible events animate, never history or recycled rows',()=>{
+ const motion=engine();
+ motion.offer(['a','b'],{atBottom:true});
+ assert.equal(motion.consume('a',false),false);
+ assert.equal(motion.consume('a',true),false,'offscreen events cannot animate later');
+ assert.equal(motion.consume('b',true),true);
+ assert.equal(motion.consume('b',true),false,'virtual remount cannot replay');
+ assert.equal(motion.consume('old',true),false);
+});
+test('large bursts and reading history suppress entry effects',()=>{
+ const motion=engine();
+ motion.offer(Array.from({length:20},(_,i)=>String(i)),{atBottom:true});
+ assert.equal(motion.consume('0',true),false);
+ motion.offer(['history-reader'],{atBottom:false});
+ assert.equal(motion.consume('history-reader',true),false);
+});
+test('split realtime bursts clear pending effects instead of queueing twenty animations',()=>{
+ const motion=engine();
+ for(let i=0;i<20;i++)motion.offer([String(i)],{atBottom:true});
+ for(let i=0;i<20;i++)assert.equal(motion.consume(String(i),true),false);
+});
+test('recurrent slow frames disable nonessential motion while preserving immediate updates',()=>{
+ const motion=engine();
+ motion.frame(40);motion.frame(40);motion.frame(40);
+ motion.offer(['new'],{atBottom:true});
+ assert.equal(motion.consume('new',true),false);
+});
+test('system reduced motion retains functional fade feedback with no translation or scale',async()=>{
+ const file=new URL('../android/app/src/main/assets/mobile/chat-motion.js',import.meta.url);
+ const context={window:{},document:{visibilityState:'visible'},navigator:{},performance:{now:()=>1000}};
+ vm.createContext(context);vm.runInContext(fs.readFileSync(file,'utf8'),context);
+ const motion=context.window.GalaxyChatMotion.create({reduced:()=>true,slow:()=>false});
+ let frames;
+ const el={animate:(value)=>{frames=value;return {finished:Promise.resolve(),cancel(){}};}};
+ motion.animate(el,'feedback');
+ assert.equal(frames.length,2);assert.equal(frames[1].opacity,1);
+ assert.ok(frames.every(frame=>!('transform' in frame)));
+});
+
+test('history rerenders do not measure rows when no fresh motion is pending',()=>{
+ const motion=engine();
+ const container={getBoundingClientRect(){throw new Error('unnecessary layout read');}};
+ motion.entries(container);
+});
+
+test('a bottom render never refocuses an old virtual anchor; a history restore does',()=>{
+ const app=fs.readFileSync(new URL('../android/app/src/main/assets/mobile/app.js',import.meta.url),'utf8');
+ const start=app.indexOf('function chatRenderMessages('),end=app.indexOf(' el.innerHTML=chatMessagesMarkup()',start);
+ const focused=[],el={};
+ const context={document:{querySelector:()=>el},chatBottomRenderPending:null,chatRenderGeneration:0,chatResizeObserver:null,chatMeasureRaf:0,chatCaptureAnchor:()=>({virtual:true,id:'old'}),chatCapturePlayback:()=>null,chatRows:()=>[{id:'old'}],chatMessageEngine:{focus:(...args)=>focused.push(args)}};
+ vm.createContext(context);vm.runInContext(app.slice(start,end)+' return true;}',context);
+ context.chatRenderMessages({scroll:'bottom'});assert.equal(focused.length,0);
+ context.chatBottomRenderPending=null;context.chatRenderMessages({scroll:'preserve'});assert.equal(focused.length,1);
+});
+
+test('full render consumes bottom intent and it cannot affect a replacement element',()=>{
+ const app=fs.readFileSync(new URL('../android/app/src/main/assets/mobile/app.js',import.meta.url),'utf8');
+ const start=app.indexOf('function render(){'),end=app.indexOf(' const currentMemoriesTabs=',start);
+ const old={},replacement={};
+ const context={view:'chat',document:{querySelector:()=>old},chatBottomRenderPending:old,chatCapturePositionState:()=>({atBottom:false})};
+ vm.createContext(context);vm.runInContext(app.slice(start,end)+' return chatRenderState;}',context);
+ assert.equal(context.render().atBottom,true);assert.equal(context.chatBottomRenderPending,null);
+ context.document.querySelector=()=>replacement;assert.equal(context.render().atBottom,false);
+});
+
+test('cached tokens invalidate when the native reduced-motion preference changes',()=>{
+ const attrs=new Map();let reads=0;
+ const root={setAttribute:(k,v)=>attrs.set(k,v),getAttribute:k=>attrs.get(k)};
+ const context={window:{},document:{visibilityState:'visible',documentElement:root},navigator:{},performance:{now:()=>1000},getComputedStyle:()=>{reads++;return {getPropertyValue:()=>attrs.get('data-chat-motion-reduced')==='true'?'0ms':'100ms'};}};
+ vm.createContext(context);vm.runInContext(fs.readFileSync(new URL('../android/app/src/main/assets/mobile/chat-motion.js',import.meta.url),'utf8'),context);
+ const motion=context.window.GalaxyChatMotion;assert.equal(motion.duration('fast'),100);assert.equal(motion.duration('fast'),100);assert.equal(reads,1);
+ motion.setNativeReduced(true);assert.equal(motion.duration('fast'),0);
+ motion.setNativeReduced(false);assert.equal(motion.duration('fast'),100);
+});
+
+test('rapid feedback replaces the animation on one element instead of accumulating layers',()=>{
+ const motion=engine(),animations=[];
+ const el={animate:()=>{const animation={cancelled:false,finished:new Promise(()=>{}),cancel(){this.cancelled=true;}};animations.push(animation);return animation;}};
+ motion.animate(el,'feedback');motion.animate(el,'feedback');
+ assert.equal(animations[0].cancelled,true);assert.equal(animations[1].cancelled,false);
+});
+
+test('a queued scroll from a replaced chat cannot change the current message window',()=>{
+ const app=fs.readFileSync(new URL('../android/app/src/main/assets/mobile/app.js',import.meta.url),'utf8');
+ const start=app.indexOf('function chatHandleScroll('),end=app.indexOf('function chatDraftAttachmentMarkup',start);
+ const old={isConnected:false},current={isConnected:true};let callback,reads=0;
+ const context={document:{querySelector:()=>current},chatVirtualRaf:0,requestAnimationFrame:fn=>{callback=fn;return 1;},chatScrollEngine:{isProgrammatic:()=>false,onScroll:()=>reads++},chatRows:()=>{reads++;return [];}};
+ vm.createContext(context);vm.runInContext(app.slice(start,end),context);
+ context.chatHandleScroll(old);callback();assert.equal(reads,0);assert.equal(context.chatVirtualRaf,0);
+ context.chatHandleScroll(current);callback();assert.equal(reads,2,'current viewport still processes real scrolling');
+});

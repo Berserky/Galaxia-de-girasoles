@@ -984,7 +984,7 @@ body.chat-mode .chat-shell{
   -webkit-overflow-scrolling:touch
 }
 .chat-message{position:relative;margin:5px 0;max-width:86%;content-visibility:auto;contain-intrinsic-size:54px}
-.chat-message .chat-bubble{min-width:62px;padding:9px 11px 7px;box-shadow:0 2px 12px rgba(30,20,50,.045);transition:transform .16s ease,box-shadow .16s ease}
+.chat-message .chat-bubble{min-width:62px;padding:9px 11px 7px;box-shadow:0 2px 12px rgba(30,20,50,.045);transition:transform var(--chat-motion-duration-fast) var(--chat-motion-easing-standard)}
 .chat-message.chat-highlight .chat-bubble{animation:chatHighlight 1.65s ease;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 26%,transparent)}
 @keyframes chatHighlight{0%,100%{transform:scale(1)}35%{transform:scale(1.025)}}
 .chat-message.local .chat-bubble{opacity:.84}
@@ -1023,7 +1023,7 @@ body.chat-mode .chat-shell{
 .chat-search-form{display:grid;grid-template-columns:1fr 1fr;gap:8px}.chat-search-form>:first-child{grid-column:1/-1}.chat-search-form button{grid-column:1/-1}
 .chat-result-list{display:grid;gap:5px;margin-top:10px;max-height:58vh;overflow:auto}.chat-result-list>button{width:100%;min-height:56px;border:1px solid var(--border);border-radius:14px;background:var(--surface);color:var(--text);display:grid;grid-template-columns:34px minmax(0,1fr);gap:8px;align-items:center;padding:8px;text-align:left}.chat-result-list>button>span{color:var(--accent)}.chat-result-list>button>div{display:grid;min-width:0}.chat-result-list b,.chat-result-list small,.chat-result-list em{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.chat-result-list small,.chat-result-list em{font-size:9px;color:var(--muted);font-style:normal}
 .chat-song-picker{display:grid;gap:6px;max-height:62vh;overflow:auto}.chat-song-picker button{min-height:54px;border:1px solid var(--border);border-radius:14px;background:var(--surface);color:var(--text);display:grid;grid-template-columns:32px minmax(0,1fr);gap:8px;align-items:center;padding:8px;text-align:left}.chat-song-picker span{display:grid;min-width:0}.chat-song-picker small{color:var(--muted)}
-.chat-mic-hold{touch-action:none;user-select:none;-webkit-user-select:none;transition:transform .16s ease,background .16s ease!important}
+.chat-mic-hold{touch-action:none;user-select:none;-webkit-user-select:none;transition:transform var(--chat-motion-duration-fast) var(--chat-motion-easing-standard),opacity var(--chat-motion-duration-fast) var(--chat-motion-easing-standard)!important}
 .chat-mic-hold.recording{transform:scale(1.08);background:var(--danger);box-shadow:0 0 0 8px color-mix(in srgb,var(--danger) 12%,transparent)}
 .chat-mic-hold.canceling{background:var(--danger);transform:translateX(-7px) scale(.96)}
 .chat-mic-hold.locked{background:var(--danger)}
@@ -1130,7 +1130,7 @@ body.chat-mode .chat-composer-v2{
   touch-action:manipulation;-webkit-tap-highlight-color:transparent;
 }
 .chat-composer-v2 .chat-plus{border:1px solid var(--border);background:var(--surface);color:var(--text)}
-.chat-composer-v2 .chat-send{border:0;background:var(--accent);color:#fff;transition:transform .12s ease,opacity .12s ease}
+.chat-composer-v2 .chat-send{border:0;background:var(--accent);color:#fff;transition:transform var(--chat-motion-duration-fast) var(--chat-motion-easing-standard),opacity var(--chat-motion-duration-fast) var(--chat-motion-easing-standard)}
 .chat-composer-v2 .chat-send:active{transform:scale(.96)}
 .chat-composer-v2 .chat-send:disabled{opacity:.55}
 .chat-composer-v2 .chat-compose-row textarea{
@@ -1259,3 +1259,36 @@ body.chat-mode{background:var(--chat-bg);color:var(--chat-text-primary)}
 @media(min-width:720px){:root{--chat-max-bubble:68%}}
 @media(max-width:390px){:root{--chat-max-bubble:90%}.chat-formatted,.chat-bubble p{font-size:max(var(--chat-font-body),1em)}}
 @media(prefers-reduced-motion:reduce){.chat-message .chat-bubble,.chat-voice-inline button,.chat-voice-waveform i{transition:none!important}.chat-message.chat-highlight .chat-bubble{animation:none!important}}
+
+/* Phase 8: finite feedback; geometry stays under the Scroll Engine's control. */
+:root{
+ --chat-motion-duration-fast:100ms;--chat-motion-duration-normal:160ms;--chat-motion-duration-slow:220ms;
+ --chat-motion-easing-standard:cubic-bezier(.2,0,0,1);--chat-motion-easing-enter:cubic-bezier(.2,.8,.2,1);--chat-motion-easing-exit:cubic-bezier(.4,0,1,1);
+ --chat-motion-scale-feedback:.97;--chat-motion-opacity:.75;--chat-motion-distance:6px;
+}
+#app>section.chat-shell{animation:none}
+.chat-shell .skeleton{animation:none}
+.chat-shell .chat-message{content-visibility:visible}
+.chat-shell button,.chat-shell textarea,.chat-message .chat-bubble{
+ transition:opacity var(--chat-motion-duration-fast) var(--chat-motion-easing-standard),transform var(--chat-motion-duration-fast) var(--chat-motion-easing-standard);
+}
+.chat-shell button:active{transform:scale(var(--chat-motion-scale-feedback))}
+.chat-shell button:disabled{opacity:var(--chat-disabled-opacity)}
+.chat-status{min-width:64px;min-height:16px;font-variant-numeric:tabular-nums}
+.chat-status.sending .ui-icon,.chat-voice-inline.preparing svg{animation:none}
+.chat-message.chat-highlight .chat-bubble{animation:none;transform:none}
+.chat-new-button,.chat-reactions small{font-variant-numeric:tabular-nums}
+.chat-voice-time,.chat-voice-inline>b{min-width:40px;font-variant-numeric:tabular-nums}
+.chat-voice-waveform i{height:32px!important;transform-origin:center;transform:scaleY(var(--chat-wave-level,.3));transition:transform var(--chat-motion-duration-normal) linear}
+.chat-bottom-sheet,.modal[data-form="chat-message-menu"]{backdrop-filter:none}
+.chat-bottom-sheet button,.modal[data-form="chat-message-menu"] button{transition:opacity var(--chat-motion-duration-fast),transform var(--chat-motion-duration-fast)}
+.chat-bottom-sheet button:active,.modal[data-form="chat-message-menu"] button:active{transform:scale(var(--chat-motion-scale-feedback))}
+[data-chat-motion-reduced="true"]{--chat-motion-scale-feedback:1;--chat-motion-duration-fast:0ms;--chat-motion-duration-normal:0ms}
+[data-chat-motion-reduced="true"] .chat-shell button,[data-chat-motion-reduced="true"] .chat-voice-waveform i{transition:none!important}
+[data-chat-motion-slow="true"]{--chat-motion-scale-feedback:1;--chat-motion-duration-fast:0ms;--chat-motion-duration-normal:0ms}
+[data-chat-motion-slow="true"] .chat-shell button,[data-chat-motion-slow="true"] .chat-voice-waveform i{transition:none!important}
+@media(prefers-reduced-motion:reduce){
+ .chat-shell button,.chat-shell textarea,.chat-message .chat-bubble,.chat-voice-waveform i{transition:none!important}
+ .chat-shell button:active,.chat-bottom-sheet button:active,.modal[data-form="chat-message-menu"] button:active{transform:none}
+ .plan-roulette,.plan-roulette.result,.wrapped-card{animation:none!important}
+}

@@ -10,6 +10,7 @@ android { namespace = "com.nuestragalaxia.companion"; compileSdk = 36
  defaultConfig { applicationId = "com.nuestragalaxia.companion"; minSdk = 26; targetSdk = 36; versionCode = 35; versionName = "3.5.1"; buildConfigField("String","SUPABASE_URL","\"https://zqiknzivfahvvadmxrvt.supabase.co\""); buildConfigField("String","SUPABASE_PUBLISHABLE_KEY","\"sb_publishable_c3SvE2qIJthLwd7IcEYSmA_OU2Ku9rT\""); buildConfigField("String","EDGE_URL","\"https://zqiknzivfahvvadmxrvt.supabase.co/functions/v1/android-companion\""); buildConfigField("String","FIREBASE_PROJECT_ID","\"$firebaseProjectId\""); buildConfigField("String","FIREBASE_APPLICATION_ID","\"$firebaseApplicationId\""); buildConfigField("String","FIREBASE_API_KEY","\"$firebaseApiKey\""); buildConfigField("String","FIREBASE_SENDER_ID","\"$firebaseSenderId\""); testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
  buildTypes {
    getByName("debug") {
+     applicationIdSuffix = providers.gradleProperty("QA_APPLICATION_SUFFIX").orNull ?: ""
      if (qaEdgeUrl.isNotBlank()) buildConfigField("String","EDGE_URL","\"$qaEdgeUrl\"")
      if (qaSupabasePublishableKey.isNotBlank()) buildConfigField("String","SUPABASE_PUBLISHABLE_KEY","\"$qaSupabasePublishableKey\"")
    }

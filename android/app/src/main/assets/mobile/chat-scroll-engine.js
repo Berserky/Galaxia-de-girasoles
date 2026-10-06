@@ -10,11 +10,11 @@ const DEFAULTS={
 
 function create(options={}){
  const config={...DEFAULTS,...options};
- let programmaticDepth=0,programmaticRaf=0,resizeRaf=0,viewportRaf=0,lastUserScrollAt=0;
- let liveAnchor=null,liveBottom=true,bound=null,viewportToken=null;
+ let programmaticDepth=0,programmaticRaf=0,programmaticGeneration=0,resizeRaf=0,viewportRaf=0,lastUserScrollAt=0;
+ let liveAnchor=null,liveBottom=true,bound=null,viewportToken=null,cancelScroll=()=>{};
 
  const now=()=>Date.now();
- const reduceMotion=()=>{try{return !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;}catch{return false;}};
+ const reduceMotion=()=>{try{return !!window.GalaxyChatMotion?.reduced?.()||!!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;}catch{return false;}};
  const rows=el=>el?[...el.querySelectorAll('.chat-message')]:[];
  const rowId=row=>String(row?.dataset?.chatId||row?.dataset?.id||'');
  const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
@@ -24,14 +24,19 @@ function create(options={}){
  }
 
  function write(el,value,reason='restore'){
+  cancelScroll();
   if(!el||!Number.isFinite(Number(value)))return false;
   const max=Math.max(0,el.scrollHeight-el.clientHeight),from=Number(el.scrollTop||0),to=clamp(Number(value),0,max);
   if(Math.abs(to-from)<.5)return false;
+  const generation=++programmaticGeneration;
   programmaticDepth=1;
   el.scrollTop=to;
   emit(reason,from,to);
   cancelAnimationFrame(programmaticRaf);
-  programmaticRaf=requestAnimationFrame(()=>requestAnimationFrame(()=>{programmaticDepth=0;sync(el);}));
+  programmaticRaf=requestAnimationFrame(()=>{
+   if(generation!==programmaticGeneration)return;
+   programmaticRaf=requestAnimationFrame(()=>{if(generation!==programmaticGeneration)return;programmaticRaf=0;programmaticDepth=0;sync(el);});
+  });
   return true;
  }
 
@@ -73,13 +78,28 @@ function create(options={}){
  function toBottom(el,{smooth=false,reason='bottom'}={}){
   if(!el)return false;
   const target=Math.max(0,el.scrollHeight-el.clientHeight);
-  if(smooth&&!reduceMotion()&&typeof el.scrollTo==='function'){
-   const from=Number(el.scrollTop||0);programmaticDepth=1;
-   el.scrollTo({top:target,behavior:'smooth'});emit(reason,from,target);
-   clearTimeout(toBottom.timer);toBottom.timer=setTimeout(()=>{programmaticDepth=0;sync(el);},260);
-   return true;
-  }
-  return write(el,target,reason);
+  return move(el,target,smooth,reason);
+ }
+
+ function move(el,target,smooth,reason){
+  const max=Math.max(0,el.scrollHeight-el.clientHeight),to=clamp(target,0,max),from=Number(el.scrollTop||0);
+  if(!smooth||reduceMotion()||window.GalaxyChatMotion?.constrained?.()||Math.abs(to-from)>el.clientHeight*2)return write(el,to,reason);
+  cancelScroll();
+  ++programmaticGeneration;cancelAnimationFrame(programmaticRaf);programmaticRaf=0;
+  const duration=window.GalaxyChatMotion?.duration?.('slow')||220;
+  let raf=0,started=null,stopped=false;
+  const finish=()=>{if(stopped)return;stopped=true;cancelAnimationFrame(raf);for(const type of ['pointerdown','wheel','keydown'])el.removeEventListener?.(type,finish);programmaticDepth=0;sync(el);cancelScroll=()=>{};};
+  cancelScroll=finish;
+  for(const type of ['pointerdown','wheel','keydown'])el.addEventListener?.(type,finish,{passive:true});
+  programmaticDepth=1;emit(reason,from,to);
+  const step=t=>{
+   if(stopped||el.isConnected===false){finish();return;}
+   if(started===null)started=t;
+   const progress=Math.min(1,(t-started)/duration);
+   el.scrollTop=from+(to-from)*(1-Math.pow(1-progress,3));
+   if(progress<1)raf=requestAnimationFrame(step);else finish();
+  };
+  raf=requestAnimationFrame(step);return true;
  }
 
  function toMessage(el,messageId,{block='center',smooth=false,reason='message'}={}){
@@ -91,13 +111,7 @@ function create(options={}){
   if(block==='center')delta-=Math.max(0,(el.clientHeight-rect.height)/2);
   else if(block==='end')delta-=Math.max(0,el.clientHeight-rect.height);
   const target=el.scrollTop+delta;
-  if(smooth&&!reduceMotion()&&typeof el.scrollTo==='function'){
-   const max=Math.max(0,el.scrollHeight-el.clientHeight),to=clamp(target,0,max),from=Number(el.scrollTop||0);
-   programmaticDepth=1;el.scrollTo({top:to,behavior:'smooth'});emit(reason,from,to);
-   clearTimeout(toMessage.timer);toMessage.timer=setTimeout(()=>{programmaticDepth=0;sync(el);},260);
-   return true;
-  }
-  return write(el,target,reason);
+  return move(el,target,smooth,reason);
  }
 
  function restoreState(el,state,{reason='restore',fallbackBottom=false}={}){
@@ -132,6 +146,7 @@ function create(options={}){
  }
 
  function bind(el){
+  if(bound!==el)cancelScroll();
   bound=el||null;
   if(bound)sync(bound);
   return bound;
@@ -168,6 +183,7 @@ function create(options={}){
  function clearMemory(){try{sessionStorage.removeItem(config.memoryKey);}catch{}}
 
  function beforeViewportChange(el=bound){
+  cancelScroll();
   if(!viewportToken)viewportToken=el?captureState(el,'viewport'):null;
   return viewportToken;
  }
