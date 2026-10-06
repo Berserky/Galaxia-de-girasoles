@@ -67,6 +67,8 @@ public class GalaxyDeviceClosureTest {
     }
 
     @Before public void setUp() throws Exception {
+        UiDevice.getInstance(instrumentation).wakeUp();
+        shell("wm dismiss-keyguard");
         backend.reset();
         new DeviceStore(context).clear();
         new DeviceStore(context).save("qa-token-0", "0", "QA Sebas");
@@ -444,6 +446,9 @@ public class GalaxyDeviceClosureTest {
         }finally{shell("null".equals(animatorScale)?"settings delete global animator_duration_scale":"settings put global animator_duration_scale "+animatorScale);}
         scenario.moveToState(Lifecycle.State.CREATED);scenario.moveToState(Lifecycle.State.RESUMED);
         awaitJs("nativeState().reducedMotion==="+initialReduced);
+        awaitJs("!chatResumeRefreshPromise&&!chatLoading&&!chatVirtualRaf&&!chatMeasureRaf&&!chatScrollEngine.isProgrammatic()");
+        runJs("window.__p8resumeSettled=false;function settle(){if(chatResumeRefreshPromise||chatLoading||chatVirtualRaf||chatMeasureRaf||chatScrollEngine.isProgrammatic()){requestAnimationFrame(settle);return;}requestAnimationFrame(()=>requestAnimationFrame(()=>{if(chatResumeRefreshPromise||chatLoading||chatVirtualRaf||chatMeasureRaf||chatScrollEngine.isProgrammatic())settle();else window.__p8resumeSettled=true;}));}settle();");
+        awaitJs("window.__p8resumeSettled");
         runJs("chatState={...(chatState||{}),messages:Array.from({length:20000},(_,i)=>({id:'p8-'+i,client_id:'p8c-'+i,sender_person:String(i%2),body:'Motion '+i,message_type:'text',attachments:[],server_seq:i+1,created_at:'2026-10-06T12:00:00Z',reactions:[]})),nextBeforeSeq:null,nextAfterSeq:null};chatMessageEngine.resetWindow(20000,{align:'end'});chatRenderMessages({scroll:'bottom'});");
         awaitJs("document.querySelectorAll('.chat-message').length===84");
         runJs("chatRenderMessages({scroll:'bottom'});render();window.__p8pendingReset=chatBottomRenderPending===null;");
@@ -659,8 +664,10 @@ public class GalaxyDeviceClosureTest {
 
     private void launch() {
         scenario = ActivityScenario.launch(MainActivity.class);
+        scenario.onActivity(activity -> activity.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON));
         awaitJs("!!document.querySelector('#app')");
         awaitJs("document.body.innerText.includes('Nuestra Galaxia')");
+        awaitJs("document.visibilityState==='visible'");
     }
 
     private void launchChat() {
@@ -668,6 +675,9 @@ public class GalaxyDeviceClosureTest {
         runJs("document.querySelector('#chatFab')?.click()");
         awaitJs("!!document.querySelector('.chat-shell')");
         awaitCondition(() -> backend.actions().contains("chat-state"), UI_TIMEOUT_MS);
+        runJs("document.activeElement?.blur();");
+        scenario.onActivity(activity -> ((android.view.inputmethod.InputMethodManager)activity.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(activity.getWindow().getDecorView().getWindowToken(),0));
+        SystemClock.sleep(300);
     }
 
     private void sendChat(String body) {
@@ -711,7 +721,8 @@ public class GalaxyDeviceClosureTest {
         });
         int[] v = frame.get();
         int x = v[0] + (int)Math.round(g.getDouble("x") * v[2] / Math.max(1d, g.getDouble("vw")));
-        int y = v[1] + (int)Math.round(g.getDouble("y") * v[3] / Math.max(1d, g.getDouble("vh")));
+        // CSS pixels use one scale on both axes, including while IME insets settle.
+        int y = v[1] + (int)Math.round(g.getDouble("y") * v[2] / Math.max(1d, g.getDouble("vw")));
         assertTrue("Unable to tap WebView element: " + selector, UiDevice.getInstance(instrumentation).click(x, y));
         SystemClock.sleep(250);
     }

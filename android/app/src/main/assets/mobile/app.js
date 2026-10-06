@@ -1651,6 +1651,7 @@ function chatHandleScroll(el){
  if(!el||chatVirtualRaf)return;
  chatVirtualRaf=requestAnimationFrame(()=>{
   chatVirtualRaf=0;
+  if(!el.isConnected||el!==document.querySelector('#chatMessages'))return;
   const programmatic=chatScrollEngine.isProgrammatic();chatScrollEngine.onScroll(el);
   if(programmatic)return;
   const list=chatRows();if(!list.length)return;

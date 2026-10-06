@@ -91,3 +91,13 @@ test('rapid feedback replaces the animation on one element instead of accumulati
  motion.animate(el,'feedback');motion.animate(el,'feedback');
  assert.equal(animations[0].cancelled,true);assert.equal(animations[1].cancelled,false);
 });
+
+test('a queued scroll from a replaced chat cannot change the current message window',()=>{
+ const app=fs.readFileSync(new URL('../android/app/src/main/assets/mobile/app.js',import.meta.url),'utf8');
+ const start=app.indexOf('function chatHandleScroll('),end=app.indexOf('function chatDraftAttachmentMarkup',start);
+ const old={isConnected:false},current={isConnected:true};let callback,reads=0;
+ const context={document:{querySelector:()=>current},chatVirtualRaf:0,requestAnimationFrame:fn=>{callback=fn;return 1;},chatScrollEngine:{isProgrammatic:()=>false,onScroll:()=>reads++},chatRows:()=>{reads++;return [];}};
+ vm.createContext(context);vm.runInContext(app.slice(start,end),context);
+ context.chatHandleScroll(old);callback();assert.equal(reads,0);assert.equal(context.chatVirtualRaf,0);
+ context.chatHandleScroll(current);callback();assert.equal(reads,2,'current viewport still processes real scrolling');
+});
