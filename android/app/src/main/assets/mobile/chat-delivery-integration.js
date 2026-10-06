@@ -42,7 +42,9 @@ function applyConfirmation(message,meta={}){
  const signature=chatSignature(next),changed=signature!==chatStateSignature;
  chatState=next;chatStateSignature=signature;
  if(view==='chat'&&changed){
-  chatMessageEngine.ensureWindow(chatRows().length);
+  const total=chatRows().length;
+  if(wasNear)chatMessageEngine.resetWindow(total,{align:'end'});
+  else chatMessageEngine.ensureWindow(total);
   chatRenderMessages({anchor,scroll:wasNear?'bottom':'preserve'});
  }
 }
