@@ -102,6 +102,14 @@ public final class MainActivity extends FragmentActivity {
     private Uri pendingVideoUri;
     private String pendingChatLocationRequest;
     private ActivityResultLauncher<PickVisualMediaRequest> photoPickerLauncher;
+    private ActivityResultLauncher<Intent> chatCameraLauncher;
+    private ActivityResultLauncher<Intent> chatMediaReviewLauncher;
+    private String pendingIntegratedCameraRequest;
+    private String pendingIntegratedCameraKind="photo";
+    private int pendingIntegratedCameraDuration=120;
+    private boolean pendingIntegratedVideoMessage=false;
+    private String pendingChatReviewRequest;
+    private final java.util.concurrent.atomic.AtomicBoolean chatMediaUploadCancelled=new java.util.concurrent.atomic.AtomicBoolean(false);
     private CloudMediaStore cloudMedia;
     private MediaRecorder voiceRecorder;
     private MediaPlayer voicePlayer;
@@ -123,6 +131,8 @@ public final class MainActivity extends FragmentActivity {
             }
         });
         photoPickerLauncher=registerForActivityResult(new ActivityResultContracts.PickMultipleVisualMedia(30),this::handlePhotoPickerResult);
+        chatCameraLauncher=registerForActivityResult(new ActivityResultContracts.StartActivityForResult(),this::handleIntegratedCameraResult);
+        chatMediaReviewLauncher=registerForActivityResult(new ActivityResultContracts.StartActivityForResult(),this::handleChatMediaReviewResult);
         setContentView(R.layout.activity_main);
         captureDeepLink(getIntent());
         store=new DeviceStore(this);
