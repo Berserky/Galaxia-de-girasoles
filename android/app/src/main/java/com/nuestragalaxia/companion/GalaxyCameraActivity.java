@@ -85,12 +85,23 @@ public final class GalaxyCameraActivity extends FragmentActivity {
     private TextView shutterButton;
     private TextView modeLabel;
     private TextView statusLabel;
+    private EditText reviewCaptionInput;
 
     @Override protected void onCreate(Bundle savedInstanceState){
         super.onCreate(savedInstanceState);
         mode="video".equals(getIntent().getStringExtra(EXTRA_MODE))?"video":"photo";
         maxDurationSeconds=Math.max(1,Math.min(120,getIntent().getIntExtra(EXTRA_MAX_DURATION,120)));
         videoMessage=getIntent().getBooleanExtra(EXTRA_VIDEO_MESSAGE,false);
+        if(savedInstanceState!=null){
+            lensFacing=savedInstanceState.getInt("camera.lens",CameraSelector.LENS_FACING_BACK);
+            capturedDurationMs=savedInstanceState.getLong("camera.durationMs",0L);
+            String path=savedInstanceState.getString("camera.capturePath","");
+            if(!path.isBlank()){
+                File restored=new File(path);
+                if(restored.exists()&&restored.getParentFile()!=null&&"camera-media".equals(restored.getParentFile().getName()))capturedFile=restored;
+            }
+            reviewing=savedInstanceState.getBoolean("camera.reviewing",false)&&capturedFile!=null;
+        }
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
         buildCameraUi();
@@ -100,7 +111,8 @@ public final class GalaxyCameraActivity extends FragmentActivity {
                 cancelAndFinish();
             }
         });
-        startCamera();
+        if(reviewing)showReview(savedInstanceState==null?"":savedInstanceState.getString("camera.caption",""));
+        else startCamera();
     }
 
     private void buildCameraUi(){
@@ -202,7 +214,7 @@ public final class GalaxyCameraActivity extends FragmentActivity {
             ImageCapture.OutputFileOptions options=new ImageCapture.OutputFileOptions.Builder(capturedFile).setMetadata(metadata).build();
             imageCapture.takePicture(options,ContextCompat.getMainExecutor(this),new ImageCapture.OnImageSavedCallback(){
                 @Override public void onImageSaved(ImageCapture.OutputFileResults output){
-                    shutterButton.setEnabled(true);showReview();
+                    shutterButton.setEnabled(true);showReview("");
                 }
                 @Override public void onError(ImageCaptureException error){
                     shutterButton.setEnabled(true);deleteCaptured();statusLabel.setText("FOTO");toastStatus("No pudimos tomar la foto.");
@@ -228,7 +240,7 @@ public final class GalaxyCameraActivity extends FragmentActivity {
                     recording=false;activeRecording=null;capturedDurationMs=Math.max(capturedDurationMs,done.getRecordingStats().getRecordedDurationNanos()/1_000_000L);
                     timer.setVisibility(View.GONE);shutterButton.setText("●");shutterButton.setContentDescription("Iniciar grabación");
                     if(done.hasError()||capturedFile==null||capturedFile.length()<1){deleteCaptured();statusLabel.setText("VIDEO");toastStatus("No pudimos guardar el video.");}
-                    else showReview();
+                    else showReview("");
                 }
             });
         }catch(Exception e){recording=false;deleteCaptured();toastStatus("No pudimos iniciar la grabación.");}
@@ -238,7 +250,7 @@ public final class GalaxyCameraActivity extends FragmentActivity {
         if(activeRecording!=null)activeRecording.stop();
     }
 
-    private void showReview(){
+    private void showReview(String restoredCaption){
         if(capturedFile==null||!capturedFile.exists())return;
         reviewing=true;recording=false;if(cameraProvider!=null)cameraProvider.unbindAll();
         root.removeAllViews();
@@ -261,7 +273,7 @@ public final class GalaxyCameraActivity extends FragmentActivity {
         root.addView(top,new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(76),Gravity.TOP));
 
         LinearLayout bottom=new LinearLayout(this);bottom.setOrientation(LinearLayout.VERTICAL);bottom.setPadding(dp(16),dp(10),dp(16),dp(18));bottom.setBackgroundColor(0xAA000000);
-        EditText caption=new EditText(this);caption.setHint("Añadir comentario…");caption.setHintTextColor(0xFFB8B5C6);caption.setTextColor(Color.WHITE);caption.setTextSize(16);caption.setMaxLines(3);caption.setSingleLine(false);caption.setContentDescription("Comentario opcional");
+        EditText caption=new EditText(this);reviewCaptionInput=caption;caption.setHint("Añadir comentario…");caption.setHintTextColor(0xFFB8B5C6);caption.setTextColor(Color.WHITE);caption.setTextSize(16);caption.setMaxLines(3);caption.setSingleLine(false);caption.setContentDescription("Comentario opcional");caption.setText(restoredCaption==null?"":restoredCaption);
         bottom.addView(caption,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(58)));
         LinearLayout actions=new LinearLayout(this);actions.setGravity(Gravity.CENTER_VERTICAL);
         TextView repeat=control("Repetir","Repetir captura");repeat.setTextSize(14);repeat.setOnClickListener(v->retake());actions.addView(repeat,new LinearLayout.LayoutParams(0,dp(54),1));
@@ -288,7 +300,7 @@ public final class GalaxyCameraActivity extends FragmentActivity {
     }
 
     private void retake(){
-        reviewing=false;capturedDurationMs=0L;deleteCaptured();buildCameraUi();bindCamera();
+        reviewing=false;reviewCaptionInput=null;capturedDurationMs=0L;deleteCaptured();buildCameraUi();bindCamera();
     }
 
     private void toggleTorch(){
@@ -350,6 +362,15 @@ public final class GalaxyCameraActivity extends FragmentActivity {
     @Override protected void onStop(){
         super.onStop();
         if(recording&&!isChangingConfigurations()&&activeRecording!=null)activeRecording.stop();
+    }
+
+    @Override protected void onSaveInstanceState(Bundle outState){
+        super.onSaveInstanceState(outState);
+        outState.putInt("camera.lens",lensFacing);
+        outState.putLong("camera.durationMs",capturedDurationMs);
+        outState.putBoolean("camera.reviewing",reviewing&&capturedFile!=null);
+        if(capturedFile!=null)outState.putString("camera.capturePath",capturedFile.getAbsolutePath());
+        if(reviewCaptionInput!=null)outState.putString("camera.caption",reviewCaptionInput.getText().toString());
     }
 
     @Override protected void onDestroy(){
