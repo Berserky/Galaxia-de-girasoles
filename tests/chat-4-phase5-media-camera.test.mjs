@@ -70,7 +70,7 @@ test('picker and camera both preview before upload',()=>{
  const reviewIndex=main.indexOf('launchChatMediaReview',pickerIndex);
  const uploadIndex=main.indexOf('uploadReviewedChatMedia',reviewIndex);
  assert.ok(pickerIndex>=0&&reviewIndex>pickerIndex&&uploadIndex>reviewIndex);
- assert.ok(camera.indexOf('showReview()')<camera.indexOf('confirmCapture'));
+ assert.ok(camera.indexOf('showReview(')<camera.indexOf('confirmCapture'));
 });
 
 test('real MIME and metadata are inspected instead of trusting extensions',()=>{
