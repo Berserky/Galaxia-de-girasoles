@@ -329,8 +329,13 @@ function renderChatFab(){
 function syncChatViewportHeight(){
  const chatEl=view==='chat'?document.querySelector('#chatMessages'):null;
  if(chatEl)chatScrollEngine.beforeViewportChange(chatEl);
- const height=Math.max(320,Math.round(window.visualViewport?.height||window.innerHeight||document.documentElement.clientHeight||0));
+ const viewport=window.visualViewport,height=Math.max(320,Math.round(viewport?.height||window.innerHeight||document.documentElement.clientHeight||0));
  document.documentElement.style.setProperty('--chat-viewport-height',height+'px');
+ if(view==='chat'){
+  const full=Math.max(height,Math.round(window.innerHeight||document.documentElement.clientHeight||height));
+  const focused=document.activeElement?.matches?.('#chatForm textarea')===true;
+  ensureChatComposer().setKeyboard(focused,Math.max(0,full-height));
+ }
  if(chatEl)chatScrollEngine.afterViewportChange(chatEl);
 }
 function go(next){
@@ -2199,9 +2204,10 @@ async function finishChatHoldRecording({cancel=false}={}){
  const button=document.querySelector('[data-action="chat-hold-record"],[data-action="chat-hold-stop"]');button?.classList.remove('recording','canceling','locked');
  chatHoldHint('');
  try{
-  if(cancel){await GalaxyNative.call('discardVoiceRecording');setChatPresence('ONLINE');return;}
+  if(cancel){await GalaxyNative.call('discardVoiceRecording');ensureChatComposer().setRecordingIntent('idle');setChatPresence('ONLINE');return;}
   const info=await GalaxyNative.call('stopVoiceRecording');
   setChatPresence('ONLINE');
+  ensureChatComposer().setRecordingIntent('ready');
   chatVoiceState={recording:false,paused:false,ready:true,durationMs:Number(info?.durationMs||0)};
   showModal('Nota de voz','<div class="chat-voice-panel"><div class="chat-voice-orb ready">'+ico('audio-lines')+'</div><b data-role="chat-voice-status">Grabación lista · '+Math.max(1,Math.round(chatVoiceState.durationMs/1000))+' s</b><p class="muted">Escúchala antes de enviarla o elimínala para repetir.</p><div class="chat-voice-actions"><button class="btn secondary" type="button" data-action="chat-voice-preview">'+ico('play')+' Escuchar</button><button class="btn ghost" type="button" data-action="chat-voice-discard">Eliminar</button><button class="btn" type="button" data-action="chat-voice-send">'+ico('send')+' Enviar</button></div></div>','chat-voice-ready');
  }catch(e){setChatPresence('ONLINE');toast(e.message||'No pudimos terminar la grabación.');}
@@ -2209,13 +2215,15 @@ async function finishChatHoldRecording({cancel=false}={}){
 async function beginChatHoldRecording(e,button){
  if(chatHoldRecord)return;
  try{
+  ensureChatComposer().setRecordingIntent('starting');
   await GalaxyNative.call('startVoiceRecording');
+  ensureChatComposer().setRecordingIntent('recording');
   setChatPresence('RECORDING_AUDIO');
   chatHoldRecord={pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,cancel:false,locked:false};
   try{button.setPointerCapture(e.pointerId);}catch{}
   button.classList.add('recording');
   chatHoldHint('Suelta para enviar · desliza a la izquierda para cancelar · arriba para bloquear','recording');
- }catch(err){chatHoldRecord=null;setChatPresence('ONLINE');toast(err.message||'No pudimos iniciar la grabación.');}
+ }catch(err){chatHoldRecord=null;ensureChatComposer().setRecordingIntent('idle');setChatPresence('ONLINE');toast(err.message||'No pudimos iniciar la grabación.');}
 }
 
 function openChatVoice(){
@@ -2762,13 +2770,13 @@ document.addEventListener('click',async e=>{
   if(a==='chat-audio-speed'){const card=btn.closest('.chat-audio-card'),audio=card?.querySelector('audio');if(!audio)return;const current=Number(btn.dataset.speed||1),next=current===1?1.5:current===1.5?2:1;audio.playbackRate=next;btn.dataset.speed=String(next);btn.textContent=next+'×';return;}
   if(a==='chat-hold-record'){return;}
   if(a==='chat-hold-stop'){await finishChatHoldRecording();return;}
-  if(a==='chat-voice-start'){await GalaxyNative.call('startVoiceRecording');chatVoiceState={recording:true,paused:false,ready:false,durationMs:0};setChatPresence('RECORDING_AUDIO');updateChatVoiceUi();return;}
+  if(a==='chat-voice-start'){ensureChatComposer().setRecordingIntent('starting');await GalaxyNative.call('startVoiceRecording');ensureChatComposer().setRecordingIntent('recording');chatVoiceState={recording:true,paused:false,ready:false,durationMs:0};setChatPresence('RECORDING_AUDIO');updateChatVoiceUi();return;}
   if(a==='chat-voice-pause'){await GalaxyNative.call('pauseVoiceRecording');chatVoiceState.paused=true;updateChatVoiceUi();return;}
   if(a==='chat-voice-resume'){await GalaxyNative.call('resumeVoiceRecording');chatVoiceState.paused=false;updateChatVoiceUi();return;}
-  if(a==='chat-voice-stop'){const info=await GalaxyNative.call('stopVoiceRecording');chatVoiceState={recording:false,paused:false,ready:true,durationMs:Number(info.durationMs||0)};setChatPresence('ONLINE');updateChatVoiceUi();return;}
+  if(a==='chat-voice-stop'){const info=await GalaxyNative.call('stopVoiceRecording');ensureChatComposer().setRecordingIntent('ready');chatVoiceState={recording:false,paused:false,ready:true,durationMs:Number(info.durationMs||0)};setChatPresence('ONLINE');updateChatVoiceUi();return;}
   if(a==='chat-voice-preview'){await GalaxyNative.call('playVoiceRecording');return;}
-  if(a==='chat-voice-discard'){await GalaxyNative.call('discardVoiceRecording');chatVoiceState={recording:false,paused:false,ready:false,durationMs:0};setChatPresence('ONLINE');updateChatVoiceUi();return;}
-  if(a==='chat-voice-send'){const duration=chatVoiceState.durationMs,upload=await GalaxyNative.call('saveChatVoiceRecording');closeModal();setChatPresence('ONLINE');queueChatMessage({messageType:'audio',attachments:[normalizeChatUpload(upload,'audio',duration)]});chatVoiceState={recording:false,paused:false,ready:false,durationMs:0};return;}
+  if(a==='chat-voice-discard'){await GalaxyNative.call('discardVoiceRecording');ensureChatComposer().setRecordingIntent('idle');chatVoiceState={recording:false,paused:false,ready:false,durationMs:0};setChatPresence('ONLINE');updateChatVoiceUi();return;}
+  if(a==='chat-voice-send'){const duration=chatVoiceState.durationMs,upload=await GalaxyNative.call('saveChatVoiceRecording');closeModal();ensureChatComposer().setRecordingIntent('idle');setChatPresence('ONLINE');queueChatMessage({messageType:'audio',attachments:[normalizeChatUpload(upload,'audio',duration)]});chatVoiceState={recording:false,paused:false,ready:false,durationMs:0};return;}
   if(a==='notifications-open'){await openNotificationCenter();return;}
   if(a==='notifications-read-all'){await api('notifications-read');if(cloud?.notifications)cloud.notifications.unread=0;await openNotificationCenter();return;}
   if(a==='notification-open'){await api('notifications-read',{id:btn.dataset.id});if(cloud?.notifications)cloud.notifications.unread=Math.max(0,Number(cloud.notifications.unread||0)-1);const target=btn.dataset.target||'home',entity=btn.dataset.entityId||'';closeModal();await routeGalaxyAction(target,entity);return;}
@@ -3045,6 +3053,8 @@ document.addEventListener('visibilitychange',()=>{
 window.visualViewport?.addEventListener('resize',syncChatViewportHeight);
 window.visualViewport?.addEventListener('scroll',syncChatViewportHeight);
 window.addEventListener('resize',syncChatViewportHeight);
+document.addEventListener('focusin',e=>{if(e.target.matches?.('#chatForm textarea')){const viewport=window.visualViewport,full=window.innerHeight||document.documentElement.clientHeight||0;ensureChatComposer().setKeyboard(true,Math.max(0,full-(viewport?.height||full)));}});
+document.addEventListener('focusout',e=>{if(e.target.matches?.('#chatForm textarea'))ensureChatComposer().setKeyboard(false,0);});
 window.addEventListener('online',()=>{if(native.paired){flushChatOutbox({retryFailed:true}).then(()=>view==='chat'&&refreshChatAfterResume()).catch(()=>{});}});
 window.addEventListener('offline',()=>{if(view==='chat')toast('Sin conexión. Tus mensajes quedarán pendientes.');});
 document.addEventListener('scroll',e=>{
