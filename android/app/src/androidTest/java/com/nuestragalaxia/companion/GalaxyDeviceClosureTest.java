@@ -725,6 +725,23 @@ public class GalaxyDeviceClosureTest {
         int y = v[1] + (int)Math.round(g.getDouble("y") * v[2] / Math.max(1d, g.getDouble("vw")));
         assertTrue("Unable to tap WebView element: " + selector, UiDevice.getInstance(instrumentation).click(x, y));
         SystemClock.sleep(250);
+        if (!"true".equals(js("document.activeElement===document.querySelector(" + quoted + ")"))) {
+            // Headless emulator screen coordinates can lag the WebView's resized surface.
+            // Deliver an actual Android touch to the current view, never DOM focus().
+            JSONObject current = new JSONObject(js("JSON.stringify((()=>{const r=document.querySelector(" + quoted + ").getBoundingClientRect();return {x:(r.left+r.right)/2,y:(r.top+r.bottom)/2,vw:innerWidth};})())"));
+            scenario.onActivity(activity -> {
+                WebView web = activity.findViewById(R.id.webView);
+                float scale = (float)(web.getWidth()/Math.max(1d,current.optDouble("vw")));
+                float localX = (float)current.optDouble("x")*scale, localY = (float)current.optDouble("y")*scale;
+                long time = SystemClock.uptimeMillis();
+                android.view.MotionEvent down = android.view.MotionEvent.obtain(time,time,android.view.MotionEvent.ACTION_DOWN,localX,localY,0);
+                android.view.MotionEvent up = android.view.MotionEvent.obtain(time,time+80,android.view.MotionEvent.ACTION_UP,localX,localY,0);
+                try { web.dispatchTouchEvent(down);web.dispatchTouchEvent(up); }
+                finally { down.recycle();up.recycle(); }
+            });
+            SystemClock.sleep(250);
+            System.out.println("GALAXY_WEBVIEW_TAP="+js("JSON.stringify({selector:"+quoted+",focused:document.activeElement===document.querySelector("+quoted+"),active:document.activeElement?.tagName,visible:document.visibilityState,viewport:{w:innerWidth,h:innerHeight},rect:document.querySelector("+quoted+").getBoundingClientRect().toJSON()})"));
+        }
     }
 
     private void runJs(String script) {
