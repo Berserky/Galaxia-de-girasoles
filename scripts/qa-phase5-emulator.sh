@@ -12,6 +12,7 @@ gradle -p android --no-daemon :app:connectedDebugAndroidTest \
 grep "GALAXY_CHAT_PHASE0_ANDROID=" qa-artifacts/instrumentation.txt > qa-artifacts/chat-4-phase0-android.jsonl || true
 grep "GALAXY_CHAT_PHASE1_ANDROID=" qa-artifacts/instrumentation.txt > qa-artifacts/chat-4-phase1-android.jsonl || true
 grep "GALAXY_CHAT_PHASE2_ANDROID=" qa-artifacts/instrumentation.txt > qa-artifacts/chat-4-phase2-android.jsonl || true
+grep "GALAXY_CHAT_PHASE4_ANDROID=" qa-artifacts/instrumentation.txt > qa-artifacts/chat-4-phase4-android.jsonl || true
 
 PACKAGE=com.nuestragalaxia.companion
 DEBUG_APK="android/app/build/outputs/apk/debug/app-debug.apk"
