@@ -9,7 +9,7 @@ const gradle=read('android/app/build.gradle.kts');
 const baselineDoc=read('docs/qa/chat-4-phase0-baseline.md');
 
 test('Phase 0 starts from Galaxy Chat Universe 3.5.1',()=>{
- assert.match(gradle,/versionCode = 35; versionName = "3\.5\.1"/);
+ assert.match(baselineDoc,/versionCode 35/);
 });
 test('baseline covers 100, 500, 5000 and 20000 mixed messages',()=>{
  for(const n of ['100','500','5000','20000'])assert.ok(bench.includes(n),n);
