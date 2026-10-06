@@ -121,6 +121,15 @@ public final class MainActivity extends FragmentActivity {
 
     @Override protected void onCreate(Bundle savedInstanceState){
         super.onCreate(savedInstanceState);
+        if(savedInstanceState!=null){
+            pendingIntegratedCameraRequest=savedInstanceState.getString("chat.camera.request");
+            pendingIntegratedCameraKind=savedInstanceState.getString("chat.camera.kind","photo");
+            pendingIntegratedCameraDuration=savedInstanceState.getInt("chat.camera.duration",120);
+            pendingIntegratedVideoMessage=savedInstanceState.getBoolean("chat.camera.videoMessage",false);
+            pendingChatReviewRequest=savedInstanceState.getString("chat.review.request");
+            pendingPhotoPickerRequest=savedInstanceState.getString("chat.picker.request");
+            pendingPhotoPickerKind=savedInstanceState.getString("chat.picker.kind","photo");
+        }
         pruneCameraMediaCache();
         getOnBackPressedDispatcher().addCallback(this,new OnBackPressedCallback(true){
             @Override public void handleOnBackPressed(){
@@ -1478,6 +1487,17 @@ public final class MainActivity extends FragmentActivity {
         try{payload.put("action",pendingDeepLinkAction);payload.put("entityId",pendingDeepLinkEntity);payload.put("eventType",pendingDeepLinkEvent);}catch(Exception ignored){}
         pendingDeepLinkAction="";pendingDeepLinkEntity="";pendingDeepLinkEvent="";
         event("deep-link",payload);
+    }
+
+    @Override protected void onSaveInstanceState(Bundle outState){
+        super.onSaveInstanceState(outState);
+        if(pendingIntegratedCameraRequest!=null)outState.putString("chat.camera.request",pendingIntegratedCameraRequest);
+        outState.putString("chat.camera.kind",pendingIntegratedCameraKind);
+        outState.putInt("chat.camera.duration",pendingIntegratedCameraDuration);
+        outState.putBoolean("chat.camera.videoMessage",pendingIntegratedVideoMessage);
+        if(pendingChatReviewRequest!=null)outState.putString("chat.review.request",pendingChatReviewRequest);
+        if(pendingPhotoPickerRequest!=null)outState.putString("chat.picker.request",pendingPhotoPickerRequest);
+        outState.putString("chat.picker.kind",pendingPhotoPickerKind);
     }
 
     @Override protected void onNewIntent(Intent intent){
