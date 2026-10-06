@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 
 const deliverySource=readFileSync('android/app/src/main/assets/mobile/chat-delivery-engine.js','utf8');
 const messageSource=readFileSync('android/app/src/main/assets/mobile/chat-message-engine.js','utf8');
-const integrationSource=readFileSync('android/app/src/main/assets/mobile/chat-delivery-integration.js','utf8');
+const appSource=readFileSync('android/app/src/main/assets/mobile/app.js','utf8');
 const indexSource=readFileSync('android/app/src/main/assets/mobile/index.html','utf8');
 
 const clone=value=>JSON.parse(JSON.stringify(value));
@@ -49,10 +49,11 @@ function messageEngine(){
  return context.window.GalaxyMessageEngine.create({pageSize:60,maxCache:420,windowSize:84,windowStep:28,estimatedHeight:92});
 }
 
-test('Phase 3 scripts are loaded in engine -> app -> integration order',()=>{
- const delivery=indexSource.indexOf('chat-delivery-engine.js'),app=indexSource.indexOf('./app.js'),integration=indexSource.indexOf('chat-delivery-integration.js');
- assert.ok(delivery>0&&app>delivery&&integration>app);
- assert.ok(integrationSource.includes('GalaxyChatDelivery'));
+test('Phase 3 delivery engine loads before app and app owns the integration',()=>{
+ const delivery=indexSource.indexOf('chat-delivery-engine.js'),app=indexSource.indexOf('./app.js');
+ assert.ok(delivery>0&&app>delivery);
+ assert.equal(indexSource.includes('chat-delivery-integration.js'),false);
+ assert.ok(appSource.includes('window.GalaxyDeliveryEngine.create')&&appSource.includes('chatDeliveryEngine=createChatDeliveryEngine()'));
 });
 
 test('1. successful send converges from pending to one confirmed server message',async()=>{
@@ -206,5 +207,4 @@ test('transient retry uses bounded exponential backoff while permanent errors sc
 
 test('delivery diagnostics never log message bodies or attachment URLs',()=>{
  assert.equal(/console\.(log|info|warn|error)/.test(deliverySource),false);
- assert.equal(/console\.(log|info|warn|error)/.test(integrationSource),false);
 });
