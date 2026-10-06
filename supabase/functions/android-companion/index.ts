@@ -1180,7 +1180,7 @@ async function chatHydrate(rows:any[],person:string){
   return {...a,url:urls.get(path)||null,thumbnailUrl:a.thumbnail_path?(urls.get(String(a.thumbnail_path))||null):null};
  });
  for(const a of hydratedAttachments){
-  const safe={id:a.id,kind:a.kind,mime:a.mime,name:a.name,sizeBytes:a.size_bytes,durationMs:a.duration_ms,width:a.width,height:a.height,caption:a.caption,url:a.url,thumbnailUrl:a.thumbnailUrl,waveform:a.waveform||[],mediaQuality:a.media_quality||"optimized"};
+  const safe={id:a.id,cacheKey:String(a.id),kind:a.kind,mime:a.mime,name:a.name,sizeBytes:a.size_bytes,durationMs:a.duration_ms,width:a.width,height:a.height,caption:a.caption,url:a.url,thumbnailUrl:a.thumbnailUrl,waveform:a.waveform||[],mediaQuality:a.media_quality||"optimized"};
   const k=String(a.message_id),v=attachmentMap.get(k)||[];v.push(safe);attachmentMap.set(k,v);
  }
  const stickerMap=new Map<string,any>(),stickerPaths=new Map<string,string[]>();
@@ -4042,6 +4042,7 @@ function uploadRules(kind:string){
   if(kind==="music")return {bucket:"galaxy-music",limit:20*1024*1024,mimes:new Set(["audio/mpeg"]),ext:{"audio/mpeg":"mp3"} as Record<string,string>,pathKind:"music"};
   if(kind==="voice")return {bucket:"galaxy-voice",limit:5*1024*1024,mimes:new Set(Object.keys(audio)),ext:audio,pathKind:"voice"};
   if(kind==="chat-photo")return {bucket:"galaxy-chat-media",limit:15*1024*1024,mimes:new Set(Object.keys(image)),ext:image,pathKind:"photo"};
+  if(kind==="chat-thumbnail")return {bucket:"galaxy-chat-media",limit:1536*1024,mimes:new Set(Object.keys(image)),ext:image,pathKind:"thumbnail"};
   if(kind==="chat-gif")return {bucket:"galaxy-chat-media",limit:10*1024*1024,mimes:new Set(["image/gif","image/webp"]),ext:{"image/gif":"gif","image/webp":"webp"} as Record<string,string>,pathKind:"gif"};
   if(kind==="chat-video")return {bucket:"galaxy-chat-media",limit:60*1024*1024,mimes:new Set(["video/mp4","video/webm"]),ext:{"video/mp4":"mp4","video/webm":"webm"} as Record<string,string>,pathKind:"video"};
   if(kind==="chat-audio")return {bucket:"galaxy-chat-media",limit:15*1024*1024,mimes:new Set(Object.keys(audio)),ext:audio,pathKind:"audio"};

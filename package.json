@@ -16,6 +16,7 @@
     "bench:chat4:phase2": "node scripts/chat-4-phase2-scroll-engine.mjs",
     "bench:chat4:phase3": "node scripts/chat-4-phase3-delivery-engine.mjs",
     "bench:chat4:phase4": "node scripts/chat-4-phase4-composer.mjs",
-    "test:chat4:phase6": "node --test tests/chat-4-phase6-voice.test.mjs"
+    "test:chat4:phase6": "node --test tests/chat-4-phase6-voice.test.mjs",
+    "bench:chat4:phase9": "node scripts/chat-4-phase9-media-performance.mjs"
   }
 }

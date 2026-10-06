@@ -111,7 +111,7 @@ function compatible(actual:string,declared:string){
 function allowed(kind:string,mime:string){
   const image=new Set(["image/jpeg","image/png","image/webp"]);
   const audio=new Set(["audio/mpeg","audio/ogg","audio/webm","audio/mp4"]);
-  if(kind==="photo"||kind==="chat-photo")return image.has(mime);
+  if(kind==="photo"||kind==="chat-photo"||kind==="chat-thumbnail")return image.has(mime);
   if(kind==="music")return mime==="audio/mpeg";
   if(kind==="voice"||kind==="chat-audio")return audio.has(mime);
   if(kind==="chat-gif")return mime==="image/gif"||mime==="image/webp";

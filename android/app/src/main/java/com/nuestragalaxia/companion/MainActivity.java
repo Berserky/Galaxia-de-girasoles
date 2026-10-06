@@ -610,13 +610,25 @@ public final class MainActivity extends FragmentActivity {
                         @Override public boolean isCancelled(){return chatMediaUploadCancelled.get();}
                         @Override public void onProgress(long sent,long total){mediaUploadEvent("uploading",itemIndex,count,sent,total);}
                     });
+                    String path=uploaded.optString("path","");if(!path.isBlank())uploadedPaths.add(path);
+                    if(chatMediaUploadCancelled.get())throw new MobileApiClient.UploadCancelledException();
+                    File thumbnail=null;
+                    try{
+                        thumbnail=MediaThumbnailer.create(this,uri,mediaMime);
+                        if(chatMediaUploadCancelled.get())throw new MobileApiClient.UploadCancelledException();
+                        JSONObject thumb=MobileApiClient.uploadThumbnailFile(token,thumbnail);
+                        String thumbnailPath=thumb.optString("path","");
+                        if(thumbnailPath.isBlank())throw new IOException("La miniatura no devolvió una ruta válida.");
+                        uploadedPaths.add(thumbnailPath);
+                        uploaded.put("thumbnailPath",thumbnailPath);
+                        uploaded.put("thumbnailUrl",thumb.optString("url",""));
+                    }finally{if(thumbnail!=null&&thumbnail.exists())thumbnail.delete();}
                     if(meta.has("width"))uploaded.put("width",meta.optLong("width"));
                     if(meta.has("height"))uploaded.put("height",meta.optLong("height"));
                     if(meta.has("durationMs"))uploaded.put("durationMs",meta.optLong("durationMs"));
                     if(meta.has("rotation"))uploaded.put("rotation",meta.optLong("rotation"));
                     uploaded.put("sourceMime",meta.optString("mime",""));
                     if(videoMessage)uploaded.put("videoMessage",true);
-                    String path=uploaded.optString("path","");if(!path.isBlank())uploadedPaths.add(path);
                     items.put(uploaded);imported++;
                 }
                 if(chatMediaUploadCancelled.get())throw new MobileApiClient.UploadCancelledException();
@@ -1527,6 +1539,15 @@ public final class MainActivity extends FragmentActivity {
     @Override protected void onPause(){
         super.onPause();
         if(voiceRecorder!=null)stopVoiceRecording(null);
+    }
+
+    @Override public void onTrimMemory(int level){
+        super.onTrimMemory(level);
+        if(level>=ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW){
+            JSONObject payload=new JSONObject();
+            try{payload.put("level",level);}catch(Exception ignored){}
+            event("memory-pressure",payload);
+        }
     }
 
     @Override protected void onDestroy(){
