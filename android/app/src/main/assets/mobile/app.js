@@ -1614,7 +1614,7 @@ function chatRenderMessages({anchor=null,scroll='preserve',highlightId='',effect
  if(scroll==='bottom')chatBottomRenderPending=el;
  else if(scroll==='preserve'&&chatBottomRenderPending===el)scroll='bottom';
  const stableAnchor=anchor||chatCaptureAnchor(el),playback=chatCapturePlayback(),renderGeneration=++chatRenderGeneration;
- if(stableAnchor?.virtual&&stableAnchor.id){
+ if(scroll==='preserve'&&stableAnchor?.virtual&&stableAnchor.id){
   const list=chatRows(),index=list.findIndex(m=>String(m.id||m.client_id||'')===String(stableAnchor.id));
   if(index>=0)chatMessageEngine.focus(list.length,index);
  }
@@ -1641,7 +1641,7 @@ function chatRenderMessages({anchor=null,scroll='preserve',highlightId='',effect
   if(scroll==='bottom')chatScrollEngine.toBottom(el,{reason:'render-bottom-settle'});
   else if(scroll==='preserve'&&stableAnchor)chatRestoreAnchor(el,stableAnchor);
   chatScrollEngine.bind(el);chatRestorePlayback(playback);chatObserveWindow({measure:false});
-  chatBottomRenderPending=false;
+  chatBottomRenderPending=null;
   window.GalaxyChatMotion?.entries(el);
   if(effect)setTimeout(()=>runChatEffect(effect),80);
  });

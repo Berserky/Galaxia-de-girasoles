@@ -54,3 +54,23 @@ test('history rerenders do not measure rows when no fresh motion is pending',()=
  const container={getBoundingClientRect(){throw new Error('unnecessary layout read');}};
  motion.entries(container);
 });
+
+test('a bottom render never refocuses an old virtual anchor; a history restore does',()=>{
+ const app=fs.readFileSync(new URL('../android/app/src/main/assets/mobile/app.js',import.meta.url),'utf8');
+ const start=app.indexOf('function chatRenderMessages('),end=app.indexOf(' el.innerHTML=chatMessagesMarkup()',start);
+ const focused=[],el={};
+ const context={document:{querySelector:()=>el},chatBottomRenderPending:null,chatRenderGeneration:0,chatResizeObserver:null,chatMeasureRaf:0,chatCaptureAnchor:()=>({virtual:true,id:'old'}),chatCapturePlayback:()=>null,chatRows:()=>[{id:'old'}],chatMessageEngine:{focus:(...args)=>focused.push(args)}};
+ vm.createContext(context);vm.runInContext(app.slice(start,end)+' return true;}',context);
+ context.chatRenderMessages({scroll:'bottom'});assert.equal(focused.length,0);
+ context.chatBottomRenderPending=null;context.chatRenderMessages({scroll:'preserve'});assert.equal(focused.length,1);
+});
+
+test('full render consumes bottom intent and it cannot affect a replacement element',()=>{
+ const app=fs.readFileSync(new URL('../android/app/src/main/assets/mobile/app.js',import.meta.url),'utf8');
+ const start=app.indexOf('function render(){'),end=app.indexOf(' const currentMemoriesTabs=',start);
+ const old={},replacement={};
+ const context={view:'chat',document:{querySelector:()=>old},chatBottomRenderPending:old,chatCapturePositionState:()=>({atBottom:false})};
+ vm.createContext(context);vm.runInContext(app.slice(start,end)+' return chatRenderState;}',context);
+ assert.equal(context.render().atBottom,true);assert.equal(context.chatBottomRenderPending,null);
+ context.document.querySelector=()=>replacement;assert.equal(context.render().atBottom,false);
+});
