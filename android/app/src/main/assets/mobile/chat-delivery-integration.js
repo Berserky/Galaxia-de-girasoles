@@ -24,7 +24,7 @@ function deliveryPayload(item){
  };
 }
 function renderDeliveryChange(event){
- if(view!=='chat'||event.type==='reconciled')return;
+ if(view!=='chat'||event.type==='reconciled'||event.type==='sent')return;
  const el=document.querySelector('#chatMessages'),anchor=chatCaptureAnchor(el);
  if(event.type==='queued'||event.type==='manual-retry'){
   chatMessageEngine.resetWindow(chatRows().length,{align:'end'});
@@ -37,15 +37,13 @@ function renderDeliveryChange(event){
 function applyConfirmation(message,meta={}){
  if(!message)return;
  window.GalaxyChatPerf?.confirmed?.(meta.clientId||message.client_id);
- const el=document.querySelector('#chatMessages'),anchor=chatCaptureAnchor(el),wasNear=chatNearBottom(el);
  const next=chatMessageEngine.applySingle(chatState||{messages:[],unread:0,pinnedIds:[]},message);
- const signature=chatSignature(next),changed=signature!==chatStateSignature;
- chatState=next;chatStateSignature=signature;
- if(view==='chat'&&changed){
-  const total=chatRows().length;
-  if(wasNear)chatMessageEngine.resetWindow(total,{align:'end'});
-  else chatMessageEngine.ensureWindow(total);
-  chatRenderMessages({anchor,scroll:wasNear?'bottom':'preserve'});
+ chatState=next;chatStateSignature=chatSignature(next);
+ if(view==='chat'){
+  const list=chatRows(),clientId=String(message.client_id||meta.clientId||''),id=String(message.id||'');
+  const index=list.findIndex(row=>(id&&String(row.id||'')===id)||(clientId&&String(row.client_id||'')===clientId));
+  if(index>=0)chatMessageEngine.focus(list.length,index);else chatMessageEngine.resetWindow(list.length,{align:'end'});
+  chatRenderMessages({scroll:'bottom'});
  }
 }
 function emitMetric(entry){
