@@ -25,6 +25,7 @@ import androidx.fragment.app.FragmentActivity;
 import org.json.JSONObject;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.concurrent.*;
 
 public final class GalaxyMediaReviewActivity extends FragmentActivity {
     public static final String EXTRA_URIS="uris";
@@ -35,6 +36,10 @@ public final class GalaxyMediaReviewActivity extends FragmentActivity {
     private int index=0;
     private EditText caption;
     private TextView counter;
+    private final ExecutorService mediaIo=Executors.newSingleThreadExecutor();
+    private VideoView activeVideo;
+    private Bitmap activeBitmap;
+    private int renderGeneration=0;
 
     @Override protected void onCreate(Bundle savedInstanceState){
         super.onCreate(savedInstanceState);
@@ -66,22 +71,37 @@ public final class GalaxyMediaReviewActivity extends FragmentActivity {
     private void renderCurrent(){
         if(items.isEmpty()){cancel();return;}
         index=Math.max(0,Math.min(index,items.size()-1));
+        releasePreview();
         root.removeAllViews();
-        Uri uri=items.get(index);
-        JSONObject meta;
-        try{meta=MediaInspector.inspect(this,uri);}
-        catch(Exception e){removeCurrent();return;}
-        String mime=meta.optString("mime","");
+        Uri uri=items.get(index);int expectedIndex=index,generation=renderGeneration;
+        TextView loading=new TextView(this);loading.setText("Preparando vista previa…");loading.setTextColor(Color.WHITE);loading.setTextSize(15);loading.setGravity(Gravity.CENTER);
+        root.addView(loading,new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
+        mediaIo.execute(()->{
+            try{
+                JSONObject meta=MediaInspector.inspect(this,uri);
+                String mime=meta.optString("mime","");
+                Bitmap bitmap=MediaInspector.isChatVideo(mime)?null:decodeScaled(uri,2048);
+                runOnUiThread(()->{
+                    if(isFinishing()||generation!=renderGeneration||index!=expectedIndex||items.isEmpty()||!uri.equals(items.get(index))){
+                        if(bitmap!=null&&!bitmap.isRecycled())bitmap.recycle();return;
+                    }
+                    if(!MediaInspector.isChatVideo(mime)&&bitmap==null){removeCurrent();return;}
+                    renderResolved(uri,mime,bitmap);
+                });
+            }catch(Exception e){runOnUiThread(()->{if(!isFinishing()&&generation==renderGeneration&&index==expectedIndex)removeCurrent();});}
+        });
+    }
 
+    private void renderResolved(Uri uri,String mime,Bitmap bitmap){
+        root.removeAllViews();
         if(MediaInspector.isChatVideo(mime)){
-            VideoView video=new VideoView(this);video.setVideoURI(uri);video.setContentDescription("Vista previa del video seleccionado");
+            VideoView video=new VideoView(this);activeVideo=video;video.setVideoURI(uri);video.setContentDescription("Vista previa del video seleccionado");
             MediaController controller=new MediaController(this);video.setMediaController(controller);
-            video.setOnPreparedListener(mp->{mp.setLooping(true);video.start();});
+            video.setOnPreparedListener(mp->{if(activeVideo==video&&!isFinishing()){mp.setLooping(true);video.start();}});
             root.addView(video,new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
         }else{
             ImageView image=new ImageView(this);image.setScaleType(ImageView.ScaleType.FIT_CENTER);image.setContentDescription("Vista previa de la imagen seleccionada");
-            Bitmap bitmap=decodeScaled(uri,2048);
-            if(bitmap!=null)image.setImageBitmap(bitmap);else image.setImageURI(uri);
+            activeBitmap=bitmap;image.setImageBitmap(bitmap);
             root.addView(image,new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
         }
 
@@ -141,7 +161,15 @@ public final class GalaxyMediaReviewActivity extends FragmentActivity {
         outState.putString("review.caption",getIntent().getStringExtra(EXTRA_CAPTION));
     }
 
-    private void cancel(){setResult(Activity.RESULT_CANCELED);finish();}
+    private void cancel(){releasePreview();setResult(Activity.RESULT_CANCELED);finish();}
+
+    private void releasePreview(){
+        renderGeneration++;
+        VideoView video=activeVideo;activeVideo=null;
+        if(video!=null)try{video.stopPlayback();}catch(Exception ignored){}
+        Bitmap bitmap=activeBitmap;activeBitmap=null;
+        if(bitmap!=null&&!bitmap.isRecycled())bitmap.recycle();
+    }
 
     private Bitmap decodeScaled(Uri uri,int max){
         try{
@@ -162,6 +190,15 @@ public final class GalaxyMediaReviewActivity extends FragmentActivity {
             BitmapFactory.Options options=new BitmapFactory.Options();options.inSampleSize=Math.max(1,sample);
             try(InputStream in=getContentResolver().openInputStream(uri)){return BitmapFactory.decodeStream(in,null,options);}
         }catch(Exception e){return null;}
+    }
+
+    @Override protected void onPause(){
+        if(activeVideo!=null)try{activeVideo.pause();}catch(Exception ignored){}
+        super.onPause();
+    }
+
+    @Override protected void onDestroy(){
+        releasePreview();mediaIo.shutdownNow();super.onDestroy();
     }
 
     private TextView control(String text,String description){

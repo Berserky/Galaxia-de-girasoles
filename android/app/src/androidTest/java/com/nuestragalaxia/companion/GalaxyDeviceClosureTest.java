@@ -502,6 +502,9 @@ public class GalaxyDeviceClosureTest {
     }
 
     @Test public void chatPhase9MediaPerformance_realWebView20kLazyCacheAndMemoryPressure() throws Exception {
+        String minimum=shell("settings get system min_refresh_rate").trim(),peak=shell("settings get system peak_refresh_rate").trim();
+        try {
+        shell("settings put system min_refresh_rate 60");shell("settings put system peak_refresh_rate 60");
         launchChat();
         awaitJs("!!window.GalaxyChatMedia&&!!document.querySelector('#chatMessages')");
         runJs("GalaxyChatPerf.enable(true);GalaxyChatPerf.reset();");
@@ -545,6 +548,71 @@ public class GalaxyDeviceClosureTest {
             .put("pssBeforeKb",pssBefore).put("pssAfterKb",pssAfter)
             .put("perf",new JSONObject(js("JSON.stringify(GalaxyChatPerf.report())")));
         System.out.println("GALAXY_CHAT_PHASE9_ANDROID="+metrics);
+        } finally {
+            shell("null".equals(minimum)?"settings delete system min_refresh_rate":"settings put system min_refresh_rate "+minimum);
+            shell("null".equals(peak)?"settings delete system peak_refresh_rate":"settings put system peak_refresh_rate "+peak);
+        }
+    }
+
+    @Test public void chatPhase10ProcessRecreation_restoresDraftOutboxAndAttachments() throws Exception {
+        launchChat();
+        runJs("const t=document.querySelector('#chatForm textarea');t.value='phase10 process draft';t.dispatchEvent(new Event('input',{bubbles:true}));chatAttachmentsDraft=[{path:'content://phase10/pending-photo',kind:'photo',mime:'image/jpeg',name:'pending.jpg',url:'https://signed.invalid/original.jpg?token=secret',thumbnailUrl:'https://signed.invalid/thumb.jpg?token=secret'}];writeChatAttachmentsDraft();writeChatOutbox([{client_id:'phase10-pending',sender_person:String(cloud?.person||0),body:'pending restore',message_type:'text',attachments:[],_localState:'PENDING',created_at:new Date().toISOString()}]);");
+        awaitJs("ensureChatComposer().snapshot().text==='phase10 process draft'");
+        assertEquals("1",js("chatAttachmentsDraft.length"));
+        assertEquals("1",js("readChatOutbox().filter(x=>x.client_id==='phase10-pending').length"));
+        assertEquals("false",js("localStorage.getItem(CHAT_ATTACHMENTS_DRAFT_KEY).includes('token=secret')"));
+
+        scenario.close();scenario=null;
+        launch();
+        assertEquals("1",js("readChatOutbox().filter(x=>x.client_id==='phase10-pending').length"));
+        assertEquals("false",js("(localStorage.getItem(CHAT_ATTACHMENTS_DRAFT_KEY)||'').includes('token=secret')"));
+        launchChat();
+        awaitJs("ensureChatComposer().snapshot().text==='phase10 process draft'");
+        assertEquals("1",js("chatAttachmentsDraft.filter(x=>x.path==='content://phase10/pending-photo').length"));
+
+        runJs("ensureChatComposer().accepted();chatAttachmentsDraft=[];writeChatAttachmentsDraft();writeChatOutbox(readChatOutbox().filter(x=>x.client_id!=='phase10-pending'));chatRenderComposer();");
+        System.out.println("GALAXY_CHAT_PHASE10_RESTORE={\"draft\":true,\"outbox\":true,\"attachments\":true,\"signedUrlsPersisted\":false}");
+    }
+
+    @Test public void chatPhase10AndroidPerformance_longSessionLifecycleAndMemoryStayBounded() throws Exception {
+        launchChat();
+        awaitJs("!!window.GalaxyChatMedia&&!!document.querySelector('#chatMessages')");
+        long requested=Long.parseLong(InstrumentationRegistry.getArguments().getString("phase10SoakMs","60000"));
+        long soakMs=Math.max(30_000L,Math.min(1_800_000L,requested));
+        runJs("GalaxyChatPerf.enable(true);GalaxyChatPerf.reset();chatState={...(chatState||{}),messages:Array.from({length:20000},(_,i)=>({id:'p10-'+i,client_id:'p10c-'+i,sender_person:String(i%2),body:'Android soak '+i,message_type:'text',attachments:[],server_seq:i+1,created_at:'2026-10-06T12:00:00Z',reactions:[]})),nextBeforeSeq:null,nextAfterSeq:null};chatMessageEngine.resetWindow(20000,{align:'end'});chatRenderMessages({scroll:'bottom'});");
+        awaitJs("document.querySelectorAll('.chat-message').length===84");
+        long pssBefore=android.os.Debug.getPss(),cpuBefore=android.os.Process.getElapsedCpuTime();
+        long end=SystemClock.elapsedRealtime()+soakMs;
+        int iterations=0,lifecycleCycles=0,memoryPressures=0;
+        while(SystemClock.elapsedRealtime()<end){
+            int direction=(iterations%2==0)?-1:1;
+            runJs("(()=>{const e=document.querySelector('#chatMessages');if(e)e.scrollTop=Math.max(0,Math.min(e.scrollHeight-e.clientHeight,e.scrollTop+"+(direction*720)+"));})()");
+            if(iterations%15==0){
+                scenario.moveToState(Lifecycle.State.CREATED);
+                SystemClock.sleep(120);
+                scenario.moveToState(Lifecycle.State.RESUMED);
+                awaitJs("document.visibilityState==='visible'&&!!document.querySelector('#chatMessages')");
+                lifecycleCycles++;
+            }
+            if(iterations%30==0){
+                scenario.onActivity(activity->activity.onTrimMemory(android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW));
+                memoryPressures++;
+            }
+            assertTrue("virtualized window grew during soak",Integer.parseInt(js("document.querySelectorAll('.chat-message').length"))<=84);
+            SystemClock.sleep(850);
+            iterations++;
+        }
+        long pssAfter=android.os.Debug.getPss(),cpuAfter=android.os.Process.getElapsedCpuTime();
+        if(isPhysicalDevice())assertTrue("phase10 soak retained excessive PSS: "+(pssAfter-pssBefore)+" KB",pssAfter-pssBefore<128*1024);
+        JSONObject metrics=new JSONObject()
+            .put("device",android.os.Build.MANUFACTURER+" "+android.os.Build.MODEL)
+            .put("soakMs",soakMs).put("iterations",iterations)
+            .put("lifecycleCycles",lifecycleCycles).put("memoryPressures",memoryPressures)
+            .put("renderedMessages",Integer.parseInt(js("document.querySelectorAll('.chat-message').length")))
+            .put("pssBeforeKb",pssBefore).put("pssAfterKb",pssAfter)
+            .put("cpuMs",cpuAfter-cpuBefore)
+            .put("perf",new JSONObject(js("JSON.stringify(GalaxyChatPerf.report())")));
+        System.out.println("GALAXY_CHAT_PHASE10_ANDROID="+metrics);
     }
 
     @Test public void dailyGoalsPlansEventsCapsulesMapContextBackupAndUpdate_areReachable() throws Exception {
