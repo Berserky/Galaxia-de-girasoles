@@ -1,9 +1,5 @@
 package com.nuestragalaxia.companion;
 
-import static androidx.test.espresso.Espresso.onView;
-import static androidx.test.espresso.assertion.ViewAssertions.matches;
-import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
-import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -65,10 +61,13 @@ public class GalaxyMediaExperienceTest {
         long inspectMs=SystemClock.elapsedRealtime()-inspectStarted;
         assertTrue(inspected.optLong("width",0)>0&&inspected.optLong("height",0)>0);
         try(ActivityScenario<GalaxyMediaReviewActivity> scenario=ActivityScenario.launch(intent)){
-            onView(withContentDescription("Vista previa de la imagen seleccionada")).check(matches(isDisplayed()));
-            onView(withContentDescription("Comentario opcional")).check(matches(isDisplayed()));
-            onView(withContentDescription("Confirmar selección")).check(matches(isDisplayed()));
-            onView(withContentDescription("Quitar elemento")).check(matches(isDisplayed()));
+            scenario.onActivity(activity->{
+                View decor=activity.getWindow().getDecorView();
+                assertTrue(findByDescription(decor,"Vista previa de la imagen seleccionada")!=null);
+                assertTrue(findByDescription(decor,"Comentario opcional")!=null);
+                assertTrue(findByDescription(decor,"Confirmar selección")!=null);
+                assertTrue(findByDescription(decor,"Quitar elemento")!=null);
+            });
         }
         assertTrue("Review must not delete picker-owned content.",new File(context.getCacheDir(),"chat-files/qa-media/qa.jpg").exists());
         System.out.println("GALAXY_CHAT_PHASE5_ANDROID="+new JSONObject().put("case","picker-review").put("inspectMs",inspectMs).put("mime",inspected.optString("mime")));

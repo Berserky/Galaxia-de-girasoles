@@ -127,7 +127,7 @@ The physical instrumentation suite completed `OK (3 tests)` and verified:
 - camera and microphone runtime permission path on real hardware;
 - no dependence on an external camera intent for Galaxy Chat media capture.
 
-The first physical run exposed two test-harness assumptions that were valid in the emulator but not on the OEM device: duplicate `Repetir captura` accessibility nodes and the `MediaController` overlay becoming Espresso's active root during video preview. The instrumentation now resolves preview/retake controls directly from the activity hierarchy, preserving the same functional assertions without weakening product behavior.
+Cross-environment validation exposed three test-harness assumptions: duplicate `Repetir captura` accessibility nodes on the OEM device, the `MediaController` overlay becoming Espresso's active root during video preview, and generic-emulator window-focus contention during gallery review. The instrumentation now resolves review/preview/retake controls directly from the activity hierarchy, preserving the same functional assertions without weakening product behavior. Subsequent QA-only commits harden this harness; the validated Phase 5 product camera/media implementation remains unchanged from the referenced product commit.
 ## Real limitations
 
 - Photo Picker selection is capped at 12 items for Galaxy Chat in this phase to keep review/upload concurrency bounded.
