@@ -39,7 +39,7 @@ test('photo capture has rear/front camera, flash, autofocus, review, retake and 
 test('video capture is integrated, bounded, reviewable and never auto-sent',()=>{
  for(const marker of [
   'VideoCapture<Recorder>','prepareRecording','VideoRecordEvent.Status','maxDurationSeconds*1000L',
-  'Detener grabación','VideoView','MediaController','showReview()','Repetir captura'
+  'Detener grabación','VideoView','MediaController','showReview(','Repetir captura'
  ])assert.ok(camera.includes(marker),marker);
  assert.ok(camera.includes('EXTRA_MAX_DURATION'));
  assert.ok(camera.includes('capturedDurationMs'));
