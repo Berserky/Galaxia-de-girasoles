@@ -30,6 +30,7 @@ import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.json.JSONObject;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.util.ArrayList;
@@ -56,6 +57,10 @@ public class GalaxyMediaExperienceTest {
         Intent intent=new Intent(context,GalaxyMediaReviewActivity.class)
             .putParcelableArrayListExtra(GalaxyMediaReviewActivity.EXTRA_URIS,uris)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_ACTIVITY_NEW_TASK);
+        long inspectStarted=SystemClock.elapsedRealtime();
+        JSONObject inspected=MediaInspector.inspect(context,image);
+        long inspectMs=SystemClock.elapsedRealtime()-inspectStarted;
+        assertTrue(inspected.optLong("width",0)>0&&inspected.optLong("height",0)>0);
         try(ActivityScenario<GalaxyMediaReviewActivity> scenario=ActivityScenario.launch(intent)){
             onView(withContentDescription("Vista previa de la imagen seleccionada")).check(matches(isDisplayed()));
             onView(withContentDescription("Comentario opcional")).check(matches(isDisplayed()));
@@ -63,6 +68,7 @@ public class GalaxyMediaExperienceTest {
             onView(withContentDescription("Quitar elemento")).check(matches(isDisplayed()));
         }
         assertTrue("Review must not delete picker-owned content.",new File(context.getCacheDir(),"chat-files/qa-media/qa.jpg").exists());
+        System.out.println("GALAXY_CHAT_PHASE5_ANDROID="+new JSONObject().put("case","picker-review").put("inspectMs",inspectMs).put("mime",inspected.optString("mime")));
     }
 
     @Test public void cameraX_photoRearFrontReviewRetakeAndCancel_whenVirtualCameraExists() throws Exception {
@@ -71,21 +77,26 @@ public class GalaxyMediaExperienceTest {
         Intent intent=new Intent(context,GalaxyCameraActivity.class)
             .putExtra(GalaxyCameraActivity.EXTRA_MODE,"photo")
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        long pssBefore=android.os.Debug.getPss(),openStarted=SystemClock.elapsedRealtime(),openMs,captureMs;
         try(ActivityScenario<GalaxyCameraActivity> scenario=ActivityScenario.launch(intent)){
             assertTrue(device.wait(Until.hasObject(By.desc("Tomar foto")),8_000));
+            openMs=SystemClock.elapsedRealtime()-openStarted;
             assertTrue(device.hasObject(By.desc("Activar flash")));
             if(provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)){
                 UiObject2 switcher=device.findObject(By.desc("Cambiar cámara"));
                 assertTrue(switcher!=null&&switcher.isEnabled());switcher.click();SystemClock.sleep(600);switcher.click();SystemClock.sleep(600);
             }
+            long captureStarted=SystemClock.elapsedRealtime();
             device.findObject(By.desc("Tomar foto")).click();
             assertTrue("Photo capture did not reach review.",device.wait(Until.hasObject(By.desc("Confirmar captura")),10_000));
+            captureMs=SystemClock.elapsedRealtime()-captureStarted;
             onView(withContentDescription("Vista previa de la foto")).check(matches(isDisplayed()));
             device.findObject(By.desc("Repetir captura")).click();
             assertTrue(device.wait(Until.hasObject(By.desc("Tomar foto")),6_000));
             device.findObject(By.desc("Cerrar cámara")).click();
         }
         assertFalse("Cancelled camera capture left a temp file.",hasFiles(new File(context.getCacheDir(),"camera-media")));
+        System.out.println("GALAXY_CHAT_PHASE5_ANDROID="+new JSONObject().put("case","photo").put("openMs",openMs).put("capturePreviewMs",captureMs).put("pssBeforeKb",pssBefore).put("pssAfterKb",android.os.Debug.getPss()));
     }
 
     @Test public void cameraX_videoHasBoundedRecordingPreviewPlaybackRetakeAndCleanup_whenVirtualCameraExists() throws Exception {
@@ -95,19 +106,23 @@ public class GalaxyMediaExperienceTest {
             .putExtra(GalaxyCameraActivity.EXTRA_MODE,"video")
             .putExtra(GalaxyCameraActivity.EXTRA_MAX_DURATION,3)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        long pssBefore=android.os.Debug.getPss(),previewMs=0;
         try(ActivityScenario<GalaxyCameraActivity> scenario=ActivityScenario.launch(intent)){
             assertTrue(device.wait(Until.hasObject(By.desc("Iniciar grabación")),8_000));
             device.findObject(By.desc("Iniciar grabación")).click();
             assertTrue(device.wait(Until.hasObject(By.desc("Detener grabación")),4_000));
             SystemClock.sleep(1_200);
+            long stopStarted=SystemClock.elapsedRealtime();
             device.findObject(By.desc("Detener grabación")).click();
             assertTrue("Video capture did not reach review.",device.wait(Until.hasObject(By.desc("Confirmar captura")),12_000));
+            previewMs=SystemClock.elapsedRealtime()-stopStarted;
             onView(withContentDescription("Vista previa del video")).check(matches(isDisplayed()));
             device.findObject(By.desc("Repetir captura")).click();
             assertTrue(device.wait(Until.hasObject(By.desc("Iniciar grabación")),6_000));
             device.findObject(By.desc("Cerrar cámara")).click();
         }
         assertFalse("Cancelled video capture left a temp file.",hasFiles(new File(context.getCacheDir(),"camera-media")));
+        System.out.println("GALAXY_CHAT_PHASE5_ANDROID="+new JSONObject().put("case","video").put("stopPreviewMs",previewMs).put("pssBeforeKb",pssBefore).put("pssAfterKb",android.os.Debug.getPss()));
     }
 
     private ProcessCameraProvider provider() throws Exception {
