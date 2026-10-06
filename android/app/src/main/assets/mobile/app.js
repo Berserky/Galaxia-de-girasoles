@@ -1833,11 +1833,26 @@ function createChatDeliveryEngine(){
   },
   onConfirm:(message,meta)=>{
    if(!message)return;
-   window.GalaxyChatPerf?.confirmed?.(meta?.clientId||message.client_id);
+   const clientId=String(message.client_id||meta?.clientId||'');
+   window.GalaxyChatPerf?.confirmed?.(clientId);
    chatState=chatMessageEngine.applySingle(chatState||{messages:[],unread:0,pinnedIds:[]},message);
    chatStateSignature=chatSignature(chatState);
+   if(view!=='chat')return;
+   const el=document.querySelector('#chatMessages');
+   const localNode=el&&clientId?[...el.querySelectorAll('.chat-message')].find(node=>String(node.dataset.clientId||'')===clientId):null;
+   if(localNode){
+    const holder=document.createElement('div');holder.innerHTML=chatMessageMarkup(message);
+    const confirmed=holder.firstElementChild;
+    if(confirmed){
+     localNode.replaceWith(confirmed);refreshIcons();
+     if(chatResizeObserver)chatResizeObserver.observe(confirmed);
+     chatScheduleMeasure();
+     if(chatNearBottom(el))chatScrollEngine.toBottom(el,{reason:'delivery-confirmed'});
+     return;
+    }
+   }
    chatMessageEngine.resetWindow(chatRows().length,{align:'end'});
-   if(view==='chat')chatRenderMessages({scroll:'bottom'});
+   chatRenderMessages({scroll:'bottom'});
   },
   onMetric:entry=>{
    if(!native.paired||!['queued','sending','sent','failed','retry'].includes(entry.event))return;
