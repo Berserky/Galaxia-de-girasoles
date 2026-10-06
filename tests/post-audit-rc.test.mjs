@@ -4,13 +4,13 @@ import {readFileSync} from 'node:fs';
 
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 
-test('post-audit RC uses a new Android version without reusing stable code 34',()=>{
+test('Supernova RC uses a version strictly newer than stable 3.5.1 code 35',()=>{
   const gradle=read('android/app/build.gradle.kts');
   const match=gradle.match(/versionCode = (\d+); versionName = "([^"]+)"/);
   assert.ok(match,'Android version metadata missing');
-  assert.equal(Number(match[1]),35);
-  assert.equal(match[2],'3.5.1');
-  assert.ok(Number(match[1])>34);
+  assert.equal(Number(match[1]),36);
+  assert.equal(match[2],'4.0.0');
+  assert.ok(Number(match[1])>35);
 });
 
 test('candidate requires the full automated release gate set',()=>{

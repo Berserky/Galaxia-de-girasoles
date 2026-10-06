@@ -15,7 +15,7 @@ const gradle=read('android/app/build.gradle.kts');
 
 test('Galaxy Chat Universe 3.5 parses under Android 3.5.1 (35)',()=>{
  assert.doesNotThrow(()=>new vm.Script(app,{filename:'app.js'}));
- assert.match(gradle,/versionCode = 35; versionName = "3\.5\.1"/);
+ assert.match(gradle,/versionCode = 36; versionName = "4\.0\.0"/);
  assert.ok(css.includes('Galaxy Chat Universe 3.5.0'));
 });
 

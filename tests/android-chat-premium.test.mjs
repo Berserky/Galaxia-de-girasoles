@@ -14,7 +14,7 @@ const migration=read('supabase/migrations/20261004165848_galaxy_chat_premium_340
 const gradle=read('android/app/build.gradle.kts');
 
 test('Premium 3.4 migration remains compatible under Universe 3.5 post-audit patch',()=>{
- assert.match(gradle,/versionCode = 35; versionName = "3\.5\.1"/);
+ assert.match(gradle,/versionCode = 36; versionName = "4\.0\.0"/);
  for(const marker of ['scheduled_at','schedule_state','expires_at','view_once','galaxy_chat_preferences','galaxy_chat_transcripts','galaxy_chat_translations','galaxy_chat_albums','galaxy_chat_stickers','galaxy_chat_cron_dispatch','cron.schedule'])assert.ok(migration.includes(marker),marker);
  assert.equal(/drop table|truncate table|drop column/i.test(migration),false);
 });
