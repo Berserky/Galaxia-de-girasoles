@@ -42,6 +42,12 @@ public final class GalaxyMediaReviewActivity extends FragmentActivity {
         if(Build.VERSION.SDK_INT>=33)incoming=getIntent().getParcelableArrayListExtra(EXTRA_URIS,Uri.class);
         else incoming=getIntent().getParcelableArrayListExtra(EXTRA_URIS);
         if(incoming!=null)items.addAll(incoming);
+        if(savedInstanceState!=null){
+            ArrayList<String> kept=savedInstanceState.getStringArrayList("review.uris");
+            if(kept!=null&&!kept.isEmpty()){items.clear();for(String value:kept)items.add(Uri.parse(value));}
+            index=savedInstanceState.getInt("review.index",0);
+            getIntent().putExtra(EXTRA_CAPTION,savedInstanceState.getString("review.caption",getIntent().getStringExtra(EXTRA_CAPTION)));
+        }
         if(items.isEmpty()){setResult(Activity.RESULT_CANCELED);finish();return;}
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
@@ -124,6 +130,15 @@ public final class GalaxyMediaReviewActivity extends FragmentActivity {
         }
         if(clip!=null)result.setClipData(clip);
         setResult(Activity.RESULT_OK,result);finish();
+    }
+
+    @Override protected void onSaveInstanceState(Bundle outState){
+        saveCaption();
+        super.onSaveInstanceState(outState);
+        ArrayList<String> values=new ArrayList<>();for(Uri uri:items)values.add(uri.toString());
+        outState.putStringArrayList("review.uris",values);
+        outState.putInt("review.index",index);
+        outState.putString("review.caption",getIntent().getStringExtra(EXTRA_CAPTION));
     }
 
     private void cancel(){setResult(Activity.RESULT_CANCELED);finish();}
