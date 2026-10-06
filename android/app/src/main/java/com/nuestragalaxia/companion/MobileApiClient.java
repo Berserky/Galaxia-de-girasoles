@@ -274,7 +274,7 @@ public final class MobileApiClient {
         if(file.length()<1)throw new IOException("El audio está vacío.");
         if(limit<0||file.length()>limit)throw new IOException("El audio supera el límite permitido.");
         UploadSource source=UploadSource.file(file,"audio/mp4",file.getName(),false);
-        return uploadWithRetry(token,kind,source,limit);
+        return uploadWithRetry(token,kind,source,limit,null);
     }
 
     private static String fileName(Context context,Uri uri){
