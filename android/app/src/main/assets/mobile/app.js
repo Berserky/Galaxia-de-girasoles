@@ -1690,7 +1690,7 @@ function chatComposerMarkup(){
  const composer=ensureChatComposer(),state=composer.snapshot(),reply=state.replyTarget,mode=composer.rightMode(chatAttachmentsDraft.length);
  return '<form id="chatForm" class="chat-composer chat-composer-v2" autocomplete="off">'+
  (reply?'<div class="chat-compose-reply chat-compose-reply-v2"><span class="chat-reply-icon">'+ico('reply')+'</span><span class="chat-reply-content"><b>'+esc(chatOwn(reply)?'Tú':partnerName())+'</b><small>'+esc(chatReplyFragment(reply))+'</small></span><button type="button" data-action="chat-reply-cancel" aria-label="Cancelar respuesta">'+ico('x')+'</button></div>':'')+
- chatDraftAttachmentMarkup()+
+ chatDraftAttachmentMarkup()+chatMediaUploadMarkup()+
  '<div class="chat-compose-row"><button class="chat-plus" type="button" data-action="chat-attach-open" aria-label="Adjuntar">'+ico('plus')+'</button><textarea name="body" maxlength="4000" rows="1" placeholder="Escribe un mensaje…" aria-label="Escribe un mensaje" inputmode="text" enterkeyhint="enter" autocapitalize="sentences" spellcheck="true">'+esc(state.text)+'</textarea>'+
  (mode==='send'?'<button class="chat-send composer-right" type="submit" aria-label="Enviar">'+ico('send')+'</button>':'<button class="chat-send composer-right chat-mic-hold" type="button" data-action="chat-hold-record" aria-label="Mantén pulsado para grabar">'+ico('mic')+'</button>')+
  '</div><div class="chat-hold-hint" aria-live="polite" hidden></div></form>';
@@ -2750,7 +2750,12 @@ document.addEventListener('click',async e=>{
   if(a==='chat-camera-open'){openChatCameraMenu();return;}
   if(a==='chat-permission-retry'){const kind=btn.dataset.kind==='video'?'video':'photo';closeModal();await addChatNativeMedia(kind==='video'?'captureChatVideo':'captureChatPhoto',[],kind);return;}
   if(a==='chat-open-app-settings'){await GalaxyNative.call('openAppSettings');return;}
-  if(a==='chat-attachment-remove'){chatAttachmentsDraft.splice(Number(btn.dataset.index),1);chatRenderComposer({focus:true});return;}
+  if(a==='chat-media-upload-cancel'){btn.disabled=true;await GalaxyNative.call('cancelChatMediaUpload').catch(()=>{});return;}
+  if(a==='chat-attachment-remove'){
+   const index=Number(btn.dataset.index),item=chatAttachmentsDraft[index];
+   if(item?.path)api('chat-media-discard',{paths:[item.path,item.thumbnailPath].filter(Boolean)}).catch(()=>{});
+   chatAttachmentsDraft.splice(index,1);chatRenderComposer({focus:true});return;
+  }
   if(a==='chat-attach-camera'){ensureChatComposer().setAttachmentIntent('camera');await addChatNativeMedia('captureChatPhoto',[],'photo');return;}
   if(a==='chat-attach-gallery'){ensureChatComposer().setAttachmentIntent('gallery');await addChatNativeMedia('pickChatPhotos',[],'media');return;}
   if(a==='chat-attach-video-camera'){ensureChatComposer().setAttachmentIntent('video');await addChatNativeMedia('captureChatVideo',[],'video');return;}
