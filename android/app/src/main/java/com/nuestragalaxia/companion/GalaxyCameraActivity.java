@@ -48,7 +48,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import org.json.JSONObject;
 import java.io.File;
 import java.io.IOException;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 public final class GalaxyCameraActivity extends FragmentActivity {
     public static final String EXTRA_MODE="mode";
@@ -86,6 +86,11 @@ public final class GalaxyCameraActivity extends FragmentActivity {
     private TextView modeLabel;
     private TextView statusLabel;
     private EditText reviewCaptionInput;
+    private final ExecutorService mediaIo=Executors.newSingleThreadExecutor();
+    private VideoView reviewVideo;
+    private Bitmap reviewBitmap;
+    private int reviewGeneration=0;
+    private boolean confirming=false;
 
     @Override protected void onCreate(Bundle savedInstanceState){
         super.onCreate(savedInstanceState);
@@ -253,17 +258,26 @@ public final class GalaxyCameraActivity extends FragmentActivity {
     private void showReview(String restoredCaption){
         if(capturedFile==null||!capturedFile.exists())return;
         reviewing=true;recording=false;if(cameraProvider!=null)cameraProvider.unbindAll();
+        releaseReviewMedia();
         root.removeAllViews();
         root.setBackgroundColor(Color.BLACK);
         Uri uri=FileProvider.getUriForFile(this,getPackageName()+".files",capturedFile);
         if(mode.equals("video")){
-            VideoView video=new VideoView(this);video.setVideoURI(uri);video.setMediaController(new MediaController(this));video.setContentDescription("Vista previa del video");
-            video.setOnPreparedListener(mp->{mp.setLooping(true);video.start();});
+            VideoView video=new VideoView(this);reviewVideo=video;video.setVideoURI(uri);video.setMediaController(new MediaController(this));video.setContentDescription("Vista previa del video");
+            video.setOnPreparedListener(mp->{if(reviewVideo==video&&!isFinishing()){mp.setLooping(true);video.start();}});
             root.addView(video,new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
         }else{
             ImageView image=new ImageView(this);image.setScaleType(ImageView.ScaleType.FIT_CENTER);image.setContentDescription("Vista previa de la foto");
-            Bitmap bitmap=decodeScaled(uri,capturedFile,2048);if(bitmap!=null)image.setImageBitmap(bitmap);else image.setImageURI(uri);
             root.addView(image,new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
+            int generation=reviewGeneration;File expectedFile=capturedFile;
+            mediaIo.execute(()->{
+                Bitmap bitmap=decodeScaled(uri,expectedFile,2048);
+                runOnUiThread(()->{
+                    if(bitmap==null){if(generation==reviewGeneration&&!isFinishing())toastStatus("No pudimos preparar la vista previa.");return;}
+                    if(isFinishing()||generation!=reviewGeneration||capturedFile!=expectedFile){bitmap.recycle();return;}
+                    reviewBitmap=bitmap;image.setImageBitmap(bitmap);
+                });
+            });
         }
 
         LinearLayout top=new LinearLayout(this);top.setOrientation(LinearLayout.HORIZONTAL);top.setGravity(Gravity.CENTER_VERTICAL);top.setPadding(dp(12),dp(12),dp(12),dp(8));
@@ -283,24 +297,30 @@ public final class GalaxyCameraActivity extends FragmentActivity {
     }
 
     private void confirmCapture(String caption){
-        if(capturedFile==null||!capturedFile.exists())return;
-        try{
-            Uri uri=FileProvider.getUriForFile(this,getPackageName()+".files",capturedFile);
-            JSONObject meta=MediaInspector.inspect(this,uri);
-            Intent result=new Intent()
-                .putExtra(EXTRA_FILE_PATH,capturedFile.getAbsolutePath())
-                .putExtra(EXTRA_CAPTION,caption==null?"":caption.trim())
-                .putExtra(EXTRA_DURATION_MS,Math.max(capturedDurationMs,meta.optLong("durationMs",0L)))
-                .putExtra(EXTRA_WIDTH,meta.optLong("width",0L))
-                .putExtra(EXTRA_HEIGHT,meta.optLong("height",0L))
-                .putExtra(EXTRA_MIME,meta.optString("mime",mode.equals("video")?"video/mp4":"image/jpeg"))
-                .putExtra(EXTRA_VIDEO_MESSAGE,videoMessage);
-            confirmed=true;setResult(Activity.RESULT_OK,result);finish();
-        }catch(Exception e){toastStatus("No pudimos validar la captura.");}
+        if(confirming||capturedFile==null||!capturedFile.exists())return;
+        confirming=true;File expectedFile=capturedFile;long expectedDuration=capturedDurationMs;
+        Uri uri=FileProvider.getUriForFile(this,getPackageName()+".files",expectedFile);
+        mediaIo.execute(()->{
+            try{
+                JSONObject meta=MediaInspector.inspect(this,uri);
+                Intent result=new Intent()
+                    .putExtra(EXTRA_FILE_PATH,expectedFile.getAbsolutePath())
+                    .putExtra(EXTRA_CAPTION,caption==null?"":caption.trim())
+                    .putExtra(EXTRA_DURATION_MS,Math.max(expectedDuration,meta.optLong("durationMs",0L)))
+                    .putExtra(EXTRA_WIDTH,meta.optLong("width",0L))
+                    .putExtra(EXTRA_HEIGHT,meta.optLong("height",0L))
+                    .putExtra(EXTRA_MIME,meta.optString("mime",mode.equals("video")?"video/mp4":"image/jpeg"))
+                    .putExtra(EXTRA_VIDEO_MESSAGE,videoMessage);
+                runOnUiThread(()->{
+                    if(isFinishing()||capturedFile!=expectedFile){confirming=false;return;}
+                    confirmed=true;setResult(Activity.RESULT_OK,result);finish();
+                });
+            }catch(Exception e){runOnUiThread(()->{confirming=false;if(!isFinishing()&&capturedFile==expectedFile)toastStatus("No pudimos validar la captura.");});}
+        });
     }
 
     private void retake(){
-        reviewing=false;reviewCaptionInput=null;capturedDurationMs=0L;deleteCaptured();buildCameraUi();bindCamera();
+        confirming=false;reviewing=false;reviewCaptionInput=null;capturedDurationMs=0L;releaseReviewMedia();deleteCaptured();buildCameraUi();bindCamera();
     }
 
     private void toggleTorch(){
@@ -327,11 +347,19 @@ public final class GalaxyCameraActivity extends FragmentActivity {
 
     private void cancelAndFinish(){
         if(activeRecording!=null){activeRecording.stop();activeRecording=null;}
-        deleteCaptured();setResult(Activity.RESULT_CANCELED);finish();
+        releaseReviewMedia();deleteCaptured();setResult(Activity.RESULT_CANCELED);finish();
     }
 
     private void finishWithError(String message){
-        deleteCaptured();setResult(Activity.RESULT_CANCELED,new Intent().putExtra("error",message));finish();
+        releaseReviewMedia();deleteCaptured();setResult(Activity.RESULT_CANCELED,new Intent().putExtra("error",message));finish();
+    }
+
+    private void releaseReviewMedia(){
+        reviewGeneration++;
+        VideoView video=reviewVideo;reviewVideo=null;
+        if(video!=null)try{video.stopPlayback();}catch(Exception ignored){}
+        Bitmap bitmap=reviewBitmap;reviewBitmap=null;
+        if(bitmap!=null&&!bitmap.isRecycled())bitmap.recycle();
     }
 
     private void deleteCaptured(){if(capturedFile!=null)try{capturedFile.delete();}catch(Exception ignored){}capturedFile=null;}
@@ -360,8 +388,9 @@ public final class GalaxyCameraActivity extends FragmentActivity {
     }
 
     @Override protected void onStop(){
-        super.onStop();
+        if(reviewVideo!=null)try{reviewVideo.pause();}catch(Exception ignored){}
         if(recording&&!isChangingConfigurations()&&activeRecording!=null)activeRecording.stop();
+        super.onStop();
     }
 
     @Override protected void onSaveInstanceState(Bundle outState){
@@ -374,6 +403,8 @@ public final class GalaxyCameraActivity extends FragmentActivity {
     }
 
     @Override protected void onDestroy(){
+        releaseReviewMedia();
+        mediaIo.shutdownNow();
         if(cameraProvider!=null)cameraProvider.unbindAll();
         if(!confirmed&&!isChangingConfigurations())deleteCaptured();
         super.onDestroy();

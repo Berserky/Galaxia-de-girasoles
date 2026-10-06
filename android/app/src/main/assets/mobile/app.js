@@ -1307,6 +1307,7 @@ function themeSettingsCard(){
 
 function chatTime(value){try{return new Intl.DateTimeFormat('es-CO',{hour:'numeric',minute:'2-digit'}).format(new Date(value));}catch{return'';}}
 const CHAT_OUTBOX_KEY='nuestra-galaxia.chat-outbox.v3';
+const CHAT_ATTACHMENTS_DRAFT_KEY='nuestra-galaxia.chat-attachments-draft.v4';
 const CHAT_REACTIONS=['\u2764\uFE0F','\uD83D\uDE02','\uD83E\uDD79','\uD83D\uDE2E','\uD83D\uDE22','\uD83D\uDC4D'];
 
 function chatDay(value){
@@ -1323,6 +1324,19 @@ function readChatOutbox(){
  try{const rows=JSON.parse(localStorage.getItem(CHAT_OUTBOX_KEY)||'[]');return Array.isArray(rows)?rows.map(x=>({...x,_localState:x._localState||'PENDING'})):[];}catch{return[];}
 }
 function writeChatOutbox(rows){try{localStorage.setItem(CHAT_OUTBOX_KEY,JSON.stringify((rows||[]).slice(-120)));}catch{}}
+function readChatAttachmentsDraft(){
+ try{
+  const rows=JSON.parse(localStorage.getItem(CHAT_ATTACHMENTS_DRAFT_KEY)||'[]');
+  return Array.isArray(rows)?rows.filter(item=>item&&typeof item==='object'&&String(item.path||'').trim()).slice(-12):[];
+ }catch{return[];}
+}
+function writeChatAttachmentsDraft(){
+ try{
+  if(!chatAttachmentsDraft.length){localStorage.removeItem(CHAT_ATTACHMENTS_DRAFT_KEY);return;}
+  const safe=chatAttachmentsDraft.slice(-12).map(item=>({...item,url:'',thumbnailUrl:''}));
+  localStorage.setItem(CHAT_ATTACHMENTS_DRAFT_KEY,JSON.stringify(safe));
+ }catch{}
+}
 function chatComposerConversationKey(){
  const me=String(cloud?.person??native.person??'unknown'),other=me==='0'?'1':me==='1'?'0':'partner';
  return 'pair:'+([me,other].sort().join('-'));
@@ -1341,6 +1355,7 @@ function ensureChatComposer(){
  return chatComposer;
 }
 function chatReplyTarget(){return ensureChatComposer().snapshot().replyTarget;}
+chatAttachmentsDraft=readChatAttachmentsDraft();
 function chatReplyFragment(m){
  if(!m)return'Mensaje';
  if(m.deleted_at)return'Mensaje eliminado';
@@ -2004,7 +2019,7 @@ function queueChatMessage({body='',messageType='text',attachments=[],attachment=
  const clientId=crypto.randomUUID(),created=new Date().toISOString();window.GalaxyChatPerf?.optimisticStart?.(clientId);
  const row={client_id:clientId,client_created_at:created,body:text,reply_to:chatReplyTarget()?.id||null,message_type:messageType,attachments,attachment,entityRef,card,scheduled_at:scheduledAt,silent,ttl_seconds:ttlSeconds,view_once:viewOnce,effect,_localState:'PENDING',retryCount:0,local_order:Date.now()};
  chatDeliveryEngine.queue(row);
- ensureChatComposer().accepted();chatAttachmentsDraft=[];
+ ensureChatComposer().accepted();chatAttachmentsDraft=[];writeChatAttachmentsDraft();
  if(view==='chat')chatRenderComposer();
  if(view==='chat'){
   window.GalaxyChatMotion?.offer([clientId],{atBottom:true});
@@ -2243,6 +2258,7 @@ async function addChatNativeMedia(method,args,kind){
   const result=await GalaxyNative.call(method,...(args||[]));
   const uploads=Array.isArray(result?.items)?result.items:[result];
   for(const item of uploads)if(item?.path)chatAttachmentsDraft.push(normalizeChatUpload(item,kind));
+  writeChatAttachmentsDraft();
   const caption=String(result?.caption||'').trim(),composer=ensureChatComposer(),existing=composer.snapshot().text.trim();
   if(caption)composer.setText(existing&&existing!==caption?existing+'\n'+caption:caption);
   chatMediaUploadState={state:'idle',index:0,count:0,sent:0,total:0};
@@ -2802,7 +2818,7 @@ document.addEventListener('click',async e=>{
   if(a==='chat-attachment-remove'){
    const index=Number(btn.dataset.index),item=chatAttachmentsDraft[index];
    if(item?.path)api('chat-media-discard',{paths:[item.path,item.thumbnailPath].filter(Boolean)}).catch(()=>{});
-   chatAttachmentsDraft.splice(index,1);chatRenderComposer({focus:true});return;
+   chatAttachmentsDraft.splice(index,1);writeChatAttachmentsDraft();chatRenderComposer({focus:true});return;
   }
   if(a==='chat-attach-camera'){ensureChatComposer().setAttachmentIntent('camera');await addChatNativeMedia('captureChatPhoto',[],'photo');return;}
   if(a==='chat-attach-gallery'){ensureChatComposer().setAttachmentIntent('gallery');await addChatNativeMedia('pickChatPhotos',[],'media');return;}

@@ -130,7 +130,8 @@ public final class MainActivity extends FragmentActivity {
             pendingPhotoPickerRequest=savedInstanceState.getString("chat.picker.request");
             pendingPhotoPickerKind=savedInstanceState.getString("chat.picker.kind","photo");
         }
-        pruneCameraMediaCache();
+        if(BuildConfig.DEBUG&&getIntent().getBooleanExtra("galaxy.strictMode",false))enableDebugStrictMode();
+        io.execute(this::pruneCameraMediaCache);
         getOnBackPressedDispatcher().addCallback(this,new OnBackPressedCallback(true){
             @Override public void handleOnBackPressed(){
                 if(pageReady)evaluate("window.GalaxyNative&&window.GalaxyNative.back&&window.GalaxyNative.back();");
@@ -179,8 +180,10 @@ public final class MainActivity extends FragmentActivity {
     @SuppressLint("RequiresFeature")
     private void setupWeb(){
         assetLoader=new WebViewAssetLoader.Builder().addPathHandler("/assets/",new WebViewAssetLoader.AssetsPathHandler(this)).build();
+        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
         WebSettings settings=web.getSettings();
         settings.setJavaScriptEnabled(true);
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(false);
         settings.setAllowFileAccess(false);
@@ -192,6 +195,7 @@ public final class MainActivity extends FragmentActivity {
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
         if(Build.VERSION.SDK_INT>=26)settings.setSafeBrowsingEnabled(true);
+        web.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_BOUND,true);
 
         GalaxyBridge secureBridge=new GalaxyBridge(this);
         if(!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)){
@@ -221,6 +225,19 @@ public final class MainActivity extends FragmentActivity {
                 Uri uri=request.getUrl();
                 String value=uri.toString();
                 if(value.startsWith("https://appassets.androidplatform.net/assets/mobile/")||"about:blank".equals(value))return false;
+                return true;
+            }
+
+            @Override public boolean onRenderProcessGone(WebView view,RenderProcessGoneDetail detail){
+                pageReady=false;
+                if(view!=null){try{view.destroy();}catch(Exception ignored){}}
+                web=null;
+                runOnUiThread(()->{
+                    if(!isFinishing()&&!isDestroyed()){
+                        toast(detail!=null&&detail.didCrash()?"La interfaz se recuperará tras un fallo del WebView.":"Android liberó la interfaz para recuperar memoria. Reabriendo…");
+                        recreate();
+                    }
+                });
                 return true;
             }
 
@@ -986,13 +1003,28 @@ public final class MainActivity extends FragmentActivity {
     void playVoiceRecording(String requestId){
         runOnUiThread(()->{
             if(voiceFile==null||!voiceFile.exists()){reject(requestId,"Primero graba un audio.");return;}
+            releaseVoicePlayer();
             try{
-                if(voicePlayer!=null){voicePlayer.release();voicePlayer=null;}
-                voicePlayer=new MediaPlayer();voicePlayer.setDataSource(voiceFile.getAbsolutePath());voicePlayer.prepare();
-                voicePlayer.setOnCompletionListener(player->{try{player.release();}catch(Exception ignored){}voicePlayer=null;event("voice-preview-ended",new JSONObject());});
-                voicePlayer.start();
-                resolve(requestId,new JSONObject().put("playing",true));
-            }catch(Exception e){reject(requestId,"No pudimos reproducir la grabación.");}
+                MediaPlayer player=new MediaPlayer();voicePlayer=player;
+                player.setDataSource(voiceFile.getAbsolutePath());
+                player.setOnPreparedListener(ready->{
+                    if(voicePlayer!=ready){try{ready.release();}catch(Exception ignored){}return;}
+                    ready.start();
+                    try{resolve(requestId,new JSONObject().put("playing",true));}catch(Exception e){reject(requestId,"No pudimos reproducir la grabación.");}
+                });
+                player.setOnCompletionListener(done->{
+                    if(voicePlayer==done)voicePlayer=null;
+                    try{done.release();}catch(Exception ignored){}
+                    event("voice-preview-ended",new JSONObject());
+                });
+                player.setOnErrorListener((failed,what,extra)->{
+                    if(voicePlayer==failed)voicePlayer=null;
+                    try{failed.release();}catch(Exception ignored){}
+                    reject(requestId,"No pudimos reproducir la grabación.");
+                    return true;
+                });
+                player.prepareAsync();
+            }catch(Exception e){releaseVoicePlayer();reject(requestId,"No pudimos reproducir la grabación.");}
         });
     }
 
@@ -1016,8 +1048,13 @@ public final class MainActivity extends FragmentActivity {
         });
     }
 
+    private void releaseVoicePlayer(){
+        MediaPlayer player=voicePlayer;voicePlayer=null;
+        if(player!=null){try{player.stop();}catch(Exception ignored){}try{player.reset();}catch(Exception ignored){}try{player.release();}catch(Exception ignored){}}
+    }
+
     private void cleanupVoice(boolean delete){
-        if(voicePlayer!=null){try{voicePlayer.stop();}catch(Exception ignored){}try{voicePlayer.release();}catch(Exception ignored){}voicePlayer=null;}
+        releaseVoicePlayer();
         if(voiceRecorder!=null){try{voiceRecorder.stop();}catch(Exception ignored){}try{voiceRecorder.release();}catch(Exception ignored){}voiceRecorder=null;}
         if(delete&&voiceFile!=null){try{voiceFile.delete();}catch(Exception ignored){}voiceFile=null;}
         voicePausedAt=0;voicePausedTotal=0;
@@ -1473,9 +1510,18 @@ public final class MainActivity extends FragmentActivity {
     private void nativeChanged(){event("native",nativeState());}
 
     private void evaluate(String script){
-        web.post(()->{
-            if(!isFinishing()&&!isDestroyed())web.evaluateJavascript(script,null);
+        WebView target=web;
+        if(target==null)return;
+        target.post(()->{
+            if(!isFinishing()&&!isDestroyed()&&web==target)target.evaluateJavascript(script,null);
         });
+    }
+
+    private void enableDebugStrictMode(){
+        StrictMode.setThreadPolicy(new StrictMode.ThreadPolicy.Builder()
+            .detectDiskReads().detectDiskWrites().detectNetwork().penaltyLog().build());
+        StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder()
+            .detectLeakedClosableObjects().penaltyLog().build());
     }
 
     private void toast(String text){runOnUiThread(()->Toast.makeText(this,text,Toast.LENGTH_LONG).show());}
@@ -1530,6 +1576,7 @@ public final class MainActivity extends FragmentActivity {
 
     @Override protected void onResume(){
         super.onResume();
+        if(web!=null)web.onResume();
         ensureTrackingService();
         if(store!=null&&store.pairedFast()){PushManager.schedule(this);if(!PushManager.configured(this))bootstrapPush();}
         if(updater!=null)updater.resumePendingInstall();
@@ -1537,12 +1584,15 @@ public final class MainActivity extends FragmentActivity {
     }
 
     @Override protected void onPause(){
-        super.onPause();
         if(voiceRecorder!=null)stopVoiceRecording(null);
+        releaseVoicePlayer();
+        if(web!=null)web.onPause();
+        super.onPause();
     }
 
     @Override public void onTrimMemory(int level){
         super.onTrimMemory(level);
+        if(level>=ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN)releaseVoicePlayer();
         if(level>=ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW){
             JSONObject payload=new JSONObject();
             try{payload.put("level",level);}catch(Exception ignored){}
@@ -1555,7 +1605,11 @@ public final class MainActivity extends FragmentActivity {
         if(chatSyncReceiver!=null){try{unregisterReceiver(chatSyncReceiver);}catch(Exception ignored){}chatSyncReceiver=null;}
         if(updater!=null)updater.close();
         io.shutdownNow();
-        if(web!=null){web.destroy();}
+        if(web!=null){
+            try{web.stopLoading();}catch(Exception ignored){}
+            try{web.onPause();web.removeAllViews();web.destroy();}catch(Exception ignored){}
+            web=null;
+        }
         super.onDestroy();
     }
 }
