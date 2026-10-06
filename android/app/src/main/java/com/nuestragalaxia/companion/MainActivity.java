@@ -236,6 +236,7 @@ public final class MainActivity extends FragmentActivity {
             boolean paired=store.pairedFast();
             state.put("version",BuildConfig.VERSION_NAME);
             state.put("versionCode",BuildConfig.VERSION_CODE);
+            state.put("reducedMotion",!android.animation.ValueAnimator.areAnimatorsEnabled());
             state.put("paired",paired);
             state.put("person",paired?store.person():"");
             state.put("name",paired?store.name():"");

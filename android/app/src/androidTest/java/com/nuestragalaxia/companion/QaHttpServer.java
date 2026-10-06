@@ -64,6 +64,14 @@ final class QaHttpServer implements Closeable {
     void setNetworkMode(NetworkMode mode) { networkMode = mode == null ? NetworkMode.NORMAL : mode; }
     List<String> actions() { return Collections.unmodifiableList(new ArrayList<>(actions)); }
     long sentCount() { return sentMessages.size(); }
+    void receivePartner(int count) throws Exception {
+        for(int i=0;i<count;i++){
+            long seq=sequence.incrementAndGet();
+            sentMessages.add(new JSONObject().put("id",UUID.randomUUID().toString()).put("client_id",UUID.randomUUID().toString())
+                .put("sender_person","1").put("body","Incoming QA "+seq).put("message_type","text")
+                .put("attachments",new JSONArray()).put("server_seq",seq).put("created_at",Instant.now().toString()).put("reactions",new JSONArray()));
+        }
+    }
 
     @Override public void close() {
         running = false;

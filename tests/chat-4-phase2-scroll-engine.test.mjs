@@ -103,6 +103,29 @@ test('bottom state uses one tolerance contract',()=>{
  assert.equal(engine.isAtBottom(el),false);
 });
 
+test('phase8 enormous smooth jumps use an immediate controlled jump',()=>{
+ const {engine}=runtime(),el=fakeList(20000);
+ let smoothCalls=0;el.scrollTo=()=>{smoothCalls++;};
+ engine.toBottom(el,{smooth:true});
+ assert.equal(el.scrollTop,1999500);
+ assert.equal(smoothCalls,0);
+});
+
+test('immediate then smooth scrolling retains programmatic ownership through stale callbacks',()=>{
+ const frames=new Map();let next=0;
+ const context={window:{matchMedia:()=>({matches:false})},requestAnimationFrame:fn=>{frames.set(++next,fn);return next;},cancelAnimationFrame:id=>frames.delete(id),Date,Math};
+ vm.createContext(context);vm.runInContext(scrollSource,context);
+ const engine=context.window.GalaxyScrollEngine.create(),el=fakeList(10);
+ engine.toBottom(el);
+ const first=frames.entries().next().value;frames.delete(first[0]);first[1](16);
+ const stale=[...frames.values()][0];
+ el.scrollTop=300;engine.toBottom(el,{smooth:true});
+ stale(32);
+ assert.equal(engine.isProgrammatic(),true,'stale immediate callback must not release smooth ownership');
+ engine.stabilize(el);
+ assert.equal(engine.isProgrammatic(),true);
+});
+
 test('programmatic bottom and message jumps are centralized and reduced-motion aware',()=>{
  const {engine}=runtime(),el=fakeList(30);
  engine.toBottom(el,{reason:'new-message'});
