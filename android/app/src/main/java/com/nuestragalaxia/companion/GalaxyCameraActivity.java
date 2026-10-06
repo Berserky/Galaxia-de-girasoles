@@ -8,6 +8,7 @@ import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.ImageDecoder;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
@@ -249,7 +250,7 @@ public final class GalaxyCameraActivity extends FragmentActivity {
             root.addView(video,new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
         }else{
             ImageView image=new ImageView(this);image.setScaleType(ImageView.ScaleType.FIT_CENTER);image.setContentDescription("Vista previa de la foto");
-            Bitmap bitmap=decodeScaled(capturedFile,2048);if(bitmap!=null)image.setImageBitmap(bitmap);else image.setImageURI(uri);
+            Bitmap bitmap=decodeScaled(uri,capturedFile,2048);if(bitmap!=null)image.setImageBitmap(bitmap);else image.setImageURI(uri);
             root.addView(image,new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
         }
 
@@ -327,8 +328,19 @@ public final class GalaxyCameraActivity extends FragmentActivity {
 
     private static String formatDuration(long ms){long total=Math.max(0,ms/1000),m=total/60,s=total%60;return String.format(java.util.Locale.ROOT,"%02d:%02d",m,s);}
 
-    private static Bitmap decodeScaled(File file,int max){
+    private Bitmap decodeScaled(Uri uri,File file,int max){
         try{
+            if(android.os.Build.VERSION.SDK_INT>=28){
+                ImageDecoder.Source source=ImageDecoder.createSource(getContentResolver(),uri);
+                return ImageDecoder.decodeBitmap(source,(decoder,info,src)->{
+                    int w=info.getSize().getWidth(),h=info.getSize().getHeight();
+                    if(w>max||h>max){
+                        double scale=Math.min((double)max/Math.max(1,w),(double)max/Math.max(1,h));
+                        decoder.setTargetSize(Math.max(1,(int)Math.round(w*scale)),Math.max(1,(int)Math.round(h*scale)));
+                    }
+                    decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
+                });
+            }
             BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;BitmapFactory.decodeFile(file.getAbsolutePath(),bounds);
             int sample=1;while(bounds.outWidth/sample>max||bounds.outHeight/sample>max)sample*=2;
             BitmapFactory.Options options=new BitmapFactory.Options();options.inSampleSize=Math.max(1,sample);return BitmapFactory.decodeFile(file.getAbsolutePath(),options);
