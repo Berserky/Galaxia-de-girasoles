@@ -334,7 +334,7 @@ public class GalaxyDeviceClosureTest {
         awaitJs("(document.querySelector('#chatForm textarea')?.value||'').includes('_IME')");
         assertEquals("true", js("ensureChatComposer().snapshot().keyboard.open"));
 
-        int sentBefore = backend.sentCount();
+        long sentBefore = backend.sentCount();
         runJs("const t=document.querySelector('#chatForm textarea');t.value='Phase4 once';t.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#chatForm').requestSubmit();document.querySelector('#chatForm')?.requestSubmit();");
         awaitCondition(() -> backend.sentCount() == sentBefore + 1, UI_TIMEOUT_MS);
         awaitJs("(document.querySelector('#chatForm textarea')?.value||'')===''");
