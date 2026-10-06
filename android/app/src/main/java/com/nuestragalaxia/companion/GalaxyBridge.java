@@ -40,6 +40,7 @@ public final class GalaxyBridge {
                 case "syncDriveFolder" -> syncDriveFolder(requestId);
                 case "disconnectDriveFolder" -> disconnectDriveFolder(requestId);
                 case "startVoiceRecording" -> startVoiceRecording(requestId);
+                case "getVoiceRecordingLevel" -> getVoiceRecordingLevel(requestId);
                 case "stopVoiceRecording" -> stopVoiceRecording(requestId);
                 case "pauseVoiceRecording" -> pauseVoiceRecording(requestId);
                 case "resumeVoiceRecording" -> resumeVoiceRecording(requestId);
@@ -113,6 +114,7 @@ public final class GalaxyBridge {
     public void disconnectDriveFolder(String requestId){ activity.disconnectDriveFolder(requestId); }
 
     public void startVoiceRecording(String requestId){ activity.startVoiceRecording(requestId); }
+    public void getVoiceRecordingLevel(String requestId){ activity.getVoiceRecordingLevel(requestId); }
     public void stopVoiceRecording(String requestId){ activity.stopVoiceRecording(requestId); }
     public void pauseVoiceRecording(String requestId){ activity.pauseVoiceRecording(requestId); }
     public void resumeVoiceRecording(String requestId){ activity.resumeVoiceRecording(requestId); }
