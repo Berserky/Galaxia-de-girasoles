@@ -14,8 +14,16 @@ import org.json.JSONArray;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
+import java.util.Set;
 
 public final class MobileApiClient {
+    public interface UploadObserver {
+        boolean isCancelled();
+        void onProgress(long sent,long total);
+    }
+    public static final class UploadCancelledException extends IOException {
+        UploadCancelledException(){super("Upload cancelado.");}
+    }
     private MobileApiClient(){}
 
     private static final int MAX_JSON_RESPONSE_BYTES=4*1024*1024;
@@ -108,12 +116,17 @@ public final class MobileApiClient {
     }
 
     public static JSONObject upload(Context context,String token,Uri uri,String kind) throws Exception {
+        return upload(context,token,uri,kind,null);
+    }
+
+    public static JSONObject upload(Context context,String token,Uri uri,String kind,UploadObserver observer) throws Exception {
         long limit=uploadLimit(kind);
         if(limit<0)throw new IOException("Tipo de archivo no válido.");
+        if(observer!=null&&observer.isCancelled())throw new UploadCancelledException();
         UploadSource source;
         try{source=prepareUpload(context,uri,kind,limit);}
         catch(SecurityException e){throw new IOException("Android perdió el permiso para leer este archivo. Selecciónalo de nuevo.",e);}
-        try{return uploadWithRetry(token,kind,source,limit);}
+        try{return uploadWithRetry(token,kind,source,limit,observer);}
         finally{source.cleanup();}
     }
 
@@ -132,16 +145,18 @@ public final class MobileApiClient {
         }
         if(prefix.length==0)throw new IOException("El archivo está vacío.");
         String actual=MediaSniffer.sniff(prefix,declared);
-        if(declared==null||declared.isBlank()||"application/octet-stream".equalsIgnoreCase(declared)){
-            declared=actual==null||actual.isBlank()?"application/octet-stream":actual;
-        }
-
+        boolean actualKnown=actual!=null&&!actual.isBlank()&&!"application/octet-stream".equalsIgnoreCase(actual);
+        String effective=actualKnown?actual:(declared==null||declared.isBlank()?"application/octet-stream":declared);
         boolean photoKind="photo".equals(kind)||"chat-photo".equals(kind);
-        if(photoKind&&(MediaSniffer.isHeif(actual)||MediaSniffer.isHeif(declared))){
+        if(photoKind&&!Set.of("image/jpeg","image/png","image/webp","image/heic","image/heif").contains(effective))
+            throw new IOException("El contenido no corresponde a una imagen permitida.");
+        if("chat-video".equals(kind)&&!Set.of("video/mp4","video/webm").contains(effective))
+            throw new IOException("El contenido no corresponde a un video permitido.");
+        if(photoKind&&MediaSniffer.isHeif(effective)){
             File jpeg=transcodeHeifToJpeg(context,uri,limit);
             return UploadSource.file(jpeg,"image/jpeg",replaceExtension(name,"jpg"),true);
         }
-        return UploadSource.uri(context,uri,declared,name,length);
+        return UploadSource.uri(context,uri,effective,name,length);
     }
 
     private static File transcodeHeifToJpeg(Context context,Uri uri,long limit) throws Exception {
@@ -197,11 +212,13 @@ public final class MobileApiClient {
         return value;
     }
 
-    private static JSONObject uploadWithRetry(String token,String kind,UploadSource source,long limit) throws Exception {
+    private static JSONObject uploadWithRetry(String token,String kind,UploadSource source,long limit,UploadObserver observer) throws Exception {
         String uploadId=java.util.UUID.randomUUID().toString();
         Exception last=null;
         for(int attempt=0;attempt<2;attempt++){
-            try{return uploadOnce(token,kind,source,limit,uploadId);}
+            if(observer!=null&&observer.isCancelled())throw new UploadCancelledException();
+            try{return uploadOnce(token,kind,source,limit,uploadId,observer);}
+            catch(UploadCancelledException e){throw e;}
             catch(ApiClient.ApiException e){
                 last=e;
                 if(e.status<500&&e.status!=408&&e.status!=425&&e.status!=429)throw e;
@@ -213,7 +230,7 @@ public final class MobileApiClient {
         throw last==null?new IOException("No pudimos completar la subida."):last;
     }
 
-    private static JSONObject uploadOnce(String token,String kind,UploadSource source,long limit,String uploadId) throws Exception {
+    private static JSONObject uploadOnce(String token,String kind,UploadSource source,long limit,String uploadId,UploadObserver observer) throws Exception {
         HttpURLConnection c=(HttpURLConnection)new URL(BuildConfig.EDGE_URL).openConnection();
         c.setRequestMethod("POST");
         c.setConnectTimeout(20000);
@@ -234,9 +251,11 @@ public final class MobileApiClient {
             try(InputStream in=source.open();OutputStream out=c.getOutputStream()){
                 byte[] buffer=new byte[8192];int read;
                 while((read=in.read(buffer))!=-1){
+                    if(observer!=null&&observer.isCancelled())throw new UploadCancelledException();
                     sent+=read;
                     if(sent>limit)throw new IOException("El archivo supera el límite permitido.");
                     out.write(buffer,0,read);
+                    if(observer!=null)observer.onProgress(sent,source.length);
                 }
             }
             if(sent<1)throw new IOException("El archivo está vacío.");
