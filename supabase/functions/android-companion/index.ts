@@ -1568,6 +1568,25 @@ async function chatEdit(req:Request,body:any){
  await chatSignal(d,target,id);
  return json({message:(await chatHydrate([updated],person))[0]});
 }
+async function chatMediaDiscard(req:Request,body:any){
+ const d=await device(req),person=String(d.person);
+ const values=Array.isArray(body?.paths)?body.paths:[];
+ const paths:string[]=Array.from(new Set<string>(values.map((value:any)=>String(text(value,400))).filter((value:string)=>Boolean(value)))).slice(0,20);
+ let removed=0,skipped=0;
+ for(const path of paths){
+  if(!path.startsWith(person+"/")||path.includes("..")||path.startsWith("__backup/")){skipped++;continue;}
+  const [primary,thumb]=await Promise.all([
+   db.from("galaxy_chat_attachments").select("id",{count:"exact",head:true}).eq("bucket","galaxy-chat-media").eq("path",path),
+   db.from("galaxy_chat_attachments").select("id",{count:"exact",head:true}).eq("bucket","galaxy-chat-media").eq("thumbnail_path",path)
+  ]);
+  if(primary.error)throw primary.error;if(thumb.error)throw thumb.error;
+  if(Number(primary.count||0)>0||Number(thumb.count||0)>0){skipped++;continue;}
+  const {error}=await db.storage.from("galaxy-chat-media").remove([path]);
+  if(error)throw error;removed++;
+ }
+ return json({ok:true,removed,skipped});
+}
+
 async function chatDeleteAttachments(messageId:string){
  const attachments=await ok(db.from("galaxy_chat_attachments").select("id,bucket,path,thumbnail_path").eq("message_id",messageId).limit(50));
  for(const a of attachments||[]){
@@ -4172,6 +4191,7 @@ Deno.serve(async req=>{
     if(action==="mobile-state")return await mobileState(req);
     if(action==="chat-state")return await chatState(req,body);
     if(action==="chat-send")return await chatSend(req,body);
+    if(action==="chat-media-discard")return await chatMediaDiscard(req,body);
     if(action==="chat-poll")return await chatPoll(req,body);
     if(action==="chat-checklist")return await chatChecklist(req,body);
     if(action==="chat-read")return await chatRead(req,body);

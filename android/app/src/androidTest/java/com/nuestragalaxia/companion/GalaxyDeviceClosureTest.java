@@ -508,14 +508,11 @@ public class GalaxyDeviceClosureTest {
         assertFalse("File picker did not leave app foreground.", device.getCurrentPackageName().equals(pkg));
         device.pressBack();
 
-        boolean hasCamera = !pm.queryIntentActivities(new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE),
-                PackageManager.MATCH_DEFAULT_ONLY).isEmpty();
-        if (hasCamera) {
-            scenario.onActivity(a -> a.captureChatPhoto("qa-camera"));
-            SystemClock.sleep(800);
-            assertFalse("Camera intent did not leave app foreground.", device.getCurrentPackageName().equals(pkg));
-            device.pressBack();
-        }
+        scenario.onActivity(a -> a.captureChatPhoto("qa-camera"));
+        SystemClock.sleep(900);
+        assertEquals("Integrated chat camera must remain inside Nuestra Galaxia.", pkg, device.getCurrentPackageName());
+        String top = shell("dumpsys activity activities | grep -m1 -E 'mResumedActivity|topResumedActivity'");
+        if (top.contains("GalaxyCameraActivity")) device.pressBack();
 
         // Microphone path is executed only when the emulator exposes an input source.
         scenario.onActivity(a -> a.startVoiceRecording("qa-mic"));

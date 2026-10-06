@@ -52,7 +52,7 @@ const chatMessageEngine=window.GalaxyMessageEngine.create({pageSize:60,maxCache:
 const chatScrollEngine=window.GalaxyScrollEngine.create({bottomTolerance:110,memoryKey:'galaxy.chat.scroll.position.v1'});
 const chatComposer=window.GalaxyChatComposer.create({draftPrefix:'nuestra-galaxia.chat-draft.v4',maxHeight:120,minHeight:44,doubleTapGuardMs:280});
 let chatResizeObserver=null,chatVirtualRaf=0,chatMeasureRaf=0,chatRenderGeneration=0,chatRestoreOnRender=false,chatResumeRefreshPromise=null;
-let chatAttachmentsDraft=[],chatNewCount=0,chatResumeUnread=0,chatResumeNewCount=0,chatPinIndex=0,chatTypingTimer=null,chatPresenceTimer=null,chatDeliveryEngine=null,chatRecentSyncIds=new Map(),chatSyncInFlight=new Set(),chatInitialScroll=true,chatVoiceState={recording:false,paused:false,ready:false,durationMs:0},chatHoldRecord=null;
+let chatAttachmentsDraft=[],chatMediaUploadState={state:'idle',index:0,count:0,sent:0,total:0},chatNewCount=0,chatResumeUnread=0,chatResumeNewCount=0,chatPinIndex=0,chatTypingTimer=null,chatPresenceTimer=null,chatDeliveryEngine=null,chatRecentSyncIds=new Map(),chatSyncInFlight=new Set(),chatInitialScroll=true,chatVoiceState={recording:false,paused:false,ready:false,durationMs:0},chatHoldRecord=null;
 let welcomeStep=0,welcomePreview=false,welcomeGift=true,welcomeEntering=false,tourStep=-1;
 const welcomeMusic=new Audio('../musica.mp3');welcomeMusic.loop=true;welcomeMusic.volume=.32;
 const globalPlayer=document.getElementById('globalPlayer'),providerPlayer=document.getElementById('providerPlayer');
@@ -113,6 +113,13 @@ window.GalaxyNative={
    if(name==='update'){updateState=data;renderUpdateOnly();}
    if(name==='deep-link'){pendingDeepLink=data;if(cloud)setTimeout(()=>consumeDeepLink(),0);}
    if(name==='chat-sync'&&native.paired){consumeChatSync(String(data.entityId||'')).catch(()=>{});}
+   if(name==='chat-media-upload'){
+    const previous=chatMediaUploadState?.state||'idle',next=String(data.state||'idle');
+    chatMediaUploadState={state:next,index:Number(data.index||0),count:Number(data.count||0),sent:Number(data.sent||0),total:Number(data.total||0)};
+    if(['preparing','uploading'].includes(next)&&!['preparing','uploading'].includes(previous))setChatPresence('UPLOADING_MEDIA');
+    if(['ready','failed','cancelled'].includes(next)&&['preparing','uploading'].includes(previous))setChatPresence('ONLINE');
+    if(view==='chat')chatRenderComposer();
+   }
    if(name==='voice'&&data.ready&&modal.open){stopVoiceTimer();voiceRecording=false;voiceReady=true;const status=modal.querySelector('[data-role="voice-status"]');if(status)status.textContent='Grabación lista. Escúchala antes de guardar.';modal.querySelector('[data-action="voice-record-stop"]')?.setAttribute('hidden','');modal.querySelector('[data-action="voice-preview"]')?.removeAttribute('hidden');modal.querySelector('[data-action="voice-discard"]')?.removeAttribute('hidden');modal.querySelector('[data-action="voice-record-start"]')?.removeAttribute('hidden');if(voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}}
    if(name==='voice-preview-ended'&&voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}
  },
@@ -1661,7 +1668,16 @@ function chatHandleScroll(el){
 }
 function chatDraftAttachmentMarkup(){
  if(!chatAttachmentsDraft.length)return'';
- return '<div class="chat-draft-media">'+chatAttachmentsDraft.map((a,i)=>'<div><span>'+ico(a.kind==='photo'?'image':a.kind==='video'?'video':a.kind==='audio'?'mic':'file')+'</span><small>'+esc(a.name||a.kind)+'</small><button type="button" data-action="chat-attachment-remove" data-index="'+i+'" aria-label="Quitar adjunto">'+ico('x')+'</button></div>').join('')+'</div>';
+ const duration=a=>a.durationMs?Math.max(1,Math.round(Number(a.durationMs)/1000))+' s':'';
+ const dims=a=>a.width&&a.height?Number(a.width)+'×'+Number(a.height):'';
+ return '<div class="chat-draft-media">'+chatAttachmentsDraft.map((a,i)=>'<div><span>'+ico(a.kind==='photo'?'image':a.kind==='video'?'video':a.kind==='audio'?'mic':'file')+'</span><small>'+esc(a.name||a.kind)+(dims(a)?' · '+esc(dims(a)):'')+(duration(a)?' · '+esc(duration(a)):'')+'</small><button type="button" data-action="chat-attachment-remove" data-index="'+i+'" aria-label="Quitar adjunto">'+ico('x')+'</button></div>').join('')+'</div>';
+}
+function chatMediaUploadMarkup(){
+ const s=chatMediaUploadState||{},active=['preparing','uploading'].includes(s.state);
+ if(!active)return'';
+ const known=s.total>0,pct=known?Math.max(0,Math.min(100,Math.round((s.sent/s.total)*100))):null;
+ const label=s.state==='preparing'?'Preparando multimedia…':'Subiendo '+Math.max(1,s.index)+' de '+Math.max(1,s.count);
+ return '<div class="chat-media-upload" role="status" aria-live="polite"><span>'+ico('upload')+'</span><div><b>'+esc(label)+'</b>'+(known?'<progress max="100" value="'+pct+'" aria-label="Progreso de subida">'+pct+'%</progress>':'<small>Validando y preparando de forma segura</small>')+'</div><button type="button" data-action="chat-media-upload-cancel" aria-label="Cancelar subida">'+ico('x')+'</button></div>';
 }
 function chatPinnedBar(){
  const ids=chatState?.pinnedIds||[];if(!ids.length)return'';
@@ -1674,7 +1690,7 @@ function chatComposerMarkup(){
  const composer=ensureChatComposer(),state=composer.snapshot(),reply=state.replyTarget,mode=composer.rightMode(chatAttachmentsDraft.length);
  return '<form id="chatForm" class="chat-composer chat-composer-v2" autocomplete="off">'+
  (reply?'<div class="chat-compose-reply chat-compose-reply-v2"><span class="chat-reply-icon">'+ico('reply')+'</span><span class="chat-reply-content"><b>'+esc(chatOwn(reply)?'Tú':partnerName())+'</b><small>'+esc(chatReplyFragment(reply))+'</small></span><button type="button" data-action="chat-reply-cancel" aria-label="Cancelar respuesta">'+ico('x')+'</button></div>':'')+
- chatDraftAttachmentMarkup()+
+ chatDraftAttachmentMarkup()+chatMediaUploadMarkup()+
  '<div class="chat-compose-row"><button class="chat-plus" type="button" data-action="chat-attach-open" aria-label="Adjuntar">'+ico('plus')+'</button><textarea name="body" maxlength="4000" rows="1" placeholder="Escribe un mensaje…" aria-label="Escribe un mensaje" inputmode="text" enterkeyhint="enter" autocapitalize="sentences" spellcheck="true">'+esc(state.text)+'</textarea>'+
  (mode==='send'?'<button class="chat-send composer-right" type="submit" aria-label="Enviar">'+ico('send')+'</button>':'<button class="chat-send composer-right chat-mic-hold" type="button" data-action="chat-hold-record" aria-label="Mantén pulsado para grabar">'+ico('mic')+'</button>')+
  '</div><div class="chat-hold-hint" aria-live="polite" hidden></div></form>';
@@ -2100,7 +2116,7 @@ function openChatAttachMenu(){
  ensureChatComposer().setAttachmentIntent('launcher');
  showBottomSheet('Adjuntar','<div class="chat-attachment-sheet-grid">'+
  '<button type="button" data-action="chat-attach-camera">'+ico('camera')+'<span>Cámara</span></button>'+
- '<button type="button" data-action="chat-attach-gallery">'+ico('images')+'<span>Fotos</span></button>'+
+ '<button type="button" data-action="chat-attach-gallery">'+ico('images')+'<span>Fotos y videos</span></button>'+
  '<button type="button" data-action="chat-attach-video-camera">'+ico('video')+'<span>Video</span></button>'+
  '<button type="button" data-action="chat-attach-file">'+ico('paperclip')+'<span>Archivo</span></button>'+
  '<button type="button" data-action="chat-attach-location">'+ico('map-pin')+'<span>Ubicación</span></button>'+
@@ -2167,19 +2183,22 @@ function openChatPermissionHelp(kind){
 }
 function normalizeChatUpload(upload,kind,durationMs=null,mediaQuality='optimized'){
  const mime=String(upload?.mime||'').toLowerCase(),browserImage=mime.startsWith('image/')&&!['image/heic','image/heif'].includes(mime);
- const resolvedKind=kind==='file'?(browserImage?'photo':mime.startsWith('video/')?'video':mime.startsWith('audio/')?'audio':'file'):kind;
- return {kind:resolvedKind,bucket:upload?.bucket||'galaxy-chat-media',path:upload.path,mime,name:upload.name||upload.originalName||resolvedKind,size:Number(upload.size||0),durationMs:durationMs||upload.durationMs||null,url:upload.url||'',waveform:Array.isArray(upload?.waveform)?upload.waveform:[],mediaQuality,videoMessage:upload?.videoMessage===true,gif:upload?.gif===true,thumbnailPath:upload?.thumbnailPath||null};
+ const resolvedKind=kind==='file'?(browserImage?'photo':mime.startsWith('video/')?'video':mime.startsWith('audio/')?'audio':'file'):(kind==='media'?(mime.startsWith('video/')?'video':'photo'):kind);
+ return {kind:resolvedKind,bucket:upload?.bucket||'galaxy-chat-media',path:upload.path,mime,name:upload.name||upload.originalName||resolvedKind,size:Number(upload.size||0),width:Number(upload.width||0)||null,height:Number(upload.height||0)||null,rotation:Number(upload.rotation||0)||0,sourceMime:String(upload.sourceMime||''),durationMs:durationMs||upload.durationMs||null,url:upload.url||'',waveform:Array.isArray(upload?.waveform)?upload.waveform:[],mediaQuality,videoMessage:upload?.videoMessage===true,gif:upload?.gif===true,thumbnailPath:upload?.thumbnailPath||null};
 }
 async function addChatNativeMedia(method,args,kind){
  try{
   ensureChatComposer().setAttachmentIntent(kind||'file');
-  setChatPresence('UPLOADING_MEDIA');
   const result=await GalaxyNative.call(method,...(args||[]));
   const uploads=Array.isArray(result?.items)?result.items:[result];
   for(const item of uploads)if(item?.path)chatAttachmentsDraft.push(normalizeChatUpload(item,kind));
-  closeModal();ensureChatComposer().setAttachmentIntent(null);chatRenderComposer({focus:true});setChatPresence('ONLINE');
+  const caption=String(result?.caption||'').trim(),composer=ensureChatComposer(),existing=composer.snapshot().text.trim();
+  if(caption)composer.setText(existing&&existing!==caption?existing+'\n'+caption:caption);
+  chatMediaUploadState={state:'idle',index:0,count:0,sent:0,total:0};
+  closeModal();composer.setAttachmentIntent(null);chatRenderComposer({focus:true});setChatPresence('ONLINE');
  }catch(e){
   setChatPresence('ONLINE');
+  chatMediaUploadState={state:'idle',index:0,count:0,sent:0,total:0};
   const message=String(e?.message||'');
   if(message.includes('PERMISSION_CAMERA')||message.includes('PERMISSION_MICROPHONE')){openChatPermissionHelp(kind==='video'?'video':'photo');return;}
   if(/cancelad[ao]/i.test(message)){closeModal();return;}
@@ -2731,9 +2750,14 @@ document.addEventListener('click',async e=>{
   if(a==='chat-camera-open'){openChatCameraMenu();return;}
   if(a==='chat-permission-retry'){const kind=btn.dataset.kind==='video'?'video':'photo';closeModal();await addChatNativeMedia(kind==='video'?'captureChatVideo':'captureChatPhoto',[],kind);return;}
   if(a==='chat-open-app-settings'){await GalaxyNative.call('openAppSettings');return;}
-  if(a==='chat-attachment-remove'){chatAttachmentsDraft.splice(Number(btn.dataset.index),1);chatRenderComposer({focus:true});return;}
+  if(a==='chat-media-upload-cancel'){btn.disabled=true;await GalaxyNative.call('cancelChatMediaUpload').catch(()=>{});return;}
+  if(a==='chat-attachment-remove'){
+   const index=Number(btn.dataset.index),item=chatAttachmentsDraft[index];
+   if(item?.path)api('chat-media-discard',{paths:[item.path,item.thumbnailPath].filter(Boolean)}).catch(()=>{});
+   chatAttachmentsDraft.splice(index,1);chatRenderComposer({focus:true});return;
+  }
   if(a==='chat-attach-camera'){ensureChatComposer().setAttachmentIntent('camera');await addChatNativeMedia('captureChatPhoto',[],'photo');return;}
-  if(a==='chat-attach-gallery'){ensureChatComposer().setAttachmentIntent('gallery');await addChatNativeMedia('pickChatPhotos',[],'photo');return;}
+  if(a==='chat-attach-gallery'){ensureChatComposer().setAttachmentIntent('gallery');await addChatNativeMedia('pickChatPhotos',[],'media');return;}
   if(a==='chat-attach-video-camera'){ensureChatComposer().setAttachmentIntent('video');await addChatNativeMedia('captureChatVideo',[],'video');return;}
   if(a==='chat-attach-file'){ensureChatComposer().setAttachmentIntent('file');await addChatNativeMedia('pickMedia',['chat-file'],'file');return;}
   if(a==='chat-attach-location'){await openChatLocationMenu();return;}
