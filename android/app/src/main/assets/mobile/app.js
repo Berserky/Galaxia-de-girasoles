@@ -2643,8 +2643,8 @@ document.addEventListener('click',async e=>{
   if(a==='chat-favorite-toggle'){await api('chat-favorite',{id:btn.dataset.id,saved:btn.dataset.saved!=='true'});closeModal();await loadChat({quiet:true,force:true});return;}
   if(a==='chat-react-menu'){const m=(chatState?.messages||[]).find(x=>String(x.id)===String(btn.dataset.id)),mine=(m?.reactions||[]).find(r=>String(r.person)===String(cloud.person))?.emoji||'',emoji=mine===btn.dataset.emoji?'':btn.dataset.emoji;await api('chat-react',{id:btn.dataset.id,emoji});if(modal.open)closeModal();await loadChat({quiet:true,force:true});return;}
   if(a==='chat-react-quick'){const m=(chatState?.messages||[]).find(x=>String(x.id)===String(btn.dataset.id)),mine=(m?.reactions||[]).find(r=>String(r.person)===String(cloud.person))?.emoji||'',emoji=mine===btn.dataset.emoji?'':btn.dataset.emoji;await api('chat-react',{id:btn.dataset.id,emoji});await loadChat({quiet:true,force:true});return;}
-  if(a==='chat-retry'){const rows=readChatOutbox(),i=rows.findIndex(x=>String(x.client_id)===String(btn.dataset.clientId));if(i>=0){rows[i]._localState='PENDING';writeChatOutbox(rows);chatMessageEngine.resetWindow(chatRows().length,{align:'end'});chatRenderMessages({scroll:'bottom'});await flushChatOutbox({retryFailed:true});}return;}
-  if(a==='chat-local-delete'){writeChatOutbox(readChatOutbox().filter(x=>String(x.client_id)!==String(btn.dataset.clientId)));render();return;}
+  if(a==='chat-retry'){const retried=await chatDeliveryEngine.retry(btn.dataset.clientId);if(retried&&view==='chat')await loadChat({quiet:true,force:true,present:true});return;}
+  if(a==='chat-local-delete'){chatDeliveryEngine.remove(btn.dataset.clientId,{reason:'local-delete'});if(view==='chat')chatRenderMessages({scroll:'preserve'});return;}
   if(a==='chat-attach-open'){openChatAttachMenu();return;}
   if(a==='chat-camera-open'){openChatCameraMenu();return;}
   if(a==='chat-permission-retry'){const kind=btn.dataset.kind==='video'?'video':'photo';closeModal();await addChatNativeMedia(kind==='video'?'captureChatVideo':'captureChatPhoto',[],kind);return;}
