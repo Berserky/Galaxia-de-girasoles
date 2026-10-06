@@ -24,8 +24,9 @@ function deliveryRuntime({seed=[],online=true,send=null,sharedServer=null,user='
   try{
    const key=user+'|'+item.client_id;
    if(server.has(key))return {message:server.get(key),idempotent:true};
-   const row={...item,id:'s-'+item.client_id,client_id:item.client_id,sender_person:user,server_seq:++seq,created_at:new Date().toISOString(),status:'SENT'};
-   server.set(key,row);if(sharedServer)sharedServer.seq=seq;
+   const nextSeq=sharedServer?++sharedServer.seq:++seq;
+   const row={...item,id:'s-'+item.client_id,client_id:item.client_id,sender_person:user,server_seq:nextSeq,created_at:new Date().toISOString(),status:'SENT'};
+   server.set(key,row);
    return {message:row,idempotent:false};
   }finally{active--;}
  };
@@ -150,7 +151,7 @@ test('15. out-of-order confirmed events are sorted deterministically by server_s
  const e=messageEngine(),state={messages:[]};
  const a={id:'a',client_id:'ca',server_seq:15,sender_person:'0'},b={id:'b',client_id:'cb',server_seq:13,sender_person:'1'},c={id:'c',client_id:'cc',server_seq:14,sender_person:'0'};
  const merged=e.applySingle(e.applySingle(e.applySingle(state,a),b),c);
- assert.deepEqual(merged.messages.map(x=>x.server_seq),[13,14,15]);
+ assert.deepEqual(Array.from(merged.messages,x=>x.server_seq),[13,14,15]);
 });
 
 test('16. burst of 20 messages is backpressured through one sequential sender',async()=>{
@@ -186,7 +187,7 @@ test('20. pagination plus realtime keeps server_seq order and reconciles optimis
  let state=e.applyPage({messages:[]},{messages:Array.from({length:60},(_,i)=>({id:'m'+(i+61),client_id:'c'+(i+61),server_seq:i+61,sender_person:String(i%2)})),nextBeforeSeq:61},{direction:'latest'});
  state=e.applyPage(state,{messages:Array.from({length:60},(_,i)=>({id:'m'+(i+1),client_id:'c'+(i+1),server_seq:i+1,sender_person:String(i%2)})),nextBeforeSeq:1},{direction:'older'});
  state=e.applySingle(state,{id:'m121',client_id:cid(20),server_seq:121,sender_person:'1'});
- const seqs=state.messages.map(x=>x.server_seq);assert.deepEqual(seqs,[...seqs].sort((a,b)=>a-b));assert.equal(new Set(seqs).size,seqs.length);
+ const seqs=Array.from(state.messages,x=>x.server_seq);assert.deepEqual(seqs,[...seqs].sort((a,b)=>a-b));assert.equal(new Set(seqs).size,seqs.length);
  const h=deliveryRuntime({seed:[local(20)],online:false});assert.equal(h.engine.reconcile({client_id:cid(20),server_seq:121}),true);
 });
 
@@ -194,7 +195,7 @@ test('50 repeated/out-of-order realtime events collapse to unique deterministic 
  const e=messageEngine();let state={messages:[]};
  const events=Array.from({length:50},(_,i)=>({id:'rt'+(i%25),client_id:'rtc'+(i%25),server_seq:(i%25)+1,sender_person:String(i%2)})).reverse();
  for(const row of events)state=e.applySingle(state,row);
- assert.equal(state.messages.length,25);assert.deepEqual(state.messages.map(x=>x.server_seq),Array.from({length:25},(_,i)=>i+1));
+ assert.equal(state.messages.length,25);assert.deepEqual(Array.from(state.messages,x=>x.server_seq),Array.from({length:25},(_,i)=>i+1));
 });
 
 test('transient retry uses bounded exponential backoff while permanent errors schedule none',async()=>{
