@@ -73,17 +73,8 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
           script: |
-            gradle -p android --no-daemon connectedDebugAndroidTest \
-              -PQA_EDGE_URL=http://127.0.0.1:18765 \
-              -PQA_SUPABASE_PUBLISHABLE_KEY=qa_phase10 \
-              -PQA_APPLICATION_SUFFIX=.phase10qa \
-              '-Pandroid.testInstrumentationRunnerArguments.class=com.nuestragalaxia.companion.GalaxyDeviceClosureTest#chatPhase10ProcessRecreation_restoresDraftOutboxAndAttachments'
-            gradle -p android --no-daemon connectedDebugAndroidTest \
-              -PQA_EDGE_URL=http://127.0.0.1:18765 \
-              -PQA_SUPABASE_PUBLISHABLE_KEY=qa_phase10 \
-              -PQA_APPLICATION_SUFFIX=.phase10qa \
-              '-Pandroid.testInstrumentationRunnerArguments.phase10SoakMs=60000' \
-              '-Pandroid.testInstrumentationRunnerArguments.class=com.nuestragalaxia.companion.GalaxyDeviceClosureTest#chatPhase9MediaPerformance_realWebView20kLazyCacheAndMemoryPressure,com.nuestragalaxia.companion.GalaxyDeviceClosureTest#chatPhase10AndroidPerformance_longSessionLifecycleAndMemoryStayBounded'
+            gradle -p android --no-daemon connectedDebugAndroidTest -PQA_EDGE_URL=http://127.0.0.1:18765 -PQA_SUPABASE_PUBLISHABLE_KEY=qa_phase10 -PQA_APPLICATION_SUFFIX=.phase10qa '-Pandroid.testInstrumentationRunnerArguments.class=com.nuestragalaxia.companion.GalaxyDeviceClosureTest#chatPhase10ProcessRecreation_restoresDraftOutboxAndAttachments'
+            gradle -p android --no-daemon connectedDebugAndroidTest -PQA_EDGE_URL=http://127.0.0.1:18765 -PQA_SUPABASE_PUBLISHABLE_KEY=qa_phase10 -PQA_APPLICATION_SUFFIX=.phase10qa '-Pandroid.testInstrumentationRunnerArguments.phase10SoakMs=60000' '-Pandroid.testInstrumentationRunnerArguments.class=com.nuestragalaxia.companion.GalaxyDeviceClosureTest#chatPhase9MediaPerformance_realWebView20kLazyCacheAndMemoryPressure,com.nuestragalaxia.companion.GalaxyDeviceClosureTest#chatPhase10AndroidPerformance_longSessionLifecycleAndMemoryStayBounded'
       - uses: actions/upload-artifact@v7
         if: always()
         with:
