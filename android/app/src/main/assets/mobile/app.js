@@ -1778,7 +1778,7 @@ async function consumeChatSync(id){
  if(chatSyncInFlight.has(messageId))return;
  chatSyncInFlight.add(messageId);
  try{
-  if(view==='chat')await loadChat({quiet:true,syncId:messageId});
+  if(view==='chat')await loadChat({quiet:true,syncId:id});
   else await refreshChatBadge();
   chatRecentSyncIds.set(messageId,Date.now());
   if(chatRecentSyncIds.size>120){
@@ -1851,7 +1851,17 @@ function createChatDeliveryEngine(){
 }
 chatDeliveryEngine=createChatDeliveryEngine();
 function patchLocalMessage(clientId,patch){return chatDeliveryEngine.patch(clientId,patch,'patch');}
-async function flushChatOutbox({retryFailed=false}={}){return chatDeliveryEngine.flush({retryFailed});}
+async function flushChatOutbox({retryFailed=false}={}){
+ const result=await chatDeliveryEngine.flush({retryFailed});
+ if(view==='chat'&&chatNearBottom()){
+  const rows=chatRows(),range=chatMessageEngine.range(rows);
+  if(range.end<rows.length){
+   chatMessageEngine.resetWindow(chatRows().length,{align:'end'});
+   chatRenderMessages({scroll:'bottom'});
+  }
+ }
+ return result;
+}
 function queueChatMessage({body='',messageType='text',attachments=[],attachment={},entityRef=null,card=null,scheduledAt=null,silent=false,ttlSeconds=null,viewOnce=false,effect=null}={}){
  const text=String(body||'').trim();
  if(!text&&messageType==='text'&&!attachments.length)return;

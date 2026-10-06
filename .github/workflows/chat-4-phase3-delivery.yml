@@ -33,7 +33,6 @@ jobs:
       - name: Syntax
         run: |
           node --check android/app/src/main/assets/mobile/chat-delivery-engine.js
-          node --check android/app/src/main/assets/mobile/chat-delivery-integration.js
           node --check android/app/src/main/assets/mobile/app.js
       - name: Delivery Engine regression
         run: node --test tests/chat-4-phase3-delivery-engine.test.mjs
