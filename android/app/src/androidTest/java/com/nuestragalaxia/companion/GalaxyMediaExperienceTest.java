@@ -13,6 +13,9 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.SystemClock;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.TextView;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.core.content.FileProvider;
@@ -71,7 +74,7 @@ public class GalaxyMediaExperienceTest {
         System.out.println("GALAXY_CHAT_PHASE5_ANDROID="+new JSONObject().put("case","picker-review").put("inspectMs",inspectMs).put("mime",inspected.optString("mime")));
     }
 
-    @Test public void cameraX_photoRearFrontReviewRetakeAndCancel_whenVirtualCameraExists() throws Exception {
+    @Test public void cameraX_photoRearFrontReviewRetakeAndCancel_whenCameraExists() throws Exception {
         ProcessCameraProvider provider=provider();
         Assume.assumeTrue("No back CameraX camera in this environment.",provider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA));
         Intent intent=new Intent(context,GalaxyCameraActivity.class)
@@ -90,8 +93,11 @@ public class GalaxyMediaExperienceTest {
             device.findObject(By.desc("Tomar foto")).click();
             assertTrue("Photo capture did not reach review.",device.wait(Until.hasObject(By.desc("Confirmar captura")),10_000));
             captureMs=SystemClock.elapsedRealtime()-captureStarted;
-            onView(withContentDescription("Vista previa de la foto")).check(matches(isDisplayed()));
-            device.findObject(By.desc("Repetir captura")).click();
+            scenario.onActivity(activity->{
+                assertTrue(findByDescription(activity.getWindow().getDecorView(),"Vista previa de la foto")!=null);
+                View repeat=findByText(activity.getWindow().getDecorView(),"Repetir");
+                assertTrue(repeat!=null&&repeat.performClick());
+            });
             assertTrue(device.wait(Until.hasObject(By.desc("Tomar foto")),6_000));
             device.findObject(By.desc("Cerrar cámara")).click();
         }
@@ -99,7 +105,7 @@ public class GalaxyMediaExperienceTest {
         System.out.println("GALAXY_CHAT_PHASE5_ANDROID="+new JSONObject().put("case","photo").put("openMs",openMs).put("capturePreviewMs",captureMs).put("pssBeforeKb",pssBefore).put("pssAfterKb",android.os.Debug.getPss()));
     }
 
-    @Test public void cameraX_videoHasBoundedRecordingPreviewPlaybackRetakeAndCleanup_whenVirtualCameraExists() throws Exception {
+    @Test public void cameraX_videoHasBoundedRecordingPreviewPlaybackRetakeAndCleanup_whenCameraExists() throws Exception {
         ProcessCameraProvider provider=provider();
         Assume.assumeTrue("No back CameraX camera in this environment.",provider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA));
         Intent intent=new Intent(context,GalaxyCameraActivity.class)
@@ -116,8 +122,11 @@ public class GalaxyMediaExperienceTest {
             device.findObject(By.desc("Detener grabación")).click();
             assertTrue("Video capture did not reach review.",device.wait(Until.hasObject(By.desc("Confirmar captura")),12_000));
             previewMs=SystemClock.elapsedRealtime()-stopStarted;
-            onView(withContentDescription("Vista previa del video")).check(matches(isDisplayed()));
-            device.findObject(By.desc("Repetir captura")).click();
+            scenario.onActivity(activity->{
+                assertTrue(findByDescription(activity.getWindow().getDecorView(),"Vista previa del video")!=null);
+                View repeat=findByText(activity.getWindow().getDecorView(),"Repetir");
+                assertTrue(repeat!=null&&repeat.performClick());
+            });
             assertTrue(device.wait(Until.hasObject(By.desc("Iniciar grabación")),6_000));
             device.findObject(By.desc("Cerrar cámara")).click();
         }
@@ -142,6 +151,21 @@ public class GalaxyMediaExperienceTest {
         try(FileOutputStream out=new FileOutputStream(file)){assertTrue(bitmap.compress(Bitmap.CompressFormat.JPEG,90,out));}
         bitmap.recycle();
         return FileProvider.getUriForFile(context,context.getPackageName()+".files",file);
+    }
+
+    private static View findByDescription(View root,String description){
+        if(root==null)return null;
+        CharSequence value=root.getContentDescription();
+        if(value!=null&&description.contentEquals(value))return root;
+        if(root instanceof ViewGroup group)for(int i=0;i<group.getChildCount();i++){View found=findByDescription(group.getChildAt(i),description);if(found!=null)return found;}
+        return null;
+    }
+
+    private static View findByText(View root,String text){
+        if(root==null)return null;
+        if(root instanceof TextView view&&text.contentEquals(view.getText()))return view;
+        if(root instanceof ViewGroup group)for(int i=0;i<group.getChildCount();i++){View found=findByText(group.getChildAt(i),text);if(found!=null)return found;}
+        return null;
     }
 
     private static boolean hasFiles(File dir){

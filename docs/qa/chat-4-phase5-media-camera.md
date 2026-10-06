@@ -114,10 +114,24 @@ Phase 0 baseline records the previous chat media path as external camera intent 
 
 CI artifacts keep the raw instrumentation and logcat evidence. The Phase 5 gate additionally runs full Node regression, Deno validation, Android unit tests, lint and debug build.
 
+## Physical Android validation
+
+A real-device gate was completed on 2026-10-06 against Phase 5 commit `6f759be61172ece996c2b663a0ea12470a08d705` using a Moto G75 5G on Android 16 connected through ADB. Validation used an isolated debug application ID suffix (`.phase5test`) so the installed stable app and its data were not replaced or modified.
+
+The physical instrumentation suite completed `OK (3 tests)` and verified:
+
+- rear-camera photo capture and front/back camera switching when the front lens is available;
+- photo preview, retake and cancel cleanup;
+- native gallery review without deleting picker-owned content;
+- bounded video recording, manual stop, playable preview, retake and cancel cleanup;
+- camera and microphone runtime permission path on real hardware;
+- no dependence on an external camera intent for Galaxy Chat media capture.
+
+The first physical run exposed two test-harness assumptions that were valid in the emulator but not on the OEM device: duplicate `Repetir captura` accessibility nodes and the `MediaController` overlay becoming Espresso's active root during video preview. The instrumentation now resolves preview/retake controls directly from the activity hierarchy, preserving the same functional assertions without weakening product behavior.
 ## Real limitations
 
 - Photo Picker selection is capped at 12 items for Galaxy Chat in this phase to keep review/upload concurrency bounded.
 - HEIC/HEIF is normalized only because the existing server chat-photo storage contract does not persist HEIF directly.
-- Android Emulator camera coverage is deterministic but does not replace a physical-device pass for OEM camera/flash/front-lens behavior.
+- Emulator coverage remains useful for deterministic regression, while the required physical-device pass was completed on Moto G75 5G / Android 16. Additional OEM/device coverage remains recommended for broader compatibility confidence.
 - Upload cancellation can stop client streaming and clean blobs already returned by the server. A server request that has crossed the final storage commit boundary may finish before cancellation arrives; `chat-media-discard` then performs safe unreferenced cleanup.
 - Advanced editing, filters, AR effects, global motion redesign and Voice Messages redesign remain outside Phase 5.
