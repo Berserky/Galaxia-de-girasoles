@@ -29,7 +29,7 @@ test('CameraX integrated capture is private and replaces external chat video cap
 test('photo capture has rear/front camera, flash, autofocus, review, retake and explicit confirmation',()=>{
  for(const marker of [
   'CameraSelector.LENS_FACING_BACK','CameraSelector.LENS_FACING_FRONT','switchCamera()',
-  'enableTorch(torch)','FocusMeteringAction.Builder','takePicture(','showReview()',
+  'enableTorch(torch)','FocusMeteringAction.Builder','takePicture(','showReview(',
   'Repetir captura','Confirmar captura','cancelAndFinish()','setReversedHorizontal'
  ])assert.ok(camera.includes(marker),marker);
  assert.ok(camera.includes('ImageDecoder.decodeBitmap'),'photo review must honor orientation metadata on modern Android');
