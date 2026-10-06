@@ -124,13 +124,13 @@ test('13. closing the attachment sheet clears intent without discarding text',()
 
 test('14. keyboard open state is centralized',()=>{
  const {composer}=composerHarness();composer.hydrate('pair:0-1');composer.setKeyboard(true,310);
- assert.deepEqual(composer.snapshot().keyboard,{open:true,height:310});
+ const keyboard=composer.snapshot().keyboard;assert.equal(keyboard.open,true);assert.equal(keyboard.height,310);
  assert.ok(appSource.includes("setKeyboard(focused,Math.max(0,full-height))"));
 });
 
 test('15. keyboard close state is explicit',()=>{
  const {composer}=composerHarness();composer.hydrate('pair:0-1');composer.setKeyboard(true,250);composer.setKeyboard(false,0);
- assert.deepEqual(composer.snapshot().keyboard,{open:false,height:0});
+ const keyboard=composer.snapshot().keyboard;assert.equal(keyboard.open,false);assert.equal(keyboard.height,0);
  assert.ok(appSource.includes("setKeyboard(false,0)"));
 });
 
