@@ -551,7 +551,7 @@ public final class MainActivity extends FragmentActivity {
         else uris=data.getParcelableArrayListExtra(GalaxyMediaReviewActivity.EXTRA_URIS);
         if(uris==null||uris.isEmpty()){reject(request,"Selección cancelada.");return;}
         String caption=data.getStringExtra(GalaxyMediaReviewActivity.EXTRA_CAPTION);
-        uploadReviewedChatMedia(request,uris,caption,false);
+        uploadReviewedChatMedia(request,uris,caption,false,false);
     }
 
     private void handleIntegratedCameraResult(androidx.activity.result.ActivityResult result){
@@ -573,10 +573,10 @@ public final class MainActivity extends FragmentActivity {
         catch(Exception e){file.delete();reject(request,"No pudimos abrir la captura temporal.");return;}
         java.util.ArrayList<Uri> uris=new java.util.ArrayList<>();uris.add(uri);
         String caption=data.getStringExtra(GalaxyCameraActivity.EXTRA_CAPTION);
-        uploadReviewedChatMedia(request,uris,caption,videoMessage);
+        uploadReviewedChatMedia(request,uris,caption,videoMessage,true);
     }
 
-    private void uploadReviewedChatMedia(String request,java.util.List<Uri> uris,String caption,boolean videoMessage){
+    private void uploadReviewedChatMedia(String request,java.util.List<Uri> uris,String caption,boolean videoMessage,boolean deleteOwnedTemps){
         chatMediaUploadCancelled.set(false);
         io.execute(()->{
             int imported=0,skipped=0;String lastError="";org.json.JSONArray items=new org.json.JSONArray();
@@ -590,7 +590,9 @@ public final class MainActivity extends FragmentActivity {
                     if(chatMediaUploadCancelled.get())throw new MobileApiClient.UploadCancelledException();
                     Uri uri=uris.get(i);
                     JSONObject meta=MediaInspector.inspect(this,uri);
-                    String uploadKind=MediaInspector.chatKind(this,uri);
+                    String mediaMime=meta.optString("mime","");
+                    String uploadKind=MediaInspector.isChatImage(mediaMime)?"chat-photo":MediaInspector.isChatVideo(mediaMime)?"chat-video":"";
+                    if(uploadKind.isBlank())throw new IOException("Formato multimedia no soportado.");
                     int itemIndex=i+1;
                     mediaUploadEvent("uploading",itemIndex,count,0,meta.optLong("size",0));
                     JSONObject uploaded=MobileApiClient.upload(this,token,uri,uploadKind,new MobileApiClient.UploadObserver(){
@@ -620,7 +622,7 @@ public final class MainActivity extends FragmentActivity {
                 lastError=e.getMessage()==null?"No pudimos preparar el contenido multimedia.":e.getMessage();
                 reject(request,lastError);
             }finally{
-                for(Uri uri:uris)deleteOwnedCameraUri(uri);
+                if(deleteOwnedTemps)for(Uri uri:uris)deleteOwnedCameraUri(uri);
                 chatMediaUploadCancelled.set(false);
             }
         });
