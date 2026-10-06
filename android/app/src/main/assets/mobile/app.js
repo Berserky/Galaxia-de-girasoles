@@ -1756,7 +1756,7 @@ async function loadChat({older=false,newer=false,quiet=false,force=false,aroundI
  const kind=older?'history':newer?'newer':aroundId?'around':syncId?'sync':present?'present':'state';
  const perfLoad=window.GalaxyChatPerf?.loadStart?.(kind);
  const current=document.querySelector('#chatMessages'),wasNear=chatNearBottom(current),anchor=chatCaptureAnchor(current);
- const hadState=!!chatState,oldMessages=chatState?.messages||[],oldIds=new Set(oldMessages.map(m=>String(m.id))),oldLastSeq=chatMessageEngine.maxSeq(oldMessages);
+ const hadState=!!chatState,oldMessages=chatState?.messages||[],oldIds=new Set(oldMessages.map(m=>String(m.id))),oldClients=new Set(oldMessages.map(m=>String(m.client_id||'')).filter(Boolean)),oldLastSeq=chatMessageEngine.maxSeq(oldMessages);
  try{
   if(hadState&&!older&&!newer&&!aroundId&&!syncId&&!present&&!force&&chatState?.nextAfterSeq)return;
   const payload={limit:60};
@@ -1786,10 +1786,14 @@ async function loadChat({older=false,newer=false,quiet=false,force=false,aroundI
   }else{
    direction=aroundId?'around':present||!hadState?'latest':older?'older':newer?'newer':'refresh';
    nextState=chatMessageEngine.applyPage(chatState||{messages:[]},result,{direction,focusId:aroundId});
-   // NG-QA-006-004: preserve confirmations that land while this request is in flight.
-   // The current chatState may advance after oldLastSeq even though the response is stale.
+   // NG-QA-006-004: preserve messages/confirmations that land while this request is in flight.
+   // Sequence is authoritative when available; client/id novelty also protects concurrent
+   // optimistic confirmations from a stale refresh racing a card/checklist mutation.
    if(direction==='refresh'&&hadState){
-    const confirmedAfterLoad=(chatState?.messages||[]).filter(m=>Number(m.server_seq||0)>oldLastSeq);
+    const confirmedAfterLoad=(chatState?.messages||[]).filter(m=>{
+     const id=String(m.id||''),client=String(m.client_id||'');
+     return Number(m.server_seq||0)>oldLastSeq||(id&&!oldIds.has(id))||(client&&!oldClients.has(client));
+    });
     if(confirmedAfterLoad.length)nextState={...nextState,messages:chatMessageEngine.mergeMessages(nextState.messages||[],confirmedAfterLoad)};
    }
   }
