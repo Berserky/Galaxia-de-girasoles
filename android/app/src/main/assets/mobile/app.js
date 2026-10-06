@@ -1719,12 +1719,13 @@ function chatRenderComposer({focus=false}={}){
  if(view!=='chat')return;
  const current=document.querySelector('#chatForm');if(!current)return;
  const chatEl=document.querySelector('#chatMessages'),active=document.activeElement===current.querySelector('textarea'),oldTextarea=current.querySelector('textarea');
- const selection=active&&oldTextarea?{start:oldTextarea.selectionStart,end:oldTextarea.selectionEnd}:null;
+ const selection=oldTextarea?{start:oldTextarea.selectionStart,end:oldTextarea.selectionEnd}:null;
  if(chatEl)chatScrollEngine.beforeViewportChange(chatEl);
  current.outerHTML=chatComposerMarkup();
  const textarea=document.querySelector('#chatForm textarea');
  if(textarea)ensureChatComposer().applyInput(textarea,{persist:false});
- if((focus||active)&&textarea){textarea.focus({preventScroll:true});if(selection)try{textarea.setSelectionRange(selection.start,selection.end);}catch{}}
+ if(textarea&&selection)try{textarea.setSelectionRange(selection.start,selection.end);}catch{}
+ if((focus||active)&&textarea)textarea.focus({preventScroll:true});
  refreshIcons();
  if(chatEl)chatScrollEngine.afterViewportChange(chatEl);
 }
