@@ -47,9 +47,10 @@ let toastTimer,refreshing=false,updateState={text:'La app está al día.',progre
 let dateContext=null,dateContextLoadedAt=0,dateQuestionNonce=0,dateMode=null,dateModeTimer=null,dateLastExperience=null;
 let goalsState=null,goalsLoadedAt=0,goalsFilter='active';
 let presenceLastSignature='',voiceTimer=null,voiceSeconds=0,intelligenceSearchNonce=0;
-let chatState=null,chatLoading=false,chatQueuedLoad=null,chatReply=null,chatStateSignature='',chatPreferencesState=null,chatUnlockedSession=false,notificationState=null,pendingDeepLink=null;
+let chatState=null,chatLoading=false,chatQueuedLoad=null,chatStateSignature='',chatPreferencesState=null,chatUnlockedSession=false,notificationState=null,pendingDeepLink=null;
 const chatMessageEngine=window.GalaxyMessageEngine.create({pageSize:60,maxCache:420,windowSize:84,windowStep:28,estimatedHeight:92});
 const chatScrollEngine=window.GalaxyScrollEngine.create({bottomTolerance:110,memoryKey:'galaxy.chat.scroll.position.v1'});
+const chatComposer=window.GalaxyChatComposer.create({draftPrefix:'nuestra-galaxia.chat-draft.v4',maxHeight:120,minHeight:44,doubleTapGuardMs:280});
 let chatResizeObserver=null,chatVirtualRaf=0,chatMeasureRaf=0,chatRenderGeneration=0,chatRestoreOnRender=false,chatResumeRefreshPromise=null;
 let chatAttachmentsDraft=[],chatNewCount=0,chatResumeUnread=0,chatResumeNewCount=0,chatPinIndex=0,chatTypingTimer=null,chatPresenceTimer=null,chatDeliveryEngine=null,chatRecentSyncIds=new Map(),chatSyncInFlight=new Set(),chatInitialScroll=true,chatVoiceState={recording:false,paused:false,ready:false,durationMs:0},chatHoldRecord=null;
 let welcomeStep=0,welcomePreview=false,welcomeGift=true,welcomeEntering=false,tourStep=-1;
@@ -328,8 +329,13 @@ function renderChatFab(){
 function syncChatViewportHeight(){
  const chatEl=view==='chat'?document.querySelector('#chatMessages'):null;
  if(chatEl)chatScrollEngine.beforeViewportChange(chatEl);
- const height=Math.max(320,Math.round(window.visualViewport?.height||window.innerHeight||document.documentElement.clientHeight||0));
+ const viewport=window.visualViewport,height=Math.max(320,Math.round(viewport?.height||window.innerHeight||document.documentElement.clientHeight||0));
  document.documentElement.style.setProperty('--chat-viewport-height',height+'px');
+ if(view==='chat'){
+  const full=Math.max(height,Math.round(window.innerHeight||document.documentElement.clientHeight||height));
+  const focused=document.activeElement?.matches?.('#chatForm textarea')===true;
+  ensureChatComposer().setKeyboard(focused,Math.max(0,full-height));
+ }
  if(chatEl)chatScrollEngine.afterViewportChange(chatEl);
 }
 function go(next){
@@ -1290,7 +1296,6 @@ function themeSettingsCard(){
 
 function chatTime(value){try{return new Intl.DateTimeFormat('es-CO',{hour:'numeric',minute:'2-digit'}).format(new Date(value));}catch{return'';}}
 const CHAT_OUTBOX_KEY='nuestra-galaxia.chat-outbox.v3';
-const CHAT_DRAFT_KEY='nuestra-galaxia.chat-draft.v3';
 const CHAT_REACTIONS=['\u2764\uFE0F','\uD83D\uDE02','\uD83E\uDD79','\uD83D\uDE2E','\uD83D\uDE22','\uD83D\uDC4D'];
 
 function chatDay(value){
@@ -1307,8 +1312,30 @@ function readChatOutbox(){
  try{const rows=JSON.parse(localStorage.getItem(CHAT_OUTBOX_KEY)||'[]');return Array.isArray(rows)?rows.map(x=>({...x,_localState:x._localState||'PENDING'})):[];}catch{return[];}
 }
 function writeChatOutbox(rows){try{localStorage.setItem(CHAT_OUTBOX_KEY,JSON.stringify((rows||[]).slice(-120)));}catch{}}
-function readChatDraft(){try{return localStorage.getItem(CHAT_DRAFT_KEY)||'';}catch{return'';}}
-function writeChatDraft(value){try{localStorage.setItem(CHAT_DRAFT_KEY,String(value||''));}catch{}}
+function chatComposerConversationKey(){
+ const me=String(cloud?.person??native.person??'unknown'),other=me==='0'?'1':me==='1'?'0':'partner';
+ return 'pair:'+([me,other].sort().join('-'));
+}
+function ensureChatComposer(){
+ const key=chatComposerConversationKey(),current=chatComposer.snapshot();
+ if(current.conversationKey!==key){
+  const next=chatComposer.hydrate(key);
+  if(!next.text){
+   try{
+    const legacy=localStorage.getItem('nuestra-galaxia.chat-draft.v3')||'';
+    if(legacy){chatComposer.setText(legacy);localStorage.removeItem('nuestra-galaxia.chat-draft.v3');}
+   }catch{}
+  }
+ }
+ return chatComposer;
+}
+function chatReplyTarget(){return ensureChatComposer().snapshot().replyTarget;}
+function chatReplyFragment(m){
+ if(!m)return'Mensaje';
+ if(m.deleted_at)return'Mensaje eliminado';
+ const body=String(m.body||'').trim();if(body)return body;
+ return {photo:'Foto',video:'Video',video_message:'Videomensaje',audio:'Audio',file:'Archivo',location:'Ubicación',card:'Galaxy Card',gif:'GIF'}[m.message_type]||'Mensaje';
+}
 function chatOwn(m){return String(m.sender_person)===String(cloud?.person);}
 function chatPartnerLabel(){return chatPreferencesState?.partner_nickname||partnerName();}
 function chatDelivery(m){
@@ -1643,16 +1670,35 @@ function chatPinnedBar(){
  const label=m?(m.deleted_at?'Mensaje eliminado':m.body||({photo:'Foto',video:'Video',audio:'Audio',file:'Archivo'}[m.message_type]||'Mensaje fijado')):'Mensaje fijado';
  return '<div class="chat-pinned"><button type="button" data-action="chat-pin-jump" data-id="'+attr(id)+'">'+ico('pin')+'<span><b>Fijado '+(chatPinIndex+1)+'/'+ids.length+'</b><small>'+esc(label)+'</small></span></button><div><button type="button" data-action="chat-pin-prev" aria-label="Anterior">'+ico('chevron-up')+'</button><button type="button" data-action="chat-pin-next" aria-label="Siguiente">'+ico('chevron-down')+'</button><button type="button" data-action="chat-pins-open" aria-label="Ver fijados">'+ico('list')+'</button></div></div>';
 }
+function chatComposerMarkup(){
+ const composer=ensureChatComposer(),state=composer.snapshot(),reply=state.replyTarget,mode=composer.rightMode(chatAttachmentsDraft.length);
+ return '<form id="chatForm" class="chat-composer chat-composer-v2" autocomplete="off">'+
+ (reply?'<div class="chat-compose-reply chat-compose-reply-v2"><span class="chat-reply-icon">'+ico('reply')+'</span><span class="chat-reply-content"><b>'+esc(chatOwn(reply)?'Tú':partnerName())+'</b><small>'+esc(chatReplyFragment(reply))+'</small></span><button type="button" data-action="chat-reply-cancel" aria-label="Cancelar respuesta">'+ico('x')+'</button></div>':'')+
+ chatDraftAttachmentMarkup()+
+ '<div class="chat-compose-row"><button class="chat-plus" type="button" data-action="chat-attach-open" aria-label="Adjuntar">'+ico('plus')+'</button><textarea name="body" maxlength="4000" rows="1" placeholder="Escribe un mensaje…" aria-label="Escribe un mensaje" inputmode="text" enterkeyhint="enter" autocapitalize="sentences" spellcheck="true">'+esc(state.text)+'</textarea>'+
+ (mode==='send'?'<button class="chat-send composer-right" type="submit" aria-label="Enviar">'+ico('send')+'</button>':'<button class="chat-send composer-right chat-mic-hold" type="button" data-action="chat-hold-record" aria-label="Mantén pulsado para grabar">'+ico('mic')+'</button>')+
+ '</div><div class="chat-hold-hint" aria-live="polite" hidden></div></form>';
+}
+function chatRenderComposer({focus=false}={}){
+ if(view!=='chat')return;
+ const current=document.querySelector('#chatForm');if(!current)return;
+ const chatEl=document.querySelector('#chatMessages'),active=document.activeElement===current.querySelector('textarea'),oldTextarea=current.querySelector('textarea');
+ const selection=active&&oldTextarea?{start:oldTextarea.selectionStart,end:oldTextarea.selectionEnd}:null;
+ if(chatEl)chatScrollEngine.beforeViewportChange(chatEl);
+ current.outerHTML=chatComposerMarkup();
+ const textarea=document.querySelector('#chatForm textarea');
+ if(textarea)ensureChatComposer().applyInput(textarea,{persist:false});
+ if((focus||active)&&textarea){textarea.focus({preventScroll:true});if(selection)try{textarea.setSelectionRange(selection.start,selection.end);}catch{}}
+ refreshIcons();
+ if(chatEl)chatScrollEngine.afterViewportChange(chatEl);
+}
 function chatView(){
- const draft=readChatDraft();
+ ensureChatComposer();
  return '<section class="chat-shell chat-theme-'+attr(chatPreferencesState?.theme||'galaxy')+'">'+
  '<header class="chat-shell-head"><button class="chat-back" type="button" data-action="chat-close" aria-label="Volver">'+ico('arrow-left')+'</button><div class="chat-avatar">'+esc(chatPartnerLabel().slice(0,1).toUpperCase())+'</div><div class="chat-contact"><p class="eyebrow">GALAXY CHAT</p><h2>'+esc(chatPartnerLabel())+'</h2><small>'+esc(chatPresenceLabel())+'</small></div><button class="chat-head-action" type="button" data-action="chat-search-open" aria-label="Buscar">'+ico('search')+'</button><button class="chat-head-action" type="button" data-action="chat-shared-open" aria-label="Contenido compartido">'+ico('layout-grid')+'</button><button class="chat-head-action" type="button" data-action="chat-saved-open" aria-label="Guardados">'+ico('bookmark')+'</button><button class="chat-head-action" type="button" data-action="chat-settings-open" aria-label="Ajustes del chat">'+ico('settings-2')+'</button></header>'+
  '<div class="chat-pinned-slot">'+chatPinnedBar()+'</div>'+
  '<div class="chat-scroll-wrap"><div id="chatMessages" class="chat-messages" tabindex="0" aria-label="Mensajes">'+chatMessagesMarkup()+'</div>'+(chatNewCount?'<button class="chat-new-button" type="button" data-action="chat-jump-present">'+ico('arrow-down')+' '+chatNewCount+' mensaje'+(chatNewCount===1?'':'s')+' nuevo'+(chatNewCount===1?'':'s')+'</button>':'')+'</div>'+
- '<form id="chatForm" class="chat-composer" autocomplete="off">'+
- (chatReply?'<div class="chat-compose-reply"><span>'+ico('reply')+' Respondiendo a '+esc(chatOwn(chatReply)?'ti':partnerName())+'<small>'+esc(chatReply.body||'Mensaje')+'</small></span><button type="button" data-action="chat-reply-cancel" aria-label="Cancelar respuesta">'+ico('x')+'</button></div>':'')+
- chatDraftAttachmentMarkup()+
- '<div class="chat-compose-row"><button class="chat-plus" type="button" data-action="chat-attach-open" aria-label="Adjuntar">'+ico('plus')+'</button><textarea name="body" maxlength="4000" rows="1" placeholder="Mensaje para '+attr(chatPartnerLabel())+'" aria-label="Mensaje">'+esc(draft)+'</textarea><button class="chat-camera" type="button" data-action="chat-camera-open" aria-label="Abrir cámara">'+ico('camera')+'</button>'+(draft||chatAttachmentsDraft.length?'<button class="chat-send" type="submit" aria-label="Enviar">'+ico('send')+'</button>':'<button class="chat-send chat-mic-hold" type="button" data-action="chat-hold-record" aria-label="Mantén pulsado para grabar">'+ico('mic')+'</button>')+'</div><div class="chat-hold-hint" aria-live="polite" hidden></div></form></section>';
+ chatComposerMarkup()+'</section>';
 }
 async function loadChatPreferences(){
  try{const result=await api('chat-preferences',{operation:'get'});chatPreferencesState=result.preferences||null;if(view==='chat')render();}catch{}
@@ -1669,9 +1715,13 @@ function openChatSendMenu(){
  showModal('Opciones de envío','<div class="chat-send-options"><button class="card" type="button" data-action="chat-send-mode" data-mode="now">'+ico('send')+'<span><b>Enviar ahora</b><small>Envío normal.</small></span></button><button class="card" type="button" data-action="chat-send-mode" data-mode="silent">'+ico('bell-off')+'<span><b>Enviar en silencio</b><small>Sin sonido ni vibración.</small></span></button></div><form id="chatPremiumSendForm" class="stack"><div class="field"><label>Programar</label><input class="input" type="datetime-local" name="scheduledAt" min="'+attr(local)+'" value="'+attr(local)+'"></div><div class="field"><label>Mensaje temporal</label><select class="input" name="ttlSeconds" data-role="chat-ttl"><option value="">No</option><option value="3600">1 hora</option><option value="86400">24 horas</option><option value="604800">7 días</option><option value="2592000">30 días</option><option value="custom">Personalizado</option></select></div><div class="field" data-role="chat-ttl-custom" hidden><label>Horas</label><input class="input" type="number" name="ttlCustomHours" min="1" max="8760" value="48"></div>'+(hasViewOnce?'<label class="chat-setting-toggle"><input type="checkbox" name="viewOnce"> Ver una vez</label>':'')+(hasMedia?'<div class="field"><label>Calidad de envío</label><select class="input" name="mediaQuality"><option value="optimized">Optimizado</option><option value="hd">HD</option><option value="original">Original</option></select></div>':'')+'<div class="field"><label>Efecto</label><select class="input" name="effect"><option value="">Sin efecto</option><option value="hearts">Corazones</option><option value="confetti">Confeti</option><option value="stars">Estrellas</option><option value="kiss">Beso</option><option value="sunflowers">Girasoles</option><option value="galaxy">Galaxia</option></select></div><button class="btn" type="submit">'+ico('calendar-clock')+' Programar envío</button></form>','chat-send-options');
 }
 function queueCurrentChat(extra={}){
- const body=readChatDraft().trim(),attachments=chatAttachmentsDraft.slice();if(!body&&!attachments.length)return;
+ const composer=ensureChatComposer(),state=composer.snapshot(),attachments=chatAttachmentsDraft.slice(),body=state.text.trim();
+ if(!body&&!attachments.length)return false;
+ if(!composer.beginSubmit({attachmentCount:attachments.length}))return false;
  const messageType=attachments.length?(attachments[0].videoMessage?'video_message':attachments[0].gif?'gif':(attachments[0].kind||'file')):'text';
- queueChatMessage({body,messageType,attachments,...extra});
+ const row=queueChatMessage({body,messageType,attachments,...extra});
+ if(!row){composer.releaseSubmit();return false;}
+ return true;
 }
 function chatSignature(state){
  const messages=(state?.messages||[]).map(m=>[m.id,m.body,m.deleted_at,m.edited_at,m.delivered_at,m.read_at,m.reply_to,m.server_seq,m.schedule_state,m.expires_at,m.opened_at,m.effect,JSON.stringify(m.reactions||[]),!!m.pin,!!m.favorite,JSON.stringify(m.attachments||[]),JSON.stringify(m.sticker||null),JSON.stringify(m.liveLocation||null),JSON.stringify(m.card||null)]);
@@ -1706,7 +1756,7 @@ async function loadChat({older=false,newer=false,quiet=false,force=false,aroundI
  const kind=older?'history':newer?'newer':aroundId?'around':syncId?'sync':present?'present':'state';
  const perfLoad=window.GalaxyChatPerf?.loadStart?.(kind);
  const current=document.querySelector('#chatMessages'),wasNear=chatNearBottom(current),anchor=chatCaptureAnchor(current);
- const hadState=!!chatState,oldMessages=chatState?.messages||[],oldIds=new Set(oldMessages.map(m=>String(m.id))),oldLastSeq=chatMessageEngine.maxSeq(oldMessages);
+ const hadState=!!chatState,oldMessages=chatState?.messages||[],oldIds=new Set(oldMessages.map(m=>String(m.id))),oldClients=new Set(oldMessages.map(m=>String(m.client_id||'')).filter(Boolean)),oldLastSeq=chatMessageEngine.maxSeq(oldMessages);
  try{
   if(hadState&&!older&&!newer&&!aroundId&&!syncId&&!present&&!force&&chatState?.nextAfterSeq)return;
   const payload={limit:60};
@@ -1736,10 +1786,14 @@ async function loadChat({older=false,newer=false,quiet=false,force=false,aroundI
   }else{
    direction=aroundId?'around':present||!hadState?'latest':older?'older':newer?'newer':'refresh';
    nextState=chatMessageEngine.applyPage(chatState||{messages:[]},result,{direction,focusId:aroundId});
-   // NG-QA-006-004: preserve confirmations that land while this request is in flight.
-   // The current chatState may advance after oldLastSeq even though the response is stale.
+   // NG-QA-006-004: preserve messages/confirmations that land while this request is in flight.
+   // Sequence is authoritative when available; client/id novelty also protects concurrent
+   // optimistic confirmations from a stale refresh racing a card/checklist mutation.
    if(direction==='refresh'&&hadState){
-    const confirmedAfterLoad=(chatState?.messages||[]).filter(m=>Number(m.server_seq||0)>oldLastSeq);
+    const confirmedAfterLoad=(chatState?.messages||[]).filter(m=>{
+     const id=String(m.id||''),client=String(m.client_id||'');
+     return Number(m.server_seq||0)>oldLastSeq||(id&&!oldIds.has(id))||(client&&!oldClients.has(client));
+    });
     if(confirmedAfterLoad.length)nextState={...nextState,messages:chatMessageEngine.mergeMessages(nextState.messages||[],confirmedAfterLoad)};
    }
   }
@@ -1882,14 +1936,16 @@ function queueChatMessage({body='',messageType='text',attachments=[],attachment=
  if(!text&&messageType==='text'&&!attachments.length)return;
  if(messageType==='card'&&!entityRef)return;
  const clientId=crypto.randomUUID(),created=new Date().toISOString();window.GalaxyChatPerf?.optimisticStart?.(clientId);
- const row={client_id:clientId,client_created_at:created,body:text,reply_to:chatReply?.id||null,message_type:messageType,attachments,attachment,entityRef,card,scheduled_at:scheduledAt,silent,ttl_seconds:ttlSeconds,view_once:viewOnce,effect,_localState:'PENDING',retryCount:0,local_order:Date.now()};
+ const row={client_id:clientId,client_created_at:created,body:text,reply_to:chatReplyTarget()?.id||null,message_type:messageType,attachments,attachment,entityRef,card,scheduled_at:scheduledAt,silent,ttl_seconds:ttlSeconds,view_once:viewOnce,effect,_localState:'PENDING',retryCount:0,local_order:Date.now()};
  chatDeliveryEngine.queue(row);
- chatReply=null;chatAttachmentsDraft=[];writeChatDraft('');
+ ensureChatComposer().accepted();chatAttachmentsDraft=[];
  if(view==='chat'){
   chatMessageEngine.resetWindow(chatRows().length,{align:'end'});chatRenderMessages({scroll:'bottom'});
   requestAnimationFrame(()=>window.GalaxyChatPerf?.optimisticVisible?.(clientId));
  }
+ if(view==='chat')chatRenderComposer();
  flushChatOutbox().catch(()=>{});
+ return row;
 }
 function queueGalaxyCard(cardType,entityKind,entityId,localCard={}){
  if(!entityId)return;
@@ -2041,7 +2097,19 @@ async function openChatLocationMenu(){
  showModal('Compartir ubicación','<div class="chat-location-options"><button class="card" type="button" data-action="chat-location-current">'+ico('locate-fixed')+'<span><b>Ubicación actual</b><small>Una posición puntual obtenida ahora.</small></span></button><div class="chat-live-options"><b>Ubicación en vivo</b><small>Reutiliza el GPS de Nuestra Galaxia. Android mantendrá una notificación visible mientras esté activa.</small><div><button class="btn small secondary" type="button" data-action="chat-location-live" data-duration="900">15 min</button><button class="btn small secondary" type="button" data-action="chat-location-live" data-duration="3600">1 h</button><button class="btn small secondary" type="button" data-action="chat-location-live" data-duration="28800">8 h</button><button class="btn small secondary" type="button" data-action="chat-location-live" data-duration="">Hasta detener</button></div></div>'+(places.length?'<div class="chat-place-list"><b>Lugares guardados</b>'+places.slice(0,30).map(p=>'<button type="button" data-action="chat-location-place" data-lat="'+attr(p.latitude)+'" data-lon="'+attr(p.longitude)+'" data-label="'+attr(p.name)+'">'+ico('map-pin')+'<span>'+esc(p.name)+'</span></button>').join('')+'</div>':'')+'</div>','chat-location');
 }
 function openChatAttachMenu(){
- showModal('Adjuntar','<div class="chat-attach-grid"><button type="button" data-action="chat-attach-file">'+ico('paperclip')+'<span>Archivos</span></button><button type="button" data-action="chat-attach-location">'+ico('map-pin')+'<span>Ubicación</span></button><button type="button" data-action="chat-context-open">'+ico('route')+'<span>Acompáñame</span></button><button type="button" data-action="chat-galaxy-open">'+ico('orbit')+'<span>Nuestra Galaxia</span></button><button type="button" data-action="chat-poll-open">'+ico('list-checks')+'<span>Encuesta</span></button><button type="button" data-action="chat-check-open">'+ico('list-todo')+'<span>Checklist</span></button><button type="button" data-action="chat-stickers-open">'+ico('sticker')+'<span>GIF / stickers</span></button></div>','chat-attach');
+ ensureChatComposer().setAttachmentIntent('launcher');
+ showBottomSheet('Adjuntar','<div class="chat-attachment-sheet-grid">'+
+ '<button type="button" data-action="chat-attach-camera">'+ico('camera')+'<span>Cámara</span></button>'+
+ '<button type="button" data-action="chat-attach-gallery">'+ico('images')+'<span>Fotos</span></button>'+
+ '<button type="button" data-action="chat-attach-video-camera">'+ico('video')+'<span>Video</span></button>'+
+ '<button type="button" data-action="chat-attach-file">'+ico('paperclip')+'<span>Archivo</span></button>'+
+ '<button type="button" data-action="chat-attach-location">'+ico('map-pin')+'<span>Ubicación</span></button>'+
+ '<button type="button" data-action="chat-galaxy-open">'+ico('orbit')+'<span>Galaxy Card</span></button>'+
+ '<button type="button" data-action="chat-context-open">'+ico('route')+'<span>Acompáñame</span></button>'+
+ '<button type="button" data-action="chat-poll-open">'+ico('list-checks')+'<span>Encuesta</span></button>'+
+ '<button type="button" data-action="chat-check-open">'+ico('list-todo')+'<span>Checklist</span></button>'+
+ '<button type="button" data-action="chat-stickers-open">'+ico('sticker')+'<span>GIF / stickers</span></button>'+
+ '</div>','chat-attach-sheet');
 }
 async function openChatContextMenu(){
  if(!mapData)await refreshMap({quiet:true,detail:true}).catch(()=>{});
@@ -2104,11 +2172,12 @@ function normalizeChatUpload(upload,kind,durationMs=null,mediaQuality='optimized
 }
 async function addChatNativeMedia(method,args,kind){
  try{
+  ensureChatComposer().setAttachmentIntent(kind||'file');
   setChatPresence('UPLOADING_MEDIA');
   const result=await GalaxyNative.call(method,...(args||[]));
   const uploads=Array.isArray(result?.items)?result.items:[result];
   for(const item of uploads)if(item?.path)chatAttachmentsDraft.push(normalizeChatUpload(item,kind));
-  closeModal();render();setChatPresence('ONLINE');
+  closeModal();ensureChatComposer().setAttachmentIntent(null);chatRenderComposer({focus:true});setChatPresence('ONLINE');
  }catch(e){
   setChatPresence('ONLINE');
   const message=String(e?.message||'');
@@ -2123,9 +2192,10 @@ function openChatSongPicker(){
 }
 function chatComposerRightMode(textarea){
  const row=textarea?.closest('.chat-compose-row'),button=row?.querySelector('.chat-send');if(!button)return;
- const sending=String(textarea?.value||'').trim().length>0||chatAttachmentsDraft.length>0;
- button.type=sending?'submit':'button';
- if(sending){delete button.dataset.action;button.classList.remove('chat-mic-hold');button.setAttribute('aria-label','Enviar');button.innerHTML=ico('send');}
+ const composer=ensureChatComposer(),state=composer.snapshot(),mode=composer.rightMode(chatAttachmentsDraft.length);
+ button.disabled=state.disabled||state.sending;
+ button.type=mode==='send'?'submit':'button';
+ if(mode==='send'){delete button.dataset.action;button.classList.remove('chat-mic-hold');button.setAttribute('aria-label','Enviar');button.innerHTML=ico('send');}
  else{button.dataset.action='chat-hold-record';button.classList.add('chat-mic-hold');button.setAttribute('aria-label','Mantén pulsado para grabar');button.innerHTML=ico('mic');}
  refreshIcons();
 }
@@ -2138,23 +2208,26 @@ async function finishChatHoldRecording({cancel=false}={}){
  const button=document.querySelector('[data-action="chat-hold-record"],[data-action="chat-hold-stop"]');button?.classList.remove('recording','canceling','locked');
  chatHoldHint('');
  try{
-  if(cancel){await GalaxyNative.call('discardVoiceRecording');setChatPresence('ONLINE');return;}
+  if(cancel){await GalaxyNative.call('discardVoiceRecording');ensureChatComposer().setRecordingIntent('idle');setChatPresence('ONLINE');return;}
   const info=await GalaxyNative.call('stopVoiceRecording');
   setChatPresence('ONLINE');
+  ensureChatComposer().setRecordingIntent('ready');
   chatVoiceState={recording:false,paused:false,ready:true,durationMs:Number(info?.durationMs||0)};
   showModal('Nota de voz','<div class="chat-voice-panel"><div class="chat-voice-orb ready">'+ico('audio-lines')+'</div><b data-role="chat-voice-status">Grabación lista · '+Math.max(1,Math.round(chatVoiceState.durationMs/1000))+' s</b><p class="muted">Escúchala antes de enviarla o elimínala para repetir.</p><div class="chat-voice-actions"><button class="btn secondary" type="button" data-action="chat-voice-preview">'+ico('play')+' Escuchar</button><button class="btn ghost" type="button" data-action="chat-voice-discard">Eliminar</button><button class="btn" type="button" data-action="chat-voice-send">'+ico('send')+' Enviar</button></div></div>','chat-voice-ready');
- }catch(e){setChatPresence('ONLINE');toast(e.message||'No pudimos terminar la grabación.');}
+ }catch(e){ensureChatComposer().setRecordingIntent('idle');setChatPresence('ONLINE');toast(e.message||'No pudimos terminar la grabación.');}
 }
 async function beginChatHoldRecording(e,button){
  if(chatHoldRecord)return;
  try{
+  ensureChatComposer().setRecordingIntent('starting');
   await GalaxyNative.call('startVoiceRecording');
+  ensureChatComposer().setRecordingIntent('recording');
   setChatPresence('RECORDING_AUDIO');
   chatHoldRecord={pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,cancel:false,locked:false};
   try{button.setPointerCapture(e.pointerId);}catch{}
   button.classList.add('recording');
   chatHoldHint('Suelta para enviar · desliza a la izquierda para cancelar · arriba para bloquear','recording');
- }catch(err){chatHoldRecord=null;setChatPresence('ONLINE');toast(err.message||'No pudimos iniciar la grabación.');}
+ }catch(err){chatHoldRecord=null;ensureChatComposer().setRecordingIntent('idle');setChatPresence('ONLINE');toast(err.message||'No pudimos iniciar la grabación.');}
 }
 
 function openChatVoice(){
@@ -2255,13 +2328,22 @@ function drawMap({fit=true}={}){
 }
 
 function showModal(title,body,formId=''){
+ if(modal.dataset.form==='chat-attach-sheet')ensureChatComposer().setAttachmentIntent(null);
+ modal.classList.remove('chat-bottom-sheet');
  modal.innerHTML='<div class="modal-inner"><button class="close" data-action="modal-close" aria-label="Cerrar">'+ico('x')+'</button><h2>'+esc(title)+'</h2>'+body+'</div>';
  if(formId)modal.dataset.form=formId;else delete modal.dataset.form;
  modal.showModal();
  refreshIcons();
 }
+function showBottomSheet(title,body,formId=''){
+ modal.classList.add('chat-bottom-sheet');
+ modal.innerHTML='<div class="modal-inner" role="region" aria-label="'+attr(title)+'"><button class="close" data-action="modal-close" aria-label="Cerrar">'+ico('x')+'</button><h2>'+esc(title)+'</h2>'+body+'</div>';
+ if(formId)modal.dataset.form=formId;else delete modal.dataset.form;
+ modal.showModal();
+ refreshIcons();
+}
 async function resetVoiceDraft(){stopVoiceTimer();if(voiceRecording||voiceReady){try{await GalaxyNative.call('discardVoiceRecording');}catch{}}voiceRecording=false;voiceReady=false;if(voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}}
-function closeModal(){if(modal.dataset.form==='voice'&&pendingVoiceDraft!==null)resetVoiceDraft();if(dateModeTimer){clearInterval(dateModeTimer);dateModeTimer=null;}if(modal.open)modal.close();delete modal.dataset.editId;delete modal.dataset.version;delete modal.dataset.kind;delete modal.dataset.form;}
+function closeModal(){const form=modal.dataset.form;if(form==='voice'&&pendingVoiceDraft!==null)resetVoiceDraft();if(form==='chat-attach-sheet')ensureChatComposer().setAttachmentIntent(null);if(dateModeTimer){clearInterval(dateModeTimer);dateModeTimer=null;}if(modal.open)modal.close();modal.classList.remove('chat-bottom-sheet');delete modal.dataset.editId;delete modal.dataset.version;delete modal.dataset.kind;delete modal.dataset.form;}
 function openItemForm(kind,item){
  const d=item?.data||{},meta=kindMeta[kind]||['sparkles','Contenido'],editing=!!item?.id,places=mapData?.places||[],songs=items('song');
  modal.dataset.editId=item?.id||'';modal.dataset.version=item?.version||'';modal.dataset.kind=kind;
@@ -2552,11 +2634,11 @@ document.addEventListener('click',async e=>{
   if(a==='welcome-replay'){welcomePreview=true;welcomeStep=0;welcomeGift=true;welcomeEntering=false;tourStep=-1;render();window.scrollTo(0,0);return;}
   if(a==='modal-close'){closeModal();return;}
   if(a==='chat-open'){window.GalaxyChatPerf?.beginOpen?.(chatState?'warm':'cold');if(native.chatLockEnabled&&!chatUnlockedSession){await GalaxyNative.call('unlockChat');chatUnlockedSession=true;}chatScrollEngine.clearMemory();chatRestoreOnRender=false;chatState=null;chatInitialScroll=true;go('chat');setChatPresence('ONLINE');await loadChat({quiet:true,force:true});flushChatOutbox({retryFailed:true}).catch(()=>{});return;}
-  if(a==='chat-close'){chatReply=null;chatResizeObserver?.disconnect();chatResizeObserver=null;setChatPresence('OFFLINE');go('home');return;}
+  if(a==='chat-close'){ensureChatComposer().cancelReply();chatResizeObserver?.disconnect();chatResizeObserver=null;setChatPresence('OFFLINE');go('home');return;}
   if(a==='chat-load-more'){await loadChat({older:true});return;}
-  if(a==='chat-reply'){const id=btn.dataset.id;chatReply=(chatState?.messages||[]).find(m=>String(m.id)===String(id))||null;closeModal();render();requestAnimationFrame(()=>document.querySelector('#chatForm textarea')?.focus());return;}
-  if(a==='chat-reply-menu'){const id=btn.dataset.id;chatReply=(chatState?.messages||[]).find(m=>String(m.id)===String(id))||null;closeModal();render();requestAnimationFrame(()=>document.querySelector('#chatForm textarea')?.focus());return;}
-  if(a==='chat-reply-cancel'){chatReply=null;render();return;}
+  if(a==='chat-reply'){const id=btn.dataset.id,m=(chatState?.messages||[]).find(x=>String(x.id)===String(id))||null;if(m)ensureChatComposer().setReply(m);closeModal();chatRenderComposer({focus:true});return;}
+  if(a==='chat-reply-menu'){const id=btn.dataset.id,m=(chatState?.messages||[]).find(x=>String(x.id)===String(id))||null;if(m)ensureChatComposer().setReply(m);closeModal();chatRenderComposer({focus:true});return;}
+  if(a==='chat-reply-cancel'){ensureChatComposer().cancelReply();chatRenderComposer({focus:true});return;}
   if(a==='chat-jump'){await jumpToChatMessage(btn.dataset.id);return;}
   if(a==='chat-pin-jump'){await jumpToChatMessage(btn.dataset.id);return;}
   if(a==='chat-jump-present'){chatNewCount=0;if(chatState?.nextAfterSeq)await loadChat({quiet:true,force:true,present:true});else{chatMessageEngine.resetWindow(chatRows().length,{align:'end'});chatRenderMessages({scroll:'bottom'});}chatUpdateNewButton();setTimeout(()=>markChatReadIfVisible(),250);return;}
@@ -2649,10 +2731,11 @@ document.addEventListener('click',async e=>{
   if(a==='chat-camera-open'){openChatCameraMenu();return;}
   if(a==='chat-permission-retry'){const kind=btn.dataset.kind==='video'?'video':'photo';closeModal();await addChatNativeMedia(kind==='video'?'captureChatVideo':'captureChatPhoto',[],kind);return;}
   if(a==='chat-open-app-settings'){await GalaxyNative.call('openAppSettings');return;}
-  if(a==='chat-attachment-remove'){chatAttachmentsDraft.splice(Number(btn.dataset.index),1);render();return;}
-  if(a==='chat-attach-camera'){await addChatNativeMedia('captureChatPhoto',[],'photo');return;}
-  if(a==='chat-attach-video-camera'){await addChatNativeMedia('captureChatVideo',[],'video');return;}
-  if(a==='chat-attach-file'){await addChatNativeMedia('pickMedia',['chat-file'],'file');return;}
+  if(a==='chat-attachment-remove'){chatAttachmentsDraft.splice(Number(btn.dataset.index),1);chatRenderComposer({focus:true});return;}
+  if(a==='chat-attach-camera'){ensureChatComposer().setAttachmentIntent('camera');await addChatNativeMedia('captureChatPhoto',[],'photo');return;}
+  if(a==='chat-attach-gallery'){ensureChatComposer().setAttachmentIntent('gallery');await addChatNativeMedia('pickChatPhotos',[],'photo');return;}
+  if(a==='chat-attach-video-camera'){ensureChatComposer().setAttachmentIntent('video');await addChatNativeMedia('captureChatVideo',[],'video');return;}
+  if(a==='chat-attach-file'){ensureChatComposer().setAttachmentIntent('file');await addChatNativeMedia('pickMedia',['chat-file'],'file');return;}
   if(a==='chat-attach-location'){await openChatLocationMenu();return;}
   if(a==='chat-attach-song'){openChatSongPicker();return;}
    if(a==='chat-song-pick'){const song=songItems().find(x=>String(x.id)===String(btn.dataset.id));if(song){closeModal();queueGalaxyCard('SONG','song',song.id,{title:song.title});}return;}
@@ -2677,7 +2760,7 @@ document.addEventListener('click',async e=>{
    if(a==='chat-card-song-add'){const song=(cloud?.items||[]).find(x=>x.kind==='song'&&String(x.id)===String(btn.dataset.id));if(song){toast('Esta canción ya está en Nuestra Música.');return;}toast('La canción ya no está disponible para añadir.');return;}
    if(a==='chat-card-status-reply'){
     const m=(chatState?.messages||[]).find(x=>x.card?.type==='STATUS'&&String(x.card.entityId)===String(btn.dataset.id));if(!m)return;
-    chatReply=m;render();requestAnimationFrame(()=>document.querySelector('#chatForm textarea')?.focus());return;
+    ensureChatComposer().setReply(m);chatRenderComposer({focus:true});return;
    }
    if(a==='chat-card-event-plan'){const event=(cloud?.items||[]).find(x=>x.kind==='event'&&String(x.id)===String(btn.dataset.id));if(event&&confirm('¿Abrir un plan con este evento?')){closeModal();chatOpenItemDraft('plan',event.data?.title||'Plan',event.data?.body||'',{date:event.data?.date||''});}return;}
    if(a==='chat-card-event-remind'){if(!native.momentNotifications){if(!confirm('¿Activar recordatorios de momentos para este teléfono?'))return;native=await GalaxyNative.call('setMomentNotifications',true);}await GalaxyNative.call('refreshMoments');toast('Recordatorio sincronizado con las notificaciones existentes.');return;}
@@ -2692,13 +2775,13 @@ document.addEventListener('click',async e=>{
   if(a==='chat-audio-speed'){const card=btn.closest('.chat-audio-card'),audio=card?.querySelector('audio');if(!audio)return;const current=Number(btn.dataset.speed||1),next=current===1?1.5:current===1.5?2:1;audio.playbackRate=next;btn.dataset.speed=String(next);btn.textContent=next+'×';return;}
   if(a==='chat-hold-record'){return;}
   if(a==='chat-hold-stop'){await finishChatHoldRecording();return;}
-  if(a==='chat-voice-start'){await GalaxyNative.call('startVoiceRecording');chatVoiceState={recording:true,paused:false,ready:false,durationMs:0};setChatPresence('RECORDING_AUDIO');updateChatVoiceUi();return;}
+  if(a==='chat-voice-start'){ensureChatComposer().setRecordingIntent('starting');await GalaxyNative.call('startVoiceRecording');ensureChatComposer().setRecordingIntent('recording');chatVoiceState={recording:true,paused:false,ready:false,durationMs:0};setChatPresence('RECORDING_AUDIO');updateChatVoiceUi();return;}
   if(a==='chat-voice-pause'){await GalaxyNative.call('pauseVoiceRecording');chatVoiceState.paused=true;updateChatVoiceUi();return;}
   if(a==='chat-voice-resume'){await GalaxyNative.call('resumeVoiceRecording');chatVoiceState.paused=false;updateChatVoiceUi();return;}
-  if(a==='chat-voice-stop'){const info=await GalaxyNative.call('stopVoiceRecording');chatVoiceState={recording:false,paused:false,ready:true,durationMs:Number(info.durationMs||0)};setChatPresence('ONLINE');updateChatVoiceUi();return;}
+  if(a==='chat-voice-stop'){const info=await GalaxyNative.call('stopVoiceRecording');ensureChatComposer().setRecordingIntent('ready');chatVoiceState={recording:false,paused:false,ready:true,durationMs:Number(info.durationMs||0)};setChatPresence('ONLINE');updateChatVoiceUi();return;}
   if(a==='chat-voice-preview'){await GalaxyNative.call('playVoiceRecording');return;}
-  if(a==='chat-voice-discard'){await GalaxyNative.call('discardVoiceRecording');chatVoiceState={recording:false,paused:false,ready:false,durationMs:0};setChatPresence('ONLINE');updateChatVoiceUi();return;}
-  if(a==='chat-voice-send'){const duration=chatVoiceState.durationMs,upload=await GalaxyNative.call('saveChatVoiceRecording');closeModal();setChatPresence('ONLINE');queueChatMessage({messageType:'audio',attachments:[normalizeChatUpload(upload,'audio',duration)]});chatVoiceState={recording:false,paused:false,ready:false,durationMs:0};return;}
+  if(a==='chat-voice-discard'){await GalaxyNative.call('discardVoiceRecording');ensureChatComposer().setRecordingIntent('idle');chatVoiceState={recording:false,paused:false,ready:false,durationMs:0};setChatPresence('ONLINE');updateChatVoiceUi();return;}
+  if(a==='chat-voice-send'){const duration=chatVoiceState.durationMs,upload=await GalaxyNative.call('saveChatVoiceRecording');closeModal();ensureChatComposer().setRecordingIntent('idle');setChatPresence('ONLINE');queueChatMessage({messageType:'audio',attachments:[normalizeChatUpload(upload,'audio',duration)]});chatVoiceState={recording:false,paused:false,ready:false,durationMs:0};return;}
   if(a==='notifications-open'){await openNotificationCenter();return;}
   if(a==='notifications-read-all'){await api('notifications-read');if(cloud?.notifications)cloud.notifications.unread=0;await openNotificationCenter();return;}
   if(a==='notification-open'){await api('notifications-read',{id:btn.dataset.id});if(cloud?.notifications)cloud.notifications.unread=Math.max(0,Number(cloud.notifications.unread||0)-1);const target=btn.dataset.target||'home',entity=btn.dataset.entityId||'';closeModal();await routeGalaxyAction(target,entity);return;}
@@ -2879,8 +2962,7 @@ document.addEventListener('input',e=>{
  if(e.target.id==='universalSearchInput')renderUniversalSearchResults(e.target.value);
  if(e.target.matches('#chatForm textarea')){
    const chatEl=document.querySelector('#chatMessages');if(chatEl)chatScrollEngine.beforeViewportChange(chatEl);
-   writeChatDraft(e.target.value);
-   e.target.style.height='auto';e.target.style.height=Math.min(120,e.target.scrollHeight)+'px';
+   ensureChatComposer().applyInput(e.target);
    chatComposerRightMode(e.target);
    chatTyping();
    if(chatEl)chatScrollEngine.afterViewportChange(chatEl);
@@ -2976,6 +3058,8 @@ document.addEventListener('visibilitychange',()=>{
 window.visualViewport?.addEventListener('resize',syncChatViewportHeight);
 window.visualViewport?.addEventListener('scroll',syncChatViewportHeight);
 window.addEventListener('resize',syncChatViewportHeight);
+document.addEventListener('focusin',e=>{if(e.target.matches?.('#chatForm textarea')){const viewport=window.visualViewport,full=window.innerHeight||document.documentElement.clientHeight||0;ensureChatComposer().setKeyboard(true,Math.max(0,full-(viewport?.height||full)));}});
+document.addEventListener('focusout',e=>{if(e.target.matches?.('#chatForm textarea'))ensureChatComposer().setKeyboard(false,0);});
 window.addEventListener('online',()=>{if(native.paired){flushChatOutbox({retryFailed:true}).then(()=>view==='chat'&&refreshChatAfterResume()).catch(()=>{});}});
 window.addEventListener('offline',()=>{if(view==='chat')toast('Sin conexión. Tus mensajes quedarán pendientes.');});
 document.addEventListener('scroll',e=>{
@@ -3012,7 +3096,7 @@ document.addEventListener('pointercancel',e=>{
 });
 document.addEventListener('click',e=>{if(chatSendSuppress&&e.target.closest?.('.chat-send[type="submit"]')){e.preventDefault();e.stopImmediatePropagation();chatSendSuppress=false;}},true);
 document.addEventListener('touchstart',e=>{const row=e.target.closest?.('.chat-message[data-id]'),t=e.touches?.[0];if(row&&row.dataset.id&&t)chatSwipe={id:row.dataset.id,x:t.clientX,y:t.clientY};},{passive:true});
-document.addEventListener('touchend',e=>{if(!chatSwipe)return;const t=e.changedTouches?.[0],swipe=chatSwipe;chatSwipe=null;if(!t)return;const dx=t.clientX-swipe.x,dy=Math.abs(t.clientY-swipe.y);if(dx>58&&dy<45){const m=(chatState?.messages||[]).find(x=>String(x.id)===String(swipe.id));if(m){chatReply=m;render();requestAnimationFrame(()=>document.querySelector('#chatForm textarea')?.focus());}}},{passive:true});
+document.addEventListener('touchend',e=>{if(!chatSwipe)return;const t=e.changedTouches?.[0],swipe=chatSwipe;chatSwipe=null;if(!t)return;const dx=t.clientX-swipe.x,dy=Math.abs(t.clientY-swipe.y);if(dx>58&&dy<45){const m=(chatState?.messages||[]).find(x=>String(x.id)===String(swipe.id));if(m){ensureChatComposer().setReply(m);chatRenderComposer({focus:true});}}},{passive:true});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){chatUnlockedSession=false;if(view==='chat'){chatSnapshotResumeBaseline();chatRememberPosition(document.querySelector('#chatMessages'),'chat');setChatPresence('OFFLINE');}}});
 
 render();

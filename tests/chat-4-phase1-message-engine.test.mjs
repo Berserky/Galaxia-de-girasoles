@@ -166,7 +166,7 @@ test('message list updates are incremental and navigation cleans window observer
  assert.ok(queue.includes('chatRenderMessages'));
  assert.equal(queue.includes('render();'),false);
  assert.ok(load.includes('chatMessageEngine.applyPage'));
- assert.ok(app.includes("if(a==='chat-close'){chatReply=null;chatResizeObserver?.disconnect()"));
+ assert.ok(app.includes("if(a==='chat-close'){ensureChatComposer().cancelReply();chatResizeObserver?.disconnect()"));
  assert.ok(app.includes("if(a==='chat-open'"));
 });
 
