@@ -34,6 +34,7 @@ public final class MobileApiClient {
             case "music" -> 20L*1024L*1024L;
             case "voice" -> 5L*1024L*1024L;
             case "chat-photo","chat-audio" -> 15L*1024L*1024L;
+            case "chat-thumbnail" -> 1536L*1024L;
             case "chat-video" -> 60L*1024L*1024L;
             case "chat-file" -> 30L*1024L*1024L;
             default -> -1L;
@@ -262,6 +263,14 @@ public final class MobileApiClient {
             if(source.length>=0&&sent!=source.length)throw new IOException("El archivo cambió mientras se enviaba. Intenta de nuevo.");
             return response(c);
         }finally{c.disconnect();}
+    }
+
+    public static JSONObject uploadThumbnailFile(String token,File file) throws Exception {
+        long limit=uploadLimit("chat-thumbnail");
+        if(file==null||!file.exists()||file.length()<1)throw new IOException("La miniatura está vacía.");
+        if(file.length()>limit)throw new IOException("La miniatura supera el límite permitido.");
+        UploadSource source=UploadSource.file(file,"image/jpeg",file.getName(),false);
+        return uploadWithRetry(token,"chat-thumbnail",source,limit,null);
     }
 
     public static JSONObject uploadVoiceFile(Context context,String token,File file) throws Exception {

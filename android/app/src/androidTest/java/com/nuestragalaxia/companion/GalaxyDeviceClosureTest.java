@@ -501,6 +501,52 @@ public class GalaxyDeviceClosureTest {
         }
     }
 
+    @Test public void chatPhase9MediaPerformance_realWebView20kLazyCacheAndMemoryPressure() throws Exception {
+        launchChat();
+        awaitJs("!!window.GalaxyChatMedia&&!!document.querySelector('#chatMessages')");
+        runJs("GalaxyChatPerf.enable(true);GalaxyChatPerf.reset();");
+        long pssBefore=android.os.Debug.getPss(),cpuBefore=android.os.Process.getElapsedCpuTime();
+        String thumb="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+        runJs("const __p9thumb="+JSONObject.quote(thumb)+";chatState={...(chatState||{}),messages:Array.from({length:20000},(_,i)=>{const media=i%40===0,video=media&&i%120===0;return {id:'p9-'+i,client_id:'p9c-'+i,sender_person:String(i%2),body:media?'':'Media benchmark '+i,message_type:media?(video?'video':'photo'):'text',attachments:media?[{id:'p9asset-'+i,cacheKey:'p9asset-'+i,kind:video?'video':'photo',mime:video?'video/mp4':'image/jpeg',name:'Media '+i,width:1600,height:900,durationMs:video?8000:null,url:'https://zqiknzivfahvvadmxrvt.supabase.co/storage/v1/object/sign/galaxy-chat-media/original-'+i+(video?'.mp4':'.jpg')+'?token=phase9',thumbnailUrl:__p9thumb}]:[],server_seq:i+1,created_at:'2026-10-06T12:00:00Z',reactions:[]};}),nextBeforeSeq:null,nextAfterSeq:null};chatMessageEngine.resetWindow(20000,{align:'end'});chatRenderMessages({scroll:'bottom'});");
+        awaitJs("document.querySelectorAll('.chat-message').length===84");
+        runJs("document.querySelector('[data-chat-media]')?.scrollIntoView({block:'center'});");
+        awaitJs("chatMediaEngine.stats().cacheEntries>0");
+        assertEquals("bubble loaded an original before explicit open","0",js("document.querySelectorAll('[data-chat-media][src^=\"https://\"]').length"));
+        assertEquals("video/audio initialized a source off intent","0",js("document.querySelectorAll('video[src],audio[src]').length"));
+        assertEquals("original opened without user intent","0",js("chatMediaEngine.stats().originalOpens"));
+        assertTrue("media cache exceeded bound",Integer.parseInt(js("chatMediaEngine.stats().cacheEntries"))<=96);
+
+        runJs("GalaxyChatPerf.reset();const m=document.querySelector('[data-media-kind=\"photo\"]');if(m){m.removeAttribute('src');m.dataset.mediaLoaded='false';m.dataset.mediaWanted='true';chatMediaEngine.retry(m);}");
+        awaitJs("document.querySelector('[data-media-kind=\"photo\"]')?.dataset.mediaLoaded==='true'");
+        SystemClock.sleep(250);
+        assertEquals("thumbnail decode changed reserved bubble geometry","0",js("GalaxyChatPerf.report().layoutShifts.count"));
+
+        runJs("GalaxyChatPerf.reset();window.__p9frames=[];window.__p9done=false;const e=document.querySelector('#chatMessages'),base=e.scrollTop;let start=0,last=0;function tick(t){if(!start)start=t;if(last)__p9frames.push(t-last);last=t;e.scrollTop=base+Math.sin((t-start)/80)*900;if(t-start<1200)requestAnimationFrame(tick);else window.__p9done=true;}requestAnimationFrame(tick);");
+        awaitJs("window.__p9done");
+        JSONObject frames=new JSONObject(js("JSON.stringify((()=>{const a=window.__p9frames,total=a.reduce((s,v)=>s+v,0);return {fps:a.length*1000/total,frameMs:total/a.length,dropped:a.filter(v=>v>34).length,worstMs:Math.max(...a)};})())"));
+        if(isPhysicalDevice())assertTrue("media scroll below 50 FPS: "+frames,frames.getDouble("fps")>=50);
+        if(isPhysicalDevice())assertTrue("media scroll repeatedly drops frames: "+frames,frames.getInt("dropped")<=3);
+
+        scenario.onActivity(activity->activity.onTrimMemory(android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW));
+        awaitJs("chatMediaEngine.stats().cacheEntries===0");
+        scenario.moveToState(Lifecycle.State.CREATED);scenario.moveToState(Lifecycle.State.RESUMED);
+        awaitJs("document.visibilityState==='visible'");
+        awaitJs("!!document.querySelector('#chatMessages')");
+
+        long pssAfter=android.os.Debug.getPss();
+        if(isPhysicalDevice())assertTrue("media benchmark retained excessive PSS: "+(pssAfter-pssBefore)+" KB",pssAfter-pssBefore<96*1024);
+        JSONObject metrics=new JSONObject()
+            .put("device",android.os.Build.MANUFACTURER+" "+android.os.Build.MODEL)
+            .put("logicalMessages",20000).put("distributedVisualMedia",500)
+            .put("renderedMessages",Integer.parseInt(js("document.querySelectorAll('.chat-message').length")))
+            .put("media",new JSONObject(js("JSON.stringify(chatMediaEngine.stats())")))
+            .put("frames",frames)
+            .put("cpuMs",android.os.Process.getElapsedCpuTime()-cpuBefore)
+            .put("pssBeforeKb",pssBefore).put("pssAfterKb",pssAfter)
+            .put("perf",new JSONObject(js("JSON.stringify(GalaxyChatPerf.report())")));
+        System.out.println("GALAXY_CHAT_PHASE9_ANDROID="+metrics);
+    }
+
     @Test public void dailyGoalsPlansEventsCapsulesMapContextBackupAndUpdate_areReachable() throws Exception {
         launch();
         awaitJs("document.body.innerText.includes('¿Qué construimos después?')");
