@@ -67,7 +67,7 @@ test('NG-QA-011 checklist aggregate versions increment under one parent row lock
   const checklist=block(edge,'async function chatChecklist(','\nasync function ');
   assert.ok(checklist.includes('db.rpc("galaxy_chat_checklist_set"'));
   assert.ok(checklist.includes('idempotent:!mutation?.changed'));
-  assert.ok(migration.includes('where id=p_checklist_id\n  for update'));
+  assert.match(migration,/where id=p_checklist_id\r?\n  for update/);
   assert.ok(migration.includes('set version=version+1'));
   assert.ok(migration.includes('if item_row.checked=p_checked then'));
 });

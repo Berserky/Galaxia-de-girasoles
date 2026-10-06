@@ -1,0 +1,74 @@
+{
+  "phase": "Galaxy Chat 4.0 / SUPERNOVA Phase 1",
+  "generatedAt": "2026-10-06T21:16:04.820Z",
+  "environment": {
+    "node": "v24.21.0",
+    "platform": "win32",
+    "arch": "x64"
+  },
+  "phase0Contract": {
+    "initialRequestMessages": 60,
+    "historicalBehavior": "loaded messages accumulated in state and DOM after backward pagination",
+    "rendering": "full loaded chat list rendered; content-visibility was not virtualization"
+  },
+  "phase1": {
+    "pageSize": 60,
+    "maxCacheMessages": 420,
+    "windowMessages": 84,
+    "windowStep": 28,
+    "scenarios": {
+      "100": {
+        "totalConversationMessages": 100,
+        "initiallyRetrieved": 60,
+        "loadedAfterOpen": 60,
+        "renderedAfterOpen": 60,
+        "initialMergeMs": 0.049,
+        "windowCalculationMs": 0.006,
+        "estimatedDomMessages": 60
+      },
+      "500": {
+        "totalConversationMessages": 500,
+        "initiallyRetrieved": 60,
+        "loadedAfterOpen": 60,
+        "renderedAfterOpen": 60,
+        "initialMergeMs": 0.045,
+        "windowCalculationMs": 0.006,
+        "estimatedDomMessages": 60
+      },
+      "5000": {
+        "totalConversationMessages": 5000,
+        "initiallyRetrieved": 60,
+        "loadedAfterOpen": 60,
+        "renderedAfterOpen": 60,
+        "initialMergeMs": 0.037,
+        "windowCalculationMs": 0.003,
+        "estimatedDomMessages": 60
+      },
+      "20000": {
+        "totalConversationMessages": 20000,
+        "initiallyRetrieved": 60,
+        "loadedAfterOpen": 60,
+        "renderedAfterOpen": 60,
+        "initialMergeMs": 0.037,
+        "windowCalculationMs": 0.003,
+        "estimatedDomMessages": 60
+      }
+    },
+    "longHistory": {
+      "pages": 33,
+      "maxLoaded": 420,
+      "maxRendered": 84,
+      "last": {
+        "mergeMs": 0.812,
+        "loaded": 420,
+        "rendered": 84
+      }
+    }
+  },
+  "acceptance": {
+    "initialRetrievalIndependentOfTotal": true,
+    "boundedCache": true,
+    "boundedDom": true,
+    "supports20000": true
+  }
+}

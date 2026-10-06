@@ -590,6 +590,8 @@ public class GalaxyDeviceClosureTest {
             if(iterations%15==0){
                 scenario.moveToState(Lifecycle.State.CREATED);
                 SystemClock.sleep(120);
+                UiDevice.getInstance(instrumentation).wakeUp();
+                shell("wm dismiss-keyguard");
                 scenario.moveToState(Lifecycle.State.RESUMED);
                 awaitJs("document.visibilityState==='visible'&&!!document.querySelector('#chatMessages')");
                 lifecycleCycles++;

@@ -24,7 +24,7 @@ test('Android release candidate metadata is 3.5.1 with versionCode 35',()=>{
  assert.match(candidate,/VERSION_NAME=.*versionName/);
  assert.match(stable,/versionCode:\$versionCode/);
  assert.match(stable,/versionName:\$versionName/);
- assert.match(candidate,/permissions:\n\s+contents: read/);
+ assert.match(candidate,/permissions:\r?\n\s+contents: read/);
  assert.match(stable,/permissions:[\s\S]*?contents: write/);
 });
 
