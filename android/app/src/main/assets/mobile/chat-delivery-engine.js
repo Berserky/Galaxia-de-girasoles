@@ -139,11 +139,14 @@ function create(options={}){
   try{
    const result=await send({...latest,_localState:STATES.SENDING});
    const confirmed=result?.message||null;
-   const wasPending=remove(clientId,{reason:'sent',notifyChange:false});
+   // Reconcile the authoritative row while the optimistic row still exists.
+   // Message Engine/outbox merge collapses both by client_id, so there is never
+   // a frame where the user's message disappears between local and server state.
    if(confirmed){
-    try{onConfirm(confirmed,{clientId,idempotent:result?.idempotent===true,source:'api',wasPending});}catch{}
+    try{onConfirm(confirmed,{clientId,idempotent:result?.idempotent===true,source:'api',wasPending:true});}catch{}
    }
-   notify('sent',confirmed,{clientId,idempotent:result?.idempotent===true});
+   const wasPending=remove(clientId,{reason:'sent',notifyChange:false});
+   notify('sent',confirmed,{clientId,idempotent:result?.idempotent===true,wasPending});
    metric('sent',{clientId,retryCount:latest.retryCount,durationMs:Math.max(0,now()-started),idempotent:result?.idempotent===true});
   }catch(error){
    const currentOnline=!!online(),classification=classifyError(error,{online:currentOnline});
