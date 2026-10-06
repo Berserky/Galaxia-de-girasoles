@@ -114,7 +114,10 @@ window.GalaxyNative={
    if(name==='deep-link'){pendingDeepLink=data;if(cloud)setTimeout(()=>consumeDeepLink(),0);}
    if(name==='chat-sync'&&native.paired){consumeChatSync(String(data.entityId||'')).catch(()=>{});}
    if(name==='chat-media-upload'){
-    chatMediaUploadState={state:String(data.state||'idle'),index:Number(data.index||0),count:Number(data.count||0),sent:Number(data.sent||0),total:Number(data.total||0)};
+    const previous=chatMediaUploadState?.state||'idle',next=String(data.state||'idle');
+    chatMediaUploadState={state:next,index:Number(data.index||0),count:Number(data.count||0),sent:Number(data.sent||0),total:Number(data.total||0)};
+    if(['preparing','uploading'].includes(next)&&!['preparing','uploading'].includes(previous))setChatPresence('UPLOADING_MEDIA');
+    if(['ready','failed','cancelled'].includes(next)&&['preparing','uploading'].includes(previous))setChatPresence('ONLINE');
     if(view==='chat')chatRenderComposer();
    }
    if(name==='voice'&&data.ready&&modal.open){stopVoiceTimer();voiceRecording=false;voiceReady=true;const status=modal.querySelector('[data-role="voice-status"]');if(status)status.textContent='Grabación lista. Escúchala antes de guardar.';modal.querySelector('[data-action="voice-record-stop"]')?.setAttribute('hidden','');modal.querySelector('[data-action="voice-preview"]')?.removeAttribute('hidden');modal.querySelector('[data-action="voice-discard"]')?.removeAttribute('hidden');modal.querySelector('[data-action="voice-record-start"]')?.removeAttribute('hidden');if(voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}}
@@ -2186,12 +2189,11 @@ function normalizeChatUpload(upload,kind,durationMs=null,mediaQuality='optimized
 async function addChatNativeMedia(method,args,kind){
  try{
   ensureChatComposer().setAttachmentIntent(kind||'file');
-  setChatPresence('UPLOADING_MEDIA');
   const result=await GalaxyNative.call(method,...(args||[]));
   const uploads=Array.isArray(result?.items)?result.items:[result];
   for(const item of uploads)if(item?.path)chatAttachmentsDraft.push(normalizeChatUpload(item,kind));
-  const caption=String(result?.caption||'').trim(),composer=ensureChatComposer();
-  if(caption&&!composer.snapshot().text.trim())composer.setText(caption);
+  const caption=String(result?.caption||'').trim(),composer=ensureChatComposer(),existing=composer.snapshot().text.trim();
+  if(caption)composer.setText(existing&&existing!==caption?existing+'\n'+caption:caption);
   chatMediaUploadState={state:'idle',index:0,count:0,sent:0,total:0};
   closeModal();composer.setAttachmentIntent(null);chatRenderComposer({focus:true});setChatPresence('ONLINE');
  }catch(e){
