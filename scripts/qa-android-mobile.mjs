@@ -35,6 +35,7 @@ const widgetPrefs=read('android/app/src/main/java/com/nuestragalaxia/companion/W
 const trackingService=read('android/app/src/main/java/com/nuestragalaxia/companion/TrackingService.java');
 const updater=read('android/app/src/main/java/com/nuestragalaxia/companion/UpdateManager.java');
 const apiClient=read('android/app/src/main/java/com/nuestragalaxia/companion/MobileApiClient.java');
+const galaxyCamera=read('android/app/src/main/java/com/nuestragalaxia/companion/GalaxyCameraActivity.java');
 const edge=read('supabase/functions/android-companion/index.ts');
 const mediaValidation=read('supabase/functions/android-companion/media-validation.ts');
 const serverInsights=read('supabase/functions/android-companion/insights.ts');
@@ -80,9 +81,11 @@ assert.ok(app.includes("data-action=\"chat-file-open\"")&&app.includes("GalaxyNa
 assert.ok(main.includes('path.startsWith("/storage/v1/object/sign/galaxy-chat-media/")')&&main.includes('32L*1024L*1024L'),'La apertura de archivos debe limitar host/ruta privada y tamaño');
 assert.ok(main.includes('pruneChatFileCache(dir)')&&main.includes('24L*60L*60L*1000L')&&main.includes('i>=20'),'La caché temporal de archivos del chat debe limpiarse y quedar acotada');
 assert.ok(main.includes('FileProvider.getUriForFile(this,getPackageName()+".files",file)'),'Foto/video deben generar content URI mediante FileProvider');
-assert.ok(main.includes('ClipData.newUri(getContentResolver(),"galaxy-camera",uri)')&&main.includes('ClipData.newUri(getContentResolver(),"galaxy-video",uri)'),'Foto/video deben conceder acceso al URI a la app de cámara');
+assert.ok(galaxyCamera.includes('PreviewView')&&galaxyCamera.includes('ImageCapture')&&galaxyCamera.includes('VideoCapture<Recorder>'),'Foto/video de Galaxy Chat deben usar la cámara integrada CameraX');
+assert.ok(main.includes('captureIntegratedChatCamera(requestId,"photo"')&&main.includes('captureIntegratedChatCamera(requestId,"video"'),'Galaxy Chat debe enrutar foto y video a la experiencia integrada');
+assert.equal(main.includes('MediaStore.ACTION_VIDEO_CAPTURE'),false,'Galaxy Chat no debe depender de una app externa para grabar video');
 assert.equal(main.includes('resolveActivity(getPackageManager())'),false,'La captura no debe depender de resolveActivity: Android moderno puede ocultar handlers instalados');
-assert.ok(manifest.includes('android.media.action.IMAGE_CAPTURE')&&manifest.includes('android.media.action.VIDEO_CAPTURE'),'Manifest debe declarar visibilidad de intents de cámara y video');
+assert.ok(manifest.includes('android.media.action.IMAGE_CAPTURE')&&!manifest.includes('android.media.action.VIDEO_CAPTURE'),'Solo la captura fotográfica heredada fuera de Galaxy Chat conserva visibilidad del intent externo');
 assert.ok(app.includes("showBottomSheet('Adjuntar'")&&app.includes('data-action="chat-attach-camera"')&&app.includes('data-action="chat-attach-gallery"')&&app.includes('data-action="chat-attach-video-camera"')&&app.includes('>Archivo</span>')&&app.includes('>Ubicación</span>')&&app.includes('>Acompáñame</span>')&&app.includes('>Galaxy Card</span>')&&app.includes('>Encuesta</span>')&&app.includes('>Checklist</span>')&&app.includes('>GIF / stickers</span>'),'El launcher + debe conservar capacidades existentes dentro del único bottom sheet de Composer 2.0');
 assert.equal(app.includes('data-action="chat-attach-photo"')||app.includes('data-action="chat-attach-video"')||app.includes('data-action="chat-voice-open"'),false,'El menú + no debe duplicar foto, video ni audio');
 assert.ok(main.includes('else mime="*/*"')&&!main.includes('Intent.EXTRA_MIME_TYPES'),'Archivos debe abrir el selector universal sin filtrar tipos');
