@@ -386,7 +386,7 @@ public final class MainActivity extends FragmentActivity {
     }
 
     void capturePhoto(String requestId){ capturePhotoWithKind(requestId,"photo"); }
-    void captureChatPhoto(String requestId){ capturePhotoWithKind(requestId,"chat-photo"); }
+    void captureChatPhoto(String requestId){ captureIntegratedChatCamera(requestId,"photo",120,false); }
 
     private void capturePhotoWithKind(String requestId,String kind){
         if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
@@ -431,49 +431,50 @@ public final class MainActivity extends FragmentActivity {
     }
 
     private void captureChatVideoWithLimit(String requestId,int durationSeconds,boolean videoMessage){
+        captureIntegratedChatCamera(requestId,"video",durationSeconds,videoMessage);
+    }
+
+    private void captureIntegratedChatCamera(String requestId,String mode,int durationSeconds,boolean videoMessage){
         if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
         runOnUiThread(()->{
+            boolean video="video".equals(mode);
             boolean cameraGranted=checkSelfPermission(Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED;
-            boolean microphoneGranted=checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED;
+            boolean microphoneGranted=!video||checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED;
             if(!cameraGranted||!microphoneGranted){
-                if(pendingVideoPermissionRequest!=null){reject(requestId,"Ya hay una solicitud de permisos de video activa.");return;}
-                pendingVideoPermissionRequest=requestId;pendingVideoPermissionDuration=durationSeconds;pendingVideoPermissionMessage=videoMessage;
-                java.util.ArrayList<String> missing=new java.util.ArrayList<>();
-                if(!cameraGranted)missing.add(Manifest.permission.CAMERA);
-                if(!microphoneGranted)missing.add(Manifest.permission.RECORD_AUDIO);
-                requestPermissions(missing.toArray(new String[0]),REQ_CHAT_VIDEO_PERMISSION);
+                if(video){
+                    if(pendingVideoPermissionRequest!=null){reject(requestId,"Ya hay una solicitud de permisos de video activa.");return;}
+                    pendingVideoPermissionRequest=requestId;pendingVideoPermissionDuration=durationSeconds;pendingVideoPermissionMessage=videoMessage;
+                    java.util.ArrayList<String> missing=new java.util.ArrayList<>();
+                    if(!cameraGranted)missing.add(Manifest.permission.CAMERA);
+                    if(!microphoneGranted)missing.add(Manifest.permission.RECORD_AUDIO);
+                    requestPermissions(missing.toArray(new String[0]),REQ_CHAT_VIDEO_PERMISSION);
+                }else{
+                    if(pendingCameraPermissionRequest!=null){reject(requestId,"Ya hay una solicitud de permiso de cámara activa.");return;}
+                    pendingCameraPermissionRequest=requestId;pendingCameraPermissionKind="chat-native";
+                    requestPermissions(new String[]{Manifest.permission.CAMERA},REQ_CHAT_CAMERA_PERMISSION);
+                }
                 return;
             }
-            if(pendingVideoRequest!=null){reject(requestId,"Ya hay una cámara de video abierta.");return;}
+            if(pendingIntegratedCameraRequest!=null){reject(requestId,"Ya hay una captura multimedia activa.");return;}
             try{
-                File dir=new File(getCacheDir(),"camera-media");
-                if(!dir.exists()&&!dir.mkdirs())throw new IOException("No se pudo preparar la cámara.");
-                File file=File.createTempFile(videoMessage?"galaxy-video-message-":"galaxy-video-", ".mp4", dir);
-                Uri uri=FileProvider.getUriForFile(this,getPackageName()+".files",file);
-                Intent intent=new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
-                intent.putExtra(MediaStore.EXTRA_OUTPUT,uri);
-                intent.setClipData(ClipData.newUri(getContentResolver(),"galaxy-video",uri));
-                intent.putExtra(MediaStore.EXTRA_DURATION_LIMIT,durationSeconds);
-                intent.putExtra(MediaStore.EXTRA_VIDEO_QUALITY,1);
-                intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                pendingVideoRequest=requestId;pendingVideoFile=file;pendingVideoUri=uri;pendingVideoMessage=videoMessage;
-                startActivityForResult(intent,REQ_VIDEO);
-            }catch(ActivityNotFoundException e){
-                pendingVideoRequest=null;pendingVideoMessage=false;
-                if(pendingVideoFile!=null)pendingVideoFile.delete();
-                pendingVideoFile=null;pendingVideoUri=null;
-                reject(requestId,"No encontramos una aplicación de cámara de video disponible. Habilita la cámara del teléfono y vuelve a intentar.");
+                pendingIntegratedCameraRequest=requestId;
+                pendingIntegratedCameraKind=video?"video":"photo";
+                pendingIntegratedCameraDuration=Math.max(1,Math.min(120,durationSeconds));
+                pendingIntegratedVideoMessage=videoMessage;
+                Intent intent=new Intent(this,GalaxyCameraActivity.class)
+                    .putExtra(GalaxyCameraActivity.EXTRA_MODE,pendingIntegratedCameraKind)
+                    .putExtra(GalaxyCameraActivity.EXTRA_MAX_DURATION,pendingIntegratedCameraDuration)
+                    .putExtra(GalaxyCameraActivity.EXTRA_VIDEO_MESSAGE,videoMessage);
+                chatCameraLauncher.launch(intent);
             }catch(Exception e){
-                pendingVideoRequest=null;pendingVideoMessage=false;
-                if(pendingVideoFile!=null)pendingVideoFile.delete();
-                pendingVideoFile=null;pendingVideoUri=null;
-                reject(requestId,e.getMessage()==null?"No pudimos abrir la cámara de video.":e.getMessage());
+                pendingIntegratedCameraRequest=null;pendingIntegratedCameraKind="photo";pendingIntegratedCameraDuration=120;pendingIntegratedVideoMessage=false;
+                reject(requestId,e.getMessage()==null?"No pudimos abrir la cámara integrada.":e.getMessage());
             }
         });
     }
 
     void pickPhotos(String requestId){ pickPhotosWithKind(requestId,"photo"); }
-    void pickChatPhotos(String requestId){ pickPhotosWithKind(requestId,"chat-photo"); }
+    void pickChatPhotos(String requestId){ pickPhotosWithKind(requestId,"chat-media"); }
 
     private void pickPhotosWithKind(String requestId,String kind){
         if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
@@ -481,10 +482,14 @@ public final class MainActivity extends FragmentActivity {
             if(pendingPhotoPickerRequest!=null){reject(requestId,"Ya hay un selector de fotos abierto.");return;}
             pendingPhotoPickerRequest=requestId;pendingPhotoPickerKind=kind;
             try{
-                photoPickerLauncher.launch(new PickVisualMediaRequest.Builder().setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly.INSTANCE).build());
+                androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.VisualMediaType type=
+                    "chat-media".equals(kind)
+                    ?ActivityResultContracts.PickVisualMedia.ImageAndVideo.INSTANCE
+                    :ActivityResultContracts.PickVisualMedia.ImageOnly.INSTANCE;
+                photoPickerLauncher.launch(new PickVisualMediaRequest.Builder().setMediaType(type).build());
             }catch(Exception e){
                 pendingPhotoPickerRequest=null;pendingPhotoPickerKind="photo";
-                reject(requestId,"Android no pudo abrir el selector de fotos.");
+                reject(requestId,"Android no pudo abrir el selector multimedia.");
             }
         });
     }
@@ -493,6 +498,10 @@ public final class MainActivity extends FragmentActivity {
         String request=pendingPhotoPickerRequest,kind=pendingPhotoPickerKind;pendingPhotoPickerRequest=null;pendingPhotoPickerKind="photo";
         if(request==null)return;
         if(uris==null||uris.isEmpty()){reject(request,"Selección cancelada.");return;}
+        if("chat-media".equals(kind)){
+            launchChatMediaReview(request,uris.subList(0,Math.min(12,uris.size())));
+            return;
+        }
         io.execute(()->{
             int imported=0,skipped=0;String lastError="";org.json.JSONArray items=new org.json.JSONArray();
             try{
@@ -507,6 +516,148 @@ public final class MainActivity extends FragmentActivity {
                 resolve(request,out);
             }catch(Exception e){reject(request,e.getMessage()==null?"No pudimos importar las fotos seleccionadas.":e.getMessage());}
         });
+    }
+
+    private void launchChatMediaReview(String requestId,java.util.List<Uri> uris){
+        runOnUiThread(()->{
+            if(pendingChatReviewRequest!=null){reject(requestId,"Ya hay una revisión multimedia activa.");return;}
+            try{
+                java.util.ArrayList<Uri> selected=new java.util.ArrayList<>(uris);
+                Intent intent=new Intent(this,GalaxyMediaReviewActivity.class)
+                    .putParcelableArrayListExtra(GalaxyMediaReviewActivity.EXTRA_URIS,selected)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                ClipData clip=null;
+                for(Uri uri:selected){
+                    if(clip==null)clip=ClipData.newUri(getContentResolver(),"galaxy-media",uri);
+                    else clip.addItem(new ClipData.Item(uri));
+                }
+                if(clip!=null)intent.setClipData(clip);
+                pendingChatReviewRequest=requestId;
+                chatMediaReviewLauncher.launch(intent);
+            }catch(Exception e){
+                pendingChatReviewRequest=null;
+                reject(requestId,"No pudimos abrir la vista previa multimedia.");
+            }
+        });
+    }
+
+    private void handleChatMediaReviewResult(androidx.activity.result.ActivityResult result){
+        String request=pendingChatReviewRequest;pendingChatReviewRequest=null;
+        if(request==null)return;
+        Intent data=result.getData();
+        if(result.getResultCode()!=RESULT_OK||data==null){reject(request,"Selección cancelada.");return;}
+        java.util.ArrayList<Uri> uris;
+        if(Build.VERSION.SDK_INT>=33)uris=data.getParcelableArrayListExtra(GalaxyMediaReviewActivity.EXTRA_URIS,Uri.class);
+        else uris=data.getParcelableArrayListExtra(GalaxyMediaReviewActivity.EXTRA_URIS);
+        if(uris==null||uris.isEmpty()){reject(request,"Selección cancelada.");return;}
+        String caption=data.getStringExtra(GalaxyMediaReviewActivity.EXTRA_CAPTION);
+        uploadReviewedChatMedia(request,uris,caption,false);
+    }
+
+    private void handleIntegratedCameraResult(androidx.activity.result.ActivityResult result){
+        String request=pendingIntegratedCameraRequest,kind=pendingIntegratedCameraKind;
+        boolean videoMessage=pendingIntegratedVideoMessage;
+        pendingIntegratedCameraRequest=null;pendingIntegratedCameraKind="photo";pendingIntegratedCameraDuration=120;pendingIntegratedVideoMessage=false;
+        if(request==null)return;
+        Intent data=result.getData();
+        if(result.getResultCode()!=RESULT_OK||data==null){
+            String error=data==null?"":data.getStringExtra("error");
+            reject(request,error==null||error.isBlank()?"Captura cancelada.":error);return;
+        }
+        String filePath=data.getStringExtra(GalaxyCameraActivity.EXTRA_FILE_PATH);
+        if(filePath==null||filePath.isBlank()){reject(request,"La captura no devolvió un archivo válido.");return;}
+        File file=new File(filePath);
+        if(!file.exists()){reject(request,"La captura temporal ya no está disponible.");return;}
+        Uri uri;
+        try{uri=FileProvider.getUriForFile(this,getPackageName()+".files",file);}
+        catch(Exception e){file.delete();reject(request,"No pudimos abrir la captura temporal.");return;}
+        java.util.ArrayList<Uri> uris=new java.util.ArrayList<>();uris.add(uri);
+        String caption=data.getStringExtra(GalaxyCameraActivity.EXTRA_CAPTION);
+        uploadReviewedChatMedia(request,uris,caption,videoMessage);
+    }
+
+    private void uploadReviewedChatMedia(String request,java.util.List<Uri> uris,String caption,boolean videoMessage){
+        chatMediaUploadCancelled.set(false);
+        io.execute(()->{
+            int imported=0,skipped=0;String lastError="";org.json.JSONArray items=new org.json.JSONArray();
+            java.util.ArrayList<String> uploadedPaths=new java.util.ArrayList<>();
+            try{
+                String token=store.token();
+                if(token==null)throw new ApiClient.ApiException(401,"El vínculo del dispositivo ya no es válido.");
+                int count=Math.min(12,uris.size());
+                mediaUploadEvent("preparing",0,count,0,0);
+                for(int i=0;i<count;i++){
+                    if(chatMediaUploadCancelled.get())throw new MobileApiClient.UploadCancelledException();
+                    Uri uri=uris.get(i);
+                    JSONObject meta=MediaInspector.inspect(this,uri);
+                    String uploadKind=MediaInspector.chatKind(this,uri);
+                    int itemIndex=i+1;
+                    mediaUploadEvent("uploading",itemIndex,count,0,meta.optLong("size",0));
+                    JSONObject uploaded=MobileApiClient.upload(this,token,uri,uploadKind,new MobileApiClient.UploadObserver(){
+                        @Override public boolean isCancelled(){return chatMediaUploadCancelled.get();}
+                        @Override public void onProgress(long sent,long total){mediaUploadEvent("uploading",itemIndex,count,sent,total);}
+                    });
+                    if(meta.has("width"))uploaded.put("width",meta.optLong("width"));
+                    if(meta.has("height"))uploaded.put("height",meta.optLong("height"));
+                    if(meta.has("durationMs"))uploaded.put("durationMs",meta.optLong("durationMs"));
+                    if(meta.has("rotation"))uploaded.put("rotation",meta.optLong("rotation"));
+                    uploaded.put("sourceMime",meta.optString("mime",""));
+                    if(videoMessage)uploaded.put("videoMessage",true);
+                    String path=uploaded.optString("path","");if(!path.isBlank())uploadedPaths.add(path);
+                    items.put(uploaded);imported++;
+                }
+                if(chatMediaUploadCancelled.get())throw new MobileApiClient.UploadCancelledException();
+                JSONObject out=new JSONObject().put("imported",imported).put("skipped",skipped).put("items",items).put("caption",caption==null?"":caption.trim());
+                mediaUploadEvent("ready",count,count,0,0);
+                resolve(request,out);
+            }catch(MobileApiClient.UploadCancelledException e){
+                discardUnreferencedChatMedia(uploadedPaths);
+                mediaUploadEvent("cancelled",imported,Math.min(12,uris.size()),0,0);
+                reject(request,"Upload cancelado.");
+            }catch(Exception e){
+                discardUnreferencedChatMedia(uploadedPaths);
+                mediaUploadEvent("failed",imported,Math.min(12,uris.size()),0,0);
+                lastError=e.getMessage()==null?"No pudimos preparar el contenido multimedia.":e.getMessage();
+                reject(request,lastError);
+            }finally{
+                for(Uri uri:uris)deleteOwnedCameraUri(uri);
+                chatMediaUploadCancelled.set(false);
+            }
+        });
+    }
+
+    private void deleteOwnedCameraUri(Uri uri){
+        try{
+            if(uri==null||!"content".equalsIgnoreCase(uri.getScheme()))return;
+            File cameraDir=new File(getCacheDir(),"camera-media");
+            String name=documentName(uri);
+            if(name==null||name.isBlank())return;
+            File candidate=new File(cameraDir,name);
+            String root=cameraDir.getCanonicalPath()+File.separator,target=candidate.getCanonicalPath();
+            if(target.startsWith(root)&&candidate.exists())candidate.delete();
+        }catch(Exception ignored){}
+    }
+
+    private void discardUnreferencedChatMedia(java.util.List<String> paths){
+        if(paths==null||paths.isEmpty())return;
+        try{
+            String token=store.token();if(token==null)return;
+            org.json.JSONArray values=new org.json.JSONArray();for(String path:paths)values.put(path);
+            MobileApiClient.post(token,new JSONObject().put("action","chat-media-discard").put("paths",values));
+        }catch(Exception ignored){}
+    }
+
+    void cancelChatMediaUpload(String requestId){
+        chatMediaUploadCancelled.set(true);
+        try{resolve(requestId,new JSONObject().put("cancelRequested",true));}catch(Exception e){reject(requestId,"No pudimos cancelar la subida.");}
+    }
+
+    private void mediaUploadEvent(String state,int index,int count,long sent,long total){
+        try{
+            JSONObject payload=new JSONObject().put("state",state).put("index",index).put("count",count);
+            if(total>0){payload.put("sent",Math.max(0,sent));payload.put("total",total);}
+            event("chat-media-upload",payload);
+        }catch(Exception ignored){}
     }
 
     void pickDriveFolder(String requestId){
