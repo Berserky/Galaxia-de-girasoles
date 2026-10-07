@@ -1512,7 +1512,7 @@ body.chat-mode .chat-compose-row{min-width:0;max-width:100%;overflow-x:hidden}
   .chat-shared-list,.chat-result-list{max-height:42vh}
   .chat-voice-instruction{display:none}
 }
-@media(prefers-reduced-motion:reduce){
+@media (prefers-reduced-motion: reduce){
   .chat-search-status[data-state="searching"] .ui-icon,.chat-shared-loading .ui-icon{animation:none}
   .chat-message.chat-message-action-target .chat-bubble{transform:none}
 }
