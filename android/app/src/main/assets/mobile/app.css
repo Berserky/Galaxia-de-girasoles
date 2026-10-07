@@ -1482,29 +1482,29 @@ body.chat-mode .chat-compose-row{min-width:0;max-width:100%;overflow-x:hidden}
 @media(max-width:390px){
   .chat-shell-head{grid-template-columns:40px 38px minmax(0,1fr) 42px 42px;gap:3px}
   .chat-avatar{width:38px;height:38px}
-  .chat-head-action,.chat-back{width:42px;height:42px;min-width:42px;min-height:42px}
+  .chat-head-action,.chat-back{width:44px;height:44px;min-width:44px;min-height:44px}
   #modal.chat-surface.chat-bottom-sheet .modal-inner{padding-left:12px;padding-right:12px}
   .chat-shared-list[data-category="media"]{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
 @media(max-width:360px){
   .chat-shell-head{grid-template-columns:40px 36px minmax(0,1fr) 40px 40px;gap:2px}
   .chat-avatar{width:36px;height:36px;font-size:.8rem}
-  .chat-head-action,.chat-back{width:40px;height:40px;min-width:40px;min-height:40px}
+  .chat-head-action,.chat-back{width:44px;height:44px;min-width:44px;min-height:44px}
   .chat-contact .eyebrow{display:none}
   .chat-search-filter-grid{grid-template-columns:minmax(0,1fr)}
   .chat-search-filter-grid label:last-child{grid-column:auto}
-  .chat-voice-inline.preview{grid-template-columns:42px minmax(0,1fr) auto 42px 42px;gap:3px}
-  .chat-voice-inline.recording.locked{grid-template-columns:42px auto minmax(0,1fr) auto;gap:3px}
-  .chat-voice-inline button{width:42px;height:42px;min-width:42px;min-height:42px}
+  .chat-voice-inline.preview{grid-template-columns:44px minmax(0,1fr) auto 44px 44px;gap:3px}
+  .chat-voice-inline.recording.locked{grid-template-columns:44px auto minmax(0,1fr) auto;gap:3px}
+  .chat-voice-inline button{width:44px;height:44px;min-width:44px;min-height:44px}
 }
 @media(max-width:320px){
   .chat-shell-head{grid-template-columns:38px 34px minmax(0,1fr) 38px 38px;gap:2px}
   .chat-avatar{width:34px;height:34px}
-  .chat-head-action,.chat-back{width:38px;height:38px;min-width:38px;min-height:38px}
+  .chat-head-action,.chat-back{width:44px;height:44px;min-width:44px;min-height:44px}
   .chat-contact h2{font-size:.9rem}.chat-contact small{font-size:.68rem}
   .chat-shared-list[data-category="media"]{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .chat-voice-inline.preview{grid-template-columns:40px minmax(0,1fr) auto 40px 40px;padding-left:4px;padding-right:4px}
-  .chat-voice-inline button{width:40px;height:40px;min-width:40px;min-height:40px}
+  .chat-voice-inline.preview{grid-template-columns:44px minmax(0,1fr) auto 44px 44px;padding-left:3px;padding-right:3px}
+  .chat-voice-inline button{width:44px;height:44px;min-width:44px;min-height:44px}
 }
 @media(orientation:landscape) and (max-height:560px){
   #modal.chat-surface .modal-inner{max-height:calc(var(--chat-viewport-height,100dvh) - 4px)}
