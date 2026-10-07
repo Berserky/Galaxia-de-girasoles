@@ -352,12 +352,15 @@ public class GalaxyDeviceClosureTest {
         runJs("const t=document.querySelector('#chatForm textarea');t.value='Realtime no borra esto';t.dispatchEvent(new Event('input',{bubbles:true}));const incoming={id:'p4-live',client_id:'p4-livec',sender_person:'1',body:'Mientras escribes',message_type:'text',attachments:[],server_seq:999999,created_at:'2026-10-05T22:00:00Z',reactions:[]};chatState=chatMessageEngine.applySingle(chatState||{messages:[]},incoming);chatStateSignature=chatSignature(chatState);chatRenderMessages({scroll:'preserve'});");
         assertEquals("Realtime no borra esto", js("document.querySelector('#chatForm textarea')?.value||''"));
 
+        // Changing font_scale may itself destroy/recreate the Activity. Close the
+        // current scenario first so ActivityScenario never races a system-driven
+        // DESTROYED transition, then relaunch under the new scaled configuration.
+        scenario.close();
+        scenario = null;
         shell("settings put system font_scale 1.30");
-        scenario.recreate();
         awaitCondition(() -> context.getResources().getConfiguration().fontScale >= 1.25f, UI_TIMEOUT_MS);
-        awaitJs("!!document.querySelector('#app')");
-        awaitJs("!!document.querySelector('#chatFab')&&!document.querySelector('#chatFab').classList.contains('hidden')");
         launchChat();
+        awaitJs("!!document.querySelector('#app')");
         awaitJs("!!document.querySelector('.chat-composer-v2')");
         double minTarget = Double.parseDouble(js("Math.min(document.querySelector('.chat-plus').getBoundingClientRect().width,document.querySelector('.chat-plus').getBoundingClientRect().height,document.querySelector('.chat-send').getBoundingClientRect().width,document.querySelector('.chat-send').getBoundingClientRect().height)"));
         assertTrue("Composer touch target below 44 CSS px: " + minTarget, minTarget >= 44d);
