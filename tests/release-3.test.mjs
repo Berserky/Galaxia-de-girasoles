@@ -14,12 +14,12 @@ test('Mega 3.0 release migration is canonical and non-destructive',()=>{
  assert.equal(new Set(tables).size,tables.length,'migration must not repeat table blocks');
 });
 
-test('Android release candidate metadata is Supernova 4.0.0 with versionCode 36',()=>{
+test('Android release candidate metadata is Crown Jewel 4.1.0 with versionCode 37',()=>{
  const gradle=read('android/app/build.gradle.kts');
  const candidate=read('.github/workflows/android-release-candidate.yml');
  const stable=read('.github/workflows/android-release-stable.yml');
- assert.match(gradle,/versionCode = 36/);
- assert.match(gradle,/versionName = "4\.0\.0"/);
+ assert.match(gradle,/versionCode = 37/);
+ assert.match(gradle,/versionName = "4\.1\.0"/);
  assert.match(candidate,/VERSION_CODE=.*versionCode/);
  assert.match(candidate,/VERSION_NAME=.*versionName/);
  assert.match(stable,/versionCode:\$versionCode/);
