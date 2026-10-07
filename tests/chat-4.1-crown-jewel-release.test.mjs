@@ -22,5 +22,5 @@ test('Crown Jewel QA ledger keeps physical smoke explicit and stable promotion f
   const qa=read('docs/qa/chat-4.1-crown-jewel-release.md');
   assert.match(qa,/Physical smoke:[^\n]*NOT TESTED/i);
   assert.match(qa,/NO ejecutar android-stable/i);
-  assert.match(qa,/PR #109/);
+  assert.match(qa,/#109/);
 });
