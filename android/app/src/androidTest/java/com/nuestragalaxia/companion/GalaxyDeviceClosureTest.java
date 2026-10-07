@@ -97,9 +97,14 @@ public class GalaxyDeviceClosureTest {
 
         runJs("document.querySelector('#chatFab')?.click()");
         awaitJs("!!document.querySelector('.chat-shell')");
+        runJs("document.querySelector('[data-action=\"chat-more-open\"]')?.click()");
+        awaitJs("document.querySelector('#modal')?.open===true");
+        assertTrue(js("document.querySelector('#modal')?.innerText||''").contains("Contenido compartido"));
+        assertTrue(js("document.querySelector('#modal')?.innerText||''").contains("Guardados"));
+        assertTrue(js("document.querySelector('#modal')?.innerText||''").contains("Ajustes del chat"));
         runJs("document.querySelector('[data-action=\"chat-settings-open\"]')?.click()");
         awaitJs("document.querySelector('#modal')?.open===true");
-        assertTrue(js("document.querySelector('#modal')?.innerText||''").contains("Ajustes"));
+        assertTrue(js("document.querySelector('#modal')?.innerText||''").contains("Ajustes del chat"));
         runJs("document.querySelector('[data-action=\"modal-close\"]')?.click()");
         awaitJs("document.querySelector('#modal')?.open===false");
 
