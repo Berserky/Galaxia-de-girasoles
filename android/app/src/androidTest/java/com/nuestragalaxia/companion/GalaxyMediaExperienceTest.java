@@ -82,8 +82,17 @@ public class GalaxyMediaExperienceTest {
         long pssBefore=android.os.Debug.getPss(),openStarted=SystemClock.elapsedRealtime(),openMs,captureMs;
         try(ActivityScenario<GalaxyCameraActivity> scenario=ActivityScenario.launch(intent)){
             assertTrue(device.wait(Until.hasObject(By.desc("Tomar foto")),8_000));
+            scenario.recreate();
+            assertTrue("Camera did not survive lifecycle recreation.",device.wait(Until.hasObject(By.desc("Tomar foto")),8_000));
             openMs=SystemClock.elapsedRealtime()-openStarted;
             assertTrue(device.hasObject(By.desc("Activar flash")));
+            scenario.onActivity(activity->{
+                View decor=activity.getWindow().getDecorView();
+                View close=findByDescription(decor,"Cerrar cámara"),shutter=findByDescription(decor,"Tomar foto"),switchView=findByDescription(decor,"Cambiar cámara");
+                assertTrue(close!=null&&close.getHeight()>=dp(context,48));
+                assertTrue(shutter!=null&&shutter.getHeight()>=dp(context,48));
+                assertTrue(switchView!=null&&switchView.getHeight()>=dp(context,48));
+            });
             if(provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)){
                 UiObject2 switcher=device.findObject(By.desc("Cambiar cámara"));
                 assertTrue(switcher!=null&&switcher.isEnabled());switcher.click();SystemClock.sleep(600);switcher.click();SystemClock.sleep(600);
@@ -123,6 +132,15 @@ public class GalaxyMediaExperienceTest {
             previewMs=SystemClock.elapsedRealtime()-stopStarted;
             scenario.onActivity(activity->{
                 assertTrue(findByDescription(activity.getWindow().getDecorView(),"Vista previa del video")!=null);
+                try{
+                    File[] files=new File(context.getCacheDir(),"camera-media").listFiles((dir,name)->name.startsWith("galaxy-camerax-video-")&&name.endsWith(".mp4"));
+                    assertTrue("CameraX review did not retain its private MP4.",files!=null&&files.length==1);
+                    Uri captured=FileProvider.getUriForFile(context,context.getPackageName()+".files",files[0]);
+                    JSONObject meta=MediaInspector.inspect(context,captured);
+                    assertTrue("CameraX MIME was rejected: "+meta,"video/mp4".equals(meta.optString("mime")));
+                    assertTrue("CameraX MP4 container brand missing: "+meta,!meta.optString("containerBrand","").isBlank());
+                    assertTrue("CameraX duration metadata missing: "+meta,meta.optLong("durationMs",0)>0);
+                }catch(Exception e){throw new AssertionError("CameraX MP4 inspection failed",e);}
                 View repeat=findByText(activity.getWindow().getDecorView(),"Repetir");
                 assertTrue(repeat!=null&&repeat.performClick());
             });
@@ -166,6 +184,8 @@ public class GalaxyMediaExperienceTest {
         if(root instanceof ViewGroup group)for(int i=0;i<group.getChildCount();i++){View found=findByText(group.getChildAt(i),text);if(found!=null)return found;}
         return null;
     }
+
+    private static int dp(Context context,int value){return Math.round(value*context.getResources().getDisplayMetrics().density);}
 
     private static boolean hasFiles(File dir){
         File[] files=dir.listFiles();return files!=null&&files.length>0;

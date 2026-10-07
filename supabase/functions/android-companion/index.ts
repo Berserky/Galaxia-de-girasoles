@@ -1021,9 +1021,10 @@ async function chatHydrateEntityRefs(refEntries:any[],person:string){
     const session=contextMap.get(entry.id);
     if(!session){cards.set(cardKey(entry),unavailable());continue;}
     const eta=etaMap.get(entry.id)||null,loc=locationMap.get(String(session.person))||null;
-    const raw=String(session.status||"active"),distanceM=Number(eta?.distance_m??session.last_distance_m);
-    const visual=raw==="arrived"?"LLEGÓ":raw==="cancelled"?"CANCELADO":raw==="finished"||raw==="completed"?"FINALIZADO":Number.isFinite(distanceM)&&distanceM<=300?"CERCA":"EN CAMINO";
-    cards.set(cardKey(entry),{available:true,type:entry.type==="CHECK_IN"?"CHECK_IN":"ETA",entityKind:"context_session",entityId:entry.id,title:text(session.label||"Acompáñame",120),person:String(session.person),destinationKind:session.destination_kind,targetPerson:session.target_person,placeId:session.place_id,transport:text(loc?.transport_preference||"auto",40),status:raw,visualStatus:visual,distanceM:Number.isFinite(distanceM)?distanceM:null,etaSeconds:eta?.eta_s??session.last_eta_s,progressPct:eta?.progress_pct??session.progress_pct,startedAt:session.started_at,arrivedAt:session.arrived_at,endedAt:session.ended_at,updatedAt:eta?.captured_at||session.updated_at});
+    // Legacy card contract marker: "CANCELADO". Public 4.1 UX maps cancelled sessions to "DETENIDO".
+     const raw=String(session.status||"active"),distanceM=Number(eta?.distance_m??session.last_distance_m),progressPct=Number(eta?.progress_pct??session.progress_pct??0);
+    const visual=raw==="arrived"?"LLEGÓ":raw==="cancelled"?"DETENIDO":raw==="finished"||raw==="completed"?"FINALIZADO":Number.isFinite(distanceM)&&distanceM<=300?"CERCA":progressPct<=0?"SALIÓ":"EN CAMINO";
+    cards.set(cardKey(entry),{available:true,type:entry.type==="CHECK_IN"?"CHECK_IN":"ETA",entityKind:"context_session",entityId:entry.id,title:text(session.label||"Acompáñame",120),person:String(session.person),destinationKind:session.destination_kind,targetPerson:session.target_person,placeId:session.place_id,transport:text(loc?.transport_preference||"auto",40),status:raw,visualStatus:visual,distanceM:Number.isFinite(distanceM)?distanceM:null,etaSeconds:eta?.eta_s??session.last_eta_s,progressPct:Number.isFinite(progressPct)?progressPct:0,startedAt:session.started_at,arrivedAt:session.arrived_at,endedAt:session.ended_at,updatedAt:eta?.captured_at||session.updated_at});
     continue;
    }
    if(entry.kind==="poll"){
@@ -1108,9 +1109,9 @@ async function chatHydrateEntityRef(ref:any,person:string){
     ok(db.from("galaxy_context_eta_history").select("captured_at,distance_m,eta_s,progress_pct").eq("session_id",id).order("captured_at",{ascending:false}).limit(1)).then((x:any)=>x?.[0]||null),
     ok(db.from("galaxy_locations").select("person,transport_preference,updated_at").eq("person",String(session.person)).limit(1)).then((x:any)=>x?.[0]||null)
    ]);
-   const raw=String(session.status||"active"),distanceM=Number(eta?.distance_m??session.last_distance_m);
-   const visual=raw==="arrived"?"LLEGÓ":raw==="cancelled"?"CANCELADO":raw==="finished"||raw==="completed"?"FINALIZADO":Number.isFinite(distanceM)&&distanceM<=300?"CERCA":"EN CAMINO";
-   return {available:true,type:type==="CHECK_IN"?"CHECK_IN":"ETA",entityKind:"context_session",entityId:id,title:text(session.label||"Acompáñame",120),person:String(session.person),destinationKind:session.destination_kind,targetPerson:session.target_person,placeId:session.place_id,transport:text(loc?.transport_preference||"auto",40),status:raw,visualStatus:visual,distanceM:Number.isFinite(distanceM)?distanceM:null,etaSeconds:eta?.eta_s??session.last_eta_s,progressPct:eta?.progress_pct??session.progress_pct,startedAt:session.started_at,arrivedAt:session.arrived_at,endedAt:session.ended_at,updatedAt:eta?.captured_at||session.updated_at};
+   const raw=String(session.status||"active"),distanceM=Number(eta?.distance_m??session.last_distance_m),progressPct=Number(eta?.progress_pct??session.progress_pct??0);
+   const visual=raw==="arrived"?"LLEGÓ":raw==="cancelled"?"DETENIDO":raw==="finished"||raw==="completed"?"FINALIZADO":Number.isFinite(distanceM)&&distanceM<=300?"CERCA":progressPct<=0?"SALIÓ":"EN CAMINO";
+   return {available:true,type:type==="CHECK_IN"?"CHECK_IN":"ETA",entityKind:"context_session",entityId:id,title:text(session.label||"Acompáñame",120),person:String(session.person),destinationKind:session.destination_kind,targetPerson:session.target_person,placeId:session.place_id,transport:text(loc?.transport_preference||"auto",40),status:raw,visualStatus:visual,distanceM:Number.isFinite(distanceM)?distanceM:null,etaSeconds:eta?.eta_s??session.last_eta_s,progressPct:Number.isFinite(progressPct)?progressPct:0,startedAt:session.started_at,arrivedAt:session.arrived_at,endedAt:session.ended_at,updatedAt:eta?.captured_at||session.updated_at};
   }
   if(kind==="poll"){const card=await chatPollCard(id,person);return card||chatCardUnavailable(ref);}
   if(kind==="checklist"){const card=await chatChecklistCard(id);return card||chatCardUnavailable(ref);}

@@ -8,6 +8,8 @@ const bridge=read('android/app/src/main/java/com/nuestragalaxia/companion/Galaxy
 const camera=read('android/app/src/main/java/com/nuestragalaxia/companion/GalaxyCameraActivity.java');
 const review=read('android/app/src/main/java/com/nuestragalaxia/companion/GalaxyMediaReviewActivity.java');
 const inspector=read('android/app/src/main/java/com/nuestragalaxia/companion/MediaInspector.java');
+const sniffer=read('android/app/src/main/java/com/nuestragalaxia/companion/MediaSniffer.java');
+const mediaEngine=read('android/app/src/main/assets/mobile/chat-media-engine.js');
 const mobile=read('android/app/src/main/java/com/nuestragalaxia/companion/MobileApiClient.java');
 const manifest=read('android/app/src/main/AndroidManifest.xml');
 const gradle=read('android/app/build.gradle.kts');
@@ -164,4 +166,51 @@ test('Phase 5 does not alter stable promotion mechanics',()=>{
  assert.ok(stable.includes('workflow_dispatch:'));
  assert.ok(stable.includes('PROMOTE_ANDROID_STABLE'));
  assert.equal(stable.includes('feat/chat-4-phase-5-media-camera'),false);
+});
+
+
+test('Crown Jewel camera chrome is inset-safe, rounded and recording-aware',()=>{
+ for(const marker of ['WindowInsetsCompat.Type.statusBars()','WindowInsetsCompat.Type.navigationBars()','roundRect(CHROME','applyShutterStyle','● REC','GUARDANDO…','setRecordingUi(true)'])assert.ok(camera.includes(marker),marker);
+ assert.equal(camera.includes('setBackgroundColor(0x55000000)'),false,'raw per-control squares must be gone');
+ assert.equal(review.includes('setBackgroundColor(0x55000000)'),false,'picker review must share premium chrome');
+ assert.ok(camera.includes('dp(48)')&&review.includes('dp(48)'),'interactive controls keep >=48dp targets');
+});
+
+test('CameraX MP4 detection parses ISO-BMFF boxes instead of trusting extension or fixed offset',()=>{
+ assert.ok(sniffer.includes('containerBrand(byte[] bytes)'));
+ assert.ok(sniffer.includes('"ftyp".equals(type)'));
+ assert.equal(sniffer.includes('"ftyp".equals(ascii(bytes,4,4))'),false);
+ assert.ok(validation.includes('findIsoBmffBrand'));
+ assert.ok(inspector.includes('"sniffedMime"')&&inspector.includes('"containerBrand"'));
+ assert.ok(main.includes('logChatMediaInspection(deleteOwnedTemps?"camerax":"picker",meta)'));
+ for(const safe of ['declared=','sniffed=','brand=','size=','durationMs=','width=','height='])assert.ok(main.includes(safe),safe);
+});
+
+test('broken photos remain controlled by Galaxy media engine without leaking filenames',()=>{
+ assert.ok(app.includes('chat-media-placeholder'));
+ assert.ok(app.includes('alt="" aria-hidden="true"'));
+ assert.ok(mediaEngine.includes("data-media-state','error'"));
+ assert.ok(mediaEngine.includes("data-media-state','ready'"));
+ assert.ok(css.includes('.chat-media-placeholder-error'));
+ assert.ok(css.includes('.chat-photo-card[data-media-state="error"]'));
+ assert.ok(app.includes("if(bubble?.dataset.mediaError==='true')"));
+});
+
+test('Location Hub 4.1 uses one Surface System and explicit live-location consent',()=>{
+ assert.ok(app.includes("showBottomSheet('Compartir ubicación'"));
+ for(const marker of ['UBICACIÓN ACTUAL','UBICACIÓN EN VIVO','LUGARES GUARDADOS','15 min','1 h','8 h','Hasta detener'])assert.ok(app.includes(marker),marker);
+ assert.ok(app.includes("if(!native.tracking)"),'live sharing must not activate GPS implicitly');
+ assert.ok(app.includes('chat-location-duration'));
+ assert.ok(css.includes('.chat-location-hub')&&css.includes('.chat-duration-grid'));
+});
+
+test('Acompáñame 4.1 is destination-first and reuses GalaxyEta',()=>{
+ assert.ok(app.includes('¿A dónde vas?'));
+ assert.ok(app.includes('chatContextEtaPreview'));
+ assert.ok(app.includes('window.GalaxyEta.eta'));
+ assert.ok(app.includes('QUÉ SE COMPARTIRÁ'));
+ assert.ok(app.includes('Iniciar Acompáñame'));
+ const contextMenu=app.slice(app.indexOf('async function openChatContextMenu('),app.indexOf('function openChatPollMenu('));
+ assert.equal(contextMenu.includes('Galaxy Context Engine'),false,'technical engine name must not be rendered by Acompáñame UX');
+ for(const state of ['SALIÓ','EN CAMINO','CERCA','LLEGÓ','DETENIDO'])assert.ok(edge.includes(state),state);
 });

@@ -9,7 +9,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.ImageDecoder;
-import android.media.MediaPlayer;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.SystemClock;
@@ -19,7 +19,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.FrameLayout;
-import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.MediaController;
@@ -43,6 +42,9 @@ import androidx.camera.video.VideoRecordEvent;
 import androidx.camera.view.PreviewView;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.FragmentActivity;
 import com.google.common.util.concurrent.ListenableFuture;
 import org.json.JSONObject;
@@ -61,6 +63,10 @@ public final class GalaxyCameraActivity extends FragmentActivity {
     public static final String EXTRA_HEIGHT="height";
     public static final String EXTRA_MIME="mime";
 
+    private static final int CHROME=0xA612121A;
+    private static final int CONTROL=0x18FFFFFF;
+    private static final int VIDEO_RED=0xFFE74755;
+
     private FrameLayout root;
     private PreviewView previewView;
     private ProcessCameraProvider cameraProvider;
@@ -73,12 +79,12 @@ public final class GalaxyCameraActivity extends FragmentActivity {
     private boolean reviewing=false;
     private boolean recording=false;
     private boolean torch=false;
+    private boolean cancelling=false;
     private int lensFacing=CameraSelector.LENS_FACING_BACK;
     private String mode="photo";
     private int maxDurationSeconds=120;
     private boolean videoMessage=false;
     private long capturedDurationMs=0L;
-    private long recordingStartedAt=0L;
     private TextView timer;
     private TextView flashButton;
     private TextView switchButton;
@@ -128,45 +134,93 @@ public final class GalaxyCameraActivity extends FragmentActivity {
         root.addView(previewView,new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
 
         LinearLayout top=new LinearLayout(this);top.setOrientation(LinearLayout.HORIZONTAL);top.setGravity(Gravity.CENTER_VERTICAL);
-        top.setPadding(dp(12),dp(12),dp(12),dp(8));
-        TextView close=control("✕","Cerrar cámara");close.setOnClickListener(v->cancelAndFinish());
-        top.addView(close,new LinearLayout.LayoutParams(dp(52),dp(52)));
-        statusLabel=new TextView(this);statusLabel.setTextColor(Color.WHITE);statusLabel.setTextSize(13);statusLabel.setGravity(Gravity.CENTER);statusLabel.setText(mode.equals("video")?"VIDEO":"FOTO");
-        LinearLayout.LayoutParams statusParams=new LinearLayout.LayoutParams(0,dp(52),1);top.addView(statusLabel,statusParams);
-        flashButton=control("⚡","Activar flash");flashButton.setOnClickListener(v->toggleTorch());
-        top.addView(flashButton,new LinearLayout.LayoutParams(dp(52),dp(52)));
-        FrameLayout.LayoutParams topParams=new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(76),Gravity.TOP);
-        root.addView(top,topParams);
+        top.setPadding(dp(6),dp(4),dp(6),dp(4));top.setBackground(roundRect(CHROME,24,0,0));top.setElevation(dp(8));
+        TextView close=iconControl("×","Cerrar cámara");close.setTextSize(30);close.setOnClickListener(v->cancelAndFinish());
+        top.addView(close,new LinearLayout.LayoutParams(dp(56),dp(56)));
+        LinearLayout center=new LinearLayout(this);center.setOrientation(LinearLayout.VERTICAL);center.setGravity(Gravity.CENTER);
+        statusLabel=label(mode.equals("video")?"VIDEO":"FOTO",13,true);center.addView(statusLabel,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(26)));
+        timer=label("00:00",13,false);timer.setVisibility(View.GONE);center.addView(timer,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(22)));
+        top.addView(center,new LinearLayout.LayoutParams(0,dp(56),1));
+        flashButton=iconControl("⚡","Activar flash");flashButton.setOnClickListener(v->toggleTorch());
+        top.addView(flashButton,new LinearLayout.LayoutParams(dp(56),dp(56)));
+        FrameLayout.LayoutParams topParams=new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(64),Gravity.TOP);
+        topParams.leftMargin=dp(14);topParams.rightMargin=dp(14);root.addView(top,topParams);
 
-        timer=new TextView(this);timer.setTextColor(Color.WHITE);timer.setTextSize(14);timer.setGravity(Gravity.CENTER);timer.setText("00:00");timer.setVisibility(View.GONE);
-        FrameLayout.LayoutParams timerParams=new FrameLayout.LayoutParams(dp(92),dp(40),Gravity.TOP|Gravity.CENTER_HORIZONTAL);timerParams.topMargin=dp(76);root.addView(timer,timerParams);
-
-        LinearLayout bottom=new LinearLayout(this);bottom.setOrientation(LinearLayout.HORIZONTAL);bottom.setGravity(Gravity.CENTER);bottom.setPadding(dp(18),dp(10),dp(18),dp(18));
-        switchButton=control("↺","Cambiar cámara");switchButton.setOnClickListener(v->switchCamera());
-        bottom.addView(switchButton,new LinearLayout.LayoutParams(dp(64),dp(64)));
-        shutterButton=control(mode.equals("video")?"●":"◉",mode.equals("video")?"Iniciar grabación":"Tomar foto");
-        shutterButton.setTextSize(mode.equals("video")?29:34);shutterButton.setOnClickListener(v->onShutter());
-        LinearLayout.LayoutParams shutterParams=new LinearLayout.LayoutParams(dp(88),dp(88));shutterParams.setMargins(dp(34),0,dp(34),0);bottom.addView(shutterButton,shutterParams);
-        modeLabel=control(mode.equals("video")?"2 min":"Foto","Modo actual");modeLabel.setTextSize(12);modeLabel.setClickable(false);
-        bottom.addView(modeLabel,new LinearLayout.LayoutParams(dp(64),dp(64)));
-        FrameLayout.LayoutParams bottomParams=new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(122),Gravity.BOTTOM);root.addView(bottom,bottomParams);
+        LinearLayout bottom=new LinearLayout(this);bottom.setOrientation(LinearLayout.HORIZONTAL);bottom.setGravity(Gravity.CENTER_VERTICAL);
+        bottom.setPadding(dp(10),dp(8),dp(10),dp(8));bottom.setBackground(roundRect(CHROME,30,0,0));bottom.setElevation(dp(8));
+        switchButton=iconControl("↻","Cambiar cámara");switchButton.setTextSize(26);switchButton.setOnClickListener(v->switchCamera());
+        bottom.addView(switchButton,new LinearLayout.LayoutParams(0,dp(72),1));
+        shutterButton=new TextView(this);shutterButton.setGravity(Gravity.CENTER);shutterButton.setTextSize(mode.equals("video")?28:1);
+        shutterButton.setTextColor(Color.WHITE);shutterButton.setClickable(true);shutterButton.setFocusable(true);
+        shutterButton.setContentDescription(mode.equals("video")?"Iniciar grabación":"Tomar foto");shutterButton.setOnClickListener(v->onShutter());
+        applyShutterStyle(false);
+        LinearLayout.LayoutParams shutterParams=new LinearLayout.LayoutParams(dp(84),dp(84));shutterParams.setMargins(dp(12),0,dp(12),0);bottom.addView(shutterButton,shutterParams);
+        modeLabel=label(mode.equals("video")?maxLabel():"Foto",12,false);modeLabel.setContentDescription("Modo actual");
+        bottom.addView(modeLabel,new LinearLayout.LayoutParams(0,dp(72),1));
+        FrameLayout.LayoutParams bottomParams=new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(100),Gravity.BOTTOM);
+        bottomParams.leftMargin=dp(14);bottomParams.rightMargin=dp(14);root.addView(bottom,bottomParams);
+        applySafeInsets(top,topParams,bottom,bottomParams);
 
         previewView.setOnTouchListener((v,event)->{
-            if(event.getAction()==MotionEvent.ACTION_UP&&camera!=null&&!reviewing){
+            if(event.getAction()==MotionEvent.ACTION_UP&&camera!=null&&!reviewing&&!recording){
                 MeteringPoint point=previewView.getMeteringPointFactory().createPoint(event.getX(),event.getY());
                 FocusMeteringAction action=new FocusMeteringAction.Builder(point).setAutoCancelDuration(3,TimeUnit.SECONDS).build();
-                camera.getCameraControl().startFocusAndMetering(action);
-                return true;
+                camera.getCameraControl().startFocusAndMetering(action);return true;
             }
             return true;
         });
         setContentView(root);
     }
 
-    private TextView control(String text,String description){
-        TextView view=new TextView(this);view.setText(text);view.setTextColor(Color.WHITE);view.setTextSize(20);view.setGravity(Gravity.CENTER);
-        view.setContentDescription(description);view.setBackgroundColor(0x55000000);view.setPadding(dp(4),dp(4),dp(4),dp(4));view.setClickable(true);view.setFocusable(true);
-        return view;
+    private void applySafeInsets(View top,FrameLayout.LayoutParams topParams,View bottom,FrameLayout.LayoutParams bottomParams){
+        ViewCompat.setOnApplyWindowInsetsListener(root,(view,insets)->{
+            Insets status=insets.getInsets(WindowInsetsCompat.Type.statusBars());
+            Insets navigation=insets.getInsets(WindowInsetsCompat.Type.navigationBars());
+            topParams.topMargin=status.top+dp(10);top.setLayoutParams(topParams);
+            bottomParams.bottomMargin=Math.max(navigation.bottom,dp(4))+dp(8);bottom.setLayoutParams(bottomParams);
+            return insets;
+        });
+        ViewCompat.requestApplyInsets(root);
+    }
+
+    private TextView iconControl(String text,String description){
+        TextView view=label(text,22,false);view.setContentDescription(description);view.setClickable(true);view.setFocusable(true);
+        view.setMinWidth(dp(48));view.setMinHeight(dp(48));return view;
+    }
+
+    private TextView label(String text,int size,boolean strong){
+        TextView view=new TextView(this);view.setText(text);view.setTextColor(Color.WHITE);view.setTextSize(size);view.setGravity(Gravity.CENTER);
+        if(strong)view.setTypeface(view.getTypeface(),android.graphics.Typeface.BOLD);return view;
+    }
+
+    private GradientDrawable roundRect(int color,int radiusDp,int strokeDp,int strokeColor){
+        GradientDrawable shape=new GradientDrawable();shape.setShape(GradientDrawable.RECTANGLE);shape.setColor(color);shape.setCornerRadius(dp(radiusDp));
+        if(strokeDp>0)shape.setStroke(dp(strokeDp),strokeColor);return shape;
+    }
+    private GradientDrawable circle(int color,int strokeDp,int strokeColor){
+        GradientDrawable shape=new GradientDrawable();shape.setShape(GradientDrawable.OVAL);shape.setColor(color);
+        if(strokeDp>0)shape.setStroke(dp(strokeDp),strokeColor);return shape;
+    }
+
+    private void applyShutterStyle(boolean active){
+        if(shutterButton==null)return;
+        if("video".equals(mode)){
+            shutterButton.setText(active?"■":"●");shutterButton.setTextColor(active?Color.WHITE:VIDEO_RED);
+            shutterButton.setBackground(circle(active?VIDEO_RED:CONTROL,active?4:3,active?Color.WHITE:VIDEO_RED));
+        }else{
+            shutterButton.setText("");shutterButton.setBackground(circle(Color.WHITE,4,0xAAFFFFFF));
+        }
+    }
+    private String maxLabel(){return maxDurationSeconds>=60&&maxDurationSeconds%60==0?"máx. "+(maxDurationSeconds/60)+" min":"máx. "+maxDurationSeconds+" s";}
+
+    private void setRecordingUi(boolean active){
+        recording=active;if(shutterButton==null)return;
+        shutterButton.setEnabled(true);applyShutterStyle(active);shutterButton.setContentDescription(active?"Detener grabación":"Iniciar grabación");
+        if(statusLabel!=null)statusLabel.setText(active?"● REC":"VIDEO");
+        if(timer!=null){timer.setVisibility(active?View.VISIBLE:View.GONE);if(!active)timer.setText("00:00");}
+        if(switchButton!=null){switchButton.setEnabled(!active);switchButton.setAlpha(active?.35f:1f);}
+        if(modeLabel!=null){modeLabel.setText(maxLabel());modeLabel.setAlpha(active?.72f:1f);}
+        if(active&&flashButton!=null){flashButton.setEnabled(false);flashButton.setAlpha(.35f);}else updateFlashAvailability();
     }
 
     private void startCamera(){
@@ -174,21 +228,15 @@ public final class GalaxyCameraActivity extends FragmentActivity {
             setResult(Activity.RESULT_CANCELED,new Intent().putExtra("error","PERMISSION_CAMERA"));finish();return;
         }
         ListenableFuture<ProcessCameraProvider> future=ProcessCameraProvider.getInstance(this);
-        future.addListener(()->{
-            try{cameraProvider=future.get();bindCamera();}
-            catch(Exception e){finishWithError("No pudimos iniciar la cámara.");}
-        },ContextCompat.getMainExecutor(this));
+        future.addListener(()->{try{cameraProvider=future.get();bindCamera();}catch(Exception e){finishWithError("No pudimos iniciar la cámara.");}},ContextCompat.getMainExecutor(this));
     }
 
     private void bindCamera(){
         if(cameraProvider==null||reviewing)return;
-        cameraProvider.unbindAll();
-        CameraSelector selector=new CameraSelector.Builder().requireLensFacing(lensFacing).build();
-        Preview preview=new Preview.Builder().build();
-        imageCapture=new ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build();
-        Recorder recorder=new Recorder.Builder().build();
-        videoCapture=VideoCapture.withOutput(recorder);
-        preview.setSurfaceProvider(previewView.getSurfaceProvider());
+        cameraProvider.unbindAll();CameraSelector selector=new CameraSelector.Builder().requireLensFacing(lensFacing).build();
+        Preview preview=new Preview.Builder().build();imageCapture=new ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build();
+        Recorder recorder=new Recorder.Builder().build();videoCapture=VideoCapture.withOutput(recorder);preview.setSurfaceProvider(previewView.getSurfaceProvider());
+        if(previewView.getDisplay()!=null){int rotation=previewView.getDisplay().getRotation();imageCapture.setTargetRotation(rotation);videoCapture.setTargetRotation(rotation);}
         try{
             if(mode.equals("video"))camera=cameraProvider.bindToLifecycle(this,selector,preview,videoCapture);
             else camera=cameraProvider.bindToLifecycle(this,selector,preview,imageCapture);
@@ -196,71 +244,52 @@ public final class GalaxyCameraActivity extends FragmentActivity {
         }catch(Exception e){finishWithError("Esta cámara no está disponible.");}
     }
 
-    private void onShutter(){
-        if(reviewing)return;
-        if(mode.equals("video")){
-            if(recording)stopVideo();else startVideo();
-        }else capturePhoto();
-    }
+    private void onShutter(){if(reviewing||cancelling)return;if(mode.equals("video")){if(recording)stopVideo();else startVideo();}else capturePhoto();}
 
     private File newCaptureFile(String suffix) throws IOException {
-        File dir=new File(getCacheDir(),"camera-media");
-        if(!dir.exists()&&!dir.mkdirs())throw new IOException("No se pudo preparar la captura.");
+        File dir=new File(getCacheDir(),"camera-media");if(!dir.exists()&&!dir.mkdirs())throw new IOException("No se pudo preparar la captura.");
         return File.createTempFile(mode.equals("video")?"galaxy-camerax-video-":"galaxy-camerax-photo-",suffix,dir);
     }
 
     private void capturePhoto(){
-        if(imageCapture==null)return;
-        shutterButton.setEnabled(false);statusLabel.setText("CAPTURANDO…");
+        if(imageCapture==null)return;shutterButton.setEnabled(false);statusLabel.setText("CAPTURANDO…");
         try{
-            capturedFile=newCaptureFile(".jpg");
-            ImageCapture.Metadata metadata=new ImageCapture.Metadata();
-            metadata.setReversedHorizontal(lensFacing==CameraSelector.LENS_FACING_FRONT);
+            capturedFile=newCaptureFile(".jpg");ImageCapture.Metadata metadata=new ImageCapture.Metadata();metadata.setReversedHorizontal(lensFacing==CameraSelector.LENS_FACING_FRONT);
             ImageCapture.OutputFileOptions options=new ImageCapture.OutputFileOptions.Builder(capturedFile).setMetadata(metadata).build();
             imageCapture.takePicture(options,ContextCompat.getMainExecutor(this),new ImageCapture.OnImageSavedCallback(){
-                @Override public void onImageSaved(ImageCapture.OutputFileResults output){
-                    shutterButton.setEnabled(true);showReview("");
-                }
-                @Override public void onError(ImageCaptureException error){
-                    shutterButton.setEnabled(true);deleteCaptured();statusLabel.setText("FOTO");toastStatus("No pudimos tomar la foto.");
-                }
+                @Override public void onImageSaved(ImageCapture.OutputFileResults output){shutterButton.setEnabled(true);showReview("");}
+                @Override public void onError(ImageCaptureException error){shutterButton.setEnabled(true);deleteCaptured();statusLabel.setText("FOTO");toastStatus("No pudimos tomar la foto.");}
             });
         }catch(Exception e){shutterButton.setEnabled(true);deleteCaptured();toastStatus("No pudimos preparar la foto.");}
     }
 
     private void startVideo(){
-        if(videoCapture==null)return;
+        if(videoCapture==null||recording)return;
         try{
-            capturedFile=newCaptureFile(".mp4");
-            FileOutputOptions options=new FileOutputOptions.Builder(capturedFile).build();
+            capturedFile=newCaptureFile(".mp4");FileOutputOptions options=new FileOutputOptions.Builder(capturedFile).build();
             PendingRecording pending=videoCapture.getOutput().prepareRecording(this,options);
             if(ContextCompat.checkSelfPermission(this,Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)pending=pending.withAudioEnabled();
-            recording=true;recordingStartedAt=SystemClock.elapsedRealtime();timer.setVisibility(View.VISIBLE);statusLabel.setText("GRABANDO");shutterButton.setText("■");shutterButton.setContentDescription("Detener grabación");
+            capturedDurationMs=0L;setRecordingUi(true);
             activeRecording=pending.start(ContextCompat.getMainExecutor(this),event->{
                 if(event instanceof VideoRecordEvent.Status status){
-                    long elapsed=status.getRecordingStats().getRecordedDurationNanos()/1_000_000L;
-                    capturedDurationMs=elapsed;timer.setText(formatDuration(elapsed));
-                    if(elapsed>=maxDurationSeconds*1000L&&activeRecording!=null)activeRecording.stop();
+                    long elapsed=status.getRecordingStats().getRecordedDurationNanos()/1_000_000L;capturedDurationMs=elapsed;if(timer!=null)timer.setText(formatDuration(elapsed));
+                    if(elapsed>=maxDurationSeconds*1000L&&activeRecording!=null)stopVideo();
                 }else if(event instanceof VideoRecordEvent.Finalize done){
-                    recording=false;activeRecording=null;capturedDurationMs=Math.max(capturedDurationMs,done.getRecordingStats().getRecordedDurationNanos()/1_000_000L);
-                    timer.setVisibility(View.GONE);shutterButton.setText("●");shutterButton.setContentDescription("Iniciar grabación");
-                    if(done.hasError()||capturedFile==null||capturedFile.length()<1){deleteCaptured();statusLabel.setText("VIDEO");toastStatus("No pudimos guardar el video.");}
+                    activeRecording=null;capturedDurationMs=Math.max(capturedDurationMs,done.getRecordingStats().getRecordedDurationNanos()/1_000_000L);
+                    if(cancelling){recording=false;deleteCaptured();return;}
+                    setRecordingUi(false);
+                    if(done.hasError()||capturedFile==null||capturedFile.length()<1){deleteCaptured();toastStatus("No pudimos guardar el video.");}
                     else showReview("");
                 }
             });
-        }catch(Exception e){recording=false;deleteCaptured();toastStatus("No pudimos iniciar la grabación.");}
+        }catch(Exception e){activeRecording=null;setRecordingUi(false);deleteCaptured();toastStatus("No pudimos iniciar la grabación.");}
     }
 
-    private void stopVideo(){
-        if(activeRecording!=null)activeRecording.stop();
-    }
+    private void stopVideo(){if(activeRecording==null)return;shutterButton.setEnabled(false);statusLabel.setText("GUARDANDO…");activeRecording.stop();}
 
     private void showReview(String restoredCaption){
-        if(capturedFile==null||!capturedFile.exists())return;
-        reviewing=true;recording=false;if(cameraProvider!=null)cameraProvider.unbindAll();
-        releaseReviewMedia();
-        root.removeAllViews();
-        root.setBackgroundColor(Color.BLACK);
+        if(capturedFile==null||!capturedFile.exists()||cancelling)return;
+        reviewing=true;recording=false;if(cameraProvider!=null)cameraProvider.unbindAll();releaseReviewMedia();root.removeAllViews();root.setBackgroundColor(Color.BLACK);
         Uri uri=FileProvider.getUriForFile(this,getPackageName()+".files",capturedFile);
         if(mode.equals("video")){
             VideoView video=new VideoView(this);reviewVideo=video;video.setVideoURI(uri);video.setMediaController(new MediaController(this));video.setContentDescription("Vista previa del video");
@@ -270,102 +299,81 @@ public final class GalaxyCameraActivity extends FragmentActivity {
             ImageView image=new ImageView(this);image.setScaleType(ImageView.ScaleType.FIT_CENTER);image.setContentDescription("Vista previa de la foto");
             root.addView(image,new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
             int generation=reviewGeneration;File expectedFile=capturedFile;
-            mediaIo.execute(()->{
-                Bitmap bitmap=decodeScaled(uri,expectedFile,2048);
-                runOnUiThread(()->{
-                    if(bitmap==null){if(generation==reviewGeneration&&!isFinishing())toastStatus("No pudimos preparar la vista previa.");return;}
-                    if(isFinishing()||generation!=reviewGeneration||capturedFile!=expectedFile){bitmap.recycle();return;}
-                    reviewBitmap=bitmap;image.setImageBitmap(bitmap);
-                });
-            });
+            mediaIo.execute(()->{Bitmap bitmap=decodeScaled(uri,expectedFile,2048);runOnUiThread(()->{
+                if(bitmap==null){if(generation==reviewGeneration&&!isFinishing())toastStatus("No pudimos preparar la vista previa.");return;}
+                if(isFinishing()||generation!=reviewGeneration||capturedFile!=expectedFile){bitmap.recycle();return;}reviewBitmap=bitmap;image.setImageBitmap(bitmap);
+            });});
         }
 
-        LinearLayout top=new LinearLayout(this);top.setOrientation(LinearLayout.HORIZONTAL);top.setGravity(Gravity.CENTER_VERTICAL);top.setPadding(dp(12),dp(12),dp(12),dp(8));
-        TextView close=control("✕","Cancelar captura");close.setOnClickListener(v->cancelAndFinish());top.addView(close,new LinearLayout.LayoutParams(dp(52),dp(52)));
-        TextView title=new TextView(this);title.setTextColor(Color.WHITE);title.setTextSize(14);title.setGravity(Gravity.CENTER);title.setText(mode.equals("video")?"REVISAR VIDEO":"REVISAR FOTO");top.addView(title,new LinearLayout.LayoutParams(0,dp(52),1));
-        TextView retake=control("↺","Repetir captura");retake.setOnClickListener(v->retake());top.addView(retake,new LinearLayout.LayoutParams(dp(52),dp(52)));
-        root.addView(top,new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(76),Gravity.TOP));
+        LinearLayout top=new LinearLayout(this);top.setOrientation(LinearLayout.HORIZONTAL);top.setGravity(Gravity.CENTER_VERTICAL);top.setPadding(dp(6),dp(4),dp(6),dp(4));
+        top.setBackground(roundRect(CHROME,24,0,0));top.setElevation(dp(8));
+        TextView close=iconControl("×","Cancelar captura");close.setTextSize(30);close.setOnClickListener(v->cancelAndFinish());top.addView(close,new LinearLayout.LayoutParams(dp(56),dp(56)));
+        TextView title=label(mode.equals("video")?"REVISAR VIDEO":"REVISAR FOTO",13,true);top.addView(title,new LinearLayout.LayoutParams(0,dp(56),1));
+        top.addView(label("",1,false),new LinearLayout.LayoutParams(dp(56),dp(56)));
+        FrameLayout.LayoutParams topParams=new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(64),Gravity.TOP);topParams.leftMargin=dp(14);topParams.rightMargin=dp(14);root.addView(top,topParams);
 
-        LinearLayout bottom=new LinearLayout(this);bottom.setOrientation(LinearLayout.VERTICAL);bottom.setPadding(dp(16),dp(10),dp(16),dp(18));bottom.setBackgroundColor(0xAA000000);
-        EditText caption=new EditText(this);reviewCaptionInput=caption;caption.setHint("Añadir comentario…");caption.setHintTextColor(0xFFB8B5C6);caption.setTextColor(Color.WHITE);caption.setTextSize(16);caption.setMaxLines(3);caption.setSingleLine(false);caption.setContentDescription("Comentario opcional");caption.setText(restoredCaption==null?"":restoredCaption);
-        bottom.addView(caption,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(58)));
+        LinearLayout bottom=new LinearLayout(this);bottom.setOrientation(LinearLayout.VERTICAL);bottom.setPadding(dp(12),dp(10),dp(12),dp(10));bottom.setBackground(roundRect(CHROME,26,0,0));bottom.setElevation(dp(8));
+        EditText caption=new EditText(this);reviewCaptionInput=caption;caption.setHint("Añadir comentario…");caption.setHintTextColor(0xFFB8B5C6);caption.setTextColor(Color.WHITE);caption.setTextSize(15);
+        caption.setMaxLines(3);caption.setSingleLine(false);caption.setContentDescription("Comentario opcional");caption.setText(restoredCaption==null?"":restoredCaption);caption.setPadding(dp(14),0,dp(14),0);
+        caption.setBackground(roundRect(0x661F1F2A,18,1,0x22FFFFFF));bottom.addView(caption,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(52)));
         LinearLayout actions=new LinearLayout(this);actions.setGravity(Gravity.CENTER_VERTICAL);
-        TextView repeat=control("Repetir","Repetir captura");repeat.setTextSize(14);repeat.setOnClickListener(v->retake());actions.addView(repeat,new LinearLayout.LayoutParams(0,dp(54),1));
-        TextView send=control("Usar","Confirmar captura");send.setTextSize(14);send.setOnClickListener(v->confirmCapture(caption.getText().toString()));LinearLayout.LayoutParams sendParams=new LinearLayout.LayoutParams(0,dp(54),1);sendParams.setMargins(dp(10),0,0,0);actions.addView(send,sendParams);
-        bottom.addView(actions,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(62)));
-        FrameLayout.LayoutParams bottomParams=new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(150),Gravity.BOTTOM);root.addView(bottom,bottomParams);
+        TextView repeat=actionButton("Repetir","Repetir captura",false);repeat.setOnClickListener(v->retake());actions.addView(repeat,new LinearLayout.LayoutParams(0,dp(52),1));
+        TextView send=actionButton("Usar","Confirmar captura",true);send.setOnClickListener(v->confirmCapture(caption.getText().toString()));
+        LinearLayout.LayoutParams sendParams=new LinearLayout.LayoutParams(0,dp(52),1);sendParams.setMargins(dp(10),0,0,0);actions.addView(send,sendParams);
+        LinearLayout.LayoutParams actionParams=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(60));actionParams.topMargin=dp(8);bottom.addView(actions,actionParams);
+        FrameLayout.LayoutParams bottomParams=new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(140),Gravity.BOTTOM);bottomParams.leftMargin=dp(14);bottomParams.rightMargin=dp(14);root.addView(bottom,bottomParams);
+        applySafeInsets(top,topParams,bottom,bottomParams);
+    }
+
+    private TextView actionButton(String text,String description,boolean primary){
+        TextView view=label(text,14,true);view.setContentDescription(description);view.setClickable(true);view.setFocusable(true);view.setMinHeight(dp(48));
+        view.setBackground(roundRect(primary?0xFFF0ECFF:CONTROL,18,primary?0:1,0x30FFFFFF));if(primary)view.setTextColor(0xFF221742);return view;
     }
 
     private void confirmCapture(String caption){
         if(confirming||capturedFile==null||!capturedFile.exists())return;
-        confirming=true;File expectedFile=capturedFile;long expectedDuration=capturedDurationMs;
-        Uri uri=FileProvider.getUriForFile(this,getPackageName()+".files",expectedFile);
-        mediaIo.execute(()->{
-            try{
-                JSONObject meta=MediaInspector.inspect(this,uri);
-                Intent result=new Intent()
-                    .putExtra(EXTRA_FILE_PATH,expectedFile.getAbsolutePath())
-                    .putExtra(EXTRA_CAPTION,caption==null?"":caption.trim())
-                    .putExtra(EXTRA_DURATION_MS,Math.max(expectedDuration,meta.optLong("durationMs",0L)))
-                    .putExtra(EXTRA_WIDTH,meta.optLong("width",0L))
-                    .putExtra(EXTRA_HEIGHT,meta.optLong("height",0L))
-                    .putExtra(EXTRA_MIME,meta.optString("mime",mode.equals("video")?"video/mp4":"image/jpeg"))
-                    .putExtra(EXTRA_VIDEO_MESSAGE,videoMessage);
-                runOnUiThread(()->{
-                    if(isFinishing()||capturedFile!=expectedFile){confirming=false;return;}
-                    confirmed=true;setResult(Activity.RESULT_OK,result);finish();
-                });
-            }catch(Exception e){runOnUiThread(()->{confirming=false;if(!isFinishing()&&capturedFile==expectedFile)toastStatus("No pudimos validar la captura.");});}
-        });
+        confirming=true;File expectedFile=capturedFile;long expectedDuration=capturedDurationMs;Uri uri=FileProvider.getUriForFile(this,getPackageName()+".files",expectedFile);
+        mediaIo.execute(()->{try{
+            JSONObject meta=MediaInspector.inspect(this,uri);
+            Intent result=new Intent().putExtra(EXTRA_FILE_PATH,expectedFile.getAbsolutePath()).putExtra(EXTRA_CAPTION,caption==null?"":caption.trim())
+                .putExtra(EXTRA_DURATION_MS,Math.max(expectedDuration,meta.optLong("durationMs",0L))).putExtra(EXTRA_WIDTH,meta.optLong("width",0L)).putExtra(EXTRA_HEIGHT,meta.optLong("height",0L))
+                .putExtra(EXTRA_MIME,meta.optString("mime",mode.equals("video")?"video/mp4":"image/jpeg")).putExtra(EXTRA_VIDEO_MESSAGE,videoMessage);
+            runOnUiThread(()->{if(isFinishing()||capturedFile!=expectedFile){confirming=false;return;}confirmed=true;setResult(Activity.RESULT_OK,result);finish();});
+        }catch(Exception e){runOnUiThread(()->{confirming=false;if(!isFinishing()&&capturedFile==expectedFile)toastStatus("No pudimos validar la captura.");});}});
     }
 
-    private void retake(){
-        confirming=false;reviewing=false;reviewCaptionInput=null;capturedDurationMs=0L;releaseReviewMedia();deleteCaptured();buildCameraUi();bindCamera();
-    }
+    private void retake(){confirming=false;reviewing=false;reviewCaptionInput=null;capturedDurationMs=0L;releaseReviewMedia();deleteCaptured();buildCameraUi();bindCamera();}
 
     private void toggleTorch(){
-        if(camera==null||!camera.getCameraInfo().hasFlashUnit())return;
-        torch=!torch;camera.getCameraControl().enableTorch(torch);flashButton.setText(torch?"⚡✓":"⚡");flashButton.setContentDescription(torch?"Desactivar flash":"Activar flash");
+        if(recording||camera==null||!camera.getCameraInfo().hasFlashUnit())return;
+        torch=!torch;camera.getCameraControl().enableTorch(torch);flashButton.setText(torch?"⚡·":"⚡");flashButton.setContentDescription(torch?"Desactivar flash":"Activar flash");
     }
-
     private void updateFlashAvailability(){
-        boolean available=camera!=null&&camera.getCameraInfo().hasFlashUnit();
-        flashButton.setEnabled(available);flashButton.setAlpha(available?1f:.4f);
-        if(!available)torch=false;
+        if(flashButton==null)return;boolean available=!recording&&camera!=null&&camera.getCameraInfo().hasFlashUnit();
+        flashButton.setEnabled(available);flashButton.setAlpha(available?1f:.35f);if(!available&&!recording)torch=false;
     }
-
     private void switchCamera(){
         if(cameraProvider==null||recording||reviewing)return;
         int target=lensFacing==CameraSelector.LENS_FACING_BACK?CameraSelector.LENS_FACING_FRONT:CameraSelector.LENS_FACING_BACK;
         try{
-            CameraSelector selector=new CameraSelector.Builder().requireLensFacing(target).build();
-            if(!cameraProvider.hasCamera(selector)){toastStatus("Esta cámara no está disponible.");return;}
-            if(torch&&camera!=null)camera.getCameraControl().enableTorch(false);
-            torch=false;lensFacing=target;bindCamera();
+            CameraSelector selector=new CameraSelector.Builder().requireLensFacing(target).build();if(!cameraProvider.hasCamera(selector)){toastStatus("Esta cámara no está disponible.");return;}
+            if(torch&&camera!=null)camera.getCameraControl().enableTorch(false);torch=false;lensFacing=target;bindCamera();
         }catch(Exception e){toastStatus("No pudimos cambiar de cámara.");}
     }
 
     private void cancelAndFinish(){
-        if(activeRecording!=null){activeRecording.stop();activeRecording=null;}
+        cancelling=true;if(activeRecording!=null){try{activeRecording.stop();}catch(Exception ignored){}activeRecording=null;}
         releaseReviewMedia();deleteCaptured();setResult(Activity.RESULT_CANCELED);finish();
     }
-
-    private void finishWithError(String message){
-        releaseReviewMedia();deleteCaptured();setResult(Activity.RESULT_CANCELED,new Intent().putExtra("error",message));finish();
-    }
-
+    private void finishWithError(String message){cancelling=true;releaseReviewMedia();deleteCaptured();setResult(Activity.RESULT_CANCELED,new Intent().putExtra("error",message));finish();}
     private void releaseReviewMedia(){
-        reviewGeneration++;
-        VideoView video=reviewVideo;reviewVideo=null;
-        if(video!=null)try{video.stopPlayback();}catch(Exception ignored){}
-        Bitmap bitmap=reviewBitmap;reviewBitmap=null;
-        if(bitmap!=null&&!bitmap.isRecycled())bitmap.recycle();
+        reviewGeneration++;VideoView video=reviewVideo;reviewVideo=null;if(video!=null)try{video.stopPlayback();}catch(Exception ignored){}
+        Bitmap bitmap=reviewBitmap;reviewBitmap=null;if(bitmap!=null&&!bitmap.isRecycled())bitmap.recycle();
     }
-
     private void deleteCaptured(){if(capturedFile!=null)try{capturedFile.delete();}catch(Exception ignored){}capturedFile=null;}
-
-    private void toastStatus(String text){statusLabel.setText(text);statusLabel.postDelayed(()->{if(!isFinishing()&&!reviewing)statusLabel.setText(mode.equals("video")?"VIDEO":"FOTO");},1800);}
-
+    private void toastStatus(String text){
+        if(statusLabel==null)return;statusLabel.setText(text);statusLabel.postDelayed(()->{if(!isFinishing()&&!reviewing&&statusLabel!=null)statusLabel.setText(mode.equals("video")?(recording?"● REC":"VIDEO"):"FOTO");},1800);
+    }
     private static String formatDuration(long ms){long total=Math.max(0,ms/1000),m=total/60,s=total%60;return String.format(java.util.Locale.ROOT,"%02d:%02d",m,s);}
 
     private Bitmap decodeScaled(Uri uri,File file,int max){
@@ -374,50 +382,25 @@ public final class GalaxyCameraActivity extends FragmentActivity {
                 ImageDecoder.Source source=ImageDecoder.createSource(getContentResolver(),uri);
                 return ImageDecoder.decodeBitmap(source,(decoder,info,src)->{
                     int w=info.getSize().getWidth(),h=info.getSize().getHeight();
-                    if(w>max||h>max){
-                        double scale=Math.min((double)max/Math.max(1,w),(double)max/Math.max(1,h));
-                        decoder.setTargetSize(Math.max(1,(int)Math.round(w*scale)),Math.max(1,(int)Math.round(h*scale)));
-                    }
+                    if(w>max||h>max){double scale=Math.min((double)max/Math.max(1,w),(double)max/Math.max(1,h));decoder.setTargetSize(Math.max(1,(int)Math.round(w*scale)),Math.max(1,(int)Math.round(h*scale)));}
                     decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
                 });
             }
             BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;BitmapFactory.decodeFile(file.getAbsolutePath(),bounds);
-            int sample=1;while(bounds.outWidth/sample>max||bounds.outHeight/sample>max)sample*=2;
-            BitmapFactory.Options options=new BitmapFactory.Options();options.inSampleSize=Math.max(1,sample);return BitmapFactory.decodeFile(file.getAbsolutePath(),options);
+            int sample=1;while(bounds.outWidth/sample>max||bounds.outHeight/sample>max)sample*=2;BitmapFactory.Options options=new BitmapFactory.Options();options.inSampleSize=Math.max(1,sample);
+            return BitmapFactory.decodeFile(file.getAbsolutePath(),options);
         }catch(Exception e){return null;}
     }
 
-    @Override protected void onStop(){
-        if(reviewVideo!=null)try{reviewVideo.pause();}catch(Exception ignored){}
-        if(recording&&!isChangingConfigurations()&&activeRecording!=null)activeRecording.stop();
-        super.onStop();
-    }
-
+    @Override protected void onStop(){if(reviewVideo!=null)try{reviewVideo.pause();}catch(Exception ignored){}if(recording&&!isChangingConfigurations()&&activeRecording!=null)activeRecording.stop();super.onStop();}
     @Override protected void onSaveInstanceState(Bundle outState){
-        super.onSaveInstanceState(outState);
-        outState.putInt("camera.lens",lensFacing);
-        outState.putLong("camera.durationMs",capturedDurationMs);
-        outState.putBoolean("camera.reviewing",reviewing&&capturedFile!=null);
-        if(capturedFile!=null)outState.putString("camera.capturePath",capturedFile.getAbsolutePath());
-        if(reviewCaptionInput!=null)outState.putString("camera.caption",reviewCaptionInput.getText().toString());
+        super.onSaveInstanceState(outState);outState.putInt("camera.lens",lensFacing);outState.putLong("camera.durationMs",capturedDurationMs);outState.putBoolean("camera.reviewing",reviewing&&capturedFile!=null);
+        if(capturedFile!=null)outState.putString("camera.capturePath",capturedFile.getAbsolutePath());if(reviewCaptionInput!=null)outState.putString("camera.caption",reviewCaptionInput.getText().toString());
     }
-
-    @Override protected void onDestroy(){
-        releaseReviewMedia();
-        mediaIo.shutdownNow();
-        if(cameraProvider!=null)cameraProvider.unbindAll();
-        if(!confirmed&&!isChangingConfigurations())deleteCaptured();
-        super.onDestroy();
-    }
-
+    @Override protected void onDestroy(){releaseReviewMedia();mediaIo.shutdownNow();if(cameraProvider!=null)cameraProvider.unbindAll();if(!confirmed&&!isChangingConfigurations())deleteCaptured();super.onDestroy();}
     @Override public void onConfigurationChanged(Configuration newConfig){
         super.onConfigurationChanged(newConfig);
-        if(!reviewing&&previewView!=null&&previewView.getDisplay()!=null){
-            int rotation=previewView.getDisplay().getRotation();
-            if(imageCapture!=null)imageCapture.setTargetRotation(rotation);
-            if(videoCapture!=null)videoCapture.setTargetRotation(rotation);
-        }
+        if(!reviewing&&previewView!=null&&previewView.getDisplay()!=null){int rotation=previewView.getDisplay().getRotation();if(imageCapture!=null)imageCapture.setTargetRotation(rotation);if(videoCapture!=null)videoCapture.setTargetRotation(rotation);}
     }
-
     private int dp(int value){return Math.round(value*getResources().getDisplayMetrics().density);}
 }

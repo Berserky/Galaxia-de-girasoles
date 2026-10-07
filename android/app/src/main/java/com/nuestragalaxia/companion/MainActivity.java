@@ -15,6 +15,7 @@ import android.os.*;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.View;
 import android.webkit.*;
 import android.widget.Toast;
@@ -604,6 +605,18 @@ public final class MainActivity extends FragmentActivity {
         uploadReviewedChatMedia(request,uris,caption,videoMessage,true);
     }
 
+    private static void logChatMediaInspection(String source,JSONObject meta){
+        if(meta==null)return;
+        Log.i("GalaxyMedia","inspect source="+source
+            +" declared="+meta.optString("declaredMime","")
+            +" sniffed="+meta.optString("sniffedMime","")
+            +" brand="+meta.optString("containerBrand","")
+            +" size="+meta.optLong("size",0L)
+            +" durationMs="+meta.optLong("durationMs",0L)
+            +" width="+meta.optLong("width",0L)
+            +" height="+meta.optLong("height",0L));
+    }
+
     private void uploadReviewedChatMedia(String request,java.util.List<Uri> uris,String caption,boolean videoMessage,boolean deleteOwnedTemps){
         chatMediaUploadCancelled.set(false);
         io.execute(()->{
@@ -618,6 +631,7 @@ public final class MainActivity extends FragmentActivity {
                     if(chatMediaUploadCancelled.get())throw new MobileApiClient.UploadCancelledException();
                     Uri uri=uris.get(i);
                     JSONObject meta=MediaInspector.inspect(this,uri);
+                    logChatMediaInspection(deleteOwnedTemps?"camerax":"picker",meta);
                     String mediaMime=meta.optString("mime","");
                     String uploadKind=MediaInspector.isChatImage(mediaMime)?"chat-photo":MediaInspector.isChatVideo(mediaMime)?"chat-video":"";
                     if(uploadKind.isBlank())throw new IOException("Formato multimedia no soportado.");
