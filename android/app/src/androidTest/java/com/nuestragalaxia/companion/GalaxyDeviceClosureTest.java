@@ -421,7 +421,7 @@ public class GalaxyDeviceClosureTest {
         assertEquals("sheet token or low-device suppression","true",js("window.__p8sheet[0]===220||(!window.__p8sheet.length&&GalaxyChatMotion.constrained())"));
         awaitJs("!document.querySelector('.chat-motion-ghost')");
         runJs("openChatMessageMenu(chatState.messages[0].id);window.__p8menu=modal.querySelector('.modal-inner').getAnimations().map(a=>a.effect.getTiming().duration);closeModal();");
-        assertEquals("menu token or low-device suppression","true",js("window.__p8menu[0]===160||(!window.__p8menu.length&&GalaxyChatMotion.constrained())"));
+        assertEquals("menu token or low-device suppression","true",js("window.__p8menu[0]===220||(!window.__p8menu.length&&GalaxyChatMotion.constrained())"));
 
         InstrumentationRegistry.getInstrumentation().getUiAutomation().grantRuntimePermission(context.getPackageName(),Manifest.permission.RECORD_AUDIO);
         runJs("ensureChatComposer().accepted();chatRenderComposer();beginChatHoldRecording({pointerId:123,clientX:100,clientY:100},document.querySelector('.chat-send'));");
@@ -757,10 +757,10 @@ public class GalaxyDeviceClosureTest {
         instrumentation.getUiAutomation().grantRuntimePermission(pkg, Manifest.permission.CAMERA);
         instrumentation.getUiAutomation().grantRuntimePermission(pkg, Manifest.permission.RECORD_AUDIO);
 
-        PackageManager pm = context.getPackageManager();
-        boolean hasDocuments = !pm.queryIntentActivities(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*")
-                .addCategory(Intent.CATEGORY_OPENABLE), PackageManager.MATCH_DEFAULT_ONLY).isEmpty();
-        Assume.assumeTrue("No ACTION_OPEN_DOCUMENT handler in this emulator.", hasDocuments);
+        // Package visibility can hide DocumentsUI from queryIntentActivities on a real phone.
+        // Resolve through the shell before testing the actual picker launch.
+        boolean hasDocuments = shell("cmd package resolve-activity --brief -a android.intent.action.OPEN_DOCUMENT -c android.intent.category.OPENABLE -t '*/*'").contains("/");
+        Assume.assumeTrue("No ACTION_OPEN_DOCUMENT handler on this device.", hasDocuments);
 
         scenario.onActivity(a -> a.pickMedia("qa-file-picker", "chat-file"));
         UiDevice device = UiDevice.getInstance(instrumentation);

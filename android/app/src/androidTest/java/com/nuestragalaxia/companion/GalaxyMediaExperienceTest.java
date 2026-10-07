@@ -107,6 +107,13 @@ public class GalaxyMediaExperienceTest {
                 assertTrue(repeat!=null&&repeat.performClick());
             });
             assertTrue(device.wait(Until.hasObject(By.desc("Tomar foto")),6_000));
+            if(provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)){
+                device.findObject(By.desc("Cambiar cámara")).click();SystemClock.sleep(600);
+                device.findObject(By.desc("Tomar foto")).click();
+                assertTrue("Front photo capture did not reach review.",device.wait(Until.hasObject(By.desc("Confirmar captura")),10_000));
+                scenario.onActivity(activity->{View repeat=findByText(activity.getWindow().getDecorView(),"Repetir");assertTrue(repeat!=null&&repeat.performClick());});
+                assertTrue(device.wait(Until.hasObject(By.desc("Tomar foto")),6_000));
+            }
             device.findObject(By.desc("Cerrar cámara")).click();
         }
         assertFalse("Cancelled camera capture left a temp file.",hasFiles(new File(context.getCacheDir(),"camera-media")));
