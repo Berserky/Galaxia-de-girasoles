@@ -2218,28 +2218,48 @@ async function openChatAlbumPicker(attachmentId){
  const result=await api('chat-albums',{operation:'list'}),albums=result.albums||[];
  showModal('Añadir a álbum','<div class="chat-album-picker">'+(albums.length?albums.map(a=>'<button class="card" type="button" data-action="chat-album-add" data-album-id="'+attr(a.id)+'" data-attachment-id="'+attr(attachmentId)+'">'+ico('images')+'<span><b>'+esc(a.name)+'</b><small>'+((a.items||[]).length)+' elementos</small></span></button>').join(''):'<div class="empty">Primero crea un álbum.</div>')+'</div><button class="btn small secondary" type="button" data-action="chat-album-create">'+ico('plus')+' Nuevo álbum</button>','chat-album-picker');
 }
-async function openChatStickerPicker(){
- const result=await api('chat-stickers',{operation:'list'}),stickers=result.stickers||[];
- showModal('Stickers y GIFs','<div class="chat-sticker-tools"><form id="chatGifSearchForm"><input class="input" name="query" maxlength="50" placeholder="Buscar GIF en GIPHY"><button class="btn small" type="submit">'+ico('search')+'</button></form><small>Powered by GIPHY · clave protegida en servidor</small></div><div id="chatGifResults"></div><div class="chat-sticker-grid">'+(stickers.length?stickers.map(x=>'<div class="chat-sticker-cell"><button type="button" data-action="chat-sticker-send" data-id="'+attr(x.id)+'"><img loading="lazy" src="'+attr(x.url)+'" alt="'+attr(x.name||'Sticker')+'"></button><button type="button" class="chat-sticker-fav '+(x.favorite?'active':'')+'" data-action="chat-sticker-favorite" data-id="'+attr(x.id)+'" data-favorite="'+(x.favorite?'true':'false')+'" aria-label="Favorito">'+ico('star')+'</button></div>').join(''):'<div class="empty">Todavía no han creado stickers. Mantén pulsada una foto del chat y elige “Crear sticker”.</div>')+'</div>','chat-stickers');
- refreshIcons();
-}
-async function runChatGifSearch(form){
- const query=String(new FormData(form).get('query')||''),box=modal.querySelector('#chatGifResults'),submit=form.querySelector('button[type="submit"]');
- if(submit)submit.disabled=true;
- if(box)box.innerHTML='<div class="monthly-loading">'+loading('Buscando GIFs')+'</div>';
- try{
-  const result=await GalaxyNative.call('searchGiphy',query,false);
-  if(!result?.configured){
-   if(box)box.innerHTML='<div class="chat-giphy-disabled"><b>GIFs online no configurados</b><small>Los stickers privados siguen disponibles. GIPHY se activa con una clave protegida en el servidor.</small></div>';
-   return;
-  }
-  if(box)box.innerHTML='<div class="chat-gif-grid">'+((result.items||[]).length?(result.items||[]).map(x=>'<button type="button" data-action="chat-gif-pick" data-url="'+attr(x.url)+'" data-title="'+attr(x.title||'GIF')+'"><img loading="lazy" src="'+attr(x.previewUrl)+'" alt="'+attr(x.title||'GIF')+'"></button>').join(''):'<div class="empty">Sin GIFs para esa búsqueda.</div>')+'</div><small class="chat-giphy-credit">Powered by GIPHY</small>';
- }catch(error){
-  if(box)box.innerHTML='<div class="chat-giphy-disabled"><b>GIPHY no respondió</b><small>'+esc(error?.message||'Puedes seguir usando tus stickers privados e intentar de nuevo.')+'</small></div>';
- }finally{
-  if(submit)submit.disabled=false;
-  refreshIcons();
+let chatStickerStudio={stickers:[],tab:'recent',query:'',nonce:0},chatStickerSearchTimer=0;
+function chatStickerPrivateMarkup(tab){
+ const all=chatStickerStudio.stickers||[],rows=tab==='favorites'?all.filter(x=>x.favorite):tab==='recent'?all.filter(x=>x.lastUsedAt):all;
+ if(!rows.length){
+  const copy=tab==='favorites'?['Aún no tienes favoritos','Marca una estrella en cualquier sticker para encontrarlo aquí.']:tab==='recent'?['Todavía no hay recientes','Envía un sticker y aparecerá aquí la próxima vez.']:['Todavía no hay stickers propios','Busca uno online para agregarlo, o mantén pulsada una foto del chat para crear uno.'];
+  return '<div class="chat-studio-empty">'+ico('sticker')+'<b>'+copy[0]+'</b><small>'+copy[1]+'</small><button class="btn small secondary" type="button" data-action="chat-sticker-add">'+ico('plus')+' Agregar sticker</button></div>';
  }
+ return '<div class="chat-sticker-grid">'+rows.map(x=>'<div class="chat-sticker-cell"><button type="button" class="chat-sticker-art" data-action="chat-sticker-send" data-id="'+attr(x.id)+'"><img loading="lazy" src="'+attr(x.url)+'" alt="'+attr(x.name||'Sticker')+'"></button><button type="button" class="chat-sticker-fav '+(x.favorite?'active':'')+'" data-action="chat-sticker-favorite" data-id="'+attr(x.id)+'" data-favorite="'+(x.favorite?'true':'false')+'" aria-label="'+(x.favorite?'Quitar de favoritos':'Añadir a favoritos')+'">'+ico('star')+'</button></div>').join('')+'</div>';
+}
+function renderChatStickerPrivate(){
+ const box=modal.querySelector('#chatStickerResults');if(box)box.innerHTML=chatStickerPrivateMarkup(chatStickerStudio.tab);
+ const search=modal.querySelector('[data-role="sticker-search"]');if(search)search.hidden=true;refreshIcons();
+}
+async function runChatStickerDiscovery(query=chatStickerStudio.query,tab=chatStickerStudio.tab){
+ if(tab!=='gifs'&&tab!=='stickers')return renderChatStickerPrivate();
+ chatStickerStudio.query=String(query||'').trim();
+ const box=modal.querySelector('#chatStickerResults'),search=modal.querySelector('[data-role="sticker-search"]'),input=modal.querySelector('#chatStickerSearch'),nonce=++chatStickerStudio.nonce;
+ if(search)search.hidden=false;if(input&&input.value!==chatStickerStudio.query)input.value=chatStickerStudio.query;
+ if(box)box.innerHTML='<div class="chat-studio-loading">'+ico('loader-circle')+' <span>'+(chatStickerStudio.query?'Buscando…':'Descubriendo tendencias…')+'</span></div>';refreshIcons();
+ try{
+  const isSticker=tab==='stickers',result=await GalaxyNative.call('searchGiphy',chatStickerStudio.query,isSticker);
+  if(nonce!==chatStickerStudio.nonce||chatStickerStudio.tab!==tab)return;
+  if(!result?.configured){
+   if(box)box.innerHTML='<div class="chat-studio-empty">'+ico('wifi-off')+'<b>El contenido online no está disponible</b><small>Puedes seguir usando tus stickers guardados.</small><button class="btn small secondary" type="button" data-action="chat-sticker-tab" data-tab="ours">Ver Nuestros</button></div>';
+   refreshIcons();return;
+  }
+  const items=result.items||[];
+  if(box)box.innerHTML=items.length?'<div class="chat-gif-grid">'+items.map(x=>'<article class="chat-online-sticker"><button type="button" class="chat-online-sticker-art" data-action="'+(isSticker?'chat-sticker-online-send':'chat-gif-pick')+'" data-url="'+attr(x.url)+'" data-provider-id="'+attr(x.id||'')+'" data-title="'+attr(x.title||(isSticker?'Sticker':'GIF'))+'"><img loading="lazy" src="'+attr(x.previewUrl)+'" alt="'+attr(x.title||(isSticker?'Sticker':'GIF'))+'"></button>'+(isSticker?'<button type="button" class="chat-online-sticker-save" data-action="chat-sticker-online-save" data-url="'+attr(x.url)+'" data-provider-id="'+attr(x.id||'')+'" data-title="'+attr(x.title||'Sticker')+'">'+ico('plus')+' Nuestros</button>':'')+'</article>').join('')+'</div><small class="chat-giphy-credit">Powered by GIPHY</small>':'<div class="chat-studio-empty">'+ico('search-x')+'<b>Sin resultados</b><small>Prueba con otras palabras.</small></div>';
+ }catch(error){
+  if(nonce!==chatStickerStudio.nonce)return;
+  if(box)box.innerHTML='<div class="chat-studio-empty error">'+ico('circle-alert')+'<b>No pudimos cargar el contenido</b><small>'+esc(error?.message||'Intenta de nuevo.')+'</small><button class="btn small secondary" type="button" data-action="chat-sticker-retry">Reintentar</button></div>';
+ }finally{refreshIcons();}
+}
+function scheduleChatStickerSearch(input,delay=320){
+ clearTimeout(chatStickerSearchTimer);
+ chatStickerSearchTimer=setTimeout(()=>runChatStickerDiscovery(String(input?.value||''),chatStickerStudio.tab),delay);
+}
+async function openChatStickerPicker(tab='recent'){
+ const result=await api('chat-stickers',{operation:'list'}),tabs=[['recent','Recientes'],['favorites','Favoritos'],['gifs','GIFs'],['stickers','Stickers'],['ours','Nuestros']];
+ chatStickerStudio={...chatStickerStudio,stickers:result.stickers||[],tab,query:''};
+ showBottomSheet('GIFs y stickers','<div class="chat-sticker-studio"><div class="chat-sticker-studio-head"><div><p class="eyebrow">INTERACTIVE CONTENT</p><h3>Encuentra algo que diga justo lo que quieres</h3></div><button class="btn small secondary" type="button" data-action="chat-sticker-add">'+ico('plus')+' Agregar sticker</button></div><div class="chat-sticker-tabs" role="tablist" aria-label="Fuentes de GIFs y stickers">'+tabs.map(([id,label])=>'<button type="button" role="tab" aria-selected="'+(id===tab?'true':'false')+'" class="'+(id===tab?'active':'')+'" data-action="chat-sticker-tab" data-tab="'+id+'">'+label+'</button>').join('')+'</div><label class="chat-sticker-search" data-role="sticker-search" '+((tab==='gifs'||tab==='stickers')?'':'hidden')+'><span>'+ico('search')+'</span><input id="chatStickerSearch" class="input" type="search" maxlength="50" placeholder="'+(tab==='stickers'?'Buscar stickers':'Buscar GIFs')+'" autocomplete="off"></label><div id="chatStickerResults" class="chat-sticker-results"></div></div>','chat-stickers');
+ if(tab==='gifs'||tab==='stickers')await runChatStickerDiscovery('',tab);else renderChatStickerPrivate();
 }
 async function openChatLocationMenu(){
  if(!mapData)await refreshMap({quiet:true,detail:true}).catch(()=>{});
@@ -2305,27 +2325,88 @@ async function openChatContextMenu(){
   '<section class="chat-context-saved"><p class="eyebrow">LUGAR GUARDADO</p>'+(placeRows?'<div class="chat-saved-place-list">'+placeRows+'</div>':'<p class="chat-surface-empty">No hay otros lugares guardados.</p>')+'</section>'+
   '<p class="chat-context-privacy">'+ico('shield-check')+' Nada se activa en segundo plano sin tu decisión. Si el GPS está apagado, te pediremos activarlo primero.</p></div>','chat-context');
 }
+function chatGalaxyLibraryRows(){
+ const rows=[],seen=new Set(),push=row=>{
+  const key=[row.cardType,row.kind,row.id].map(x=>String(x??'')).join('|');
+  if(!row.id||seen.has(key))return;
+  seen.add(key);rows.push(row);
+ };
+ const itemMap={memory:['MEMORY','memory','Recuerdo','images'],plan:['PLAN','plan','Plan','calendar-days'],song:['SONG','song','Canción','music-2'],capsule:['CAPSULE','capsule','Cápsula','package'],event:['EVENT','event','Evento','calendar']};
+ for(const item of cloud?.items||[]){
+  const spec=itemMap[item.kind];if(!spec)continue;
+  const data=item.data||{},meta=[data.date?fmtDate(data.date):'',data.time||'',data.targetDate?fmtDate(data.targetDate):'',data.artist||'',data.category||'',data.note||''].filter(Boolean).join(' · ');
+  push({cardType:spec[0],kind:spec[1],id:item.id,label:spec[2],title:data.title||spec[2],icon:kindMeta[item.kind]?.[0]||spec[3],meta});
+ }
+ for(const goal of goalsState?.goals||[])push({cardType:'GOAL',kind:'goal',id:goal.id,label:'Objetivo',title:goal.title||'Objetivo',icon:'target',meta:[goal.target_date?fmtDate(goal.target_date):'',goal.status||''].filter(Boolean).join(' · ')});
+ for(const place of mapData?.places||[])push({cardType:'PLACE',kind:'place',id:place.id,label:'Lugar',title:place.name||'Lugar guardado',icon:'map-pin',meta:[place.kind||'',place.note||''].filter(Boolean).join(' · ')});
+ const session=contextSession();if(session?.id)push({cardType:'ETA',kind:'context_session',id:session.id,label:'ETA',title:session.label||'Acompáñame',icon:'navigation',meta:session.updated_at?fmtDateTime(session.updated_at):''});
+ if(dateContext?.question&&cloud?.today)push({cardType:'DAILY_QUESTION',kind:'daily_question',id:cloud.today,label:'Pregunta del día',title:dailyQuestion(),icon:'message-circle-question',meta:fmtDate(cloud.today)});
+ for(const loc of cloud?.locations||[])if(loc?.status)push({cardType:'STATUS',kind:'status',id:String(loc.person),label:String(loc.person)===String(cloud.person)?'Mi estado':'Estado de '+partnerName(),title:String(loc.status),icon:'message-circle',meta:loc.updated_at?fmtDateTime(loc.updated_at):''});
+ for(const message of mergeChatOutbox(chatState?.messages||[])){
+  const card=message?.card,type=String(card?.type||'');
+  if(type==='POLL'&&card?.entityId)push({cardType:'POLL',kind:'poll',id:card.entityId,label:'Encuesta',title:card.question||card.title||'Encuesta',icon:'list-checks',meta:card.closed?'Cerrada':((card.options||[]).length+' opciones')});
+  if(type==='CHECKLIST'&&card?.entityId)push({cardType:'CHECKLIST',kind:'checklist',id:card.entityId,label:'Checklist',title:card.title||'Checklist',icon:'list-todo',meta:Number(card.done||0)+'/'+Number(card.total||0)+' completados'});
+  if(type==='CHECK_IN'&&card?.entityId)push({cardType:'CHECK_IN',kind:'context_session',id:card.entityId,label:'Check-in',title:card.title||'Acompáñame',icon:'map-pin-check',meta:card.visualStatus||''});
+ }
+ return rows;
+}
+function chatGalaxyRowMarkup(x){
+ const haystack=[x.cardType,x.label,x.title,x.meta].join(' ').toLocaleLowerCase('es');
+ return '<button type="button" class="chat-galaxy-library-row" role="listitem" data-action="chat-galaxy-pick" data-card-type="'+attr(x.cardType)+'" data-kind="'+attr(x.kind)+'" data-id="'+attr(x.id)+'" data-title="'+attr(x.title)+'" data-search="'+attr(haystack)+'"><span class="chat-galaxy-library-icon">'+ico(x.icon)+'</span><span class="chat-galaxy-library-copy"><small>'+esc(x.label)+'</small><b>'+esc(x.title)+'</b>'+(x.meta?'<em>'+esc(x.meta)+'</em>':'')+'</span></button>';
+}
+function filterChatGalaxyPicker(){
+ const root=modal.querySelector('.chat-galaxy-library');if(!root)return;
+ const query=String(root.querySelector('#chatGalaxySearch')?.value||'').trim().toLocaleLowerCase('es'),active=root.querySelector('.chat-galaxy-category[aria-selected="true"]')?.dataset.type||'ALL';
+ let visible=0;
+ root.querySelectorAll('.chat-galaxy-library-row').forEach(row=>{const show=(active==='ALL'||row.dataset.cardType===active)&&(!query||String(row.dataset.search||'').includes(query));row.hidden=!show;if(show)visible++;});
+ const count=root.querySelector('[data-role="galaxy-count"]'),empty=root.querySelector('[data-role="galaxy-empty"]');
+ if(count)count.textContent=visible+' resultado'+(visible===1?'':'s');
+ if(empty)empty.hidden=visible>0;
+}
 async function openChatGalaxyPicker(){
  if(!mapData)await refreshMap({quiet:true,detail:true}).catch(()=>{});
  await loadGoals().catch(()=>{});
  await loadDateContext().catch(()=>{});
- const rows=[];
- for(const item of cloud?.items||[]){
-  const map={memory:['MEMORY','memory','Recuerdo'],plan:['PLAN','plan','Plan'],song:['SONG','song','Canción'],capsule:['CAPSULE','capsule','Cápsula'],event:['EVENT','event','Evento']},spec=map[item.kind];
-  if(spec)rows.push({cardType:spec[0],kind:spec[1],id:item.id,label:spec[2],title:item.data?.title||spec[2],icon:kindMeta[item.kind]?.[0]||'sparkles'});
+ const rows=chatGalaxyLibraryRows(),order=['STATUS','DAILY_QUESTION','EVENT','MEMORY','PLAN','GOAL','PLACE','SONG','ETA','CHECK_IN','POLL','CHECKLIST','CAPSULE'];
+ const labels={STATUS:'Estados',DAILY_QUESTION:'Preguntas',EVENT:'Eventos',MEMORY:'Recuerdos',PLAN:'Planes',GOAL:'Objetivos',PLACE:'Lugares',SONG:'Canciones',ETA:'ETA',CHECK_IN:'Check-ins',POLL:'Encuestas',CHECKLIST:'Checklists',CAPSULE:'Cápsulas'};
+ const types=order.filter(type=>rows.some(x=>x.cardType===type));
+ const categories='<div class="chat-galaxy-categories" role="tablist" aria-label="Categorías de Galaxy Cards"><button type="button" class="chat-galaxy-category active" data-action="chat-galaxy-filter" data-type="ALL" role="tab" aria-selected="true">Todo</button>'+types.map(type=>'<button type="button" class="chat-galaxy-category" data-action="chat-galaxy-filter" data-type="'+type+'" role="tab" aria-selected="false">'+esc(labels[type]||type)+'</button>').join('')+'</div>';
+ showBottomSheet('Galaxy Cards','<div class="chat-galaxy-library"><label class="chat-galaxy-search"><span>'+ico('search')+'</span><input id="chatGalaxySearch" class="input" type="search" placeholder="Buscar recuerdos, planes, eventos…" autocomplete="off"></label>'+categories+'<div class="chat-galaxy-library-meta"><span data-role="galaxy-count">'+rows.length+' resultado'+(rows.length===1?'':'s')+'</span><small>Toca una tarjeta para compartirla</small></div><div class="chat-galaxy-picker" role="list">'+rows.map(chatGalaxyRowMarkup).join('')+'</div><div class="chat-studio-empty" data-role="galaxy-empty" '+(rows.length?'hidden':'')+'>'+ico('orbit')+'<b>'+(rows.length?'No encontramos coincidencias':'Todavía no hay Galaxy Cards')+'</b><small>'+(rows.length?'Prueba otra búsqueda o categoría.':'Crea un recuerdo, plan, objetivo o lugar y aparecerá aquí.')+'</small>'+(rows.length?'<button type="button" class="btn small secondary" data-action="chat-galaxy-clear">Ver todo</button>':'')+'</div></div>','chat-galaxy-library');
+ filterChatGalaxyPicker();refreshIcons();
+}
+function chatStudioOptionRow(kind,value='',index=0){
+ const noun=kind==='poll'?'Opción':'Elemento',name=kind==='poll'?'options':'items';
+ return '<div class="chat-studio-row" data-role="studio-row"><span class="chat-studio-row-number" aria-hidden="true">'+(index+1)+'</span><input class="input" name="'+name+'" maxlength="240" value="'+attr(value)+'" placeholder="'+(kind==='poll'?'Escribe una opción':'Añade algo por hacer')+'" aria-label="'+noun+' '+(index+1)+'"><div class="chat-studio-row-actions"><button type="button" data-action="chat-studio-row-move" data-dir="-1" aria-label="Mover '+noun.toLowerCase()+' arriba">'+ico('chevron-up')+'</button><button type="button" data-action="chat-studio-row-move" data-dir="1" aria-label="Mover '+noun.toLowerCase()+' abajo">'+ico('chevron-down')+'</button><button type="button" data-action="chat-studio-row-remove" aria-label="Eliminar '+noun.toLowerCase()+'">'+ico('x')+'</button></div></div>';
+}
+function chatStudioFormError(form,message=''){
+ const box=form?.querySelector('[data-role="form-error"]');if(!box)return;
+ box.hidden=!message;box.textContent=message;
+}
+function chatStudioSync(form){
+ if(!form)return false;
+ const kind=form.dataset.kind,rows=[...form.querySelectorAll('[data-role="studio-row"]')],min=kind==='poll'?2:1,max=kind==='poll'?10:50;
+ rows.forEach((row,index)=>{const n=row.querySelector('.chat-studio-row-number'),input=row.querySelector('input');if(n)n.textContent=String(index+1);if(input)input.setAttribute('aria-label',(kind==='poll'?'Opción ':'Elemento ')+(index+1));row.querySelectorAll('[data-action="chat-studio-row-move"]').forEach(button=>button.disabled=(Number(button.dataset.dir)<0?index===0:index===rows.length-1));const remove=row.querySelector('[data-action="chat-studio-row-remove"]');if(remove)remove.disabled=rows.length<=min;});
+ const add=form.querySelector('[data-action="chat-studio-row-add"]');if(add)add.disabled=rows.length>=max;
+ const values=rows.map(row=>String(row.querySelector('input')?.value||'').trim()),filled=values.filter(Boolean);
+ const title=String(form.elements[kind==='poll'?'question':'title']?.value||'').trim(),previewTitle=form.querySelector('[data-role="preview-title"]'),preview=form.querySelector('[data-role="preview-items"]');
+ if(previewTitle)previewTitle.textContent=title||(kind==='poll'?'Tu pregunta aparecerá aquí':'Tu checklist aparecerá aquí');
+ if(preview)preview.innerHTML=(filled.length?filled:(kind==='poll'?['Primera opción','Segunda opción']:['Primer elemento'])).slice(0,6).map(value=>'<span>'+ico(kind==='poll'?'circle':'square')+'<b>'+esc(value)+'</b></span>').join('');
+ const duplicate=kind==='poll'&&new Set(filled.map(x=>x.toLocaleLowerCase('es'))).size!==filled.length;
+ if(duplicate){chatStudioFormError(form,'Cada opción debe ser diferente.');return false;}
+ if(form.dataset.submitted==='true'){
+  if(!title){chatStudioFormError(form,kind==='poll'?'Escribe la pregunta de la encuesta.':'Escribe un título para la checklist.');return false;}
+  if(filled.length<min){chatStudioFormError(form,kind==='poll'?'Añade al menos dos opciones.':'Añade al menos un elemento.');return false;}
+  if(filled.length!==values.length){chatStudioFormError(form,'Completa o elimina las filas vacías antes de compartir.');return false;}
  }
- for(const goal of goalsState?.goals||[])rows.push({cardType:'GOAL',kind:'goal',id:goal.id,label:'Objetivo',title:goal.title,icon:'target'});
- for(const place of mapData?.places||[])rows.push({cardType:'PLACE',kind:'place',id:place.id,label:'Lugar',title:place.name,icon:'map-pin'});
- const session=contextSession();if(session?.id)rows.unshift({cardType:'ETA',kind:'context_session',id:session.id,label:'ETA',title:session.label||'Acompáñame',icon:'navigation'});
- if(dateContext?.question&&cloud?.today)rows.unshift({cardType:'DAILY_QUESTION',kind:'daily_question',id:cloud.today,label:'Pregunta del día',title:dailyQuestion(),icon:'message-circle-question'});
- for(const loc of cloud?.locations||[])if(loc?.status)rows.unshift({cardType:'STATUS',kind:'status',id:String(loc.person),label:String(loc.person)===String(cloud.person)?'Mi estado':'Estado de '+partnerName(),title:String(loc.status),icon:'message-circle'});
- showModal('Compartir de Nuestra Galaxia','<div class="chat-galaxy-picker">'+(rows.length?rows.slice(0,120).map(x=>'<button type="button" class="card" data-action="chat-galaxy-pick" data-card-type="'+attr(x.cardType)+'" data-kind="'+attr(x.kind)+'" data-id="'+attr(x.id)+'" data-title="'+attr(x.title)+'"><span>'+ico(x.icon)+'</span><div><small>'+esc(x.label)+'</small><b>'+esc(x.title)+'</b></div>'+ico('send')+'</button>').join(''):'<div class="empty">Todavía no hay contenido para compartir.</div>')+'</div>','chat-galaxy-picker');
+ chatStudioFormError(form,'');return true;
 }
 function openChatPollForm(){
- showModal('Nueva encuesta','<form id="chatPollForm" class="stack"><div class="field"><label>Pregunta</label><input class="input" name="question" maxlength="500" required placeholder="¿Qué hacemos el sábado?"></div><div class="field"><label>Opciones, una por línea</label><textarea name="options" rows="6" required placeholder="Cine\nMuseo"></textarea><small>Entre 2 y 10 opciones.</small></div><label class="chat-setting-toggle"><input type="checkbox" name="allowMultiple"> Permitir varias respuestas</label><div class="field"><label>Cierre opcional</label><input class="input" type="datetime-local" name="closesAt"></div><button class="btn" type="submit">'+ico('send')+' Crear encuesta</button></form>','chat-poll-create');
+ showBottomSheet('Nueva encuesta','<form id="chatPollForm" class="chat-interactive-composer" data-kind="poll"><div class="field"><label>Pregunta</label><input class="input" name="question" maxlength="500" required placeholder="¿Qué hacemos el sábado?"></div><section class="chat-studio-section"><div class="chat-studio-section-head"><div><b>Opciones</b><small>Entre 2 y 10 respuestas.</small></div><button class="btn small secondary" type="button" data-action="chat-studio-row-add">'+ico('plus')+' Añadir opción</button></div><div class="chat-studio-rows" data-role="studio-rows">'+chatStudioOptionRow('poll','',0)+chatStudioOptionRow('poll','',1)+'</div></section><details class="chat-studio-advanced"><summary>Opciones avanzadas</summary><label class="chat-toggle-card"><input type="checkbox" name="allowMultiple"><span class="chat-toggle-ui" aria-hidden="true"></span><span><b>Permitir varias respuestas</b><small>Cada persona podrá elegir más de una opción.</small></span></label><div class="field"><label>Cierre opcional</label><input class="input" type="datetime-local" name="closesAt"><small>Al llegar la fecha, la encuesta queda visible pero ya no acepta votos.</small></div></details><section class="chat-studio-preview"><p class="eyebrow">VISTA PREVIA</p><h3 data-role="preview-title">Tu pregunta aparecerá aquí</h3><div data-role="preview-items"></div></section><p class="chat-studio-error" data-role="form-error" hidden></p><div class="chat-studio-footer"><small>Podrás cerrar la encuesta antes desde la tarjeta enviada.</small><button class="btn chat-studio-submit" type="submit">'+ico('send')+' Crear encuesta</button></div></form>','chat-poll-create');
+ chatStudioSync(modal.querySelector('#chatPollForm'));refreshIcons();
 }
 function openChatChecklistForm(){
- showModal('Nueva checklist','<form id="chatChecklistForm" class="stack"><div class="field"><label>Título</label><input class="input" name="title" maxlength="300" required placeholder="Viaje a Boyacá"></div><div class="field"><label>Elementos, uno por línea</label><textarea name="items" rows="8" required placeholder="Gasolina\nHotel\nCargadores"></textarea></div><button class="btn" type="submit">'+ico('send')+' Compartir checklist</button></form>','chat-check-create');
+ showBottomSheet('Nueva checklist','<form id="chatChecklistForm" class="chat-interactive-composer" data-kind="checklist"><div class="field"><label>Título</label><input class="input" name="title" maxlength="300" required placeholder="Viaje a Boyacá"></div><section class="chat-studio-section"><div class="chat-studio-section-head"><div><b>Elementos</b><small>Reordena con las flechas; después seguirá siendo colaborativa.</small></div><button class="btn small secondary" type="button" data-action="chat-studio-row-add">'+ico('plus')+' Añadir elemento</button></div><div class="chat-studio-rows" data-role="studio-rows">'+chatStudioOptionRow('checklist','',0)+chatStudioOptionRow('checklist','',1)+'</div></section><section class="chat-studio-preview checklist"><p class="eyebrow">VISTA PREVIA</p><h3 data-role="preview-title">Tu checklist aparecerá aquí</h3><div data-role="preview-items"></div></section><p class="chat-studio-error" data-role="form-error" hidden></p><div class="chat-studio-footer"><small>Los dos podrán marcar y desmarcar elementos cuando se envíe.</small><button class="btn chat-studio-submit" type="submit">'+ico('send')+' Compartir checklist</button></div></form>','chat-check-create');
+ chatStudioSync(modal.querySelector('#chatChecklistForm'));refreshIcons();
 }
 function chatMessageById(id){return mergeChatOutbox(chatState?.messages||[]).find(x=>String(x.id)===String(id));}
 function prefillGoalFromChat(title,description=''){
@@ -2869,10 +2950,15 @@ document.addEventListener('click',async e=>{
     return;
    }
    if(a==='chat-galaxy-open'){await openChatGalaxyPicker();return;}
-   if(a==='chat-galaxy-pick'){const cardType=btn.dataset.cardType,kind=btn.dataset.kind,id=btn.dataset.id,title=btn.dataset.title||'';closeModal();queueGalaxyCard(cardType,kind,id,{title});toast('Compartido en Galaxy Chat.');return;}
-   if(a==='chat-poll-open'){openChatPollForm();return;}
-   if(a==='chat-check-open'){openChatChecklistForm();return;}
-   if(a==='chat-save-as-open'){openChatSaveAs(btn.dataset.id);return;}
+  if(a==='chat-galaxy-pick'){const cardType=btn.dataset.cardType,kind=btn.dataset.kind,id=btn.dataset.id,title=btn.dataset.title||'';closeModal();queueGalaxyCard(cardType,kind,id,{title});toast('Compartido en Galaxy Chat.');return;}
+  if(a==='chat-galaxy-filter'){modal.querySelectorAll('.chat-galaxy-category').forEach(x=>{const active=x.dataset.type===btn.dataset.type;x.classList.toggle('active',active);x.setAttribute('aria-selected',active?'true':'false');});filterChatGalaxyPicker();return;}
+  if(a==='chat-galaxy-clear'){const input=modal.querySelector('#chatGalaxySearch');if(input)input.value='';modal.querySelectorAll('.chat-galaxy-category').forEach(x=>{const active=x.dataset.type==='ALL';x.classList.toggle('active',active);x.setAttribute('aria-selected',active?'true':'false');});filterChatGalaxyPicker();return;}
+  if(a==='chat-poll-open'){openChatPollForm();return;}
+  if(a==='chat-check-open'){openChatChecklistForm();return;}
+  if(a==='chat-studio-row-add'){const form=btn.closest('.chat-interactive-composer'),box=form?.querySelector('[data-role="studio-rows"]'),kind=form?.dataset.kind;if(!form||!box)return;const count=box.querySelectorAll('[data-role="studio-row"]').length,max=kind==='poll'?10:50;if(count>=max)return;box.insertAdjacentHTML('beforeend',chatStudioOptionRow(kind,'',count));chatStudioSync(form);box.querySelector('[data-role="studio-row"]:last-child input')?.focus();refreshIcons();return;}
+  if(a==='chat-studio-row-remove'){const form=btn.closest('.chat-interactive-composer'),row=btn.closest('[data-role="studio-row"]');if(form&&row){row.remove();chatStudioSync(form);}return;}
+  if(a==='chat-studio-row-move'){const form=btn.closest('.chat-interactive-composer'),row=btn.closest('[data-role="studio-row"]'),dir=Number(btn.dataset.dir||0);if(!form||!row||!dir)return;const sibling=dir<0?row.previousElementSibling:row.nextElementSibling;if(sibling){if(dir<0)sibling.before(row);else sibling.after(row);chatStudioSync(form);row.querySelector('input')?.focus();}return;}
+  if(a==='chat-save-as-open'){openChatSaveAs(btn.dataset.id);return;}
    if(a==='chat-save-as-kind'){
     const m=chatMessageById(btn.dataset.id),kind=btn.dataset.kind;if(!m)return;
     const title=String(m.card?.title||m.body||'').trim().slice(0,160),body=String(m.body||m.card?.body||'').trim();
@@ -2897,9 +2983,13 @@ document.addEventListener('click',async e=>{
   if(a==='chat-album-add-open'){await openChatAlbumPicker(btn.dataset.attachmentId);return;}
   if(a==='chat-album-add'){await api('chat-albums',{operation:'add',id:btn.dataset.albumId,attachmentIds:[btn.dataset.attachmentId]});closeModal();toast('Añadido al álbum.');return;}
   if(a==='chat-stickers-open'){await openChatStickerPicker();return;}
+  if(a==='chat-sticker-tab'){chatStickerStudio.tab=btn.dataset.tab||'recent';chatStickerStudio.query='';modal.querySelectorAll('.chat-sticker-tabs [role="tab"]').forEach(x=>{const active=x.dataset.tab===chatStickerStudio.tab;x.classList.toggle('active',active);x.setAttribute('aria-selected',active?'true':'false');});const search=modal.querySelector('[data-role="sticker-search"]'),input=modal.querySelector('#chatStickerSearch');if(search)search.hidden=chatStickerStudio.tab!=='gifs'&&chatStickerStudio.tab!=='stickers';if(input){input.value='';input.placeholder=chatStickerStudio.tab==='stickers'?'Buscar stickers':'Buscar GIFs';}if(chatStickerStudio.tab==='gifs'||chatStickerStudio.tab==='stickers')await runChatStickerDiscovery('',chatStickerStudio.tab);else renderChatStickerPrivate();return;}
+  if(a==='chat-sticker-add'){chatStickerStudio.tab='stickers';chatStickerStudio.query='';modal.querySelectorAll('.chat-sticker-tabs [role="tab"]').forEach(x=>{const active=x.dataset.tab==='stickers';x.classList.toggle('active',active);x.setAttribute('aria-selected',active?'true':'false');});const search=modal.querySelector('[data-role="sticker-search"]'),input=modal.querySelector('#chatStickerSearch');if(search)search.hidden=false;if(input){input.value='';input.placeholder='Buscar stickers';input.focus();}await runChatStickerDiscovery('','stickers');return;}
+  if(a==='chat-sticker-retry'){await runChatStickerDiscovery(chatStickerStudio.query,chatStickerStudio.tab);return;}
   if(a==='chat-sticker-send'){closeModal();queueChatMessage({messageType:'sticker',attachment:{stickerId:btn.dataset.id}});return;}
-  if(a==='chat-sticker-favorite'){await api('chat-stickers',{operation:'favorite',id:btn.dataset.id,favorite:btn.dataset.favorite!=='true'});await openChatStickerPicker();return;}
+  if(a==='chat-sticker-favorite'){await api('chat-stickers',{operation:'favorite',id:btn.dataset.id,favorite:btn.dataset.favorite!=='true'});await openChatStickerPicker(chatStickerStudio.tab);return;}
   if(a==='chat-sticker-create'){const result=await api('chat-stickers',{operation:'create',attachmentId:btn.dataset.attachmentId,name:'Sticker de Nuestra Galaxia'});closeModal();toast(result.sticker?'Sticker creado.':'No se pudo crear.');return;}
+  if(a==='chat-sticker-online-save'||a==='chat-sticker-online-send'){const imported=await api('chat-stickers',{operation:'import-online',url:btn.dataset.url,providerId:btn.dataset.providerId||'',name:btn.dataset.title||'Sticker'});if(a==='chat-sticker-online-send'){closeModal();queueChatMessage({messageType:'sticker',attachment:{stickerId:imported.sticker.id}});}else{toast('Sticker agregado a Nuestros.');await openChatStickerPicker('ours');}return;}
   if(a==='chat-gif-pick'){const imported=await api('chat-gif-import',{url:btn.dataset.url,title:btn.dataset.title||'GIF'});closeModal();const item=normalizeChatUpload({...imported.item,gif:true},'photo');item.gif=true;queueChatMessage({messageType:'gif',attachments:[item]});return;}
   if(a==='chat-video-message-open'){showModal('Videomensaje','<div class="chat-video-duration"><p>Elige la duración máxima.</p><button class="btn secondary" type="button" data-action="chat-video-message" data-seconds="15">15 s</button><button class="btn secondary" type="button" data-action="chat-video-message" data-seconds="30">30 s</button><button class="btn secondary" type="button" data-action="chat-video-message" data-seconds="60">60 s</button></div>','chat-video-duration');return;}
   if(a==='chat-video-message'){await addChatNativeMedia('captureChatVideoMessage',[Number(btn.dataset.seconds||30)],'video');return;}
@@ -3175,6 +3265,9 @@ document.addEventListener('click',async e=>{
 
 document.addEventListener('input',e=>{
  if(e.target.id==='universalSearchInput')renderUniversalSearchResults(e.target.value);
+ if(e.target.id==='chatGalaxySearch')filterChatGalaxyPicker();
+ if(e.target.id==='chatStickerSearch')scheduleChatStickerSearch(e.target);
+ if(e.target.matches('.chat-interactive-composer input'))chatStudioSync(e.target.form);
  if(e.target.matches('#chatSearchForm [name="query"]'))scheduleChatSearch(e.target.form);
  if(e.target.matches('#chatSharedSearchForm [name="query"]'))scheduleChatShared(e.target.form);
  if(e.target.matches('#chatForm textarea')){
@@ -3202,9 +3295,9 @@ document.addEventListener('submit',async e=>{
  try{
   if(e.target.id==='chatForm'){queueCurrentChat({ttlSeconds:chatPreferencesState?.default_ttl_seconds||null});return;}
   if(e.target.id==='chatPremiumSendForm'){const fd=new FormData(e.target),when=new Date(String(fd.get('scheduledAt')||''));if(!Number.isFinite(when.getTime())||when.getTime()<=Date.now()+15000)throw new Error('Elige una fecha futura.');const rawTtl=String(fd.get('ttlSeconds')||''),ttl=rawTtl==='custom'?Math.max(1,Math.min(8760,Number(fd.get('ttlCustomHours')||1)))*3600:(Number(rawTtl||0)||chatPreferencesState?.default_ttl_seconds||null);const viewOnce=fd.get('viewOnce')==='on',effect=String(fd.get('effect')||'')||null,quality=String(fd.get('mediaQuality')||'optimized');chatAttachmentsDraft.forEach(x=>{if(x.kind==='photo'||x.kind==='video')x.mediaQuality=quality;});closeModal();queueCurrentChat({scheduledAt:when.toISOString(),ttlSeconds:ttl,viewOnce,effect});return;}
-   if(e.target.id==='chatPollForm'){const fd=new FormData(e.target),options=String(fd.get('options')||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean).slice(0,10);if(options.length<2)throw new Error('Escribe al menos dos opciones.');const raw=String(fd.get('closesAt')||''),closesAt=raw?new Date(raw).toISOString():null;await api('chat-poll',{operation:'create',pollId:crypto.randomUUID(),clientId:crypto.randomUUID(),question:String(fd.get('question')||''),options,allowMultiple:fd.get('allowMultiple')==='on',closesAt});closeModal();await loadChat({quiet:true,force:true});return;}
-   if(e.target.id==='chatChecklistForm'){const fd=new FormData(e.target),items=String(fd.get('items')||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean).slice(0,50);if(!items.length)throw new Error('Escribe al menos un elemento.');await api('chat-checklist',{operation:'create',checklistId:crypto.randomUUID(),clientId:crypto.randomUUID(),title:String(fd.get('title')||''),items});closeModal();await loadChat({quiet:true,force:true});return;}
-   if(e.target.id==='chatDailyAnswerForm'){const answer=String(new FormData(e.target).get('answer')||'').trim();await saveDaily('answer',answer);closeModal();await loadChat({quiet:true,force:true});toast('Respuesta guardada en Pregunta del día.');return;}
+   if(e.target.id==='chatPollForm'){e.target.dataset.submitted='true';if(!chatStudioSync(e.target))return;const fd=new FormData(e.target),options=fd.getAll('options').map(x=>String(x).trim()).filter(Boolean).slice(0,10),raw=String(fd.get('closesAt')||''),when=raw?new Date(raw):null;if(when&&!Number.isFinite(when.getTime())){chatStudioFormError(e.target,'Elige una fecha de cierre válida.');return;}if(when&&when.getTime()<=Date.now()){chatStudioFormError(e.target,'La fecha de cierre debe estar en el futuro.');return;}await api('chat-poll',{operation:'create',pollId:crypto.randomUUID(),clientId:crypto.randomUUID(),question:String(fd.get('question')||'').trim(),options,allowMultiple:fd.get('allowMultiple')==='on',closesAt:when?when.toISOString():null});closeModal();await loadChat({quiet:true,force:true});return;}
+    if(e.target.id==='chatChecklistForm'){e.target.dataset.submitted='true';if(!chatStudioSync(e.target))return;const fd=new FormData(e.target),items=fd.getAll('items').map(x=>String(x).trim()).filter(Boolean).slice(0,50);await api('chat-checklist',{operation:'create',checklistId:crypto.randomUUID(),clientId:crypto.randomUUID(),title:String(fd.get('title')||'').trim(),items});closeModal();await loadChat({quiet:true,force:true});return;}
+    if(e.target.id==='chatDailyAnswerForm'){const answer=String(new FormData(e.target).get('answer')||'').trim();await saveDaily('answer',answer);closeModal();await loadChat({quiet:true,force:true});toast('Respuesta guardada en Pregunta del día.');return;}
   if(e.target.id==='chatPreferencesForm'){const fd=new FormData(e.target),raw=String(fd.get('defaultTtlSeconds')||''),defaultTtl=raw==='custom'?Math.max(1,Math.min(8760,Number(fd.get('defaultTtlHours')||1)))*3600:(Number(raw||0)||null),result=await api('chat-preferences',{operation:'save',partnerNickname:String(fd.get('partnerNickname')||''),theme:String(fd.get('theme')||'galaxy'),notificationPrivacy:String(fd.get('notificationPrivacy')||'full'),showRead:fd.get('showRead')==='on',showLastSeen:fd.get('showLastSeen')==='on',showTyping:fd.get('showTyping')==='on',defaultTtlSeconds:defaultTtl});chatPreferencesState=result.preferences||null;closeModal();render();toast('Ajustes del chat guardados.');return;}
   if(e.target.id==='chatScheduleEditForm'){const fd=new FormData(e.target),when=new Date(String(fd.get('scheduledAt')||''));await api('chat-schedule-update',{id:String(fd.get('id')||''),scheduledAt:when.toISOString(),silent:fd.get('silent')==='on'});closeModal();await loadChat({quiet:true,force:true});return;}
   if(e.target.id==='chatEditForm'){const fd=new FormData(e.target);await api('chat-edit',{id:String(fd.get('id')||''),body:String(fd.get('body')||'')});closeModal();await loadChat({quiet:true,force:true});return;}
