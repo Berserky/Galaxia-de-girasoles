@@ -51,7 +51,7 @@ test('intelligent search has one primary textbox, debounce, states and exact nav
 });
 
 test('Shared Hub uses contained tabs, integrated live search and media grid',()=>{
- const shared=block('function scheduleChatShared(','function chatFormatText(');
+ const shared=block('function scheduleChatShared(','async function openChatAlbums(');
  assert.match(shared,/function runChatShared/);
  assert.match(shared,/role="tablist"/);
  assert.match(shared,/chat-albums-open/);
@@ -100,7 +100,7 @@ test('responsive contracts cover 320, 360, 390, landscape, safe areas and font s
 });
 
 test('reduced motion keeps new loading and press feedback nonessential',()=>{
- assert.match(crownCss,/@media\(prefers-reduced-motion:reduce\)/);
+ assert.match(crownCss,/@media\s*\(prefers-reduced-motion:\s*reduce\)/);
  assert.match(crownCss,/chat-search-status\[data-state="searching"\][\s\S]*?animation:none/);
  assert.match(crownCss,/chat-message\.chat-message-action-target[\s\S]*?transform:none/);
 });
