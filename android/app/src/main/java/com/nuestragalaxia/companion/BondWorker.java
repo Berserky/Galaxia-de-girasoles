@@ -221,16 +221,18 @@ public final class BondWorker extends Worker {
 
     private static void downloadPhoto(Context c,BondStore bond,String signedUrl)throws Exception{
         if(signedUrl.trim().isEmpty()||"null".equals(signedUrl)){
-            bond.photo().delete();
+            bond.clearPhoto();
             return;
         }
 
         URL remote=new URL(signedUrl),origin=new URL(BuildConfig.SUPABASE_URL);
         if(!"https".equals(remote.getProtocol())||!origin.getHost().equals(remote.getHost())||!remote.getPath().startsWith("/storage/v1/object/sign/galaxy-photos/")){
-            bond.photo().delete();
+            bond.clearPhoto();
             return;
         }
 
+        // The access token changes on each refresh; the private storage path identifies the image.
+        if(bond.photoFresh(remote.getPath()))return;
         File tmp=new File(c.getFilesDir(),"widget-photo.tmp");
         HttpURLConnection connection=(HttpURLConnection)remote.openConnection();
         connection.setInstanceFollowRedirects(false);
@@ -280,6 +282,7 @@ public final class BondWorker extends Worker {
             }finally{
                 bitmap.recycle();
             }
+            bond.photoFetched(remote.getPath());
         }finally{
             connection.disconnect();
             tmp.delete();

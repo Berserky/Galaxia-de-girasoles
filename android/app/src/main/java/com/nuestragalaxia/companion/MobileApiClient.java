@@ -62,12 +62,52 @@ public final class MobileApiClient {
     }
 
     public static JSONObject giphySearch(String token,String query,boolean stickers) throws Exception {
+        String key=BuildConfig.GIPHY_API_KEY.trim();
+        if(key.isEmpty())return new JSONObject().put("provider","giphy").put("configured",false)
+            .put("items",new JSONArray()).put("message","GIPHY no está configurado en esta compilación.");
         String q=query==null?"":query.trim();
         if(q.length()>50)q=q.substring(0,50);
-        return post(token,new JSONObject()
-            .put("action","giphy-search")
-            .put("query",q)
-            .put("stickers",stickers));
+        String endpoint="https://api.giphy.com/v1/"+(stickers?"stickers":"gifs")+(q.isEmpty()?"/trending":"/search");
+        String params="?api_key="+URLEncoder.encode(key,"UTF-8")
+            +"&limit=20&rating=pg-13&lang=es"+(q.isEmpty()?"":"&q="+URLEncoder.encode(q,"UTF-8"));
+        HttpURLConnection c=(HttpURLConnection)new URL(endpoint+params).openConnection();
+        c.setConnectTimeout(10000);
+        c.setReadTimeout(15000);
+        c.setRequestProperty("Accept","application/json");
+        try{
+            JSONObject body=response(c);
+            JSONArray raw=body.optJSONArray("data"),items=new JSONArray();
+            if(raw!=null)for(int i=0;i<raw.length();i++){
+                JSONObject item=raw.optJSONObject(i);
+                if(item==null)continue;
+                JSONObject images=item.optJSONObject("images");
+                if(images==null)continue;
+                JSONObject preview=images.optJSONObject("fixed_width_small");
+                if(preview==null)preview=images.optJSONObject("fixed_width");
+                JSONObject original=images.optJSONObject("downsized_medium");
+                if(original==null)original=images.optJSONObject("original");
+                if(preview==null||original==null)continue;
+                String creator=item.optString("username","").trim();
+                if(creator.isEmpty()){JSONObject user=item.optJSONObject("user");if(user!=null)creator=user.optString("display_name","").trim();}
+                if(creator.length()>80)creator=creator.substring(0,80);
+                String previewUrl=preview.optString("webp",preview.optString("url",""));
+                String url=original.optString("url","");
+                if(!isGiphyMediaUrl(previewUrl)||!isGiphyMediaUrl(url))continue;
+                items.put(new JSONObject().put("id",item.optString("id",""))
+                    .put("title",item.optString("title",stickers?"Sticker":"GIF")).put("creator",creator)
+                    .put("previewUrl",previewUrl).put("url",url));
+            }
+            return new JSONObject().put("provider","giphy").put("configured",true).put("items",items);
+        }finally{c.disconnect();}
+    }
+
+    private static boolean isGiphyMediaUrl(String value){
+        try{
+            URI uri=URI.create(value);
+            String host=uri.getHost();
+            return "https".equalsIgnoreCase(uri.getScheme())&&host!=null
+                &&(host.equals("giphy.com")||host.endsWith(".giphy.com"));
+        }catch(Exception ignored){return false;}
     }
 
     public static JSONObject post(String token,JSONObject body) throws Exception {

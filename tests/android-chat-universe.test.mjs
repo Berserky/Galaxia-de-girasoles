@@ -15,7 +15,7 @@ const gradle=read('android/app/build.gradle.kts');
 
 test('Galaxy Chat Universe 3.5 parses under Crown Jewel Android 4.1.0 (37)',()=>{
  assert.doesNotThrow(()=>new vm.Script(app,{filename:'app.js'}));
- assert.match(gradle,/versionCode = 37; versionName = "4\.1\.0"/);
+ assert.match(gradle,/versionCode = 38; versionName = "4\.1\.1"/);
  assert.ok(css.includes('Galaxy Chat Universe 3.5.0'));
 });
 

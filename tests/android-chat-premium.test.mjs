@@ -14,7 +14,7 @@ const migration=read('supabase/migrations/20261004165848_galaxy_chat_premium_340
 const gradle=read('android/app/build.gradle.kts');
 
 test('Premium 3.4 migration remains compatible under Universe 3.5 post-audit patch',()=>{
- assert.match(gradle,/versionCode = 37; versionName = "4\.1\.0"/);
+ assert.match(gradle,/versionCode = 38; versionName = "4\.1\.1"/);
  for(const marker of ['scheduled_at','schedule_state','expires_at','view_once','galaxy_chat_preferences','galaxy_chat_transcripts','galaxy_chat_translations','galaxy_chat_albums','galaxy_chat_stickers','galaxy_chat_cron_dispatch','cron.schedule'])assert.ok(migration.includes(marker),marker);
  assert.equal(/drop table|truncate table|drop column/i.test(migration),false);
 });
@@ -80,13 +80,15 @@ test('backup v5 preserves premium chat metadata through canonical sections',()=>
  for(const marker of ['chatStickerRecents','chatLiveLocations','BACKUP_SECTION_NAMES','galaxy_backup_export_v5'])assert.ok(edge.includes(marker),marker);
 });
 
-test('native premium bridge includes short video, GIPHY and point location',()=>{
+test('native premium bridge includes GIPHY client search and point location',()=>{
  const bridge=read('android/app/src/main/java/com/nuestragalaxia/companion/GalaxyBridge.java');
  const mobile=read('android/app/src/main/java/com/nuestragalaxia/companion/MobileApiClient.java');
  const gradle=read('android/app/build.gradle.kts');
  for(const marker of ['captureChatVideoMessage','searchGiphy','getChatLocation'])assert.ok(bridge.includes(marker),marker);
  assert.ok(mobile.includes('giphySearch('));
- assert.ok(edge.includes('Deno.env.get("GIPHY_API_KEY")'));
- assert.ok(edge.includes('action==="giphy-search"'));
- assert.equal(gradle.includes('GIPHY_API_KEY'),false,'La clave GIPHY no puede quedar en el APK');
+ assert.ok(mobile.includes('https://api.giphy.com/v1/'));
+ assert.ok(mobile.includes('BuildConfig.GIPHY_API_KEY'));
+ assert.ok(gradle.includes('buildConfigField("String","GIPHY_API_KEY"'));
+ assert.ok(edge.includes('chatGiphyId(attachmentMeta.providerId)'));
 });
+

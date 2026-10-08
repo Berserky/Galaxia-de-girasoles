@@ -1595,6 +1595,10 @@ body.chat-mode .chat-compose-row{min-width:0;max-width:100%;overflow-x:hidden}
 .chat-sticker-art,.chat-online-sticker-art{width:100%;aspect-ratio:1/1;border:0;background:transparent;padding:5px;display:grid;place-items:center}.chat-sticker-art img,.chat-online-sticker-art img{width:100%;height:100%;object-fit:contain;border-radius:11px}
 .chat-sticker-fav{position:absolute;right:6px;top:6px;width:30px;height:30px;border:0;border-radius:999px;background:var(--control-glass);color:var(--muted);display:grid;place-items:center}.chat-sticker-fav.active{color:var(--accent)}.chat-sticker-fav .ui-icon{width:15px;height:15px}
 .chat-online-sticker{display:grid}.chat-online-sticker-save{border:0;border-top:1px solid var(--border);background:var(--surface);color:var(--accent);padding:7px 5px;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:4px}.chat-online-sticker-save .ui-icon{width:13px;height:13px}
-.chat-giphy-credit{display:block;margin-top:9px;text-align:right;color:var(--muted);font-size:9px}
+.chat-giphy-credit{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:9px;color:var(--muted);font-size:10px;font-weight:700;line-height:1.2}.chat-giphy-credit img{display:block;width:92px;height:auto;flex-shrink:0;border-radius:3px}.chat-giphy-creator{display:block;color:var(--muted);font-size:10px;margin:4px 0}
+.chat-giphy-embed{width:min(100%,300px);aspect-ratio:1/1;overflow:hidden;border-radius:14px;background:var(--surface2)}
+.chat-giphy-embed.gif{aspect-ratio:4/3}
+.chat-giphy-embed iframe{display:block;width:100%;height:100%;border:0}
+.chat-sticker-art .chat-sticker-giphy-frame{display:block;width:100%;height:100%;aspect-ratio:1/1;border:0;pointer-events:none;border-radius:11px}
 @media(max-width:360px){.chat-studio-footer{align-items:stretch;flex-direction:column}.chat-studio-submit{width:100%}.chat-studio-row{grid-template-columns:22px minmax(0,1fr)}.chat-studio-row-actions{grid-column:2;justify-content:flex-end}.chat-sticker-grid,.chat-gif-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(orientation:landscape) and (max-height:520px){.chat-galaxy-picker,.chat-sticker-results,.chat-interactive-composer{max-height:54dvh}}

@@ -6,7 +6,7 @@ const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 
 test('Crown Jewel release metadata is 4.1.0 code 37',()=>{
   const gradle=read('android/app/build.gradle.kts');
-  assert.match(gradle,/versionCode = 37; versionName = "4\.1\.0"/);
+  assert.match(gradle,/versionCode = 38; versionName = "4\.1\.1"/);
 });
 
 test('Crown Jewel QA ledger contains exactly VIS-001 through VIS-066',()=>{

@@ -20,9 +20,19 @@ test("Checklist 4.1 shares the interactive composer pattern",()=>{
 test("GIF and Sticker Studio separates sources and supports sticker discovery",()=>{
  for(const label of ["Recientes","Favoritos","GIFs","Stickers","Nuestros"])assert.match(app,new RegExp(label));assert.match(app,/searchGiphy',chatStickerStudio\.query,isSticker/);assert.match(app,/Descubriendo tendencias/);assert.match(app,/scheduleChatStickerSearch/);assert.match(app,/loading="lazy"/);assert.match(app,/Powered by GIPHY/);assert.doesNotMatch(app,/clave protegida en servidor/);
 });
-test("Online stickers are imported server-side and never persisted as external URLs",()=>{
- assert.match(edge,/operation==="import-online"/);assert.match(edge,/chatPublicUrl\(raw\)/);assert.match(edge,/u\.hostname==="giphy\.com"/);assert.match(edge,/validateUploadMedia\("chat-gif"/);assert.match(edge,/db\.storage\.from\(bucket\)\.upload/);assert.match(edge,/galaxy_chat_stickers/);assert.doesNotMatch(app,/GIPHY_API_KEY/);assert.doesNotMatch(bridge,/GIPHY_API_KEY/);assert.doesNotMatch(api,/GIPHY_API_KEY/);
+test("Online stickers persist as GIPHY references without copying provider files",()=>{
+ assert.match(edge,/operation==="import-online"/);
+ assert.match(edge,/bucket:"giphy-external"/);
+ assert.match(edge,/chatGiphyId\(body\.providerId\)/);
+ assert.match(edge,/chatGiphyId\(attachmentMeta\.providerId\)/);
+ assert.match(app,/messageType:'gif',attachment:\{provider:'giphy'/);
+ assert.match(app,/messageType:'sticker',attachment:\{provider:'giphy'/);
+ assert.match(app,/Powered by GIPHY/);
+ assert.doesNotMatch(app,/GIPHY_API_KEY/);
+ assert.doesNotMatch(bridge,/GIPHY_API_KEY/);
+ assert.match(api,/BuildConfig\.GIPHY_API_KEY/);
 });
-test("Native bridge keeps the server-side stickers parameter",()=>{
- assert.match(bridge,/searchGiphy\(requestId,args\.optString\(0,""\),args\.optBoolean\(1,false\)\)/);assert.match(api,/\.put\("stickers",stickers\)/);
+
+test("Native bridge forwards stickers discovery to client GIPHY API",()=>{
+ assert.match(bridge,/searchGiphy\(requestId,args\.optString\(0,""\),args\.optBoolean\(1,false\)\)/);assert.match(api,/stickers\?"stickers":"gifs"/);
 });

@@ -4,7 +4,7 @@ import { aggregateInsightRows, evaluateAchievements, isInsightVisibleItem, perio
 import { QUESTION_DECKS, buildDateRecap, buildSequentialPlan, buildSurpriseExperience, normalizePlanCategory, questionById, roulettePendingPlans, selectQuestion } from "./date-engine.ts";
 import { buildGoalDateSuggestions, buildGoalInsightSummary, computeGoalProgress, conversionDraft, normalizeContribution, normalizeGoalInput, reorderStepIds } from "./goals-engine.ts";
 import { BUILTIN_GESTURES, computeBondProgress, gestureSnapshot, normalizeCustomGesture, resolveGesture } from "./bond-engine.ts";
-import { PUSH_EVENT_TYPES, firebaseAndroidClientConfig, sanitizePushPayload, sendFcmData } from "./push-engine.ts";
+import { PUSH_EVENT_TYPES, sanitizePushPayload, sendFcmData } from "./push-engine.ts";
 import { CONTEXT_EVENTS, buildDateContextRecap, buildEncounterSuggestion, buildTripContextRecap, contextStep, emptyContextState, haversineM, summarizeTrack } from "./context-engine.ts";
 import { bookSections, buildIntelligenceDocument, contentHashInput, explainConnection, normalizeSearchText, sanitizeTranscriptSegments, validateNarrative } from "./intelligence-engine.ts";
 import { aiProviderConfig, extractJsonObject, generateGroundedResponse, gteSmallEmbedding, transcribeAudioBlob } from "./intelligence-provider.ts";
@@ -520,25 +520,55 @@ function nextCalendarEvent(items:any[],day:string){
   return events.sort((a,b)=>a.date.localeCompare(b.date))[0]||null;
 }
 
+// Reuse short-lived signed URLs within one Edge isolate so clients can reuse cached
+// images instead of receiving a different image URL on each refresh.
+const signedUrlCache=new Map<string,{url:string,validUntil:number}>();
+function signedCacheKey(bucket:string,path:string,seconds:number){return JSON.stringify([bucket,path,seconds]);}
+function signedCached(bucket:string,path:string,seconds:number){
+ const key=signedCacheKey(bucket,path,seconds),entry=signedUrlCache.get(key);
+ if(!entry)return null;
+ if(entry.validUntil>Date.now())return entry.url;
+ signedUrlCache.delete(key);return null;
+}
+function rememberSigned(bucket:string,path:string,seconds:number,url:string|null){
+ if(!url)return;
+ const key=signedCacheKey(bucket,path,seconds);
+ signedUrlCache.delete(key);
+ signedUrlCache.set(key,{url,validUntil:Date.now()+Math.max(30000,Math.min(600000,Math.floor(seconds*400)))});
+ while(signedUrlCache.size>400)signedUrlCache.delete(signedUrlCache.keys().next().value!);
+}
 async function signed(bucket:string,path:string,seconds=900){
-  if(!path)return null;
-  const {data,error}=await db.storage.from(bucket).createSignedUrl(path,seconds);
-  return error?null:data.signedUrl;
+ if(!path)return null;
+ const cached=signedCached(bucket,path,seconds);
+ if(cached)return cached;
+ const {data,error}=await db.storage.from(bucket).createSignedUrl(path,seconds);
+ const url=error?null:(data.signedUrl||null);
+ rememberSigned(bucket,path,seconds,url);
+ return url;
 }
 async function signedMany(bucket:string,paths:string[],seconds=900){
-  const unique=[...new Set((paths||[]).map(String).filter(Boolean))];
-  const result=new Map<string,string|null>();
-  if(!unique.length)return result;
-  const {data,error}=await db.storage.from(bucket).createSignedUrls(unique,seconds);
-  if(error){
-    const fallback=await Promise.all(unique.map(async path=>[path,await signed(bucket,path,seconds)] as [string,string|null]));
-    return new Map(fallback);
-  }
-  for(const row of data||[])result.set(String(row.path||""),row.error?null:(row.signedUrl||null));
-  for(const path of unique)if(!result.has(path))result.set(path,null);
+ const unique=[...new Set((paths||[]).map(String).filter(Boolean))];
+ const result=new Map<string,string|null>();
+ if(!unique.length)return result;
+ const remaining:string[]=[];
+ for(const path of unique){
+  const cached=signedCached(bucket,path,seconds);
+  if(cached)result.set(path,cached);else remaining.push(path);
+ }
+ if(!remaining.length)return result;
+ const {data,error}=await db.storage.from(bucket).createSignedUrls(remaining,seconds);
+ if(error){
+  const fallback=await Promise.all(remaining.map(async path=>[path,await signed(bucket,path,seconds)] as [string,string|null]));
+  for(const [path,url] of fallback)result.set(path,url);
   return result;
+ }
+ for(const row of data||[]){
+  const path=String(row.path||""),url=row.error?null:(row.signedUrl||null);
+  if(path){result.set(path,url);rememberSigned(bucket,path,seconds,url);}
+ }
+ for(const path of remaining)if(!result.has(path))result.set(path,null);
+ return result;
 }
-
 
 function fcmCredentials(){
  const raw=Deno.env.get("FCM_SERVICE_ACCOUNT_JSON")||"";
@@ -569,13 +599,15 @@ async function pushClientConfig(req:Request){
  const d=await device(req);
  const credentials=fcmCredentials();
  if(!credentials)return json({available:false},503);
- try{
-  const config=await firebaseAndroidClientConfig(credentials,"com.nuestragalaxia.companion");
-  return json({available:true,config,deviceId:String(d.id)});
- }catch(error){
-  console.error("push-client-config",error instanceof Error?error.message:"error");
-  return json({available:false},503);
- }
+ // Sender IAM only needs cloudmessaging.messages.create; no Firebase Management API.
+ const config={
+  projectId:Deno.env.get("FIREBASE_PROJECT_ID")||"",
+  senderId:Deno.env.get("FIREBASE_SENDER_ID")||"",
+  applicationId:Deno.env.get("FIREBASE_APPLICATION_ID")||"",
+  apiKey:Deno.env.get("FIREBASE_API_KEY")||""
+ };
+ if(!config.projectId||!config.senderId||!config.applicationId||!config.apiKey||config.projectId!==credentials.project_id)return json({available:false},503);
+ return json({available:true,config,deviceId:String(d.id)});
 }
 
 async function pushTokenRegister(req:Request,body:any){
@@ -712,6 +744,11 @@ function chatPublicUrl(value:any){
   return u;
  }catch{return null;}
 }
+function chatGiphyId(value:any){
+ const id=text(value,120);
+ return /^[A-Za-z0-9_-]{1,120}$/.test(id)?id:null;
+}
+function chatGiphyEmbedUrl(id:string){return "https://giphy.com/embed/"+encodeURIComponent(id);}
 async function chatLinkPreview(body:string){
  const match=String(body||"").match(/https:\/\/[^\s<>"']+/i);
  if(!match)return {};
@@ -1185,12 +1222,12 @@ async function chatHydrate(rows:any[],person:string){
   const k=String(a.message_id),v=attachmentMap.get(k)||[];v.push(safe);attachmentMap.set(k,v);
  }
  const stickerMap=new Map<string,any>(),stickerPaths=new Map<string,string[]>();
- for(const x of stickers||[]){const bucket=String(x.bucket),paths=stickerPaths.get(bucket)||[];paths.push(String(x.path));stickerPaths.set(bucket,paths);}
+ for(const x of stickers||[]){const bucket=String(x.bucket);if(bucket==="giphy-external")continue;const paths=stickerPaths.get(bucket)||[];paths.push(String(x.path));stickerPaths.set(bucket,paths);}
  const stickerSigned=new Map<string,Map<string,string|null>>();
  await Promise.all([...stickerPaths.entries()].map(async([bucket,paths])=>stickerSigned.set(bucket,await signedMany(bucket,paths,1800))));
  for(const x of stickers||[]){
-  const id=String(x.id),url=stickerSigned.get(String(x.bucket))?.get(String(x.path))||null;
-  stickerMap.set(id,{id,name:x.name,url,createdBy:x.created_by});
+  const id=String(x.id),external=String(x.bucket)==="giphy-external",providerId=external?chatGiphyId(x.path):null,url=external?null:(stickerSigned.get(String(x.bucket))?.get(String(x.path))||null);
+  stickerMap.set(id,{id,name:x.name,url,providerId,embedUrl:providerId?chatGiphyEmbedUrl(providerId):null,createdBy:x.created_by});
  }
  const sessionMap=new Map<string,any>((liveSessions||[]).map((x:any)=>[String(x.id),x] as [string,any]));
  const locationMap=new Map<string,any>((locations||[]).map((x:any)=>[String(x.person),x] as [string,any]));
@@ -1324,7 +1361,16 @@ async function chatSend(req:Request,body:any){
   const preview=await chatHydrateEntityRef({card_type:entityRef.cardType,entity_kind:entityRef.entityKind,entity_id:entityRef.entityId},person);
   if(!preview?.available)return json({error:"Este contenido ya no está disponible."},404);
  }
- if(messageType==="sticker"){
+ if(messageType==="gif"||(messageType==="sticker"&&attachmentMeta.provider==="giphy")){
+  const id=chatGiphyId(attachmentMeta.providerId);
+  if(!id||files.length)return json({error:"Contenido de GIPHY no válido."},400);
+  attachmentMeta.provider="giphy";attachmentMeta.providerId=id;
+  attachmentMeta.title=text(attachmentMeta.title||"GIF",120);
+  attachmentMeta.creator=text(attachmentMeta.creator||"",80);
+  // Do not persist GIPHY media URLs in chat payloads.
+  delete attachmentMeta.externalUrl;
+ }
+ if(messageType==="sticker"&&attachmentMeta.provider!=="giphy"){
   const stickerId=String(attachmentMeta.stickerId||"");
   if(!uuidish(stickerId)||(await ok(db.from("galaxy_chat_stickers").select("id").eq("id",stickerId).limit(1)))?.length!==1)return json({error:"Sticker no disponible."},404);
  }
@@ -1910,7 +1956,7 @@ async function chatStickers(req:Request,body:any={}){
    ok(db.from("galaxy_chat_sticker_recents").select("sticker_id,last_used_at").eq("person",person).order("last_used_at",{ascending:false}).limit(80))
   ]);
   const fav=new Set((favorites||[]).map((x:any)=>String(x.sticker_id))),recentMap=new Map((recents||[]).map((x:any)=>[String(x.sticker_id),x.last_used_at]));
-  const hydrated=await Promise.all((stickers||[]).map(async(x:any)=>({id:x.id,name:x.name,url:await signed(String(x.bucket),String(x.path),1800),favorite:fav.has(String(x.id)),lastUsedAt:recentMap.get(String(x.id))||null,createdBy:x.created_by})));
+  const hydrated=await Promise.all((stickers||[]).map(async(x:any)=>({id:x.id,name:x.name,url:String(x.bucket)==="giphy-external"?null:await signed(String(x.bucket),String(x.path),1800),providerId:String(x.bucket)==="giphy-external"?chatGiphyId(x.path):null,embedUrl:String(x.bucket)==="giphy-external"&&chatGiphyId(x.path)?chatGiphyEmbedUrl(String(x.path)):null,favorite:fav.has(String(x.id)),lastUsedAt:recentMap.get(String(x.id))||null,createdBy:x.created_by})));
   hydrated.sort((a:any,b:any)=>Number(!!b.favorite)-Number(!!a.favorite)||String(b.lastUsedAt||"").localeCompare(String(a.lastUsedAt||""))||String(b.id).localeCompare(String(a.id)));
   return json({stickers:hydrated});
  }
@@ -1922,24 +1968,16 @@ async function chatStickers(req:Request,body:any={}){
   return json({sticker:{...sticker,url:await signed(String(sticker.bucket),String(sticker.path),1800)}});
  }
  if(operation==="import-online"){
-  const raw=text(body.url,1200),name=text(body.name||"Sticker",80)||"Sticker",providerId=text(body.providerId||"",120).replace(/[^a-zA-Z0-9_-]/g,"").slice(0,120);
-  const u=chatPublicUrl(raw);if(!u||!(u.hostname==="giphy.com"||u.hostname.endsWith(".giphy.com")))return json({error:"Sticker online no válido."},400);
-  let response:Response;
-  try{response=await fetch(u,{redirect:"error",signal:AbortSignal.timeout(12000),headers:{accept:"image/gif,image/webp"}});}catch{return json({error:"No se pudo descargar el sticker."},503);}
-  if(!response.ok)return json({error:"No se pudo descargar el sticker."},503);
-  const declaredMime=String(response.headers.get("content-type")||"").split(";")[0].toLowerCase(),declared=Number(response.headers.get("content-length")||0);
-  if(declared>6*1024*1024)return json({error:"El sticker supera 6 MB."},413);
-  const bytes=new Uint8Array(await response.arrayBuffer());
-  if(bytes.length<1||bytes.length>6*1024*1024)return json({error:bytes.length<1?"El sticker está vacío.":"El sticker supera 6 MB."},bytes.length<1?400:413);
-  const validation=validateUploadMedia("chat-gif",declaredMime,name+".gif",bytes);if(!validation.ok)return json({error:validation.message},validation.status);
-  const mime=validation.mime,ext=validation.extension,key=providerId||crypto.randomUUID(),path=person+"/sticker-giphy-"+key+"."+ext,bucket="galaxy-chat-media";
-  const existing=(await ok(db.from("galaxy_chat_stickers").select("*").eq("bucket",bucket).eq("path",path).limit(1)))?.[0];
-  if(existing)return json({sticker:{...existing,url:await signed(bucket,path,1800),favorite:false},idempotent:true});
-  const {error:uploadError}=await db.storage.from(bucket).upload(path,bytes,{contentType:mime,upsert:true,cacheControl:"3600",metadata:{originalName:name+"."+ext,provider:"giphy",providerId:key}});
-  if(uploadError)throw uploadError;
-  const sticker=await ok(db.from("galaxy_chat_stickers").upsert({created_by:person,bucket,path,name},{onConflict:"bucket,path"}).select("*").single());
-  return json({sticker:{...sticker,url:await signed(bucket,path,1800),favorite:false},idempotent:false});
+  const providerId=chatGiphyId(body.providerId),name=text(body.name||"Sticker",80)||"Sticker";
+  if(!providerId)return json({error:"Sticker online no válido."},400);
+  // Reference only; provider bytes never pass through Supabase Storage.
+  const sticker=await ok(db.from("galaxy_chat_stickers").upsert(
+   {created_by:person,bucket:"giphy-external",path:providerId,name},
+   {onConflict:"bucket,path"}
+  ).select("*").single());
+  return json({sticker:{...sticker,url:null,providerId,embedUrl:chatGiphyEmbedUrl(providerId),favorite:false},idempotent:false});
  }
+
  const id=String(body.id||"");if(!uuidish(id))return json({error:"Sticker no válido."},400);
  const exists=(await ok(db.from("galaxy_chat_stickers").select("id,created_by").eq("id",id).limit(1)))?.[0];
  if(!exists)return json({error:"Sticker no encontrado."},404);
@@ -1988,48 +2026,16 @@ async function chatLiveLocation(req:Request,body:any={}){
  return json({session:{...session,active},location:active&&loc?.sharing?loc:null});
 }
 
-async function giphySearch(req:Request,body:any={}){
-  await device(req);
-  const apiKey=String(Deno.env.get("GIPHY_API_KEY")||"").trim();
-  if(!apiKey)return json({provider:"giphy",configured:false,items:[],message:"GIFs online no están configurados en el servidor."});
-  const query=text(body.query||"",50),stickers=body.stickers===true;
-  const endpoint=new URL("https://api.giphy.com/v1/"+(stickers?"stickers":"gifs")+(query?"/search":"/trending"));
-  endpoint.searchParams.set("api_key",apiKey);
-  if(query)endpoint.searchParams.set("q",query);
-  endpoint.searchParams.set("limit","20");
-  endpoint.searchParams.set("rating","pg-13");
-  endpoint.searchParams.set("lang","es");
-  let response:Response;
-  try{response=await fetch(endpoint,{headers:{accept:"application/json"},signal:AbortSignal.timeout(15000)});}
-  catch{return json({error:"GIPHY no está disponible en este momento."},503);}
-  if(!response.ok)return json({error:"GIPHY no está disponible en este momento."},503);
-  const raw=await response.json().catch(()=>({} as any)),items:any[]=[];
-  for(const item of Array.isArray(raw?.data)?raw.data:[]){
-    const preview=item?.images?.fixed_width_small||item?.images?.fixed_width||{};
-    const original=item?.images?.downsized_medium||item?.images?.original||{};
-    const previewUrl=String(preview?.webp||preview?.url||""),url=String(original?.url||"");
-    const valid=(value:string)=>{try{const u=new URL(value);return u.protocol==="https:"&&(u.hostname==="giphy.com"||u.hostname.endsWith(".giphy.com"));}catch{return false;}};
-    if(!valid(previewUrl)||!valid(url))continue;
-    items.push({id:text(item?.id||"",120),title:text(item?.title||(stickers?"Sticker":"GIF"),160),previewUrl,url});
-  }
-  return json({provider:"giphy",configured:true,items});
+async function giphySearch(req:Request,_body:any={}){
+ await device(req);
+ // Legacy Android clients must upgrade: GIPHY API and media traffic cannot be proxied.
+ return json({provider:"giphy",configured:false,items:[],message:"Actualiza Nuestra Galaxia para activar la búsqueda de GIPHY en Android."});
 }
 
 async function chatGifImport(req:Request,body:any={}){
- const d=await device(req),person=String(d.person),raw=text(body.url,1200),title=text(body.title||"GIF",120)||"GIF";
- const u=chatPublicUrl(raw);if(!u||!(u.hostname==="giphy.com"||u.hostname.endsWith(".giphy.com")))return json({error:"GIF no válido."},400);
- let response:Response;
- try{response=await fetch(u,{redirect:"error",signal:AbortSignal.timeout(12000),headers:{accept:"image/gif,image/webp"}});}catch{return json({error:"No se pudo descargar el GIF."},503);}
- if(!response.ok)return json({error:"No se pudo descargar el GIF."},503);
- const declaredMime=String(response.headers.get("content-type")||"").split(";")[0].toLowerCase();
- const declared=Number(response.headers.get("content-length")||0);if(declared>10*1024*1024)return json({error:"El GIF supera 10 MB."},413);
- const bytes=new Uint8Array(await response.arrayBuffer());if(bytes.length<1||bytes.length>10*1024*1024)return json({error:bytes.length<1?"El GIF está vacío.":"El GIF supera 10 MB."},bytes.length<1?400:413);
- const validation=validateUploadMedia("chat-gif",declaredMime,title+".gif",bytes);
- if(!validation.ok)return json({error:validation.message},validation.status);
- const mime=validation.mime,ext=validation.extension,path=person+"/gif-"+crypto.randomUUID()+"."+ext;
- const {error}=await db.storage.from("galaxy-chat-media").upload(path,bytes,{contentType:mime,upsert:false,cacheControl:"3600",metadata:{originalName:title+"."+ext,provider:"giphy"}});
- if(error)throw error;
- return json({item:{kind:"photo",path,bucket:"galaxy-chat-media",mime,name:title+"."+ext,size:bytes.length,url:await signed("galaxy-chat-media",path,1800),gif:true}});
+ await device(req);
+ // No server-side fetch/re-host of GIPHY content.
+ return json({error:"Los GIFs de GIPHY deben compartirse mediante su enlace original, sin copiar el archivo."},422);
 }
 
 async function chatMetric(req:Request,body:any={}){
