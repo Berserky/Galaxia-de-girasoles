@@ -6,6 +6,7 @@ on:
     paths:
       - 'supabase/**'
       - 'tests/privacy-firewall-db.sql'
+      - 'tests/phase4-member-location-rls.sql'
       - 'tests/privacy-firewall-pre-migration.sql'
       - 'tests/privacy-firewall-chat-e2e.sh'
       - 'tests/privacy-firewall.test.mjs'
@@ -56,6 +57,9 @@ jobs:
 
       - name: Run Phase 0 two-profile attack probes
         run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/privacy-firewall-db.sql
+
+      - name: NG-AUD-004 Verify authenticated outsiders cannot read shared GPS
+        run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/phase4-member-location-rls.sql
 
       - name: Validate Phase 0 rollback and re-apply
         run: |
