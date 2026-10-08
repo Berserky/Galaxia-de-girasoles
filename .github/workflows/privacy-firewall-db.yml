@@ -11,6 +11,7 @@ on:
       - 'tests/privacy-firewall-chat-e2e.sh'
       - 'tests/privacy-firewall.test.mjs'
       - 'tests/supabase-rls.sql'
+      - 'tests/phase4-invitation-identity.sql'
       - '.github/workflows/privacy-firewall-db.yml'
   workflow_dispatch:
 
@@ -55,6 +56,9 @@ jobs:
 
       - name: Run RLS regression
         run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/supabase-rls.sql
+
+      - name: NG-FNC invitation expiry, replacement, reuse and profile isolation
+        run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/phase4-invitation-identity.sql
 
       - name: Run Phase 0 two-profile attack probes
         run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/privacy-firewall-db.sql
