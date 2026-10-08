@@ -18,7 +18,7 @@ test('NG-QA-005 uses GIPHY client key and avoids server media rehosting',()=>{
  assert.ok(main.includes('BuildConfig.GIPHY_API_KEY'));
  assert.ok(mobile.includes('BuildConfig.GIPHY_API_KEY'));
  assert.ok(mobile.includes('https://api.giphy.com/v1/'));
- assert.ok(edge.includes('chatGiphyMediaUrl(attachmentMeta.externalUrl)'));
+ assert.ok(edge.includes('chatGiphyId(attachmentMeta.providerId)'));
  const stickers=edge.slice(edge.indexOf('async function chatStickers('),edge.indexOf('async function chatLiveLocation('));
  assert.ok(stickers.includes('bucket:"giphy-external"'));
  assert.ok(app.includes('if(!result?.configured)'));
