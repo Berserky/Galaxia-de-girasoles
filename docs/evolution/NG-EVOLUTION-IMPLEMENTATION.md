@@ -22,3 +22,15 @@
 | NG-DEP-001,003–008 | — | matriz F3 | DIFERIDO |
 
 El commit y el enlace del PR que contienen esta documentación son la fuente autoritativa de trazabilidad; deben registrarse al integrarse. No afirmar merge o checks verdes antes de observarlos.
+
+
+## Evidencia posterior a la preparación inicial (2026-10-08)
+El apartado «0 cambios funcionales» anterior describe **exclusivamente la entrega documental original PR #117**, no todo lo que se integró después en `desarrollo`.
+
+- **NG-AUD-004 (GPS):** corrección limitada a cuatro políticas SELECT en migración nueva, PR #118 mergeado; prueba adversarial A/B miembros y C/D externos aprobada en DB local. **No desplegada a QA/PROD**; hallazgo activo en SQL efectivo hasta cambio autorizado.
+- **NG-FNC-007/008/009 (invitaciones):** PR #120 mergeado; suite SQL transaccional ejercita expiración, replacement, replay, correo no verificado, asignación perfil 0/1; no sustituye pruebas deep-link reales Android.
+- **Cámara (cobertura):** PR #119 mergeado; `CAMERAX_QA_EVIDENCE` confirmó foto y video `passed`, `reportFiles=1`, `requiredCameraCases=2`; no permite `SKIPPED` como éxito.
+- **NG-AUD-003 (onboarding):** PR #121 abrió corrección CSS landscape y etiquetado accesible del código de vinculación, pendiente validación final e inspección visual a la fecha de esta nota.
+- **Trazabilidad:** PR #113 de auditoría F1 también mergeado. Los documentos anteriores conservan su baseline de 92 funcionalidades y decisiones históricas.
+
+Quedan **sin realizar** la regresión integral F4 por módulo, el staging real dual-user con credenciales QA, validación FCM/GPS/privacidad remota e informe de rendimiento comparativo. Ningún dato de pareja ni ambiente productivo fue modificado por estos PR.
