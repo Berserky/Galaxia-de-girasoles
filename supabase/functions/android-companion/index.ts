@@ -744,14 +744,6 @@ function chatPublicUrl(value:any){
   return u;
  }catch{return null;}
 }
-function chatGiphyMediaUrl(value:any){
- const raw=text(value,1200),u=chatPublicUrl(raw);
- if(!u)return null;
- const host=u.hostname.toLowerCase().replace(/\.$/,"");
- if(!(host==="giphy.com"||host.endsWith(".giphy.com")))return null;
- if(!/\.(gif|webp)$/i.test(u.pathname))return null;
- return u.toString();
-}
 function chatGiphyId(value:any){
  const id=text(value,120);
  return /^[A-Za-z0-9_-]{1,120}$/.test(id)?id:null;
@@ -2033,31 +2025,10 @@ async function chatLiveLocation(req:Request,body:any={}){
  return json({session:{...session,active},location:active&&loc?.sharing?loc:null});
 }
 
-async function giphySearch(req:Request,body:any={}){
-  await device(req);
-  const apiKey=String(Deno.env.get("GIPHY_API_KEY")||"").trim();
-  if(!apiKey)return json({provider:"giphy",configured:false,items:[],message:"GIFs online no están configurados en el servidor."});
-  const query=text(body.query||"",50),stickers=body.stickers===true;
-  const endpoint=new URL("https://api.giphy.com/v1/"+(stickers?"stickers":"gifs")+(query?"/search":"/trending"));
-  endpoint.searchParams.set("api_key",apiKey);
-  if(query)endpoint.searchParams.set("q",query);
-  endpoint.searchParams.set("limit","20");
-  endpoint.searchParams.set("rating","pg-13");
-  endpoint.searchParams.set("lang","es");
-  let response:Response;
-  try{response=await fetch(endpoint,{headers:{accept:"application/json"},signal:AbortSignal.timeout(15000)});}
-  catch{return json({error:"GIPHY no está disponible en este momento."},503);}
-  if(!response.ok)return json({error:"GIPHY no está disponible en este momento."},503);
-  const raw=await response.json().catch(()=>({} as any)),items:any[]=[];
-  for(const item of Array.isArray(raw?.data)?raw.data:[]){
-    const preview=item?.images?.fixed_width_small||item?.images?.fixed_width||{};
-    const original=item?.images?.downsized_medium||item?.images?.original||{};
-    const previewUrl=String(preview?.webp||preview?.url||""),url=String(original?.url||"");
-    const valid=(value:string)=>{try{const u=new URL(value);return u.protocol==="https:"&&(u.hostname==="giphy.com"||u.hostname.endsWith(".giphy.com"));}catch{return false;}};
-    if(!valid(previewUrl)||!valid(url))continue;
-    items.push({id:text(item?.id||"",120),title:text(item?.title||(stickers?"Sticker":"GIF"),160),previewUrl,url});
-  }
-  return json({provider:"giphy",configured:true,items});
+async function giphySearch(req:Request,_body:any={}){
+ await device(req);
+ // Legacy Android clients must upgrade: GIPHY API and media traffic cannot be proxied.
+ return json({provider:"giphy",configured:false,items:[],message:"Actualiza Nuestra Galaxia para activar la búsqueda de GIPHY en Android."});
 }
 
 async function chatGifImport(req:Request,body:any={}){
