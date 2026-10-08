@@ -1,15 +1,15 @@
 # Nuestra Galaxia 4.1.1 — Auditoría funcional integral (Fase 1/5)
 
-**Fecha:** 2026-10-08 · **Tipo:** diagnóstico no destructivo · **Repo:** [Berserky/Galaxia-de-girasoles](https://github.com/Berserky/Galaxia-de-girasoles) · **Estado del informe:** auditoría técnica y smoke no autenticado completados; flujos emparejados documentados como BLOQUEADOS, no aprobados.
+**Fecha:** 2026-10-08 · **Tipo:** diagnóstico no destructivo · **Repo:** [Berserky/Galaxia-de-girasoles](https://github.com/Berserky/Galaxia-de-girasoles) · **Estado del informe:** auditoría técnica, smoke local, staging dual-usuario y WebView hermético verificados; funciones restantes clasificadas explícitamente PASS/PARTIAL/BLOCKED/NOT TESTED.
 
 ## 1. Resumen ejecutivo
 
-- Inventario de **92 unidades verificables** en [matriz](NG-4.1.1-FUNCTIONAL-MATRIX.md): **19 PASS**, **65 BLOCKED**, **8 NOT TESTED**. Los PASS incluyen pruebas **de contrato/motor** y de instalación/onboarding; no significan 19 journeys completos de una pareja.
+- Inventario de **92 unidades verificables** en [matriz](NG-4.1.1-FUNCTIONAL-MATRIX.md): **31 PASS**, **11 PARTIAL**, **43 BLOCKED**, **7 NOT TESTED**. Los PASS incluyen pruebas de contrato/motor, instalación, staging de dos perfiles e instrumentación Android; no significan 31 recorridos completos de una pareja.
 - Verificación Node local: **603 tests aprobados / 0 fallidos / 0 omitidos**; duración reportada ~3 segundos, ejecutados en copia aislada exactamente desde `desarrollo` actual. `npm test` se volvió a ejecutar solamente para validar la línea base local independiente y comprobar que la copia de trabajo es reproducible.
 - [Android Release Candidate run 37808030670](https://github.com/Berserky/Galaxia-de-girasoles/actions/runs/37808030670): **SUCCESS**, 7 de 7 jobs. Los jobs ya aprobados de Android instrumentado, upgrade, lint y CI no se repitieron.
 - APK `android-stable`: **4.1.1 / versionCode 38**, paquete `com.nuestragalaxia.companion`. Instalación limpia, pantalla de vinculación offline, giro a paisaje con scroll y reapertura **PASS** en AVD efímero Android API35; sin uso del móvil personal ni credenciales reales.
 - **0 P0, 0 P1, 1 P2 (entorno QA), 2 P3 (documentación/UX)** observados con evidencia. No inferir que las áreas no probadas carecen de defectos.
-- **Dictamen:** la base de código/CI y el arranque limpio son verificables; la auditoría **no puede declarar PASS integral de las funciones emparejadas** sin dos identidades efímeras QA y pruebas reales sobre backend aislado. Los bloqueos restantes están explícitos, no ocultos.
+- **Dictamen:** la base de código/CI y el arranque limpio son verificables; la auditoría **no puede declarar PASS integral de todas las funciones emparejadas**: hay doble usuario de staging y WebView hermético, pero faltan escenarios específicos documentados. Los bloqueos restantes están explícitos, no ocultos.
 
 ## 2. Ficha de línea base verificada
 
@@ -55,7 +55,7 @@ Artifacts asociados: `android-candidate`, `android-candidate-evidence`, `android
 
 | Dominio | Evidencia positiva | Restricción | Estado global prudente |
 |---|---|---|---|
-| Identidad | Pantalla y APK sin datos PASS; pruebas contratos | No se emitieron tokens ni se ejecutó doble usuario | BLOCKED para identidad real |
+| Identidad | Pantalla y APK sin datos PASS; pruebas contratos | Doble perfil OIDC real comprobado; OAuth/invitaciones pendientes | BLOCKED para identidad real |
 | Galaxy Chat | Motores y contratos automatizados PASS | Sin cuentas ni E2E de scroll/realtime | BLOCKED |
 | Cámara y multimedia | Validación y contratos Node/CI | Sin flujo capturar-subir-recibir | BLOCKED |
 | Música | Implementación/entradas identificadas | Sin pista QA ni proveedor real | BLOCKED |
@@ -99,4 +99,24 @@ El AVD anterior contenía 4.1.0 versionCode37 con firma incompatible para el APK
 
 Consulte [hallazgos NG-AUD-001–003](NG-4.1.1-FINDINGS.md), [matriz de 92 unidades](NG-4.1.1-FUNCTIONAL-MATRIX.md) y [próximos pasos](NG-4.1.1-NEXT-STEPS.md).
 
-**Cierre del trabajo ejecutable en entorno actual:** baseline, inventario, CI, tests Node, APK estable y flujo público/no vinculado obtenidos de forma reproducible. **Límite:** la condición original de verificación integral de *cada* flujo no puede certificarse con dos usuarios ausentes. No existe fundamento técnico para dar luz verde a una nueva versión basándose en los 19 PASS parciales. Plan de continuación detallado, sin inventar PASS, en NEXT-STEPS.
+**Cierre del trabajo ejecutable en entorno actual:** baseline, inventario, CI, tests Node, APK estable y flujo público/no vinculado obtenidos de forma reproducible. **Límite:** la condición original de verificación integral de *cada* flujo no puede certificarse con dos usuarios ausentes. No existe fundamento técnico para dar luz verde a una nueva versión basándose en los 31 PASS parciales. Plan de continuación detallado, sin inventar PASS, en NEXT-STEPS.
+
+
+## 9. Adenda de cierre: correlación con evidencias reales del RC
+
+**Esta sección actualiza y prevalece sobre las limitaciones redactadas antes de recuperar los logs de CI.** La matriz actualizada registra **31 PASS, 11 PARTIAL, 43 BLOCKED y 7 NOT TESTED**, no 19/65/8.
+
+### Ejecución verificada sin repetir pruebas
+
+- [Android instrumentation: job 113417339690](https://github.com/Berserky/Galaxia-de-girasoles/actions/runs/37808030670/job/113417339690): registró 24 pruebas finalizadas, de las cuales 2 CameraX fueron SKIPPED por limitación del emulador; job SUCCESS. El código de prueba ejercita un WebView real y puente nativo contra servidor HTTP hermético.
+- [Staging remoto: job 113422125384](https://github.com/Berserky/Galaxia-de-girasoles/actions/runs/37808030670/job/113422125384): el workflow solicitó dos identidades temporales por GitHub OIDC, comprobó perfiles 0/1, dos envíos concurrentes, visibilidad de ambos mensajes para ambos usuarios, consulta de mapa y exportación de backup. Terminó con la marca VERIFIED y un cleanup confirmado.
+- La ejecución protegió staging de uso accidental del Supabase productivo; el script de comprobación aborta si detecta la referencia productiva.
+- Se conservaron sin repetición los 603 tests Node y los 7 jobs CI aprobados en el mismo SHA.
+
+### Limitaciones residuales y criterio de cierre
+
+- Los casos CameraX con vídeo y fotografía sobre hardware físico no quedaron acreditados por el emulador del último RC. El historial de QA físico de versiones anteriores no suple esa diferencia.
+- Quedan sin certificación completa FCM foreground/background, OAuth/revocación/invitaciones, proveedor GIF en condiciones de producción, IA externa, música, GPS compartido vivo, aislamiento adversarial entre parejas y batería.
+- El archivo docs/qa/galaxy-4.1.1-release-preflight.md había documentado en esta misma fecha HTTP 503 de push-client-config productivo. No se revalidó su estado actual con credencial; se conserva como riesgo de publicación pendiente, **sin clasificarlo como falla nueva reproducida**.
+
+**Decisión:** Fase 1 completa como auditoría diagnóstica con incertidumbres trazadas. **GO para iniciar Fase 2** de comparación histórica no destructiva sobre rama aislada desde desarrollo. **NO GO para implementar, fusionar o publicar una nueva versión** sin una evaluación posterior de riesgos y aprobaciones. Los módulos con pruebas parciales o bloqueadas jamás se presentarán como completamente certificados.

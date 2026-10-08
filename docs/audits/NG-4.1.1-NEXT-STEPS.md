@@ -4,13 +4,13 @@
 
 ## Decisión principal
 
-No abrir una nueva línea funcional hasta cerrar las comprobaciones críticas bloqueadas. Los 603 tests Node, los 7 jobs CI verdes y el onboarding 4.1.1 saludable son señales positivas, pero **65 de 92 unidades** dependen de una pareja QA o proveedor real. No confundir ausencia de evidencia de fallo con evidencia de ausencia de fallos.
+Se autoriza la comparación histórica no destructiva de Fase 2 con riesgos documentados; NO autorizar nuevas releases ni correcciones funcionales sin cerrar las pruebas críticas. Los 603 tests Node, los 7 jobs CI verdes y el onboarding 4.1.1 saludable son señales positivas, pero **43 de 92 unidades** requieren coberturas de proveedor, privacidad adversarial, hardware o UI aún no demostradas. No confundir ausencia de evidencia de fallo con evidencia de ausencia de fallos.
 
 ## Orden propuesto (dependencias y salidas)
 
 | Orden | Prioridad | Trabajo futuro | Dependencias | Prueba mínima de aceptación | Salida |
 |---:|---|---|---|---|---|
-| 0 | P0 preventivo / imprescindible | Provisionar dos identidades efímeras, un espacio pareja desechable en QA, endpoints/storage aislados, datos sintéticos y tokens de vida corta. Confirmar que el APK QA apunta **solo** a QA, sin exponer secretos | Permisos/infra QA | Escrituras y lecturas QA no modifican producción; limpieza solo de fixtures sintéticos | Desbloquear 65 unidades sin comprometer privacidad |
+| 0 | P0 preventivo / imprescindible | Reutilizar la provisión OIDC de dos identidades ya verificada en QA, ampliarla a parejas separadas y fixtures sintéticos, y confirmar que cada APK/prueba apunta **solo** a QA, sin exponer secretos | Permisos/infra QA | Escrituras y lecturas QA no modifican producción; limpieza solo de fixtures sintéticos | Desbloquear 43 unidades sin comprometer privacidad |
 | 1 | P0 preventivo / imprescindible | Validar límites RLS y acceso a chat, ubicaciones, fotos, notas, adjuntos y tokens entre A/B y no vinculados | Orden 0 | A puede leer lo suyo y lo compartido autorizado, B no puede leer datos privados de A; revocación efectiva | Evidencia adversarial reproducible, sin P0 abierto |
 | 2 | P1 preventivo / imprescindible | Validar invitaciones, expiración, reúso, perfil incorrecto, reconexión, cierre/cambio de cuenta y revocación | Orden 0–1 | Token caducado/reutilizado rechazado; vínculo nunca se asigna al perfil equivocado | Seguridad de identidad comprobada |
 | 3 | P1 / operación diaria | Validar Galaxy Chat extremo a extremo (dos emuladores, mensajes, entregas, respuestas, scroll 1k+ mensajes, teclado, offline/reconexión, borradores, notificaciones e interactividad) | Orden 0–2 | Sin pérdida/duplicado, scroll estable, trazas latencia y reintentos | Regresiones históricas 1,2,13,14 clasificadas de verdad |
@@ -41,7 +41,7 @@ No abrir una nueva línea funcional hasta cerrar las comprobaciones críticas bl
 
 ## Criterios verificables para cerrar la deuda de auditoría
 
-- Los 65 BLOCKED tienen ejecución real de QA o justificación técnica individual para seguir bloqueados.
+- Los 43 BLOCKED tienen ejecución real de QA o justificación técnica individual para seguir bloqueados.
 - Los 8 NOT TESTED se ejecutaron o tienen limitación demostrada (emulador frente a cámara/sensores físicos).
 - Las 14 hipótesis históricas se reclasificaron usando resultados reales: RESUELTO Y VERIFICADO, REPRODUCIDO, PARCIALMENTE RESUELTO, NO REPRODUCIDO o NO VERIFICABLE EN ESTE ENTORNO.
 - Pruebas negativas RLS/privacidad y autenticación pasan con dos identidades independientes.
@@ -54,3 +54,16 @@ No abrir una nueva línea funcional hasta cerrar las comprobaciones críticas bl
 No crear funciones nuevas, no migrar código histórico, no refactorizar la app, no cambiar políticas RLS o claves, no añadir servicios pagos, no realizar despliegue ni modificar `qa`, `prod` o `main` durante la Fase 1. Mantener la tag inmutable de fuente 4.1.1 como ancla reproducible.
 
 **Fuentes cruzadas:** [auditoría completa](NG-4.1.1-FUNCTIONAL-AUDIT.md) · [matriz](NG-4.1.1-FUNCTIONAL-MATRIX.md) · [hallazgos](NG-4.1.1-FINDINGS.md) · [CI](https://github.com/Berserky/Galaxia-de-girasoles/actions/runs/37808030670).
+
+
+## Resolución del gate diagnóstico: Fase 2 permitida
+
+**GO para Fase 2** — investigación no destructiva de ramas históricas, comparación de cambios, inventario de piezas recuperables y propuestas de integración; conservar el PR de auditoría en revisión. No crear, fusionar ni desplegar cambios funcionales dentro del PR actual.
+
+**NO GO para nueva versión productiva** — quedan 43 funcionalidades BLOCKED, 7 NOT TESTED y 11 PARTIAL, principalmente integraciones no cubiertas, privacidad adversarial, FCM productivo y CameraX real. Priorizar los P0/P1 solo si aparecen evidencias reproducibles; no inferir P0/P1 por falta de ejecución.
+
+**Corrección del plan original:** ya existe doble usuario QA remoto con OIDC y cleanup probado en el workflow #37808030670. El orden 0 no consiste en crear desde cero esa capacidad, sino **reutilizar/expandir** el harness existente con nuevos flujos adversariales, cámara/media y notificaciones de manera segura. No solicitar a la persona usuaria credenciales de producción para esas pruebas.
+
+**Advertencia para release:** el preflight de 4.1.1 registró un 503 productivo de push-client-config, no revalidado. Debe atenderse antes de certificar notificaciones o promover cualquier nueva stable; tampoco equivale a un defecto reproducido durante esta auditoría.
+
+**Trazabilidad:** CI Android job 113417339690 (24 finalizados, 2 SKIPPED), staging job 113422125384 (VERIFIED con limpieza), Node 603/603, matriz 92 entradas. Cada nueva fase conservará esta base sin repetir tests verdes que no hayan cambiado.

@@ -70,7 +70,7 @@ Los 14 errores históricos se revisaron como hipótesis, **no** se añadieron al
 | 6 | Mapa sin distancia/ETA | NO VERIFICABLE EN ESTE ENTORNO | Cálculos distance/eta Node PASS; no dos ubicaciones QA |
 | 7 | IA escondida | NO VERIFICABLE EN ESTE ENTORNO | Nav contiene botón IA, no probada con sesión |
 | 8 | Nuestros objetivos no abre | NO VERIFICABLE EN ESTE ENTORNO | goalsView y pruebas motor existen, navegación real no ejecutada |
-| 9 | Token de invitación asigna perfil incorrecto | NO VERIFICABLE EN ESTE ENTORNO | Sin dos identidades QA ni token efímero |
+| 9 | Token de invitación asigna perfil incorrecto | NO VERIFICABLE EN ESTE ENTORNO | Staging dual usuario OIDC sí verificado, pero sin token de invitación errónea o reutilizada |
 | 10 | Música por URL | NO VERIFICABLE EN ESTE ENTORNO | Sin streaming ni perfil vinculado |
 | 11 | Stickers/GIF compatibilidad producción | NO VERIFICABLE EN ESTE ENTORNO | Atribución GIPHY en contratos PASS, proveedor real no probado |
 | 12 | FCM y registro de dispositivos | NO VERIFICABLE EN ESTE ENTORNO | CI pasa, sin entrega push real |
@@ -87,3 +87,14 @@ Los 14 errores históricos se revisaron como hipótesis, **no** se añadieron al
 - Los 603 tests Node y siete jobs CI pasan. Son evidencia de contratos, migraciones e instrumentación en CI, no equivalen a pruebas manuales completas de toda la UI.
 - El APK oficial SHA256 comprobado localmente: `4C10F614235D3ED509D89A4BC9EAF37631A7D4681943EA07F852628E1F15147F`.
 - Ninguna característica que solo apareció en el código fue clasificada como completamente funcional por mera presencia.
+
+
+## Adenda: evidencia recuperada del RC 4.1.1
+
+El [job Android de instrumentación](https://github.com/Berserky/Galaxia-de-girasoles/actions/runs/37808030670/job/113417339690) aprobó los escenarios WebView/ciclo de vida/objetivos/chat simulado y registró dos SKIPPED CameraX. El [job de staging remoto](https://github.com/Berserky/Galaxia-de-girasoles/actions/runs/37808030670/job/113422125384) validó identidades temporales A/B, mensajes simultáneos, recepción de ambos, map-state, backup-export y cleanup.
+
+**Reclasificación de cobertura funcional:** PASS 31, PARTIAL 11, BLOCKED 43, NOT TESTED 7. No cambia la cuenta de hallazgos reproducidos (P0=0, P1=0, P2=1, P3=2), ya que esos resultados no demuestran ni descartan todos los 14 incidentes históricos en producción.
+
+**Riesgo documentado adicional (no verificado en esta fase):** docs/qa/galaxy-4.1.1-release-preflight.md registra un HTTP 503 previo de push-client-config en producción y advertencias sobre cuota egress y tier de API de GIPHY. Esto es **un riesgo de release**, no una incidencia que hayamos reproducido en el estado actual. No ejecutar acciones productivas sin revisión autorizada.
+
+**Nota CameraX:** los dos SKIPPED identifican evidencia ausente, no fallos de captura. Mantenerlos explícitos para QA de hardware futuro.
