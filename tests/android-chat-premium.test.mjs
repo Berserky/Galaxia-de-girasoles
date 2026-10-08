@@ -80,13 +80,15 @@ test('backup v5 preserves premium chat metadata through canonical sections',()=>
  for(const marker of ['chatStickerRecents','chatLiveLocations','BACKUP_SECTION_NAMES','galaxy_backup_export_v5'])assert.ok(edge.includes(marker),marker);
 });
 
-test('native premium bridge includes short video, GIPHY and point location',()=>{
+test('native premium bridge includes GIPHY client search and point location',()=>{
  const bridge=read('android/app/src/main/java/com/nuestragalaxia/companion/GalaxyBridge.java');
  const mobile=read('android/app/src/main/java/com/nuestragalaxia/companion/MobileApiClient.java');
  const gradle=read('android/app/build.gradle.kts');
  for(const marker of ['captureChatVideoMessage','searchGiphy','getChatLocation'])assert.ok(bridge.includes(marker),marker);
  assert.ok(mobile.includes('giphySearch('));
- assert.ok(edge.includes('Deno.env.get("GIPHY_API_KEY")'));
- assert.ok(edge.includes('action==="giphy-search"'));
- assert.equal(gradle.includes('GIPHY_API_KEY'),false,'La clave GIPHY no puede quedar en el APK');
+ assert.ok(mobile.includes('https://api.giphy.com/v1/'));
+ assert.ok(mobile.includes('BuildConfig.GIPHY_API_KEY'));
+ assert.ok(gradle.includes('buildConfigField("String","GIPHY_API_KEY"'));
+ assert.ok(edge.includes('chatGiphyMediaUrl(attachmentMeta.externalUrl)'));
 });
+
