@@ -17,3 +17,11 @@ For `ACTION_OPEN_DOCUMENT`, the prior test compared the foreground package with 
 - The earlier failures remain recorded in issue #129 with original SHA and job references.
 
 **No device personal data, Supabase changes, app release, QA branch promotion or prod changes.**
+
+## CameraX accessibility timing gate
+
+On PR #130, two CameraX runs reached a visible `GalaxyCameraActivity` and opened Camera2 sessions, but `UiDevice.wait(Until.hasObject(By.desc(...)),8000)` failed to find the initial shutter labels. The native view hierarchy does set those descriptions; the accessibility-node search is not an adequate stand-alone indicator on the headless API35 runner.
+
+The instrumented test now resolves a **shown and measured native view** from the Activity window, uses its actual on-screen center, and delivers `UiDevice.click` (real Android touch). It still asserts captured photo/video review, preview quality, MIME/duration and file cleanup, recreations and lens switching. No CameraX app code is changed. Missing controls remain **test failures**, not skipped tests; added diagnostic names and bounded timeouts.
+
+**Evidence required:** new JUnit runs for both camera tests with 0 skips and CameraX `CAMERAX_QA_EVIDENCE.status=VERIFIED`, plus all other PR CI suites. Historical green PR #119 is not enough for the new commit.
