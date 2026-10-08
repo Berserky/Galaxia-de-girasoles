@@ -29,6 +29,7 @@ jobs:
     name: Android unit + lint + release build
     runs-on: ubuntu-latest
     env:
+      GIPHY_API_KEY: ${{ vars.GIPHY_API_KEY }}
       FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID || vars.FIREBASE_PROJECT_ID }}
       FIREBASE_APPLICATION_ID: ${{ secrets.FIREBASE_APPLICATION_ID || vars.FIREBASE_APPLICATION_ID }}
       FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY || vars.FIREBASE_API_KEY }}
