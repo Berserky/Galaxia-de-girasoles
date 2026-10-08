@@ -520,25 +520,55 @@ function nextCalendarEvent(items:any[],day:string){
   return events.sort((a,b)=>a.date.localeCompare(b.date))[0]||null;
 }
 
+// Reuse short-lived signed URLs within one Edge isolate so clients can reuse cached
+// images instead of receiving a different image URL on each refresh.
+const signedUrlCache=new Map<string,{url:string,validUntil:number}>();
+function signedCacheKey(bucket:string,path:string,seconds:number){return JSON.stringify([bucket,path,seconds]);}
+function signedCached(bucket:string,path:string,seconds:number){
+ const key=signedCacheKey(bucket,path,seconds),entry=signedUrlCache.get(key);
+ if(!entry)return null;
+ if(entry.validUntil>Date.now())return entry.url;
+ signedUrlCache.delete(key);return null;
+}
+function rememberSigned(bucket:string,path:string,seconds:number,url:string|null){
+ if(!url)return;
+ const key=signedCacheKey(bucket,path,seconds);
+ signedUrlCache.delete(key);
+ signedUrlCache.set(key,{url,validUntil:Date.now()+Math.max(30000,Math.min(600000,Math.floor(seconds*400)))});
+ while(signedUrlCache.size>400)signedUrlCache.delete(signedUrlCache.keys().next().value!);
+}
 async function signed(bucket:string,path:string,seconds=900){
-  if(!path)return null;
-  const {data,error}=await db.storage.from(bucket).createSignedUrl(path,seconds);
-  return error?null:data.signedUrl;
+ if(!path)return null;
+ const cached=signedCached(bucket,path,seconds);
+ if(cached)return cached;
+ const {data,error}=await db.storage.from(bucket).createSignedUrl(path,seconds);
+ const url=error?null:(data.signedUrl||null);
+ rememberSigned(bucket,path,seconds,url);
+ return url;
 }
 async function signedMany(bucket:string,paths:string[],seconds=900){
-  const unique=[...new Set((paths||[]).map(String).filter(Boolean))];
-  const result=new Map<string,string|null>();
-  if(!unique.length)return result;
-  const {data,error}=await db.storage.from(bucket).createSignedUrls(unique,seconds);
-  if(error){
-    const fallback=await Promise.all(unique.map(async path=>[path,await signed(bucket,path,seconds)] as [string,string|null]));
-    return new Map(fallback);
-  }
-  for(const row of data||[])result.set(String(row.path||""),row.error?null:(row.signedUrl||null));
-  for(const path of unique)if(!result.has(path))result.set(path,null);
+ const unique=[...new Set((paths||[]).map(String).filter(Boolean))];
+ const result=new Map<string,string|null>();
+ if(!unique.length)return result;
+ const remaining:string[]=[];
+ for(const path of unique){
+  const cached=signedCached(bucket,path,seconds);
+  if(cached)result.set(path,cached);else remaining.push(path);
+ }
+ if(!remaining.length)return result;
+ const {data,error}=await db.storage.from(bucket).createSignedUrls(remaining,seconds);
+ if(error){
+  const fallback=await Promise.all(remaining.map(async path=>[path,await signed(bucket,path,seconds)] as [string,string|null]));
+  for(const [path,url] of fallback)result.set(path,url);
   return result;
+ }
+ for(const row of data||[]){
+  const path=String(row.path||""),url=row.error?null:(row.signedUrl||null);
+  if(path){result.set(path,url);rememberSigned(bucket,path,seconds,url);}
+ }
+ for(const path of remaining)if(!result.has(path))result.set(path,null);
+ return result;
 }
-
 
 function fcmCredentials(){
  const raw=Deno.env.get("FCM_SERVICE_ACCOUNT_JSON")||"";
