@@ -759,12 +759,15 @@ public class GalaxyDeviceClosureTest {
 
         // Package visibility can hide DocumentsUI from queryIntentActivities on a real phone.
         // Resolve through the shell before testing the actual picker launch.
-        boolean hasDocuments = shell("cmd package resolve-activity --brief -a android.intent.action.OPEN_DOCUMENT -c android.intent.category.OPENABLE -t '*/*'").contains("/");
+        String documentsHandler = shell("cmd package resolve-activity --brief -a android.intent.action.OPEN_DOCUMENT -c android.intent.category.OPENABLE -t '*/*'").trim();
+        boolean hasDocuments = documentsHandler.contains("/");
         Assume.assumeTrue("No ACTION_OPEN_DOCUMENT handler on this device.", hasDocuments);
 
+        String documentsComponent = documentsHandler.substring(documentsHandler.lastIndexOf('\n') + 1).trim();
+        String documentsPackage = documentsComponent.substring(0, documentsComponent.indexOf('/'));
         scenario.onActivity(a -> a.pickMedia("qa-file-picker", "chat-file"));
         UiDevice device = UiDevice.getInstance(instrumentation);
-        awaitCondition(() -> !pkg.equals(device.getCurrentPackageName()), UI_TIMEOUT_MS);
+        awaitCondition(() -> documentsPackage.equals(device.getCurrentPackageName()), UI_TIMEOUT_MS);
         assertFalse("File picker did not leave app foreground.", device.getCurrentPackageName().equals(pkg));
         device.pressBack();
         awaitCondition(() -> pkg.equals(device.getCurrentPackageName()), UI_TIMEOUT_MS);
@@ -846,10 +849,19 @@ public class GalaxyDeviceClosureTest {
         AtomicReference<int[]> frame = new AtomicReference<>();
         scenario.onActivity(a -> {
             WebView web = a.findViewById(R.id.webView);
+            web.requestFocus();
             int[] location = new int[2];
             web.getLocationOnScreen(location);
             frame.set(new int[]{location[0], location[1], web.getWidth(), web.getHeight()});
         });
+        awaitCondition(() -> {
+            AtomicReference<Boolean> focused = new AtomicReference<>(false);
+            scenario.onActivity(a -> {
+                WebView web = a.findViewById(R.id.webView);
+                focused.set(web.hasFocus() && web.hasWindowFocus());
+            });
+            return focused.get();
+        }, UI_TIMEOUT_MS);
         int[] v = frame.get();
         int x = v[0] + (int)Math.round(g.getDouble("x") * v[2] / Math.max(1d, g.getDouble("vw")));
         // CSS pixels use one scale on both axes, including while IME insets settle.
@@ -872,6 +884,13 @@ public class GalaxyDeviceClosureTest {
             });
             SystemClock.sleep(250);
             System.out.println("GALAXY_WEBVIEW_TAP="+js("JSON.stringify({selector:"+quoted+",focused:document.activeElement===document.querySelector("+quoted+"),active:document.activeElement?.tagName,visible:document.visibilityState,viewport:{w:innerWidth,h:innerHeight},rect:document.querySelector("+quoted+").getBoundingClientRect().toJSON()})"));
+        }
+        if ("#chatForm textarea".equals(selector)) {
+            awaitCondition(() -> {
+                AtomicReference<Boolean> accepting = new AtomicReference<>(false);
+                scenario.onActivity(a -> accepting.set(((android.view.inputmethod.InputMethodManager)a.getSystemService(Context.INPUT_METHOD_SERVICE)).isAcceptingText()));
+                return accepting.get();
+            }, UI_TIMEOUT_MS);
         }
     }
 
