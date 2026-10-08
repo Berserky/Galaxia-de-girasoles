@@ -1924,24 +1924,10 @@ async function chatStickers(req:Request,body:any={}){
   return json({sticker:{...sticker,url:await signed(String(sticker.bucket),String(sticker.path),1800)}});
  }
  if(operation==="import-online"){
-  const raw=text(body.url,1200),name=text(body.name||"Sticker",80)||"Sticker",providerId=text(body.providerId||"",120).replace(/[^a-zA-Z0-9_-]/g,"").slice(0,120);
-  const u=chatPublicUrl(raw);if(!u||!(u.hostname==="giphy.com"||u.hostname.endsWith(".giphy.com")))return json({error:"Sticker online no válido."},400);
-  let response:Response;
-  try{response=await fetch(u,{redirect:"error",signal:AbortSignal.timeout(12000),headers:{accept:"image/gif,image/webp"}});}catch{return json({error:"No se pudo descargar el sticker."},503);}
-  if(!response.ok)return json({error:"No se pudo descargar el sticker."},503);
-  const declaredMime=String(response.headers.get("content-type")||"").split(";")[0].toLowerCase(),declared=Number(response.headers.get("content-length")||0);
-  if(declared>6*1024*1024)return json({error:"El sticker supera 6 MB."},413);
-  const bytes=new Uint8Array(await response.arrayBuffer());
-  if(bytes.length<1||bytes.length>6*1024*1024)return json({error:bytes.length<1?"El sticker está vacío.":"El sticker supera 6 MB."},bytes.length<1?400:413);
-  const validation=validateUploadMedia("chat-gif",declaredMime,name+".gif",bytes);if(!validation.ok)return json({error:validation.message},validation.status);
-  const mime=validation.mime,ext=validation.extension,key=providerId||crypto.randomUUID(),path=person+"/sticker-giphy-"+key+"."+ext,bucket="galaxy-chat-media";
-  const existing=(await ok(db.from("galaxy_chat_stickers").select("*").eq("bucket",bucket).eq("path",path).limit(1)))?.[0];
-  if(existing)return json({sticker:{...existing,url:await signed(bucket,path,1800),favorite:false},idempotent:true});
-  const {error:uploadError}=await db.storage.from(bucket).upload(path,bytes,{contentType:mime,upsert:true,cacheControl:"3600",metadata:{originalName:name+"."+ext,provider:"giphy",providerId:key}});
-  if(uploadError)throw uploadError;
-  const sticker=await ok(db.from("galaxy_chat_stickers").upsert({created_by:person,bucket,path,name},{onConflict:"bucket,path"}).select("*").single());
-  return json({sticker:{...sticker,url:await signed(bucket,path,1800),favorite:false},idempotent:false});
+  // Online GIPHY assets must not be copied into Supabase Storage.
+  return json({error:"Los stickers de GIPHY se comparten mediante su enlace original; no se importan al almacenamiento."},422);
  }
+
  const id=String(body.id||"");if(!uuidish(id))return json({error:"Sticker no válido."},400);
  const exists=(await ok(db.from("galaxy_chat_stickers").select("id,created_by").eq("id",id).limit(1)))?.[0];
  if(!exists)return json({error:"Sticker no encontrado."},404);
@@ -2018,20 +2004,9 @@ async function giphySearch(req:Request,body:any={}){
 }
 
 async function chatGifImport(req:Request,body:any={}){
- const d=await device(req),person=String(d.person),raw=text(body.url,1200),title=text(body.title||"GIF",120)||"GIF";
- const u=chatPublicUrl(raw);if(!u||!(u.hostname==="giphy.com"||u.hostname.endsWith(".giphy.com")))return json({error:"GIF no válido."},400);
- let response:Response;
- try{response=await fetch(u,{redirect:"error",signal:AbortSignal.timeout(12000),headers:{accept:"image/gif,image/webp"}});}catch{return json({error:"No se pudo descargar el GIF."},503);}
- if(!response.ok)return json({error:"No se pudo descargar el GIF."},503);
- const declaredMime=String(response.headers.get("content-type")||"").split(";")[0].toLowerCase();
- const declared=Number(response.headers.get("content-length")||0);if(declared>10*1024*1024)return json({error:"El GIF supera 10 MB."},413);
- const bytes=new Uint8Array(await response.arrayBuffer());if(bytes.length<1||bytes.length>10*1024*1024)return json({error:bytes.length<1?"El GIF está vacío.":"El GIF supera 10 MB."},bytes.length<1?400:413);
- const validation=validateUploadMedia("chat-gif",declaredMime,title+".gif",bytes);
- if(!validation.ok)return json({error:validation.message},validation.status);
- const mime=validation.mime,ext=validation.extension,path=person+"/gif-"+crypto.randomUUID()+"."+ext;
- const {error}=await db.storage.from("galaxy-chat-media").upload(path,bytes,{contentType:mime,upsert:false,cacheControl:"3600",metadata:{originalName:title+"."+ext,provider:"giphy"}});
- if(error)throw error;
- return json({item:{kind:"photo",path,bucket:"galaxy-chat-media",mime,name:title+"."+ext,size:bytes.length,url:await signed("galaxy-chat-media",path,1800),gif:true}});
+ await device(req);
+ // No server-side fetch/re-host of GIPHY content.
+ return json({error:"Los GIFs de GIPHY deben compartirse mediante su enlace original, sin copiar el archivo."},422);
 }
 
 async function chatMetric(req:Request,body:any={}){
