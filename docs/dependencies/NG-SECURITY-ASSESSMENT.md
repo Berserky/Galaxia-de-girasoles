@@ -5,7 +5,7 @@ Fecha: 2026-10-08. Revisión limitada a manifiestos/CI/diffs y estado de checks 
 | ID | Componente | Riesgo comprobado / incertidumbre | Gravedad operativa | Acción |
 |---|---|---|---|---|
 | SEC-DEP-01 | AGP 9.4.1 sobre Gradle 9.4.1 | configuración oficialmente incompatible (requiere Gradle >=9.6) | ALTA disponibilidad CI | bloquear PR #79, plan de actualización coordinada |
-| SEC-DEP-02 | WorkManager y AndroidX Core | CI de PR #78/#80 incluye failures de instrumentación; no atribuir sin logs | ALTA en regresión Android | posponer, realizar tests de permisos, background, identidad y media |
+| SEC-DEP-02 | WorkManager y AndroidX Core | #78 falla AAR metadata: Core 1.19.1 exige compileSdk37 frente a 36; #80 falla instrumentación por timeout (causa funcional no establecida) | ALTA en compatibilidad Android | bloquear #78 hasta migración compileSdk37, posponer #80 y ejecutar tests lifecycle/permisos |
 | SEC-DEP-03 | GitHub Actions major updates | potenciales cambios de runtime, permisos, cache y confianza | MEDIA | lotes aislados, permitir sólo CI verificado, documentar hashes |
 | SEC-DEP-04 | Supabase JS/npm import Edge | fijado a versión directa 2.117.2, resolución transitiva no auditada | DESCONOCIDA | resolver grafo / escáner SCA y comparar lock reproducible |
 | SEC-DEP-05 | Dependencias Gradle transitivas | no existe SBOM resuelta a partir de esta inspección | DESCONOCIDA | Gradle dependencies + escáner de composición |
