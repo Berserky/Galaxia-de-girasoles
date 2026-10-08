@@ -13,6 +13,11 @@ android { namespace = "com.nuestragalaxia.companion"; compileSdk = 36
    getByName("debug") {
      applicationIdSuffix = providers.gradleProperty("QA_APPLICATION_SUFFIX").orNull ?: ""
      if (qaEdgeUrl.isNotBlank()) buildConfigField("String","EDGE_URL","\"$qaEdgeUrl\"")
+     // Prevent QA media validation from referencing the production Supabase host.
+     if (qaEdgeUrl.startsWith("https://") && qaEdgeUrl.contains(".supabase.co/functions/v1/")) {
+       val qaOrigin = qaEdgeUrl.substringBefore("/functions/v1/")
+       buildConfigField("String","SUPABASE_URL","\"$qaOrigin\"")
+     }
      if (qaSupabasePublishableKey.isNotBlank()) buildConfigField("String","SUPABASE_PUBLISHABLE_KEY","\"$qaSupabasePublishableKey\"")
    }
  }
