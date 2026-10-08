@@ -764,16 +764,23 @@ public class GalaxyDeviceClosureTest {
 
         scenario.onActivity(a -> a.pickMedia("qa-file-picker", "chat-file"));
         UiDevice device = UiDevice.getInstance(instrumentation);
-        SystemClock.sleep(800);
+        awaitCondition(() -> !pkg.equals(device.getCurrentPackageName()), UI_TIMEOUT_MS);
         assertFalse("File picker did not leave app foreground.", device.getCurrentPackageName().equals(pkg));
         device.pressBack();
+        awaitCondition(() -> pkg.equals(device.getCurrentPackageName()), UI_TIMEOUT_MS);
 
-        scenario.onActivity(a -> a.captureChatPhoto("qa-camera"));
-        SystemClock.sleep(900);
-        assertEquals("Integrated chat camera must remain inside Nuestra Galaxia.", pkg, device.getCurrentPackageName());
-        String top = shell("dumpsys activity activities | grep -m1 -E 'mResumedActivity|topResumedActivity'");
-        if (top.contains("GalaxyCameraActivity")) device.pressBack();
-
+        Instrumentation.ActivityMonitor cameraMonitor = instrumentation.addMonitor(GalaxyCameraActivity.class.getName(), null, false);
+        try {
+            scenario.onActivity(a -> a.captureChatPhoto("qa-camera"));
+            android.app.Activity cameraActivity = instrumentation.waitForMonitorWithTimeout(cameraMonitor, UI_TIMEOUT_MS);
+            assertNotNull("Integrated camera activity never launched.", cameraActivity);
+            awaitCondition(() -> pkg.equals(device.getCurrentPackageName()), UI_TIMEOUT_MS);
+            assertEquals("Integrated chat camera must remain inside Nuestra Galaxia.", pkg, device.getCurrentPackageName());
+            instrumentation.runOnMainSync(() -> { if (!cameraActivity.isFinishing()) cameraActivity.onBackPressed(); });
+            awaitCondition(() -> shell("dumpsys activity activities | grep -m1 -E 'mResumedActivity|topResumedActivity'").contains("MainActivity"), UI_TIMEOUT_MS);
+        } finally {
+            instrumentation.removeMonitor(cameraMonitor);
+        }
         // Microphone path is executed only when the emulator exposes an input source.
         scenario.onActivity(a -> a.startVoiceRecording("qa-mic"));
         SystemClock.sleep(700);
