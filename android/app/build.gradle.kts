@@ -3,8 +3,8 @@ val firebaseProjectId = providers.gradleProperty("FIREBASE_PROJECT_ID").orNull ?
 val firebaseApplicationId = providers.gradleProperty("FIREBASE_APPLICATION_ID").orNull ?: System.getenv("FIREBASE_APPLICATION_ID") ?: ""
 val firebaseApiKey = providers.gradleProperty("FIREBASE_API_KEY").orNull ?: System.getenv("FIREBASE_API_KEY") ?: ""
 val firebaseSenderId = providers.gradleProperty("FIREBASE_SENDER_ID").orNull ?: System.getenv("FIREBASE_SENDER_ID") ?: ""
-val qaEdgeUrl = providers.gradleProperty("QA_EDGE_URL").orNull ?: System.getenv("QA_EDGE_URL") ?: ""
-val qaSupabasePublishableKey = providers.gradleProperty("QA_SUPABASE_PUBLISHABLE_KEY").orNull ?: System.getenv("QA_SUPABASE_PUBLISHABLE_KEY") ?: ""
+val qaEdgeUrl = providers.gradleProperty("QA_EDGE_URL").orNull ?: System.getenv("QA_EDGE_URL") ?: "https://vwtcncvmwjfywrzjmskw.supabase.co/functions/v1/android-companion"
+val qaSupabasePublishableKey = providers.gradleProperty("QA_SUPABASE_PUBLISHABLE_KEY").orNull ?: System.getenv("QA_SUPABASE_PUBLISHABLE_KEY") ?: "sb_publishable_H2wISjcUmDX3FmL0j6IxEw_ntJwm_JG"
 
 plugins { id("com.android.application") }
 android { namespace = "com.nuestragalaxia.companion"; compileSdk = 36
