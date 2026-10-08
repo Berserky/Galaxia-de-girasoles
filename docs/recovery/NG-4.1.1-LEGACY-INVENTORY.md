@@ -62,3 +62,9 @@ Las seis ramas legacy y las 80 refs `archive/2026-10-08/*` se comprobaron como e
 
 ## Método y límites
 Fuentes: GitHub refs y árboles, archivos textuales selectivos, documentos `docs/BRANCH_POLICY.md`, `docs/MOMENTOS.md`, auditoría F1 en PR #113. No se ejecutó `git fetch` sobre PC, tests nuevos, emulador ni CI para este documento: las comprobaciones son lectura de GitHub remoto. No se accedió a secretos, datos de usuarios ni servicios privados.
+
+## Conciliación del índice de rescate del 8-oct
+
+El archivo histórico [`docs/branch-audit-2026-10-08.csv`](../branch-audit-2026-10-08.csv) contiene **113 registros**: **80** con estado `unique` y **33** con estado `included`. Se cruzaron por **nombre y SHA** los **80** registros `archive/2026-10-08/*` de GitHub contra el CSV: **80/80 coinciden, 0 ausentes/discordantes**. Este resultado certifica la integridad del *índice de referencias de rescate*, **no** una revisión semántica de todos sus árboles/funciones. Para ese cierre, cada tag todavía debe recibir lectura de diff por módulo y decisión de paridad.
+
+Ejemplos incluidos en el índice: `aegiron/nuestro-hogar-v1`, `aegiron/rpg-indoors-v1`, `aegiron/music-player-v2` y `aegiron/map-insights-privacy`. No modificar estas referencias.
