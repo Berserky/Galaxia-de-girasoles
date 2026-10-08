@@ -13,6 +13,21 @@ public final class BondStore {
  public JSONObject snapshot(){try{return new JSONObject(prefs.getString("snapshot","{}"));}catch(Exception e){return new JSONObject();}}
  public void snapshot(JSONObject data){JSONObject safe=new JSONObject();try{safe.put("names",data.optJSONArray("names"));safe.put("nextEvent",data.optJSONObject("nextEvent"));safe.put("nextPlan",data.optJSONObject("nextPlan"));safe.put("now",data.optJSONObject("now"));safe.put("distanceM",data.has("distanceM")?data.opt("distanceM"):JSONObject.NULL);safe.put("etaMinutes",data.has("etaMinutes")?data.opt("etaMinutes"):JSONObject.NULL);safe.put("garden",data.optJSONObject("garden"));}catch(Exception ignored){}prefs.edit().putString("snapshot",safe.toString()).apply();}
  public File photo(){return new File(context.getFilesDir(),"widget-photo.jpg");}
+ private static final long PHOTO_REVALIDATE_MILLIS=12L*60L*60L*1000L;
+ public boolean photoFresh(String sourcePath){
+  if(sourcePath==null||sourcePath.isEmpty()||!photo().isFile()||photo().length()<=0)return false;
+  if(!sourcePath.equals(prefs.getString("photoSourcePath","")))return false;
+  long checked=prefs.getLong("photoFetchedAt",0L);
+  return checked>0&&System.currentTimeMillis()-checked<PHOTO_REVALIDATE_MILLIS;
+ }
+ public void photoFetched(String sourcePath){
+  prefs.edit().putString("photoSourcePath",sourcePath).putLong("photoFetchedAt",System.currentTimeMillis()).apply();
+ }
+ public void clearPhoto(){
+  prefs.edit().remove("photoSourcePath").remove("photoFetchedAt").apply();
+  photo().delete();
+ }
+
  public String feedback(){return prefs.getString("feedback","");}
  public void feedback(String text){prefs.edit().putString("feedback",text).apply();}
  public boolean consumeDate(String key){if(key.equals(prefs.getString("dateSeen","")))return false;return prefs.edit().putString("dateSeen",key).commit();}
