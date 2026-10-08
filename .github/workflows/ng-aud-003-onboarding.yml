@@ -7,6 +7,8 @@ on:
       - "android/app/src/main/assets/mobile/app.js"
       - "android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyOnboardingViewportTest.java"
       - "scripts/qa-onboarding-viewport.sh"
+      - "scripts/qa-onboarding-image-check.py"
+      - "tests/test_qa_onboarding_image_check.py"
       - ".github/workflows/ng-aud-003-onboarding.yml"
   workflow_dispatch:
 
@@ -20,6 +22,11 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Pillow for rendered screenshot checks
+        run: python3 -m pip install --disable-pip-version-check Pillow==11.3.0
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -42,6 +49,8 @@ jobs:
           sudo udevadm trigger --name-match=kvm || true
       - name: Package welcome audio
         run: cp musica.mp3 android/app/src/main/assets/musica.mp3
+      - name: Screenshot verifier negative fixtures
+        run: python3 -m unittest discover -s tests -p test_qa_onboarding_image_check.py
       - name: Verify portrait + landscape first viewport
         uses: reactivecircus/android-emulator-runner@v2
         with:

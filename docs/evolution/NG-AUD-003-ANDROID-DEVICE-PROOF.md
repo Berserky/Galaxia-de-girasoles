@@ -16,3 +16,7 @@ The workflow `ng-aud-003-onboarding.yml` runs on Android API35 with QA applicati
 
 ## Limits
 The emulated Pixel 6 viewport does not cover all OEMs, keyboard resize behaviors and accessibility font scales. A human must still inspect the screenshots to assess readability and overlapping system UI. This test does not pair a device or contact production.
+
+
+## 2026-10-08 — mandatory painted-image gate
+Human inspection of the first CI artifact found the portrait PNG nearly blank even though JUnit/DOM tests passed. The issue concerns the **timing and adequacy of screenshot evidence**; it does not establish that the user sees a blank app. To prevent a false GO, instrumentation now delays the raw capture until WebView has painted, and `qa-onboarding-image-check.py` inspects PNG pixels in both orientations. A dark-pixel fraction below 1% in the interior rejects blank frames. The workflow installs a pinned Pillow version and runs negative fixtures, then validates actual rendered screenshots. This is complementary to JUnit and does not contact production.

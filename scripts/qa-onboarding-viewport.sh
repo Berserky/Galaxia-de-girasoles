@@ -29,3 +29,9 @@ for file in files:
 assert len(found)==1 and found[0][0].startswith("unpairedPortraitLandscape_") and not found[0][1], f"NG-AUD-003 NOT VERIFIED: {found}"
 print("NG_AUD_003_JUNIT_VERIFIED=1")
 PY
+
+# Verify the actual screenshots are painted, not just the DOM/JUnit result.
+for side in portrait landscape; do
+  adb pull "/sdcard/Download/NG-AUD-003-onboarding-${side}.png" "qa-artifacts/ng-aud-003/${side}.png"
+done
+python3 scripts/qa-onboarding-image-check.py qa-artifacts/ng-aud-003/portrait.png qa-artifacts/ng-aud-003/landscape.png | tee qa-artifacts/ng-aud-003/screenshot-proof.txt

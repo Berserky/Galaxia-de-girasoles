@@ -63,6 +63,7 @@ public class GalaxyOnboardingViewportTest {
         assertTrue("Pairing input label is not associated", portrait.getBoolean("labelLinked"));
         assertTrue("Pairing code must be required", portrait.getBoolean("required"));
         assertFalse("Portrait viewport must not have horizontal overflow", portrait.getBoolean("horizontalOverflow"));
+        SystemClock.sleep(1400); // Allow WebView to paint before capturing pixels.
         screenshot("portrait");
 
         // Orientation change exercises the real WebView, not an artificial CSS viewport.
@@ -81,6 +82,7 @@ public class GalaxyOnboardingViewportTest {
             landscape.getBoolean("ctaVisibleFirstViewport"));
         assertTrue("Pairing CTA target is too small: " + landscape,
             landscape.getDouble("ctaHeight") >= 40.0);
+        SystemClock.sleep(1400); // A DOM-ready state is not sufficient for visual evidence.
         screenshot("landscape");
 
         // Verify it is a usable real input after rotation. No token is entered/sent.
