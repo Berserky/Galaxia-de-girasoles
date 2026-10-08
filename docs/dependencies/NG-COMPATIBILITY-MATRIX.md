@@ -6,7 +6,7 @@ Revisión: 2026-10-08. Estado de la fase: evaluación parcial, sin autorización
 | AGP + Gradle | AGP 9.2.0 / Gradle CI 9.4.1 | AGP 9.4.1 solo | MANTENER 9.2.0 / 9.4.1 | ALTO | AGP 9.4 requiere Gradle >=9.6.0; #79 bloqueado |
 | JDK | 17 Temurin | setup-java@v6 con JDK17 | MANTENER setup-java@v5 | MEDIO | #77 builds verdes pero emulador/stress fallidos |
 | SDK | compile/target 36; min26 | sin cambios | CONSERVAR | ALTO | Android release gate |
-| Core | androidx.core 1.17.0 | 1.19.1 | MANTENER 1.17.0 | MEDIO-ALTO | #78 fallos build e instrumentación |
+| Core | androidx.core 1.17.0 / compileSdk36 | 1.19.1 exige compileSdk37 | MANTENER 1.17.0 / compileSdk36 | ALTO | #78 AAR metadata falla por API 37; migración aislada a compileSdk37 + QA |
 | WorkManager | 2.11.2 | 2.12.0 | MANTENER 2.11.2 | ALTO | #80 falla instrumentación; procesos en background |
 | CameraX | 1.5.3 en cinco módulos | sin cambio | CONSERVAR | ALTO | Cámara foto/video nativa, pruebas emulador/físicas según cobertura |
 | WebKit | androidx.webkit 1.15.0 | sin cambio | CONSERVAR | ALTO | Puente JS, assets, navegación, media, permisos |
