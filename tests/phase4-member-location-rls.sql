@@ -11,8 +11,10 @@ insert into auth.users(id,email,email_confirmed_at) values
  ('e4000000-0000-4000-8000-000000000003','ng4-c@example.invalid',now()),
  ('e4000000-0000-4000-8000-000000000004','ng4-d@example.invalid',now());
 
-update public.galaxy_members set email='ng4-a@example.invalid' where person='0';
-update public.galaxy_members set email='ng4-b@example.invalid' where person='1';
+insert into public.galaxy_members(person,email) values
+ ('0','ng4-a@example.invalid'),
+ ('1','ng4-b@example.invalid')
+on conflict(person) do update set email=excluded.email;
 
 insert into public.galaxy_items(id,kind,data,author) values
  ('e4000000-0000-4000-8000-000000000011','note',
