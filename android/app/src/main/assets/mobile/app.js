@@ -1480,7 +1480,14 @@ function chatRichMessageMarkup(m){
  if(m.view_once&&!chatOwn(m)){
   if(m.opened_at)out+='<div class="chat-view-once consumed">'+ico('eye-off')+'<span><b>Contenido visto</b><small>Era de una sola visualización.</small></span></div>';
   else out+='<button type="button" class="chat-view-once" data-action="chat-view-once" data-id="'+attr(m.id)+'">'+ico('eye')+'<span><b>Ver una vez</b><small>Foto, video o audio temporal.</small></span></button>';
- }else if(m.message_type==='sticker'&&m.sticker?.url)out+='<button class="chat-sticker-message" type="button" data-action="chat-stickers-open"><img loading="lazy" src="'+attr(m.sticker.url)+'" alt="'+attr(m.sticker.name||'Sticker')+'"></button>';
+ }else if((m.message_type==='sticker'||m.message_type==='gif')&&m.attachment?.provider==='giphy'&&m.attachment?.externalUrl){
+   const giphyUrl=String(m.attachment.externalUrl),giphyTitle=String(m.attachment.title||'GIPHY');
+   if(/^https:\/\/(?:[a-z0-9-]+\.)*giphy\.com\//i.test(giphyUrl)&&/\.(gif|webp)(?:\?|$)/i.test(giphyUrl)){
+    if(m.message_type==='sticker')out+='<button class="chat-sticker-message" type="button" data-action="chat-stickers-open"><img loading="lazy" src="'+attr(giphyUrl)+'" alt="'+attr(giphyTitle)+'"></button>';
+    else out+='<div class="chat-media-grid">'+chatAttachmentMarkup({kind:'photo',url:giphyUrl,name:giphyTitle,cacheKey:giphyUrl},m)+'</div>';
+    out+='<small class="chat-giphy-credit">Powered by GIPHY</small>';
+   }
+  }else if(m.message_type==='sticker'&&m.sticker?.url)out+='<button class="chat-sticker-message" type="button" data-action="chat-stickers-open"><img loading="lazy" src="'+attr(m.sticker.url)+'" alt="'+attr(m.sticker.name||'Sticker')+'"></button>';
  else if(Array.isArray(m.attachments)&&m.attachments.length)out+='<div class="chat-media-grid">'+m.attachments.map(a=>chatAttachmentMarkup(a,m)).join('')+'</div>';
  if(m.message_type==='location'){
   if(m.attachment?.mode==='live'){
@@ -2989,8 +2996,8 @@ document.addEventListener('click',async e=>{
   if(a==='chat-sticker-send'){closeModal();queueChatMessage({messageType:'sticker',attachment:{stickerId:btn.dataset.id}});return;}
   if(a==='chat-sticker-favorite'){await api('chat-stickers',{operation:'favorite',id:btn.dataset.id,favorite:btn.dataset.favorite!=='true'});await openChatStickerPicker(chatStickerStudio.tab);return;}
   if(a==='chat-sticker-create'){const result=await api('chat-stickers',{operation:'create',attachmentId:btn.dataset.attachmentId,name:'Sticker de Nuestra Galaxia'});closeModal();toast(result.sticker?'Sticker creado.':'No se pudo crear.');return;}
-  if(a==='chat-sticker-online-save'||a==='chat-sticker-online-send'){const imported=await api('chat-stickers',{operation:'import-online',url:btn.dataset.url,providerId:btn.dataset.providerId||'',name:btn.dataset.title||'Sticker'});if(a==='chat-sticker-online-send'){closeModal();queueChatMessage({messageType:'sticker',attachment:{stickerId:imported.sticker.id}});}else{toast('Sticker agregado a Nuestros.');await openChatStickerPicker('ours');}return;}
-  if(a==='chat-gif-pick'){const imported=await api('chat-gif-import',{url:btn.dataset.url,title:btn.dataset.title||'GIF'});closeModal();const item=normalizeChatUpload({...imported.item,gif:true},'photo');item.gif=true;queueChatMessage({messageType:'gif',attachments:[item]});return;}
+  if(a==='chat-sticker-online-save'||a==='chat-sticker-online-send'){if(a==='chat-sticker-online-send'){closeModal();queueChatMessage({messageType:'sticker',attachment:{provider:'giphy',externalUrl:btn.dataset.url,title:btn.dataset.title||'Sticker',providerId:btn.dataset.providerId||''}});}else{await api('chat-stickers',{operation:'import-online',url:btn.dataset.url,providerId:btn.dataset.providerId||'',name:btn.dataset.title||'Sticker'});toast('Sticker guardado en Nuestros sin copiar el archivo.');await openChatStickerPicker('ours');}return;}
+  if(a==='chat-gif-pick'){closeModal();queueChatMessage({messageType:'gif',attachment:{provider:'giphy',externalUrl:btn.dataset.url,title:btn.dataset.title||'GIF',providerId:btn.dataset.providerId||''}});return;}
   if(a==='chat-video-message-open'){showModal('Videomensaje','<div class="chat-video-duration"><p>Elige la duración máxima.</p><button class="btn secondary" type="button" data-action="chat-video-message" data-seconds="15">15 s</button><button class="btn secondary" type="button" data-action="chat-video-message" data-seconds="30">30 s</button><button class="btn secondary" type="button" data-action="chat-video-message" data-seconds="60">60 s</button></div>','chat-video-duration');return;}
   if(a==='chat-video-message'){await addChatNativeMedia('captureChatVideoMessage',[Number(btn.dataset.seconds||30)],'video');return;}
   if(a==='chat-location-current'){const loc=await GalaxyNative.call('getChatLocation');closeModal();queueChatMessage({messageType:'location',attachment:{mode:'static',latitude:Number(loc.latitude),longitude:Number(loc.longitude),accuracy:Number(loc.accuracy||0),label:'Ubicación actual'}});return;}
