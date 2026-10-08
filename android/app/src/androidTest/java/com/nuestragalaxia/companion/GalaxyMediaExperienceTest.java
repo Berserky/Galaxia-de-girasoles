@@ -107,8 +107,15 @@ public class GalaxyMediaExperienceTest {
                 assertTrue(repeat!=null&&repeat.performClick());
             });
             assertTrue(device.wait(Until.hasObject(By.desc("Tomar foto")),6_000));
-            if(provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)){
+            boolean hasFront=provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA);
+            if(!android.os.Build.HARDWARE.equals("ranchu")&&!android.os.Build.HARDWARE.equals("goldfish"))assertTrue("Physical front-camera gate requires a front camera.",hasFront);
+            if(hasFront){
                 device.findObject(By.desc("Cambiar cámara")).click();SystemClock.sleep(600);
+                scenario.onActivity(activity->{
+                    try{java.lang.reflect.Field f=GalaxyCameraActivity.class.getDeclaredField("camera");f.setAccessible(true);androidx.camera.core.Camera bound=(androidx.camera.core.Camera)f.get(activity);
+                        assertTrue("Camera switch did not bind the front lens.",bound!=null&&!CameraSelector.DEFAULT_FRONT_CAMERA.filter(java.util.Collections.singletonList(bound.getCameraInfo())).isEmpty());
+                    }catch(ReflectiveOperationException e){throw new AssertionError(e);}
+                });
                 device.findObject(By.desc("Tomar foto")).click();
                 assertTrue("Front photo capture did not reach review.",device.wait(Until.hasObject(By.desc("Confirmar captura")),10_000));
                 scenario.onActivity(activity->{View repeat=findByText(activity.getWindow().getDecorView(),"Repetir");assertTrue(repeat!=null&&repeat.performClick());});
