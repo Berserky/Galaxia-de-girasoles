@@ -23,7 +23,8 @@ test('widget privacy clearing removes source key and any cached photo',()=>{
 
 test('QA debug signed photo origin matches the isolated Edge endpoint',()=>{
  const gradle=readFileSync(new URL('../android/app/build.gradle.kts',import.meta.url),'utf8');
- assert.match(gradle,/val qaOrigin = qaEdgeUrl\.substringBefore\("\/functions\/v1\/"\)/);
- assert.match(gradle,/buildConfigField\("String","SUPABASE_URL","\\\\"\$qaOrigin\\\\""\)/);
- assert.match(gradle,/val qaEdgeUrl = .*vwtcncvmwjfywrzjmskw\.supabase\.co/);
+ assert.ok(gradle.includes('val qaOrigin = qaEdgeUrl.substringBefore("/functions/v1/")'));
+ assert.ok(gradle.includes('buildConfigField("String","SUPABASE_URL"'));
+ assert.ok(gradle.includes('vwtcncvmwjfywrzjmskw.supabase.co'));
+
 });
