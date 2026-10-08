@@ -341,7 +341,7 @@ function renderChatFab(){
 function syncChatViewportHeight(){
  const chatEl=view==='chat'?document.querySelector('#chatMessages'):null;
  if(chatEl)chatScrollEngine.beforeViewportChange(chatEl);
- const viewport=window.visualViewport,height=Math.max(320,Math.round(viewport?.height||window.innerHeight||document.documentElement.clientHeight||0));
+ const viewport=window.visualViewport,height=Math.max(1,Math.round(viewport?.height||window.innerHeight||document.documentElement.clientHeight||0));
  document.documentElement.style.setProperty('--chat-viewport-height',height+'px');
  if(view==='chat'){
   const full=Math.max(height,Math.round(window.innerHeight||document.documentElement.clientHeight||height));
