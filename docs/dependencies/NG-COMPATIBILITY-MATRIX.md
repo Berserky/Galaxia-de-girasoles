@@ -12,7 +12,7 @@ Revisión: 2026-10-08. Estado de la fase: evaluación parcial, sin autorización
 | WebKit | androidx.webkit 1.15.0 | sin cambio | CONSERVAR | ALTO | Puente JS, assets, navegación, media, permisos |
 | Firebase Messaging | 25.1.3 | sin cambio | CONSERVAR | ALTO | FCM foreground/background, sin credenciales expuestas |
 | Play location | 21.4.0 | sin cambio | CONSERVAR | ALTO | GPS, permisos, revocación y batería |
-| Node CI | Node 24 + setup-node v5/v6 | setup-node@v6 | PROPUESTO v6 (PR aislado) | BAJO-MEDIO | necesita checks del SHA nuevo, base en package.json |
+| Node CI | Node 24 + setup-node v5/v6 | setup-node@v6 | ADOPTADO v6 en 7 workflows (#115, desarrollo) | BAJO-MEDIO | 7/7 checks del SHA final SUCCESS; sin cambiar Node 24 |
 | Gradle Action | setup-gradle@v4 | v6 | MANTENER v4 | MEDIO | #81 tiene un FAILURE de instrumentación |
 | Checkout | checkout@v5 | v7 | MANTENER v5 | MEDIO | #82: no se pudo comprobar checks del head |
 | Pages | deploy-pages@v4 | v5 | MANTENER v4 | ALTO | publicar es operación separada no autorizada |
