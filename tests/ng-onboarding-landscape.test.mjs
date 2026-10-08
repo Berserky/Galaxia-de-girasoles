@@ -7,7 +7,7 @@ const js=readFileSync(new URL('../android/app/src/main/assets/mobile/app.js',imp
 test('NG-AUD-003 landscape onboarding uses compact card and visible two-column form',()=>{
  const marker=css.indexOf('/* NG-AUD-003:');
  assert.ok(marker>0,'Landscape fix marker missing');
- const chunk=css.slice(marker,css.indexOf('}',css.indexOf('}',marker)+1)+1);
+ const chunk=css.slice(marker,css.indexOf('.update-line{',marker));
  assert.match(chunk,/@media\s*\(orientation:landscape\)\s*and\s*\(max-height:560px\)/);
  assert.match(chunk,/\.onboarding\s+\.card\s*\{[^}]*padding:12px 16px/);
  assert.match(chunk,/\.onboarding\s+#pairForm\s*\{[^}]*grid-template-columns:minmax\(0,1fr\)/);
