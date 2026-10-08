@@ -42,6 +42,7 @@ jobs:
           mv supabase/migrations/20261004232942_qa_phase0_privacy_firewall.sql /tmp/phase0.sql
           mv supabase/migrations/20261005011401_qa_phase1_data_integrity.sql /tmp/phase1.sql
           mv supabase/migrations/20261005023031_qa_phase2_chat_correctness.sql /tmp/phase2.sql
+          mv supabase/migrations/20261008193000_ng_phase4_member_location_rls.sql /tmp/phase4.sql
           supabase start
 
       - name: Seed pre-Phase-0 orphan
@@ -58,8 +59,7 @@ jobs:
       - name: Run Phase 0 two-profile attack probes
         run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/privacy-firewall-db.sql
 
-      - name: NG-AUD-004 Verify authenticated outsiders cannot read shared GPS
-        run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/phase4-member-location-rls.sql
+
 
       - name: Validate Phase 0 rollback and re-apply
         run: |
@@ -73,6 +73,11 @@ jobs:
           supabase migration up
           mv /tmp/phase2.sql supabase/migrations/20261005023031_qa_phase2_chat_correctness.sql
           supabase migration up
+          mv /tmp/phase4.sql supabase/migrations/20261008193000_ng_phase4_member_location_rls.sql
+          supabase migration up
+
+      - name: NG-AUD-004 Verify authenticated outsiders cannot read shared GPS
+        run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/phase4-member-location-rls.sql
 
       - name: Run delete-for-both and privacy Edge E2E
         run: bash tests/privacy-firewall-chat-e2e.sh
