@@ -23,8 +23,8 @@ test("GIF and Sticker Studio separates sources and supports sticker discovery",(
 test("Online stickers persist as GIPHY references without copying provider files",()=>{
  assert.match(edge,/operation==="import-online"/);
  assert.match(edge,/bucket:"giphy-external"/);
- assert.match(edge,/chatGiphyMediaUrl\(body\.url\)/);
- assert.match(edge,/chatGiphyMediaUrl\(attachmentMeta\.externalUrl\)/);
+ assert.match(edge,/chatGiphyId\(body\.providerId\)/);
+ assert.match(edge,/chatGiphyId\(attachmentMeta\.providerId\)/);
  assert.match(app,/messageType:'gif',attachment:\{provider:'giphy'/);
  assert.match(app,/messageType:'sticker',attachment:\{provider:'giphy'/);
  assert.match(app,/Powered by GIPHY/);
