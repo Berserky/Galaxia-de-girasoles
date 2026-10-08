@@ -12,3 +12,12 @@ El job existente `Dual-user remote staging` es **informativo**: cuando faltan cr
 - Ningún secreto se debe guardar en documentación, comentarios de PR o artefactos CI. La acción `workflow_dispatch` solo estará disponible por defecto una vez que el workflow exista en la rama predeterminada de GitHub (actualmente `prod`); durante desarrollo, use el disparador PR y el gate que se habilita por variable. Esto no autoriza promover el PR a prod.
 
 **Estado actual:** credenciales QA no confirmadas en GitHub; E2E obligatorio **NOT_EXECUTED**, GO prohibido.
+
+
+## Existing ephemeral QA identities via GitHub OIDC
+
+The existing `android-release-candidate.yml` workflow already bootstraps two short-lived QA device tokens via the active `qa-github-bootstrap` Edge Function. Its OIDC signature and claims are constrained to repository `Berserky/Galaxia-de-girasoles`, ref `refs/heads/qa`, `event_name=push`, the Android Release Candidate workflow and the run SHA. It revokes tokens in an unconditional cleanup step.
+
+The release candidate smoke now calls `node scripts/qa-phase4-strict-staging.mjs` and requires `F4_QA_REMOTE_GATE=VERIFIED` before recording `stagingSmoke=PASS`. Thus **no manual QA token secret setup is necessary for that future authorized QA promotion**. A green informational PR job with `NOT_EXECUTED` does not satisfy the release gate.
+
+This PR does not itself trigger a push to `qa`, create QA identities or touch live Supabase.

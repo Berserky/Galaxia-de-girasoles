@@ -54,4 +54,9 @@ test('Fail-closed entrypoint is the one selected by Fase 4 release workflow',()=
  assert.match(yaml,/node scripts\/qa-phase4-strict-staging\.mjs/);
  assert.match(yaml,/QA_STAGING_TOKEN_1/);
  assert.match(yaml,/QA_STAGING_REQUIRED/);
+ const rc=readFileSync(new URL('../.github/workflows/android-release-candidate.yml',import.meta.url),'utf8');
+ assert.match(rc,/Obtain ephemeral QA identities through GitHub OIDC/);
+ assert.ok(rc.includes('node scripts/qa-phase4-strict-staging.mjs'));
+ assert.ok(rc.includes('F4_QA_REMOTE_GATE=VERIFIED'));
+ assert.match(rc,/Revoke ephemeral QA identities/);
 });
