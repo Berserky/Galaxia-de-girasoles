@@ -64,7 +64,7 @@ jobs:
           gh run download "$CANDIDATE_RUN_ID" -n android-candidate -D candidate
           gh run download "$CANDIDATE_RUN_ID" -n android-candidate-evidence -D candidate-evidence
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
