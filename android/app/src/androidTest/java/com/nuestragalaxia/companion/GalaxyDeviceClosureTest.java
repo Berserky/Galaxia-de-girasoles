@@ -767,8 +767,18 @@ public class GalaxyDeviceClosureTest {
         String documentsPackage = documentsComponent.substring(0, documentsComponent.indexOf('/'));
         scenario.onActivity(a -> a.pickMedia("qa-file-picker", "chat-file"));
         UiDevice device = UiDevice.getInstance(instrumentation);
-        awaitCondition(() -> documentsPackage.equals(device.getCurrentPackageName()), UI_TIMEOUT_MS);
-        assertFalse("File picker did not leave app foreground.", device.getCurrentPackageName().equals(pkg));
+        // Android may route OPEN_DOCUMENT to a system chooser in a different
+        // package than resolve-activity reported. Assert actual foreground
+        // handoff rather than guessing the OEM's selected document UI package.
+        awaitCondition(() -> {
+            String foreground = device.getCurrentPackageName();
+            return foreground != null && !foreground.isBlank() && !pkg.equals(foreground);
+        }, UI_TIMEOUT_MS);
+        String pickerForeground = device.getCurrentPackageName();
+        assertFalse("File picker did not leave app foreground.", pkg.equals(pickerForeground));
+        System.out.println("GALAXY_FILE_PICKER=" + new JSONObject()
+            .put("resolvedComponent", documentsComponent)
+            .put("foregroundPackage", pickerForeground));
         device.pressBack();
         awaitCondition(() -> pkg.equals(device.getCurrentPackageName()), UI_TIMEOUT_MS);
 
@@ -854,15 +864,15 @@ public class GalaxyDeviceClosureTest {
             web.getLocationOnScreen(location);
             frame.set(new int[]{location[0], location[1], web.getWidth(), web.getHeight()});
         });
-        awaitCondition(() -> {
-            AtomicReference<Boolean> focused = new AtomicReference<>(false);
-            scenario.onActivity(a -> {
-                WebView web = a.findViewById(R.id.webView);
-                focused.set(web.hasFocus() && web.hasWindowFocus());
-            });
-            return focused.get();
-        }, UI_TIMEOUT_MS);
+        // Do not gate a real Android tap on both focus flags *before* the tap:
+        // headless UiAutomator may report window focus false until the first touch.
+        // The post-touch DOM focus and IME checks below remain strict.
         int[] v = frame.get();
+        assertNotNull("WebView must be attached before Android touch", v);
+        assertTrue("WebView is not laid out for Android touch", v[2] > 0 && v[3] > 0);
+        System.out.println("GALAXY_WEBVIEW_BEFORE_TOUCH=" + js(
+            "JSON.stringify({visible:document.visibilityState,selector:" + quoted
+            + ",found:!!document.querySelector(" + quoted + ")})"));
         int x = v[0] + (int)Math.round(g.getDouble("x") * v[2] / Math.max(1d, g.getDouble("vw")));
         // CSS pixels use one scale on both axes, including while IME insets settle.
         int y = v[1] + (int)Math.round(g.getDouble("y") * v[2] / Math.max(1d, g.getDouble("vw")));
