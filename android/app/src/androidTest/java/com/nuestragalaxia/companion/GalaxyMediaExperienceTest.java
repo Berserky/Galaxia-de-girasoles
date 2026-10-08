@@ -119,7 +119,7 @@ public class GalaxyMediaExperienceTest {
                 device.findObject(By.desc("Tomar foto")).click();
                 awaitVisibleCameraControl(scenario,"Confirmar captura",12_000);
                 scenario.onActivity(activity->{View repeat=findByText(activity.getWindow().getDecorView(),"Repetir");assertTrue(repeat!=null&&repeat.performClick());});
-                assertTrue(device.wait(Until.hasObject(By.desc("Tomar foto")),6_000));
+                awaitVisibleCameraControl(scenario,"Tomar foto",8_000);
             }
             tapVisibleCameraControl(scenario,"Cerrar cámara");
         }
