@@ -1,7 +1,7 @@
 name: Galaxy Chat 4 Phase 8 Motion
 on:
   pull_request:
-    branches: [main]
+    branches: [desarrollo, qa, prod]
     paths: ['android/**', 'tests/**', 'scripts/qa-android-mobile.mjs', '.github/workflows/chat-4-phase8-motion.yml']
   workflow_dispatch:
 permissions:

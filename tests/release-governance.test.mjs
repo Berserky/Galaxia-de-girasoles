@@ -19,8 +19,8 @@ test('NG-QA-007 normal main pushes cannot mutate android-stable',()=>{
   assert.match(candidate,/gh release download android-stable/);
 });
 
-test('main creates a candidate only after required automated gates',()=>{
-  assert.match(candidate,/push:\s*\n\s*branches: \[main\]/);
+test('qa creates a candidate only after required automated gates',()=>{
+  assert.match(candidate,/push:\s*\n\s*branches: \[qa\]/);
   for(const marker of [
     'npm test',
     'deno check',
@@ -45,7 +45,9 @@ test('stable promotion is manual, provenance-bound and approval-gated',()=>{
   assert.match(stable,/GOOGLE_ONLY_OR_LEAK_PROTECTION_ENABLED/);
   assert.match(stable,/environment: android-stable/);
   assert.match(stable,/\.event.*push/);
-  assert.match(stable,/\.head_branch.*main/);
+  assert.match(stable,/\.head_branch.*qa/);
+  assert.match(stable,/github.ref == .refs\/heads\/prod./);
+  assert.match(stable,/CANDIDATE_SHA.*GITHUB_SHA/);
   assert.match(stable,/\.conclusion.*success/);
   assert.match(stable,/NEW_CODE.*-gt.*OLD_CODE/);
   assert.match(stable,/sha256sum -c/);
@@ -66,7 +68,15 @@ test('NG-QA-019 documents password leak protection against the real auth model',
 
 test('NG-QA-020 operational docs describe candidate and explicit stable promotion',()=>{
   assert.match(releaseDocs,/PR → CI/);
-  assert.match(releaseDocs,/main → candidate/);
+  assert.match(releaseDocs,/qa → candidate/);
   assert.match(releaseDocs,/candidate → staging\/smoke/);
   assert.match(releaseDocs,/approval explícito → stable/);
+});
+
+test('legacy web publishing is manual-only and PR targets are staged',()=>{
+ const pages=read('.github/workflows/pages.yml');
+ assert.match(pages,/workflow_dispatch:/);
+ assert.doesNotMatch(pages,/\n\s*push:\s*\n/);
+ assert.doesNotMatch(pages,/\n\s*pull_request:\s*\n/);
+ assert.match(ci,/branches: \[desarrollo, qa, prod\]/);
 });

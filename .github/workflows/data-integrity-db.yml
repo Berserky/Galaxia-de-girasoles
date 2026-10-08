@@ -2,7 +2,7 @@ name: Data Integrity DB
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [desarrollo, qa, prod]
     paths:
       - 'supabase/migrations/**'
       - 'supabase/rollbacks/**'

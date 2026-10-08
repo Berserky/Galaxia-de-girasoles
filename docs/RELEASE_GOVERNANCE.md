@@ -4,7 +4,7 @@ Este documento describe el proceso operativo vigente de Nuestra Galaxia desde la
 
 ## Flujo
 
-**PR → CI → main → candidate → staging/smoke → approval explícito → stable**
+**PR → CI → qa → candidate → staging/smoke → approval explícito → stable**
 
 ### 1. PR → CI
 
@@ -20,9 +20,9 @@ La Fase 5 conserva la instrumentation real, lifecycle, permisos, orientación, f
 
 El workflow de CI no tiene `contents: write`, no escucha pushes de `main` y no contiene comandos de publicación de `android-stable`.
 
-### 2. main → candidate
+### 2. qa → candidate
 
-Cada commit de `main` activa `.github/workflows/android-release-candidate.yml`.
+Cada commit de `qa` activa `.github/workflows/android-release-candidate.yml`.
 
 Antes de producir el candidate se exigen:
 
@@ -66,7 +66,7 @@ Solo se inicia manualmente mediante `workflow_dispatch`. Requiere:
 
 Antes de escribir la release vuelve a comprobar:
 
-- que el run proviene de un `push` a `main`;
+- que el run proviene de un push a qa y su SHA debe coincidir con prod;
 - que concluyó en `success`;
 - que el SHA del artefacto coincide con el SHA del run;
 - todos los gates del ledger;
@@ -83,7 +83,7 @@ El environment `android-stable` debe configurarse en GitHub con required reviewe
 
 Antes de Fase 6, `android-companion.yml` reaccionaba a cambios en `main` y podía ejecutar `gh release upload android-stable --clobber` cuando detectaba una nueva versión. Ese comportamiento se eliminó.
 
-Regla operativa: **un push normal a `main` puede producir un candidate, nunca reemplazar `android-stable`.**
+Regla operativa: **un push normal a qa puede producir un candidate, nunca reemplazar `android-stable`.**
 
 ## NG-QA-019 — password leak protection
 
@@ -105,7 +105,7 @@ No se debe interpretar esa confirmación como sustituto de la revisión: quien p
 
 ### Web
 
-GitHub Pages se construye desde `app/public` + `app/cloud` y usa Supabase para Auth/datos. El workflow `pages.yml` publica la web desde `main`; este despliegue es independiente del canal Android estable.
+GitHub Pages se construye desde `app/public` + `app/cloud` y usa Supabase para Auth/datos. El workflow pages.yml solo admite publicacion web manual; no despliega al cambiar ramas.
 
 ### Backend
 
@@ -119,7 +119,7 @@ La app empaqueta su UI móvil local, usa bridge nativo y consume `android-compan
 
 ## Operación de una release
 
-1. Mergear el cambio a `main`.
+1. Integrar en desarrollo, validar CI y promover por fast-forward a qa.
 2. Abrir Actions → **Android Release Candidate**.
 3. Confirmar que el run terminó `success`; si staging falta o falla, corregir staging y generar un nuevo candidate válido.
 4. Revisar Security Advisor/Auth. Si hay usuarios con contraseña, confirmar que Leaked Password Protection está habilitado.

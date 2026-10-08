@@ -2,7 +2,7 @@ name: QA Phase 5 Real Integration
 
 on:
   pull_request:
-    branches: [main]
+    branches: [desarrollo, qa, prod]
     paths:
       - "android/**"
       - "scripts/qa-phase5-staging.mjs"

@@ -2,7 +2,7 @@ name: Galaxy Chat 4 Phase 3 Delivery Engine
 
 on:
   pull_request:
-    branches: [main]
+    branches: [desarrollo, qa, prod]
     paths:
       - "android/app/src/main/assets/mobile/**"
       - "android/app/src/androidTest/**"

@@ -2,7 +2,7 @@ name: Phase 4 Performance
 
 on:
   pull_request:
-    branches: [main]
+    branches: [desarrollo, qa, prod]
     paths:
       - 'supabase/functions/android-companion/**'
       - 'tests/performance-phase4.test.mjs'
