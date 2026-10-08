@@ -89,6 +89,6 @@ test('native premium bridge includes GIPHY client search and point location',()=
  assert.ok(mobile.includes('https://api.giphy.com/v1/'));
  assert.ok(mobile.includes('BuildConfig.GIPHY_API_KEY'));
  assert.ok(gradle.includes('buildConfigField("String","GIPHY_API_KEY"'));
- assert.ok(edge.includes('chatGiphyMediaUrl(attachmentMeta.externalUrl)'));
+ assert.ok(edge.includes('chatGiphyId(attachmentMeta.providerId)'));
 });
 
