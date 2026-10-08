@@ -11,7 +11,7 @@ Fecha: 2026-10-08. Las actualizaciones pendientes NO se interpretan como descart
 | 007 | #81 | instrumentación Android falla; nueva acción cambia infraestructura de cache/build | setup-gradle v4 / Gradle 9.4.1 | inspección changelog upstream, build/lint/instrumentación sobre rama aislada | no se adopta action major |
 | 008 | #82 | head histórico no resolvió endpoint check-runs, falta verificación | checkout v5 | actualizar referencia, comparar el diff real, validar permisos/runtime/CI | se retrasa action major |
 
-NG-DEP-002 (#76) **no está pospuesto**: se llevó como candidato aislado a rama temporal, condicionado a checks del nuevo PR y merge a desarrollo. No cerrar #76 sin confirmar equivalencia del cambio y evitar duplicados; no cerrar ningún otro PR sin prueba de obsolescencia/reemplazo.
+NG-DEP-002 (#76) **INTEGRADO POR REEMPLAZO**: PR #115 fusionado a `desarrollo` (`0bab4e1`) con 7/7 checks SUCCESS, cambios equivalentes verificados (8 referencias/7 archivos). PR #76 cerrado con comentario de trazabilidad; ninguna otra actualización debe cerrarse sin verificación de su reemplazo o bloqueo.
 
 ## Riesgos de producto independientes
 El documento F2 `docs/recovery/NG-4.1.1-PHASE2-HANDOFF.md` autoriza solo estabilización aislada, no QA/prod. PR #113 conserva el diagnóstico F1 como borrador y 43 BLOCKED + 7 NOT TESTED. No autorizar integración funcional sensible, migraciones, ni release por el hecho de haber auditado dependencias. Casos inaplazables: aislamiento entre parejas/RLS, invitación y revocación, FCM, CameraX y GPS.
