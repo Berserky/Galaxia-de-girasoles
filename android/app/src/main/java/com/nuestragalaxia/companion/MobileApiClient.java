@@ -68,8 +68,8 @@ public final class MobileApiClient {
         String q=query==null?"":query.trim();
         if(q.length()>50)q=q.substring(0,50);
         String endpoint="https://api.giphy.com/v1/"+(stickers?"stickers":"gifs")+(q.isEmpty()?"/trending":"/search");
-        String params="?api_key="+URLEncoder.encode(key,StandardCharsets.UTF_8)
-            +"&limit=20&rating=pg-13&lang=es"+(q.isEmpty()?"":"&q="+URLEncoder.encode(q,StandardCharsets.UTF_8));
+        String params="?api_key="+URLEncoder.encode(key,"UTF-8")
+            +"&limit=20&rating=pg-13&lang=es"+(q.isEmpty()?"":"&q="+URLEncoder.encode(q,"UTF-8"));
         HttpURLConnection c=(HttpURLConnection)new URL(endpoint+params).openConnection();
         c.setConnectTimeout(10000);
         c.setReadTimeout(15000);
