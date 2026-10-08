@@ -14,3 +14,13 @@ test('GIPHY creator logo attribution is bundled and shown in all online discover
   assert.ok(logo.length>5000);
   assert.deepEqual([...logo.subarray(0,8)],[137,80,78,71,13,10,26,10]);
 });
+test('GIPHY original creator is displayed and stored as a short text attribution',()=>{
+  const js=fs.readFileSync(path.join(root,'android/app/src/main/assets/mobile/app.js'),'utf8');
+  const native=fs.readFileSync(path.join(root,'android/app/src/main/java/com/nuestragalaxia/companion/MobileApiClient.java'),'utf8');
+  const edge=fs.readFileSync(path.join(root,'supabase/functions/android-companion/index.ts'),'utf8');
+  assert.ok(native.includes('.put("creator",creator)'));
+  assert.ok(js.includes('data-creator='));
+  assert.ok(js.includes('chat-giphy-creator'));
+  assert.ok(js.includes('creator:btn.dataset.creator'));
+  assert.ok(edge.includes('attachmentMeta.creator=text(attachmentMeta.creator||"",80);'));
+});

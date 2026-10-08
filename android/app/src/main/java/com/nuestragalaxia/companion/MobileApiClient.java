@@ -87,11 +87,14 @@ public final class MobileApiClient {
                 JSONObject original=images.optJSONObject("downsized_medium");
                 if(original==null)original=images.optJSONObject("original");
                 if(preview==null||original==null)continue;
+                String creator=item.optString("username","").trim();
+                if(creator.isEmpty()){JSONObject user=item.optJSONObject("user");if(user!=null)creator=user.optString("display_name","").trim();}
+                if(creator.length()>80)creator=creator.substring(0,80);
                 String previewUrl=preview.optString("webp",preview.optString("url",""));
                 String url=original.optString("url","");
                 if(!isGiphyMediaUrl(previewUrl)||!isGiphyMediaUrl(url))continue;
                 items.put(new JSONObject().put("id",item.optString("id",""))
-                    .put("title",item.optString("title",stickers?"Sticker":"GIF"))
+                    .put("title",item.optString("title",stickers?"Sticker":"GIF")).put("creator",creator)
                     .put("previewUrl",previewUrl).put("url",url));
             }
             return new JSONObject().put("provider","giphy").put("configured",true).put("items",items);

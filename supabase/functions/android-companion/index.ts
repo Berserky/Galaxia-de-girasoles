@@ -1366,6 +1366,7 @@ async function chatSend(req:Request,body:any){
   if(!id||files.length)return json({error:"Contenido de GIPHY no válido."},400);
   attachmentMeta.provider="giphy";attachmentMeta.providerId=id;
   attachmentMeta.title=text(attachmentMeta.title||"GIF",120);
+  attachmentMeta.creator=text(attachmentMeta.creator||"",80);
   // Do not persist GIPHY media URLs in chat payloads.
   delete attachmentMeta.externalUrl;
  }
