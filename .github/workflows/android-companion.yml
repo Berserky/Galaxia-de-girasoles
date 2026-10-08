@@ -35,7 +35,7 @@ jobs:
       FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY || vars.FIREBASE_API_KEY }}
       FIREBASE_SENDER_ID: ${{ secrets.FIREBASE_SENDER_ID || vars.FIREBASE_SENDER_ID }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: denoland/setup-deno@v2
         with:
           deno-version: "v2.x"
