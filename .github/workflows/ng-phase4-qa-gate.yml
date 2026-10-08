@@ -1,0 +1,56 @@
+name: NG Fase 4 Strict QA Staging Gate
+on:
+  pull_request:
+    branches: [desarrollo, qa, prod]
+    paths:
+      - 'scripts/qa-phase5-staging.mjs'
+      - 'scripts/qa-phase4-strict-staging.mjs'
+      - 'tests/ng-phase4-strict-staging.test.mjs'
+      - '.github/workflows/ng-phase4-qa-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    name: Remote QA gate guardrails (offline)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Verify fail-closed semantics and endpoint allowlist
+        run: node --test tests/ng-phase4-strict-staging.test.mjs
+
+  remote-qa-required:
+    name: Required F4 remote QA dual-user E2E
+    # Enable this when arranging the Fase 4 release-readiness review.
+    # It MUST NOT be enabled while credentials are missing; when enabled
+    # missing prerequisites result in FAILURE rather than a fake green check.
+    if: vars.QA_STAGING_REQUIRED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      QA_STAGING_EDGE_URL: ${{ vars.QA_STAGING_EDGE_URL }}
+      QA_STAGING_PUBLISHABLE_KEY: ${{ secrets.QA_STAGING_PUBLISHABLE_KEY }}
+      QA_STAGING_TOKEN_0: ${{ secrets.QA_STAGING_TOKEN_0 }}
+      QA_STAGING_TOKEN_1: ${{ secrets.QA_STAGING_TOKEN_1 }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: F4 release gate - actual staging verification required
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/qa-phase4-strict-staging.mjs 2>&1 | tee f4-qa-gate.log
+          grep -q '^F4_QA_REMOTE_GATE=VERIFIED$' f4-qa-gate.log
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ng-f4-remote-qa-gate
+          path: f4-qa-gate.log
+          retention-days: 14

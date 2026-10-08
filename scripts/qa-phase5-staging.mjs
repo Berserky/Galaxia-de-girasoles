@@ -24,6 +24,22 @@ if(endpoint.includes(PROD_REF)){
   console.error('BLOCKED: QA staging endpoint resolves to the production Supabase project.');
   process.exit(2);
 }
+// QA device tokens must never be posted to an arbitrary host, even by mistake.
+const QA_REF='vwtcncvmwjfywrzjmskw';
+let stagingUrl;
+try { stagingUrl=new URL(endpoint); }
+catch { console.error('BLOCKED: QA staging URL is invalid.'); process.exit(2); }
+if(stagingUrl.protocol!=='https:' ||
+    stagingUrl.hostname!==QA_REF+'.supabase.co' ||
+    stagingUrl.pathname!=='/functions/v1/android-companion' ||
+    stagingUrl.username || stagingUrl.password || stagingUrl.search || stagingUrl.hash) {
+  console.error('BLOCKED: staging must be the exact QA Supabase Edge endpoint.');
+  process.exit(2);
+}
+if(token0===token1) {
+  console.error('BLOCKED: QA member tokens 0 and 1 must be distinct.');
+  process.exit(2);
+}
 
 async function api(token,body){
   const response=await fetch(endpoint,{
