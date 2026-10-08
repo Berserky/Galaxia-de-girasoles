@@ -1,3 +1,4 @@
+val giphyApiKey = providers.gradleProperty("GIPHY_API_KEY").orNull ?: System.getenv("GIPHY_API_KEY") ?: ""
 val firebaseProjectId = providers.gradleProperty("FIREBASE_PROJECT_ID").orNull ?: System.getenv("FIREBASE_PROJECT_ID") ?: ""
 val firebaseApplicationId = providers.gradleProperty("FIREBASE_APPLICATION_ID").orNull ?: System.getenv("FIREBASE_APPLICATION_ID") ?: ""
 val firebaseApiKey = providers.gradleProperty("FIREBASE_API_KEY").orNull ?: System.getenv("FIREBASE_API_KEY") ?: ""
@@ -7,7 +8,7 @@ val qaSupabasePublishableKey = providers.gradleProperty("QA_SUPABASE_PUBLISHABLE
 
 plugins { id("com.android.application") }
 android { namespace = "com.nuestragalaxia.companion"; compileSdk = 36
- defaultConfig { applicationId = "com.nuestragalaxia.companion"; minSdk = 26; targetSdk = 36; versionCode = 37; versionName = "4.1.0"; buildConfigField("String","SUPABASE_URL","\"https://zqiknzivfahvvadmxrvt.supabase.co\""); buildConfigField("String","SUPABASE_PUBLISHABLE_KEY","\"sb_publishable_c3SvE2qIJthLwd7IcEYSmA_OU2Ku9rT\""); buildConfigField("String","EDGE_URL","\"https://zqiknzivfahvvadmxrvt.supabase.co/functions/v1/android-companion\""); buildConfigField("String","FIREBASE_PROJECT_ID","\"$firebaseProjectId\""); buildConfigField("String","FIREBASE_APPLICATION_ID","\"$firebaseApplicationId\""); buildConfigField("String","FIREBASE_API_KEY","\"$firebaseApiKey\""); buildConfigField("String","FIREBASE_SENDER_ID","\"$firebaseSenderId\""); testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
+ defaultConfig { applicationId = "com.nuestragalaxia.companion"; minSdk = 26; targetSdk = 36; versionCode = 37; versionName = "4.1.0"; buildConfigField("String","SUPABASE_URL","\"https://zqiknzivfahvvadmxrvt.supabase.co\""); buildConfigField("String","SUPABASE_PUBLISHABLE_KEY","\"sb_publishable_c3SvE2qIJthLwd7IcEYSmA_OU2Ku9rT\""); buildConfigField("String","EDGE_URL","\"https://zqiknzivfahvvadmxrvt.supabase.co/functions/v1/android-companion\""); buildConfigField("String","GIPHY_API_KEY","\"$giphyApiKey\""); buildConfigField("String","FIREBASE_PROJECT_ID","\"$firebaseProjectId\""); buildConfigField("String","FIREBASE_APPLICATION_ID","\"$firebaseApplicationId\""); buildConfigField("String","FIREBASE_API_KEY","\"$firebaseApiKey\""); buildConfigField("String","FIREBASE_SENDER_ID","\"$firebaseSenderId\""); testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
  buildTypes {
    getByName("debug") {
      applicationIdSuffix = providers.gradleProperty("QA_APPLICATION_SUFFIX").orNull ?: ""
