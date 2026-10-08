@@ -54,6 +54,12 @@ test('Fail-closed entrypoint is the one selected by Fase 4 release workflow',()=
  assert.match(yaml,/node scripts\/qa-phase4-strict-staging\.mjs/);
  assert.match(yaml,/QA_STAGING_TOKEN_1/);
  assert.match(yaml,/QA_STAGING_REQUIRED/);
+ const expected="grep -q '^F4_QA_REMOTE_GATE=VERIFIED$' candidate-evidence/staging-smoke.txt";
+ assert.ok(rc.includes(expected),'strict staging grep must be complete and shell-safe');
+ assert.equal(rc.split('      - name: Revoke ephemeral QA identities').length-1,1,'duplicate RC revoke step');
+ assert.equal(rc.split('      - name: Release gate ledger').length-1,1,'duplicate RC ledger');
+ assert.equal(rc.split('name: android-candidate-evidence').length-1,1,'duplicate RC evidence artifact');
+ assert.ok(rc.trimEnd().endsWith('if-no-files-found: warn'),'RC trailing YAML unexpectedly corrupted');
  const rc=readFileSync(new URL('../.github/workflows/android-release-candidate.yml',import.meta.url),'utf8');
  assert.match(rc,/Obtain ephemeral QA identities through GitHub OIDC/);
  assert.ok(rc.includes('node scripts/qa-phase4-strict-staging.mjs'));
