@@ -34,6 +34,9 @@ public final class MediaInspector {
         try{
             out.put("mime",mime);
             out.put("declaredMime",canonical(declared));
+            out.put("sniffedMime",canonical(sniffed));
+            String containerBrand=MediaSniffer.containerBrand(prefix);
+            if(!containerBrand.isBlank())out.put("containerBrand",containerBrand);
             out.put("size",Math.max(0,size));
             if(CHAT_IMAGES.contains(mime))inspectImage(context,uri,out);
             else if(CHAT_VIDEOS.contains(mime))inspectVideo(context,uri,out);

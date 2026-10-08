@@ -60,15 +60,16 @@ function create(options={}){
   if(!node?.isConnected||node.dataset.mediaWanted==='false')return;
   const thumb=String(node.dataset.mediaThumbnail||''),original=String(node.dataset.mediaOriginal||'');
   const url=thumb||original;if(!url)return;
+  const card=node.closest?.('.chat-photo-card');
   const variant=thumb?'thumb':'fallback-original',key=keyOf(node,variant);
-  node.dataset.mediaWanted='true';node.dataset.mediaVariant=variant;
+  node.dataset.mediaWanted='true';node.dataset.mediaVariant=variant;card?.setAttribute('data-media-state','loading');card?.removeAttribute('data-media-error');
   preloadImage(key,url,priority,()=>node.isConnected&&node.dataset.mediaWanted!=='false')
    .then(value=>{
     if(!node.isConnected||node.dataset.mediaWanted==='false')return;
     if(node.getAttribute('src')!==value)node.setAttribute('src',value);
-    node.dataset.mediaLoaded='true';node.dataset.mediaError='false';node.closest?.('.chat-photo-card')?.removeAttribute('data-media-error');
+    node.dataset.mediaLoaded='true';node.dataset.mediaError='false';card?.setAttribute('data-media-state','ready');card?.removeAttribute('data-media-error');
    })
-   .catch(error=>{if(error?.message!=='cancelled'&&node.isConnected){node.dataset.mediaError='true';node.closest?.('.chat-photo-card')?.setAttribute('data-media-error','true');}});
+   .catch(error=>{if(error?.message!=='cancelled'&&node.isConnected){node.dataset.mediaError='true';card?.setAttribute('data-media-state','error');card?.setAttribute('data-media-error','true');}});
  }
  function assignPoster(node,priority=1){
   if(!node?.isConnected||node.dataset.mediaWanted==='false')return;
@@ -149,6 +150,7 @@ function create(options={}){
  }
  function retry(node){
   if(!node)return;node.dataset.mediaError='false';node.dataset.mediaWanted='true';
+  const card=node.closest?.('.chat-photo-card');card?.setAttribute('data-media-state','loading');card?.removeAttribute('data-media-error');
   for(const variant of ['thumb','fallback-original'])cache.delete(keyOf(node,variant));
   requestNode(node,0);
  }

@@ -20,8 +20,11 @@ test('NG-QA-005 keeps GIPHY credentials server-side and degrades explicitly',()=
   assert.ok(edge.includes('Deno.env.get("GIPHY_API_KEY")'));
   assert.ok(edge.includes('configured:false'));
   assert.ok(edge.includes('action==="giphy-search"'));
-  assert.ok(app.includes('GIFs online no configurados'));
-  assert.ok(app.includes('GIPHY no respondió'));
+  assert.ok(app.includes('if(!result?.configured)'));
+  assert.ok(app.includes('El contenido online no está disponible'));
+  assert.ok(app.includes('Puedes seguir usando tus stickers guardados.'));
+  assert.ok(app.includes('No pudimos cargar el contenido'));
+  assert.ok(app.includes('Powered by GIPHY'));
   assert.ok(app.includes('finally{'));
 });
 

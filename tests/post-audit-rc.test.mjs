@@ -4,13 +4,13 @@ import {readFileSync} from 'node:fs';
 
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 
-test('Supernova RC uses a version strictly newer than stable 3.5.1 code 35',()=>{
+test('Crown Jewel RC uses version 4.1.0 code 37 and is newer than Supernova 4.0.0 code 36',()=>{
   const gradle=read('android/app/build.gradle.kts');
   const match=gradle.match(/versionCode = (\d+); versionName = "([^"]+)"/);
   assert.ok(match,'Android version metadata missing');
-  assert.equal(Number(match[1]),36);
-  assert.equal(match[2],'4.0.0');
-  assert.ok(Number(match[1])>35);
+  assert.equal(Number(match[1]),37);
+  assert.equal(match[2],'4.1.0');
+  assert.ok(Number(match[1])>36);
 });
 
 test('candidate requires the full automated release gate set',()=>{

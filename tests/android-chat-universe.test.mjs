@@ -13,9 +13,9 @@ const schema=read('supabase/schema.sql');
 const main=read('android/app/src/main/java/com/nuestragalaxia/companion/MainActivity.java');
 const gradle=read('android/app/build.gradle.kts');
 
-test('Galaxy Chat Universe 3.5 parses under Android 3.5.1 (35)',()=>{
+test('Galaxy Chat Universe 3.5 parses under Crown Jewel Android 4.1.0 (37)',()=>{
  assert.doesNotThrow(()=>new vm.Script(app,{filename:'app.js'}));
- assert.match(gradle,/versionCode = 36; versionName = "4\.0\.0"/);
+ assert.match(gradle,/versionCode = 37; versionName = "4\.1\.0"/);
  assert.ok(css.includes('Galaxy Chat Universe 3.5.0'));
 });
 

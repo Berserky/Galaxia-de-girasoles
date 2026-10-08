@@ -1,7 +1,7 @@
 export const DOCX_MIME="application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 export const XLSX_MIME="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-export type MediaInspection={mime:string,extension:string};
+export type MediaInspection={mime:string,extension:string,containerBrand?:string};
 export type MediaValidation=
  | {ok:true,mime:string,extension:string}
  | {ok:false,status:number,message:string};
@@ -31,6 +31,30 @@ function ascii(bytes:Uint8Array,start:number,length:number){
   const end=Math.min(bytes.length,start+length);
   for(let i=start;i<end;i++)out+=String.fromCharCode(bytes[i]);
   return out;
+}
+function uint32(bytes:Uint8Array,offset:number){
+  if(offset<0||offset+4>bytes.length)return -1;
+  return bytes[offset]*0x1000000+bytes[offset+1]*0x10000+bytes[offset+2]*0x100+bytes[offset+3];
+}
+function findIsoBmffBrand(bytes:Uint8Array){
+  const limit=Math.min(bytes.length,256*1024);let offset=0,boxes=0;
+  while(offset+8<=limit&&boxes++<64){
+    let size=uint32(bytes,offset),header=8;const type=ascii(bytes,offset+4,4);
+    if(size===1){
+      if(offset+16>limit)return "";
+      const high=uint32(bytes,offset+8),low=uint32(bytes,offset+12);
+      if(high<0||high>0x1fffff)return "";
+      size=high*4294967296+low;header=16;
+    }else if(size===0)size=limit-offset;
+    if(size<header)return "";
+    if(type==="ftyp"){
+      if(size<header+4||offset+header+4>limit)return "";
+      return ascii(bytes,offset+header,4).toLowerCase();
+    }
+    if(size>limit-offset)return "";
+    offset+=size;
+  }
+  return "";
 }
 function containsAscii(bytes:Uint8Array,needle:string){
   const pattern=new TextEncoder().encode(needle);
@@ -81,14 +105,14 @@ export function sniffMedia(bytes:Uint8Array,declaredMime=""):MediaInspection{
   if(ascii(bytes,0,4)==="OggS")return {mime:"audio/ogg",extension:"ogg"};
   if(ascii(bytes,0,3)==="ID3"||(bytes.length>1&&bytes[0]===0xff&&(bytes[1]&0xe0)===0xe0))return {mime:"audio/mpeg",extension:"mp3"};
 
-  if(bytes.length>=12&&ascii(bytes,4,4)==="ftyp"){
-    const brand=ascii(bytes,8,4).toLowerCase();
+  const brand=findIsoBmffBrand(bytes);
+  if(brand){
     const heic=new Set(["heic","heix","hevc","hevx","heim","heis"]);
     const heif=new Set(["mif1","msf1"]);
-    if(heic.has(brand))return {mime:"image/heic",extension:"heic"};
-    if(heif.has(brand))return {mime:"image/heif",extension:"heif"};
-    if(brand==="m4a "||brand==="m4b "||declared==="audio/mp4")return {mime:"audio/mp4",extension:"m4a"};
-    return {mime:"video/mp4",extension:"mp4"};
+    if(heic.has(brand))return {mime:"image/heic",extension:"heic",containerBrand:brand};
+    if(heif.has(brand))return {mime:"image/heif",extension:"heif",containerBrand:brand};
+    if(brand==="m4a "||brand==="m4b "||declared==="audio/mp4")return {mime:"audio/mp4",extension:"m4a",containerBrand:brand};
+    return {mime:"video/mp4",extension:"mp4",containerBrand:brand};
   }
 
   const zip=starts(bytes,[0x50,0x4b,0x03,0x04])||starts(bytes,[0x50,0x4b,0x05,0x06])||starts(bytes,[0x50,0x4b,0x07,0x08]);

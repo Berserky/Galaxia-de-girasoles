@@ -97,9 +97,14 @@ public class GalaxyDeviceClosureTest {
 
         runJs("document.querySelector('#chatFab')?.click()");
         awaitJs("!!document.querySelector('.chat-shell')");
+        runJs("document.querySelector('[data-action=\"chat-more-open\"]')?.click()");
+        awaitJs("document.querySelector('#modal')?.open===true");
+        assertTrue(js("document.querySelector('#modal')?.innerText||''").contains("Contenido compartido"));
+        assertTrue(js("document.querySelector('#modal')?.innerText||''").contains("Guardados"));
+        assertTrue(js("document.querySelector('#modal')?.innerText||''").contains("Ajustes del chat"));
         runJs("document.querySelector('[data-action=\"chat-settings-open\"]')?.click()");
         awaitJs("document.querySelector('#modal')?.open===true");
-        assertTrue(js("document.querySelector('#modal')?.innerText||''").contains("Ajustes"));
+        assertTrue(js("document.querySelector('#modal')?.innerText||''").contains("Ajustes del chat"));
         runJs("document.querySelector('[data-action=\"modal-close\"]')?.click()");
         awaitJs("document.querySelector('#modal')?.open===false");
 
@@ -347,12 +352,15 @@ public class GalaxyDeviceClosureTest {
         runJs("const t=document.querySelector('#chatForm textarea');t.value='Realtime no borra esto';t.dispatchEvent(new Event('input',{bubbles:true}));const incoming={id:'p4-live',client_id:'p4-livec',sender_person:'1',body:'Mientras escribes',message_type:'text',attachments:[],server_seq:999999,created_at:'2026-10-05T22:00:00Z',reactions:[]};chatState=chatMessageEngine.applySingle(chatState||{messages:[]},incoming);chatStateSignature=chatSignature(chatState);chatRenderMessages({scroll:'preserve'});");
         assertEquals("Realtime no borra esto", js("document.querySelector('#chatForm textarea')?.value||''"));
 
+        // Changing font_scale may itself destroy/recreate the Activity. Close the
+        // current scenario first so ActivityScenario never races a system-driven
+        // DESTROYED transition, then relaunch under the new scaled configuration.
+        scenario.close();
+        scenario = null;
         shell("settings put system font_scale 1.30");
-        scenario.recreate();
         awaitCondition(() -> context.getResources().getConfiguration().fontScale >= 1.25f, UI_TIMEOUT_MS);
-        awaitJs("!!document.querySelector('#app')");
-        awaitJs("!!document.querySelector('#chatFab')&&!document.querySelector('#chatFab').classList.contains('hidden')");
         launchChat();
+        awaitJs("!!document.querySelector('#app')");
         awaitJs("!!document.querySelector('.chat-composer-v2')");
         double minTarget = Double.parseDouble(js("Math.min(document.querySelector('.chat-plus').getBoundingClientRect().width,document.querySelector('.chat-plus').getBoundingClientRect().height,document.querySelector('.chat-send').getBoundingClientRect().width,document.querySelector('.chat-send').getBoundingClientRect().height)"));
         assertTrue("Composer touch target below 44 CSS px: " + minTarget, minTarget >= 44d);
@@ -413,7 +421,7 @@ public class GalaxyDeviceClosureTest {
         assertEquals("sheet token or low-device suppression","true",js("window.__p8sheet[0]===220||(!window.__p8sheet.length&&GalaxyChatMotion.constrained())"));
         awaitJs("!document.querySelector('.chat-motion-ghost')");
         runJs("openChatMessageMenu(chatState.messages[0].id);window.__p8menu=modal.querySelector('.modal-inner').getAnimations().map(a=>a.effect.getTiming().duration);closeModal();");
-        assertEquals("menu token or low-device suppression","true",js("window.__p8menu[0]===160||(!window.__p8menu.length&&GalaxyChatMotion.constrained())"));
+        assertEquals("menu token or low-device suppression","true",js("window.__p8menu[0]===220||(!window.__p8menu.length&&GalaxyChatMotion.constrained())"));
 
         InstrumentationRegistry.getInstrumentation().getUiAutomation().grantRuntimePermission(context.getPackageName(),Manifest.permission.RECORD_AUDIO);
         runJs("ensureChatComposer().accepted();chatRenderComposer();beginChatHoldRecording({pointerId:123,clientX:100,clientY:100},document.querySelector('.chat-send'));");
@@ -749,23 +757,33 @@ public class GalaxyDeviceClosureTest {
         instrumentation.getUiAutomation().grantRuntimePermission(pkg, Manifest.permission.CAMERA);
         instrumentation.getUiAutomation().grantRuntimePermission(pkg, Manifest.permission.RECORD_AUDIO);
 
-        PackageManager pm = context.getPackageManager();
-        boolean hasDocuments = !pm.queryIntentActivities(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*")
-                .addCategory(Intent.CATEGORY_OPENABLE), PackageManager.MATCH_DEFAULT_ONLY).isEmpty();
-        Assume.assumeTrue("No ACTION_OPEN_DOCUMENT handler in this emulator.", hasDocuments);
+        // Package visibility can hide DocumentsUI from queryIntentActivities on a real phone.
+        // Resolve through the shell before testing the actual picker launch.
+        String documentsHandler = shell("cmd package resolve-activity --brief -a android.intent.action.OPEN_DOCUMENT -c android.intent.category.OPENABLE -t '*/*'").trim();
+        boolean hasDocuments = documentsHandler.contains("/");
+        Assume.assumeTrue("No ACTION_OPEN_DOCUMENT handler on this device.", hasDocuments);
 
+        String documentsComponent = documentsHandler.substring(documentsHandler.lastIndexOf('\n') + 1).trim();
+        String documentsPackage = documentsComponent.substring(0, documentsComponent.indexOf('/'));
         scenario.onActivity(a -> a.pickMedia("qa-file-picker", "chat-file"));
         UiDevice device = UiDevice.getInstance(instrumentation);
-        SystemClock.sleep(800);
+        awaitCondition(() -> documentsPackage.equals(device.getCurrentPackageName()), UI_TIMEOUT_MS);
         assertFalse("File picker did not leave app foreground.", device.getCurrentPackageName().equals(pkg));
         device.pressBack();
+        awaitCondition(() -> pkg.equals(device.getCurrentPackageName()), UI_TIMEOUT_MS);
 
-        scenario.onActivity(a -> a.captureChatPhoto("qa-camera"));
-        SystemClock.sleep(900);
-        assertEquals("Integrated chat camera must remain inside Nuestra Galaxia.", pkg, device.getCurrentPackageName());
-        String top = shell("dumpsys activity activities | grep -m1 -E 'mResumedActivity|topResumedActivity'");
-        if (top.contains("GalaxyCameraActivity")) device.pressBack();
-
+        Instrumentation.ActivityMonitor cameraMonitor = instrumentation.addMonitor(GalaxyCameraActivity.class.getName(), null, false);
+        try {
+            scenario.onActivity(a -> a.captureChatPhoto("qa-camera"));
+            android.app.Activity cameraActivity = instrumentation.waitForMonitorWithTimeout(cameraMonitor, UI_TIMEOUT_MS);
+            assertNotNull("Integrated camera activity never launched.", cameraActivity);
+            awaitCondition(() -> pkg.equals(device.getCurrentPackageName()), UI_TIMEOUT_MS);
+            assertEquals("Integrated chat camera must remain inside Nuestra Galaxia.", pkg, device.getCurrentPackageName());
+            instrumentation.runOnMainSync(() -> { if (!cameraActivity.isFinishing()) cameraActivity.onBackPressed(); });
+            awaitCondition(() -> shell("dumpsys activity activities | grep -m1 -E 'mResumedActivity|topResumedActivity'").contains("MainActivity"), UI_TIMEOUT_MS);
+        } finally {
+            instrumentation.removeMonitor(cameraMonitor);
+        }
         // Microphone path is executed only when the emulator exposes an input source.
         scenario.onActivity(a -> a.startVoiceRecording("qa-mic"));
         SystemClock.sleep(700);
@@ -831,10 +849,19 @@ public class GalaxyDeviceClosureTest {
         AtomicReference<int[]> frame = new AtomicReference<>();
         scenario.onActivity(a -> {
             WebView web = a.findViewById(R.id.webView);
+            web.requestFocus();
             int[] location = new int[2];
             web.getLocationOnScreen(location);
             frame.set(new int[]{location[0], location[1], web.getWidth(), web.getHeight()});
         });
+        awaitCondition(() -> {
+            AtomicReference<Boolean> focused = new AtomicReference<>(false);
+            scenario.onActivity(a -> {
+                WebView web = a.findViewById(R.id.webView);
+                focused.set(web.hasFocus() && web.hasWindowFocus());
+            });
+            return focused.get();
+        }, UI_TIMEOUT_MS);
         int[] v = frame.get();
         int x = v[0] + (int)Math.round(g.getDouble("x") * v[2] / Math.max(1d, g.getDouble("vw")));
         // CSS pixels use one scale on both axes, including while IME insets settle.
@@ -857,6 +884,13 @@ public class GalaxyDeviceClosureTest {
             });
             SystemClock.sleep(250);
             System.out.println("GALAXY_WEBVIEW_TAP="+js("JSON.stringify({selector:"+quoted+",focused:document.activeElement===document.querySelector("+quoted+"),active:document.activeElement?.tagName,visible:document.visibilityState,viewport:{w:innerWidth,h:innerHeight},rect:document.querySelector("+quoted+").getBoundingClientRect().toJSON()})"));
+        }
+        if ("#chatForm textarea".equals(selector)) {
+            awaitCondition(() -> {
+                AtomicReference<Boolean> accepting = new AtomicReference<>(false);
+                scenario.onActivity(a -> accepting.set(((android.view.inputmethod.InputMethodManager)a.getSystemService(Context.INPUT_METHOD_SERVICE)).isAcceptingText()));
+                return accepting.get();
+            }, UI_TIMEOUT_MS);
         }
     }
 

@@ -7,7 +7,8 @@ const concat=(...parts:Uint8Array[])=>{
   const out=new Uint8Array(parts.reduce((n,p)=>n+p.length,0));let offset=0;
   for(const part of parts){out.set(part,offset);offset+=part.length;}return out;
 };
-const ftyp=(brand:string)=>concat(bytes(0,0,0,24),ascii("ftyp"),ascii(brand.padEnd(4," ").slice(0,4)),bytes(0,0,0,0),ascii("isom"));
+const ftyp=(brand:string)=>concat(bytes(0,0,0,24),ascii("ftyp"),ascii(brand.padEnd(4," ").slice(0,4)),bytes(0,0,0,0),ascii("isom"),ascii("mp41"));
+const box=(type:string,payload:Uint8Array)=>{const size=8+payload.length;return concat(bytes((size>>>24)&255,(size>>>16)&255,(size>>>8)&255,size&255),ascii(type),payload);};
 
 Deno.test("detecta matriz multimedia principal por contenido",()=>{
   const cases:[string,Uint8Array,string][]=[
@@ -73,4 +74,20 @@ Deno.test("HEIC/HEIF crudo en chat-photo exige normalización Android",()=>{
     assertEquals(result.ok,false);
     if(!result.ok)assertMatch(result.message,/convertirse a JPEG/i);
   }
+});
+
+
+Deno.test("CameraX MP4 sigue siendo válido cuando ftyp no es la primera caja",()=>{
+  const camerax=concat(box("free",bytes(0,0,0,0)),ftyp("mp42"),box("mdat",bytes(1,2,3,4)));
+  const inspected=sniffMedia(camerax,"video/mp4");
+  assertEquals(inspected.mime,"video/mp4");
+  assertEquals(inspected.containerBrand,"mp42");
+  const validated=validateUploadMedia("chat-video","video/mp4","captura.mp4",camerax);
+  assertEquals(validated.ok,true);
+});
+
+Deno.test("chat-video conserva rechazo estricto para contenido externo falso",()=>{
+  const fake=validateUploadMedia("chat-video","video/mp4","engaño.mp4",ascii("esto no es un contenedor MP4"));
+  assertEquals(fake.ok,false);
+  if(!fake.ok)assertMatch(fake.message,/contenido real|MIME declarado|reconocer/i);
 });
