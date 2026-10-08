@@ -49,7 +49,7 @@ Aplicación móvil de Nuestra Galaxia. Desde la versión 1.4.0 deja de ser solo 
 gradle -p android testDebugUnitTest assembleDebug
 ```
 
-`main` genera un **release candidate** firmado y verificable; nunca sustituye automáticamente `android-stable`. La promoción estable es manual, requiere staging/smoke, checksum, firma, `versionCode` creciente y aprobación explícita. Ver [gobernanza de releases](../docs/RELEASE_GOVERNANCE.md).
+El flujo vigente es **rama temporal → PR/CI → `desarrollo` → `qa` → `prod`**. Un push a `qa` activa **Android Release Candidate**; la promoción a `prod` conserva exactamente el SHA aprobado en QA. Solo desde `prod`, el workflow **Android Stable Promotion** se ejecuta manualmente con el Run ID del candidato exitoso, validación de firma y checksum, `versionCode` creciente y aprobación explícita. `main` es histórica y **no** genera el release candidate. No publicar APK desde `desarrollo`. Ver [política de ramas](../docs/BRANCH_POLICY.md) y [gobernanza de releases](../docs/RELEASE_GOVERNANCE.md).
 
 
 ## Calidad de release 1.4.1
