@@ -7,6 +7,9 @@ on:
       - "android/**"
       - "supabase/functions/android-companion/**"
       - "tests/chat-4-phase5-media-camera.test.mjs"
+      - "scripts/qa_camerax_report.py"
+      - "scripts/qa-camerax-emulator.sh"
+      - "tests/test_qa_camerax_results.py"
       - "docs/qa/chat-4-phase5-media-camera.md"
       - ".github/workflows/chat-4-phase5-media-camera.yml"
   workflow_dispatch:
@@ -37,6 +40,8 @@ jobs:
           node --test tests/chat-4-phase5-media-camera.test.mjs
           deno check --node-modules-dir=auto supabase/functions/android-companion/index.ts
           deno test supabase/functions/android-companion/media-validation.test.ts
+      - name: Validate strict CameraX coverage gate
+        run: python3 -m unittest discover -s tests -p test_qa_camerax_results.py
       - name: Full Node regression
         run: npm test
 
@@ -103,12 +108,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back emulated -camera-front emulated
-          script: |
-            mkdir -p qa-artifacts
-            adb logcat -c
-            gradle -p android --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.nuestragalaxia.companion.GalaxyMediaExperienceTest 2>&1 | tee qa-artifacts/chat-4-phase5-camera-emulator.txt
-            adb logcat -d > qa-artifacts/chat-4-phase5-logcat.txt || true
-            ! grep -E "FATAL EXCEPTION|ANR in com\.nuestragalaxia\.companion" qa-artifacts/chat-4-phase5-logcat.txt
+          script: bash scripts/qa-camerax-emulator.sh
       - uses: actions/upload-artifact@v7
         if: always()
         with:
