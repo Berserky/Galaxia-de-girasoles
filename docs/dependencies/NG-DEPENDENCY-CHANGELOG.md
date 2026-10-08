@@ -1,7 +1,7 @@
 # NG-DEPENDENCY-CHANGELOG — Fase 3/5
 Fecha: 2026-10-08. Base original: desarrollo 86a12d7e8e892f4eef8880554c0310b9cd4e8bd6.
 
-## Cambios realizados en rama temporal
+## Cambios implementados e integrados
 - Rama **chore/ng-phase3-dependency-control-20261008** creada desde SHA exacto de desarrollo.
 - NG-DEP-002: migración `actions/setup-node@v5` → `actions/setup-node@v6` en:
   - .github/workflows/chat-4-phase0-baseline.yml
@@ -12,18 +12,18 @@ Fecha: 2026-10-08. Base original: desarrollo 86a12d7e8e892f4eef8880554c0310b9cd4
   - .github/workflows/pages.yml (2 usos)
   - .github/workflows/performance-phase4.yml
 - Se conservan Node 24 y los comandos de workflow; no hay actualización de npm packages por ausencia de dependencias declaradas.
-- Evaluación anterior: #76 tenía nueve checks SUCCESS, pero eso **no es verificación nueva** de la rama rebasada en desarrollo.
+- El PR original #76 registraba nueve checks SUCCESS. El PR sustituto #115 ejecutó y aprobó siete checks nuevos (Node baseline, fases chat 1–4, benchmark y Android runtime) sobre el SHA definitivo `d586fb575f536b762b53159e7ae3160a07b28388`.
 - Este directorio contiene el inventario, la revisión Dependabot, compatibilidad, seguridad, changelog y posposiciones.
 
 ## Estado de integración y verificaciones
-Los cambios de la rama temporal son **candidatos** hasta un PR aprobado y CI nuevo en el SHA final. No marcar como merged/estable antes de obtener pruebas. Ninguna modificación afecta el contenido de Android, SQL, WebView, Supabase Edge ni Android signing. No se publicó APK ni se incrementó Android 4.1.1. Se respetan los NO GO de F1/F2.
+**INTEGRADO**: PR #115 fusionado mediante squash a `desarrollo` en commit `0bab4e1d60a1a8b0e382a6724b49bf3730dc4ef8`. Los **7/7 checks del SHA final** concluyeron SUCCESS, incluyendo Android runtime; PR #76 cerrado como duplicado técnicamente equivalente, tras cotejar sus ocho sustituciones y dejar comentario de trazabilidad. Ninguna modificación afecta el contenido de Android, SQL, WebView, Supabase Edge ni Android signing. No se publicó APK ni se incrementó Android 4.1.1. Se respetan los NO GO de F1/F2.
 
 ## Comprobaciones requeridas para cerrar
-1. Confirmar diff exacto y que el PR tiene base `desarrollo` actual.
-2. Obtener `npm test` y checks de workflows relacionados sobre nuevo SHA; usar los resultados de GitHub, no suponer PASS.
-3. Si es verde, fusionar **solo a desarrollo** con SHA esperado; no tocar qa/prod/main.
-4. Comprobar nuevamente SHA de ramas protegidas y anotarlo en resultado final.
-5. Mantener PR no seleccionados abiertos; cualquier vulnerabilidad crítica sin resolver bloquea la fase.
+1. COMPLETADO en #115: diff equivalente a #76 y base `desarrollo` fijada al abrir PR.
+2. COMPLETADO: 7/7 checks del SHA final `d586fb575f536b762b53159e7ae3160a07b28388` SUCCESS, incluido `npm test` en baseline y rendimiento Android.
+3. COMPLETADO: squash #115 a desarrollo `0bab4e1`; sin cambios qa/prod/main.
+4. COMPLETADO: desarrollo `0bab4e1`; qa/prod `f526299`; main `8ab4f84`.
+5. PRs #75, #77–#82 permanecen diferidos/abiertos; #76 cerrado como reemplazado. Las alertas de seguridad transitivas continúan sin auditar: NO GO de cierre integral hasta resolver visibilidad.
 6. Revisar decisiones pospuestas y señalar que la Fase 4 solo puede comenzar bajo gate restringido y sin despliegue.
 
 ## Recomendación Fase 4
