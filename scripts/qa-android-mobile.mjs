@@ -305,7 +305,7 @@ assert.ok(apiClient.includes('uploadLimit(String kind)')&&apiClient.includes('if
 assert.ok(apiClient.includes('transcodeHeifToJpeg')&&apiClient.includes('x-upload-id')&&apiClient.includes('uploadWithRetry'),'Android debe normalizar HEIC/HEIF y reintentar sin duplicar');
 assert.ok(build.includes('GIPHY_API_KEY'),'GIPHY debe estar disponible en el cliente Android para consultas directas');
 assert.ok(apiClient.includes('BuildConfig.GIPHY_API_KEY')&&apiClient.includes('https://api.giphy.com/v1/'),'GIPHY debe consultarse directamente desde Android');
-assert.ok(edge.includes('chatGiphyMediaUrl(attachmentMeta.externalUrl)')&&edge.includes('bucket:"giphy-external"'),'Backend debe validar y persistir solo enlaces GIPHY, sin rehosting');
+assert.ok(edge.includes('chatGiphyId(attachmentMeta.providerId)')&&edge.includes('bucket:"giphy-external"'),'Backend debe validar y persistir solo enlaces GIPHY, sin rehosting');
 assert.ok(edge.includes('Date.now()-lastSeen>5*60*1000'),'La autenticación del dispositivo debe limitar escrituras de last_seen');
 assert.ok(edge.includes('async function signedMany(')&&edge.includes('const hydratedAttachments=(attachments||[]).map')&&edge.includes('await signedMany(bucket,paths,1800)'),'La firma de adjuntos del chat debe agruparse por bucket y firmarse por lotes');
 assert.ok(edge.includes('body.detail!==true'),'El mapa debe tener refresco ligero');
