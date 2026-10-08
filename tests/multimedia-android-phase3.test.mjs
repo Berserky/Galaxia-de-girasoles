@@ -12,21 +12,22 @@ const media=read('supabase/functions/android-companion/media-validation.ts');
 const gradle=read('android/app/build.gradle.kts');
 const workflow=read('.github/workflows/android-companion.yml');
 
-test('NG-QA-005 keeps GIPHY credentials server-side and degrades explicitly',()=>{
-  assert.equal(gradle.includes('GIPHY_API_KEY'),false);
-  assert.equal(workflow.includes('GIPHY_API_KEY:'),false);
-  assert.equal(main.includes('BuildConfig.GIPHY_API_KEY'),false);
-  assert.equal(mobile.includes('BuildConfig.GIPHY_API_KEY'),false);
-  assert.ok(edge.includes('Deno.env.get("GIPHY_API_KEY")'));
-  assert.ok(edge.includes('configured:false'));
-  assert.ok(edge.includes('action==="giphy-search"'));
-  assert.ok(app.includes('if(!result?.configured)'));
-  assert.ok(app.includes('El contenido online no está disponible'));
-  assert.ok(app.includes('Puedes seguir usando tus stickers guardados.'));
-  assert.ok(app.includes('No pudimos cargar el contenido'));
-  assert.ok(app.includes('Powered by GIPHY'));
-  assert.ok(app.includes('finally{'));
+test('NG-QA-005 uses GIPHY client key and avoids server media rehosting',()=>{
+ assert.ok(gradle.includes('GIPHY_API_KEY'));
+ assert.ok(workflow.includes('GIPHY_API_KEY:'));
+ assert.ok(main.includes('BuildConfig.GIPHY_API_KEY'));
+ assert.ok(mobile.includes('BuildConfig.GIPHY_API_KEY'));
+ assert.ok(mobile.includes('https://api.giphy.com/v1/'));
+ assert.ok(edge.includes('chatGiphyMediaUrl(attachmentMeta.externalUrl)'));
+ const stickers=edge.slice(edge.indexOf('async function chatStickers('),edge.indexOf('async function chatLiveLocation('));
+ assert.ok(stickers.includes('bucket:"giphy-external"'));
+ assert.ok(app.includes('if(!result?.configured)'));
+ assert.ok(app.includes('El contenido online no está disponible'));
+ assert.ok(app.includes('Puedes seguir usando tus stickers guardados.'));
+ assert.ok(app.includes('No pudimos cargar el contenido'));
+ assert.ok(app.includes('Powered by GIPHY'));
 });
+
 
 test('NG-QA-015 normalizes HEIC and HEIF selected by Android to JPEG',()=>{
   for(const marker of ['image/heic','image/heif'])assert.ok(sniffer.includes(marker),marker);
