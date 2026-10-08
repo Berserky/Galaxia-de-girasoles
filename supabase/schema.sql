@@ -1505,7 +1505,7 @@ set search_path=''
 as $$
 declare viewer text:=public.galaxy_person();
 begin
-  if viewer not in ('0','1') or object_name is null or object_name='' then return false; end if;
+  if viewer is null or viewer not in ('0','1') or object_name is null or object_name='' then return false; end if;
   return not exists(
     select 1 from public.galaxy_items i
     where i.kind='capsule'
