@@ -68,3 +68,12 @@ Fuentes: GitHub refs y árboles, archivos textuales selectivos, documentos `docs
 El archivo histórico [`docs/branch-audit-2026-10-08.csv`](../branch-audit-2026-10-08.csv) contiene **113 registros**: **80** con estado `unique` y **33** con estado `included`. Se cruzaron por **nombre y SHA** los **80** registros `archive/2026-10-08/*` de GitHub contra el CSV: **80/80 coinciden, 0 ausentes/discordantes**. Este resultado certifica la integridad del *índice de referencias de rescate*, **no** una revisión semántica de todos sus árboles/funciones. Para ese cierre, cada tag todavía debe recibir lectura de diff por módulo y decisión de paridad.
 
 Ejemplos incluidos en el índice: `aegiron/nuestro-hogar-v1`, `aegiron/rpg-indoors-v1`, `aegiron/music-player-v2` y `aegiron/map-insights-privacy`. No modificar estas referencias.
+
+
+## Extensión de auditoría realizada en PC autorizada — 80/80 etiquetas
+
+Se ejecutó `node scripts/phase2-audit-archive.mjs` en worktree aislado (`origin/desarrollo` @ `f5262991`). El [ledger detallado](NG-4.1.1-ARCHIVE-80-LEDGER.md) cruza nombres/SHA con `docs/branch-audit-2026-10-08.csv` y consulta, **para cada una de las 80 refs archivadas**, fecha de commit, merge-base, rutas divergentes, presencia actual y área tentativa. Resultado: **80/80 SHA consistentes**, 0 discrepancias, **35 apariciones de rutas históricas ausentes** (repetidas entre etiquetas; no equivalen a 35 funcionalidades faltantes).
+
+Distribución *heurística* por etiqueta: 25 hogar/RPG/tienda; 16 plataforma; 14 mapas/privacidad; 12 chat/cámara; 8 diseño/tema; 3 momentos/widgets; 1 música; 1 general. Este barrido cubre todas las referencias en estructura Git, **no** todas las líneas de código ni E2E de sus interfaces: el análisis semántico profundo sigue reservado a las funcionalidades NG-LEG seleccionadas.
+
+Hallazgo de migración: rutas históricas `20261002183012_couple_moments.sql`, `20261004023000_galaxy_chat_core_320.sql`, `20261004212500_qa_phase0_privacy_firewall.sql` y `20261005023000_qa_phase2_chat_correctness.sql` figuran con versiones canónicas actuales `20261002183542`, `20261004021255`, `20261004232942` y `20261005023031`, respectivamente. `tests/migration-history.test.mjs` comprueba el inventario canónico y rechaza duplicados conocidos. **No reinstalar ni renombrar migraciones.**

@@ -39,3 +39,10 @@ Base: `desarrollo` @ `f5262991f3ab3fc65a6b39da2231915a453a9112`. Auditoría F1: 
 ## Métricas pendientes para cierre F2
 - 28 candidatos preclasificados; **0** recuperados, **0** modernizados, **0** tests nuevos de recuperación, **0** PR funcional.
 - Archivo de tags y paridad E2E todavía pendientes; la Fase 2 **permanece abierta**.
+
+
+## Puerta de traspaso a Fase 3 — alcance permitido
+
+El rastreo documental de las 80 etiquetas históricas está completado; [ledger](NG-4.1.1-ARCHIVE-80-LEDGER.md). La Fase 2 podrá cerrarse **como investigación y clasificación sin recuperaciones** si se acepta el bloqueo motivado de las 28 candidatas y se valida el PR documental. **Fase 3 es admisible sólo como trabajo aislado de QA/estabilización**, no como aprobación de funcionalidades sensibles, migraciones, publicación Android o promoción de rama.
+
+Para liberar implementaciones posteriores, obtener evidencia adversarial A/B y C/D entre parejas, revocación/tokens, E2E de cámara/FCM y proveedores, y pruebas de navegación real. Sin estas pruebas, la recomendación sigue siendo `NO GO` para integrar cambios funcionales sensibles o publicar `prod`.

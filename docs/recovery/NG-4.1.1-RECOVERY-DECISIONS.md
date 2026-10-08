@@ -57,3 +57,10 @@ Base: `desarrollo` @ `f5262991f3ab3fc65a6b39da2231915a453a9112`. Auditoría F1: 
 6. Aprobación de producto para hogar/RPG/tienda y para integraciones de proveedores antes de comprometer el alcance.
 
 No se restaurarán ramas enteras, no se emplearán secretos viejos y no se alterarán etiquetas/respaldos. Nada se promociona a `qa` ni `prod` durante F2.
+
+
+## Resolución posterior al barrido estático íntegro
+
+Se concilió cada una de las **80 etiquetas archivadas** con SHA/ancestro/cambio de archivos: [ledger](NG-4.1.1-ARCHIVE-80-LEDGER.md). No apareció evidencia que habilite de forma segura una recuperación productiva sin pruebas críticas de datos compartidos, permisos o hardware. Se mantienen las 28 decisiones y **0 candidatas `RECUPERAR AHORA`**. Las funcionalidades de valor, especialmente regalo y dedicatorias, no se descartan: se pospone su implementación, no su conservación.
+
+Los archivos de la carpeta histórica de hogar y los nombres viejos de migración no deben interpretarse como ausencia de tablas o código equivalente. Los esquemas canónicos actuales ya están fijados por `tests/migration-history.test.mjs`.

@@ -53,3 +53,10 @@ Base: `desarrollo` @ `f5262991f3ab3fc65a6b39da2231915a453a9112`. Auditoría F1: 
 
 ## Dependencia de la auditoría F1
 Correlación por dominio: identidad NG-FNC-001/006, chat NG-FNC-010/011/014/019, medios a partir de NG-FNC-024 y áreas de música/mapas/widgets del mismo archivo `NG-4.1.1-FUNCTIONAL-MATRIX.md` en PR #113. **No se asignan identificadores NG-FNC exactos donde no se ha comprobado correspondencia fila por fila**. Se requiere correlación final con la matriz al integrar la Fase 1.
+
+
+## Adenda de comparación sobre las 80 etiquetas completas
+
+La revisión de rutas históricas se amplió a **80/80** en [NG-4.1.1-ARCHIVE-80-LEDGER.md](NG-4.1.1-ARCHIVE-80-LEDGER.md), que identifica commits y archivos modificados/ausentes por referencia. Los 35 casos de ruta antigua ausente se concentran principalmente en `app/public/assets/home/` y alias de migraciones SQL, **no demuestran pérdida de funcionalidad Android**. El sitio PWA antiguo y `assets/mobile` nativo son arquitecturas distintas; no restaurar assets, service workers ni SQL sólo por no compartir ruta.
+
+Persisten diferencias que **requieren QA funcional**: dedicatorias de voz vs mensajes chat, narración de regalo vs bienvenida nativa, música en segundo plano y consentimiento GPS real. Los 15 registros `YA EXISTE` reflejan implementación observable en código, no paridad certificada para ambos usuarios.

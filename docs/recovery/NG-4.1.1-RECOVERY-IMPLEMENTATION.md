@@ -38,3 +38,12 @@ Cada propuesta posterior deberá limitarse a un módulo, fijar SHA base, evitar 
 
 ## Registro de regresiones propio F2
 **Regresiones nuevas comprobadas: ninguna**, ya que no se realizaron cambios ni E2E nuevos. No interpretar esta frase como ausencia de defectos. Hallazgos preexistentes: NG-AUD-001 (P2 entorno), NG-AUD-002/003 (P3) en PR #113.
+
+
+## Segunda ejecución local de validación — 2026-10-08
+
+Worktree autorizado `C:\\Users\\juans\\NG-RECOVERY-411` sobre rama de revisión local sin tocar ramas permanentes. `npm.cmd test` ejecutó **603 PASS / 0 FAIL** sobre los archivos de producto aún sin cambios. Se generó `docs/recovery/NG-4.1.1-ARCHIVE-80-LEDGER.md` mediante `node scripts/phase2-audit-archive.mjs` (80 refs inspeccionadas, 0 desajustes, 35 apariciones de rutas ausentes) y se agregó `tests/phase2-legacy-audit.test.mjs` con 3 verificaciones **PASS**: SHA de 80 tags, integridad de NG-LEG-001–028, y reglas de gate documentadas. Ejecutar suite global después de incluir las pruebas en el PR; publicar aquí el recuento real.
+
+Se inspeccionó el inventario canónico de migraciones y el test de historia que prohíbe alias viejos. **No** se restauró ninguna SQL histórica. La compilación Android/emulador no se repitió porque ningún archivo funcional fue modificado, y la prueba física CameraX sigue pendiente de recursos de QA autorizados. Los resultados de F1 en CI se conservan como evidencia previa, no como pruebas nuevas de funcionalidades recuperadas.
+
+**Estado de cierre:** entregables y rastreo documental de las 80 referencias completados. Recuperaciones funcionales **0**, por criterio de bloqueo de F1. No afirmar recuperación completa ni habilitar una release.
