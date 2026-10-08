@@ -303,8 +303,9 @@ assert.ok(edge.includes('3*1024*1024')&&edge.includes('Solicitud demasiado grand
 assert.ok(apiClient.includes('MAX_JSON_RESPONSE_BYTES')&&apiClient.includes('Respuesta demasiado grande.'),'Android debe limitar respuestas JSON anómalas');
 assert.ok(apiClient.includes('uploadLimit(String kind)')&&apiClient.includes('if(length>limit)'),'Android debe rechazar archivos demasiado grandes antes de subirlos');
 assert.ok(apiClient.includes('transcodeHeifToJpeg')&&apiClient.includes('x-upload-id')&&apiClient.includes('uploadWithRetry'),'Android debe normalizar HEIC/HEIF y reintentar sin duplicar');
-assert.equal(build.includes('GIPHY_API_KEY'),false,'GIPHY_API_KEY no puede empaquetarse en BuildConfig');
-assert.ok(edge.includes('Deno.env.get("GIPHY_API_KEY")')&&edge.includes('configured:false'),'GIPHY debe vivir en backend y degradar explícitamente');
+assert.ok(build.includes('GIPHY_API_KEY'),'GIPHY debe estar disponible en el cliente Android para consultas directas');
+assert.ok(apiClient.includes('BuildConfig.GIPHY_API_KEY')&&apiClient.includes('https://api.giphy.com/v1/'),'GIPHY debe consultarse directamente desde Android');
+assert.ok(edge.includes('chatGiphyMediaUrl(attachmentMeta.externalUrl)')&&edge.includes('bucket:"giphy-external"'),'Backend debe validar y persistir solo enlaces GIPHY, sin rehosting');
 assert.ok(edge.includes('Date.now()-lastSeen>5*60*1000'),'La autenticación del dispositivo debe limitar escrituras de last_seen');
 assert.ok(edge.includes('async function signedMany(')&&edge.includes('const hydratedAttachments=(attachments||[]).map')&&edge.includes('await signedMany(bucket,paths,1800)'),'La firma de adjuntos del chat debe agruparse por bucket y firmarse por lotes');
 assert.ok(edge.includes('body.detail!==true'),'El mapa debe tener refresco ligero');
