@@ -5,7 +5,7 @@ Fecha: 2026-10-08. Las actualizaciones pendientes NO se interpretan como descart
 |---|---:|---|---|---|---|
 | 001 | #75 | workflow publica Pages solo manualmente; prueba de publish prohibida en fase | deploy-pages v4 | QA del workflow en PR, prueba aislada sin publicación y después autorización de release | conserva versión actual de despliegue |
 | 003 | #77 | failures instrumentación/stress en head histórico | setup-java v5, JDK 17 | distinguir flake vs regresión, reejecutar Android QA y lint en base actual | se retrasa runtime de acción |
-| 004 | #78 | fallan build e instrumentación Android | androidx.core 1.17.0 | revisar logs, compilar, unit/lint y Media/WebView regression | minor no adoptada |
+| 004 | #78 | checkDebugAarMetadata: AndroidX Core 1.19.1 requiere compileSdk37 y proyecto usa 36 | androidx.core 1.17.0 / compileSdk36 | evaluar PR separado de compileSdk37 (target36 conservado), unit/lint e instrumentación Media/WebView | minor no adoptada hasta migración SDK compatible |
 | 005 | #79 | AGP 9.4.1 requiere Gradle >=9.6.0, actual CI=9.4.1 | AGP 9.2.0 / Gradle 9.4.1 | PR conjunto controlado Gradle>=9.6 y AGP 9.4.1, verificar JDK 17, build+emulador | herramienta anterior aunque compatible |
 | 006 | #80 | instrumentación Android falla; background de WorkManager es relevante | WorkManager 2.11.2 | reproducir tests lifecycle/background/gestos, permisos, revocación | correcciones minor sin adoptar |
 | 007 | #81 | instrumentación Android falla; nueva acción cambia infraestructura de cache/build | setup-gradle v4 / Gradle 9.4.1 | inspección changelog upstream, build/lint/instrumentación sobre rama aislada | no se adopta action major |
