@@ -2,7 +2,7 @@ name: Galaxy Chat 4 Phase 0 Baseline
 
 on:
   pull_request:
-    branches: [main]
+    branches: [desarrollo, qa, prod]
     paths:
       - "android/app/src/main/assets/mobile/**"
       - "android/app/src/androidTest/**"

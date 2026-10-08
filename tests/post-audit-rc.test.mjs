@@ -33,7 +33,7 @@ test('stable promotion remains explicit and provenance-bound',()=>{
   assert.match(workflow,/GOOGLE_ONLY_OR_LEAK_PROTECTION_ENABLED/);
   assert.match(workflow,/PROMOTE_ANDROID_STABLE/);
   assert.match(workflow,/environment: android-stable/);
-  assert.match(workflow,/\.head_branch.*main/);
+  assert.match(workflow,/\.head_branch.*qa/);
   assert.match(workflow,/\.conclusion.*success/);
   assert.match(workflow,/NEW_CODE.*-gt.*OLD_CODE/);
   assert.match(workflow,/sha256sum -c/);

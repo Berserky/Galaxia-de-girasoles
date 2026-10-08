@@ -2,7 +2,7 @@ name: Nuestra Galaxia Android CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [desarrollo, qa, prod]
     paths:
       - "app/public/**"
       - "app/cloud/**"

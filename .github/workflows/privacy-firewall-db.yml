@@ -2,7 +2,7 @@ name: Privacy Firewall DB
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [desarrollo, qa, prod]
     paths:
       - 'supabase/**'
       - 'tests/privacy-firewall-db.sql'

@@ -2,7 +2,7 @@ name: Chat Correctness DB
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [desarrollo, qa, prod]
     paths:
       - 'supabase/migrations/20261005023031_qa_phase2_chat_correctness.sql'
       - 'supabase/rollbacks/20261005023031_qa_phase2_chat_correctness_rollback.sql'

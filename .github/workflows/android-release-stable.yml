@@ -26,6 +26,7 @@ concurrency:
 
 jobs:
   promote:
+    if: github.ref == 'refs/heads/prod'
     name: Verify gates and promote stable
     runs-on: ubuntu-latest
     environment: android-stable
@@ -52,10 +53,11 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID" > /tmp/run.json
           test "$(jq -r '.name' /tmp/run.json)" = "Android Release Candidate"
           test "$(jq -r '.event' /tmp/run.json)" = "push"
-          test "$(jq -r '.head_branch' /tmp/run.json)" = "main"
+          test "$(jq -r '.head_branch' /tmp/run.json)" = "qa"
           test "$(jq -r '.conclusion' /tmp/run.json)" = "success"
           CANDIDATE_SHA=$(jq -r '.head_sha' /tmp/run.json)
           test -n "$CANDIDATE_SHA"
+          test "$CANDIDATE_SHA" = "$GITHUB_SHA"
           echo "CANDIDATE_SHA=$CANDIDATE_SHA" >> "$GITHUB_ENV"
 
       - name: Download immutable candidate and evidence
