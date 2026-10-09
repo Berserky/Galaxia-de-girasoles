@@ -113,7 +113,12 @@ window.GalaxyNative={
  },
  event(name,json){
    let data={};try{data=JSON.parse(json||'{}');}catch{}
-   if(name==='native'){native=data;window.GalaxyChatMotion?.setNativeReduced(data.reducedMotion);render();}
+   if(name==='native'){
+    if(!data.paired||String(data.person??'')!==String(native?.person??'')){
+     lastSuccessfulApiAt=0;lastSuccessfulApiPerson='';
+    }
+    native=data;window.GalaxyChatMotion?.setNativeReduced(data.reducedMotion);render();
+   }
    if(name==='update'){updateState=data;renderUpdateOnly();}
    if(name==='deep-link'){pendingDeepLink=data;if(cloud)setTimeout(()=>consumeDeepLink(),0);}
    if(name==='chat-sync'&&native.paired){consumeChatSync(String(data.entityId||'')).catch(()=>{});}
@@ -141,16 +146,21 @@ native={paired:false};
 // navigator.onLine is advisory in Android WebView. Real successful backend
 // responses briefly prove connectivity even if Chromium reports offline.
 const CHAT_BACKEND_REACHABLE_GRACE_MS=45_000;
-let lastSuccessfulApiAt=0;
+let lastSuccessfulApiAt=0,lastSuccessfulApiPerson='';
 function chatTransportCanSend(now=Date.now()){
+ const person=String(native?.person??'');
  return !!native.paired&&(navigator.onLine!==false||
-   (lastSuccessfulApiAt>0&&now>=lastSuccessfulApiAt&&now-lastSuccessfulApiAt<CHAT_BACKEND_REACHABLE_GRACE_MS));
+   (lastSuccessfulApiAt>0&&lastSuccessfulApiPerson===person&&person!==''
+    &&now>=lastSuccessfulApiAt&&now-lastSuccessfulApiAt<CHAT_BACKEND_REACHABLE_GRACE_MS));
 }
 const api=(action,payload={})=>{
  const perf=window.GalaxyChatPerf,token=perf?.apiStart?.(action);
  const promise=GalaxyNative.call('api',JSON.stringify({action,...payload}));
  Promise.resolve(promise).then(()=>{
-  lastSuccessfulApiAt=Date.now();perf?.apiEnd?.(token,true);
+  if(native.paired&&native.person!=null){
+   lastSuccessfulApiAt=Date.now();lastSuccessfulApiPerson=String(native.person);
+  }
+  perf?.apiEnd?.(token,true);
   if(action==='chat-state'&&navigator.onLine===false&&chatDeliveryEngine?.snapshot?.().pending>0)
    queueMicrotask(()=>flushChatOutbox().catch(()=>{}));
  },()=>perf?.apiEnd?.(token,false));
