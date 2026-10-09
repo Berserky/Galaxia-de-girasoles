@@ -23,3 +23,14 @@ test('Android FCM QA tests distinguish handler from actual Firebase transport',(
   assert.match(notificationTest,/contentIntent/);
   assert.doesNotMatch(notificationTest,/assumeTrue|@Ignore/);
 });
+
+
+test('strict QA staging requires Firebase bootstrap from two OIDC devices without leaking config',()=>{
+  const probe=readFileSync('scripts/qa-phase5-staging.mjs','utf8');
+  assert.match(probe,/action:'push-client-config'/);
+  assert.match(probe,/response\.available,true/);
+  assert.match(probe,/projectId','senderId','applicationId','apiKey/);
+  assert.match(probe,/assert\.notEqual\(String\(pushConfigs\[0\]\.deviceId\)/);
+  assert.match(probe,/VERIFIED: QA Firebase client bootstrap \(not FCM delivery\)/);
+  assert.doesNotMatch(probe,/console\.log\(.*pushConfigs\[0\]\.config/);
+});
