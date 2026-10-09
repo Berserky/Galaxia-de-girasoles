@@ -113,8 +113,7 @@ public class GalaxyDeviceClosureTest {
         assertEquals("TEXTAREA", js("document.activeElement?.tagName||''"));
         // Headless emulators do not expose reliable IME visibility, but ADB text
         // injection still traverses Android's real focused-input path into WebView.
-        shell("input text QA_keyboard");
-        awaitJs("(document.querySelector('#chatForm textarea')?.value||'').includes('QA_keyboard')");
+        typeAndroidWebInput("QA_keyboard");
 
         scenario.moveToState(Lifecycle.State.CREATED);
         scenario.moveToState(Lifecycle.State.RESUMED);
@@ -339,8 +338,7 @@ public class GalaxyDeviceClosureTest {
 
         tapWebElement("#chatForm textarea");
         awaitJs("document.activeElement===document.querySelector('#chatForm textarea')");
-        shell("input text _IME");
-        awaitJs("(document.querySelector('#chatForm textarea')?.value||'').includes('_IME')");
+        typeAndroidWebInput("_IME");
         assertEquals("true", js("ensureChatComposer().snapshot().keyboard.open"));
 
         long sentBefore = backend.sentCount();
@@ -772,7 +770,8 @@ public class GalaxyDeviceClosureTest {
         // handoff rather than guessing the OEM's selected document UI package.
         awaitCondition(() -> {
             String foreground = device.getCurrentPackageName();
-            return foreground != null && !foreground.isBlank() && !pkg.equals(foreground);
+            return foreground != null && !foreground.isBlank()
+                && !pkg.equals(foreground) && !"android".equals(foreground);
         }, UI_TIMEOUT_MS);
         String pickerForeground = device.getCurrentPackageName();
         assertFalse("File picker did not leave app foreground.", pkg.equals(pickerForeground));
@@ -904,6 +903,38 @@ public class GalaxyDeviceClosureTest {
             scenario.onActivity(a -> accepting.set(((android.view.inputmethod.InputMethodManager)a.getSystemService(Context.INPUT_METHOD_SERVICE)).isAcceptingText()));
             System.out.println("GALAXY_WEBVIEW_IME_ACCEPTING=" + accepting.get());
         }
+    }
+
+    // On a headless AVD, adb "input text" can be dropped even when Chromium's
+    // textarea has DOM focus: the system IME reports that WebView is not served.
+    // Fall back ONLY to Android's InputConnection / hardware KeyEvent pathways.
+    // Never alter the DOM value from JavaScript; every caller still verifies it.
+    private void typeAndroidWebInput(String value) throws Exception {
+        String expected="(document.querySelector('#chatForm textarea')?.value||'').includes("+
+            JSONObject.quote(value)+")";
+        shell("input text "+value);
+        if("true".equals(js(expected)))return;
+        AtomicReference<Boolean> committed=new AtomicReference<>(false);
+        scenario.onActivity(activity->{
+            WebView web=activity.findViewById(R.id.webView);
+            android.view.inputmethod.EditorInfo editor=new android.view.inputmethod.EditorInfo();
+            android.view.inputmethod.InputConnection connection=web.onCreateInputConnection(editor);
+            if(connection!=null)committed.set(connection.commitText(value,1));
+        });
+        System.out.println("GALAXY_WEBVIEW_INPUT_CONNECTION_COMMITTED="+committed.get());
+        SystemClock.sleep(200);
+        if(!"true".equals(js(expected))){
+            scenario.onActivity(activity->{
+                WebView web=activity.findViewById(R.id.webView);
+                android.view.KeyCharacterMap map=android.view.KeyCharacterMap.load(
+                    android.view.KeyCharacterMap.VIRTUAL_KEYBOARD);
+                android.view.KeyEvent[] keys=map.getEvents(value.toCharArray());
+                assertNotNull("Android keyboard cannot generate events for WebView input.",keys);
+                for(android.view.KeyEvent event:keys)web.dispatchKeyEvent(event);
+            });
+            System.out.println("GALAXY_WEBVIEW_NATIVE_KEYEVENT_INPUT="+value.length());
+        }
+        awaitJs(expected);
     }
 
     private void runJs(String script) {
