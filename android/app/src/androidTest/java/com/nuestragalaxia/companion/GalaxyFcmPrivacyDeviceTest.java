@@ -72,6 +72,11 @@ public class GalaxyFcmPrivacyDeviceTest {
         assertTrue(device.pairedFast());
         assertTrue("Notification permission unavailable for QA",GalaxyNotifications.allowed(context));
         GalaxyFirebaseService.handleIncoming(context,payload("qa-paired"));
+        // NotificationManager.notify() is asynchronous. Observe the actual
+        // notification rather than checking immediately after the binder call.
+        long postedDeadline=android.os.SystemClock.elapsedRealtime()+5_000;
+        while(!chatNotificationVisible()&&android.os.SystemClock.elapsedRealtime()<postedDeadline)
+            android.os.SystemClock.sleep(100);
         assertTrue("Paired device did not create chat notification",chatNotificationVisible());
 
         StatusBarNotification[] active=notifications.getActiveNotifications();
