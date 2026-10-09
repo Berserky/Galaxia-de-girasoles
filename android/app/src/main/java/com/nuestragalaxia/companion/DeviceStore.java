@@ -37,6 +37,8 @@ public final class DeviceStore {
     }
 
     public void save(String token,String person,String name) throws Exception {
+        String oldPerson=prefs.getString("person","");
+        if(!oldPerson.isEmpty()&&!oldPerson.equals(person))GalaxyNotifications.resetChat(context);
         new BondStore(context).clear();
         Cipher c=Cipher.getInstance("AES/GCM/NoPadding");
         c.init(Cipher.ENCRYPT_MODE,key());
@@ -74,6 +76,7 @@ public final class DeviceStore {
     public String name(){ return prefs.getString("name","Android"); }
     public void setPerson(String person){
         if(!"0".equals(person)&&!"1".equals(person))throw new IllegalArgumentException("Perfil no válido");
+        if(!person.equals(prefs.getString("person","")))GalaxyNotifications.resetChat(context);
         prefs.edit().putString("person",person).apply();
         new BondStore(context).clear();
     }
@@ -84,6 +87,7 @@ public final class DeviceStore {
     public void clear(){
         prefs.edit().clear().commit();
         new BondStore(context).clear();
+        GalaxyNotifications.resetChat(context);
         context.stopService(new android.content.Intent(context,TrackingService.class));
         // Revoking the identity also revokes consent to retransmit offline fixes.
         try(PendingPointStore queued=new PendingPointStore(context)){queued.clear();}

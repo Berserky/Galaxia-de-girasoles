@@ -21,6 +21,7 @@ import org.junit.runner.RunWith;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Runs the actual Android notification handler, not an FCM transport mock.
@@ -61,6 +62,30 @@ public class GalaxyFcmPrivacyDeviceTest {
         for(StatusBarNotification n:notifications.getActiveNotifications())
             if("galaxy-chat".equals(n.getTag())&&n.getId()==320)return true;
         return false;
+    }
+
+    @Test public void retriedChatEventDoesNotDuplicateAndAccountSwitchClearsPreviews() throws Exception {
+        device.save("qa-only-token-0","0","Synthetic QA Member A");
+        android.content.SharedPreferences prefs=context.getSharedPreferences(
+            "galaxy-chat-notification-state",Context.MODE_PRIVATE);
+        String duplicateId="qa-duplicate-"+UUID.randomUUID();
+        GalaxyFirebaseService.handleIncoming(context,payload(duplicateId));
+        assertEquals("First delivery did not record exactly one chat message",1,prefs.getInt("count",-1));
+        GalaxyFirebaseService.handleIncoming(context,payload(duplicateId));
+        assertEquals("FCM retry appended a duplicate chat notification",1,prefs.getInt("count",-1));
+        GalaxyFirebaseService.handleIncoming(context,payload("qa-next-"+UUID.randomUUID()));
+        assertEquals("A different event was incorrectly suppressed",2,prefs.getInt("count",-1));
+
+        device.setPerson("1");
+        assertEquals("Profile switch retained previous chat preview count",0,prefs.getInt("count",-1));
+        assertFalse("Profile switch retained encrypted history",prefs.contains("history_cipher"));
+        GalaxyFirebaseService.handleIncoming(context,payload("qa-new-profile-"+UUID.randomUUID()));
+        assertEquals("New profile inherited old notification history",1,prefs.getInt("count",-1));
+
+        device.clear();
+        assertEquals("Unpair retained message count",0,prefs.getInt("count",-1));
+        assertFalse("Unpair retained encrypted message preview",prefs.contains("history_cipher"));
+        assertFalse("Unpair retained event-id cache",prefs.contains("seen_chat_event_keys"));
     }
 
     @Test public void inFlightPushAfterUnpair_cannotRevealPrivateNotification() throws Exception {
