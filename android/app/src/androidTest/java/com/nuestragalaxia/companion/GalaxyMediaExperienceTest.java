@@ -19,10 +19,7 @@ import androidx.test.core.app.ActivityScenario;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
-import androidx.test.uiautomator.By;
 import androidx.test.uiautomator.UiDevice;
-import androidx.test.uiautomator.UiObject2;
-import androidx.test.uiautomator.Until;
 import com.google.common.util.concurrent.ListenableFuture;
 import org.junit.After;
 import org.junit.Assume;
@@ -34,6 +31,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 @RunWith(AndroidJUnit4.class)
 public class GalaxyMediaExperienceTest {
@@ -81,11 +79,11 @@ public class GalaxyMediaExperienceTest {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         long pssBefore=android.os.Debug.getPss(),openStarted=SystemClock.elapsedRealtime(),openMs,captureMs;
         try(ActivityScenario<GalaxyCameraActivity> scenario=ActivityScenario.launch(intent)){
-            assertTrue(device.wait(Until.hasObject(By.desc("Tomar foto")),8_000));
+            awaitVisibleCameraControl(scenario,"Tomar foto",12_000);
             scenario.recreate();
-            assertTrue("Camera did not survive lifecycle recreation.",device.wait(Until.hasObject(By.desc("Tomar foto")),8_000));
+            awaitVisibleCameraControl(scenario,"Tomar foto",12_000);
             openMs=SystemClock.elapsedRealtime()-openStarted;
-            assertTrue(device.hasObject(By.desc("Activar flash")));
+            awaitVisibleCameraControl(scenario,"Activar flash",12_000);
             scenario.onActivity(activity->{
                 View decor=activity.getWindow().getDecorView();
                 View close=findByDescription(decor,"Cerrar cámara"),shutter=findByDescription(decor,"Tomar foto"),switchView=findByDescription(decor,"Cambiar cámara");
@@ -94,34 +92,33 @@ public class GalaxyMediaExperienceTest {
                 assertTrue(switchView!=null&&switchView.getHeight()>=dp(context,48));
             });
             if(provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)){
-                UiObject2 switcher=device.findObject(By.desc("Cambiar cámara"));
-                assertTrue(switcher!=null&&switcher.isEnabled());switcher.click();SystemClock.sleep(600);switcher.click();SystemClock.sleep(600);
+                tapVisibleCameraControl(scenario,"Cambiar cámara");SystemClock.sleep(600);tapVisibleCameraControl(scenario,"Cambiar cámara");SystemClock.sleep(600);
             }
             long captureStarted=SystemClock.elapsedRealtime();
-            device.findObject(By.desc("Tomar foto")).click();
-            assertTrue("Photo capture did not reach review.",device.wait(Until.hasObject(By.desc("Confirmar captura")),10_000));
+            tapVisibleCameraControl(scenario,"Tomar foto");
+            awaitVisibleCameraControl(scenario,"Confirmar captura",12_000);
             captureMs=SystemClock.elapsedRealtime()-captureStarted;
             scenario.onActivity(activity->{
                 assertTrue(findByDescription(activity.getWindow().getDecorView(),"Vista previa de la foto")!=null);
                 View repeat=findByText(activity.getWindow().getDecorView(),"Repetir");
                 assertTrue(repeat!=null&&repeat.performClick());
             });
-            assertTrue(device.wait(Until.hasObject(By.desc("Tomar foto")),6_000));
+            awaitVisibleCameraControl(scenario,"Tomar foto",8_000);
             boolean hasFront=provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA);
             if(!android.os.Build.HARDWARE.equals("ranchu")&&!android.os.Build.HARDWARE.equals("goldfish"))assertTrue("Physical front-camera gate requires a front camera.",hasFront);
             if(hasFront){
-                device.findObject(By.desc("Cambiar cámara")).click();SystemClock.sleep(600);
+                tapVisibleCameraControl(scenario,"Cambiar cámara");SystemClock.sleep(600);
                 scenario.onActivity(activity->{
                     try{java.lang.reflect.Field f=GalaxyCameraActivity.class.getDeclaredField("camera");f.setAccessible(true);androidx.camera.core.Camera bound=(androidx.camera.core.Camera)f.get(activity);
                         assertTrue("Camera switch did not bind the front lens.",bound!=null&&!CameraSelector.DEFAULT_FRONT_CAMERA.filter(java.util.Collections.singletonList(bound.getCameraInfo())).isEmpty());
                     }catch(ReflectiveOperationException e){throw new AssertionError(e);}
                 });
-                device.findObject(By.desc("Tomar foto")).click();
-                assertTrue("Front photo capture did not reach review.",device.wait(Until.hasObject(By.desc("Confirmar captura")),10_000));
+                tapVisibleCameraControl(scenario,"Tomar foto");
+                awaitVisibleCameraControl(scenario,"Confirmar captura",12_000);
                 scenario.onActivity(activity->{View repeat=findByText(activity.getWindow().getDecorView(),"Repetir");assertTrue(repeat!=null&&repeat.performClick());});
-                assertTrue(device.wait(Until.hasObject(By.desc("Tomar foto")),6_000));
+                awaitVisibleCameraControl(scenario,"Tomar foto",8_000);
             }
-            device.findObject(By.desc("Cerrar cámara")).click();
+            tapVisibleCameraControl(scenario,"Cerrar cámara");
         }
         assertFalse("Cancelled camera capture left a temp file.",hasFiles(new File(context.getCacheDir(),"camera-media")));
         System.out.println("GALAXY_CHAT_PHASE5_ANDROID="+new JSONObject().put("case","photo").put("openMs",openMs).put("capturePreviewMs",captureMs).put("pssBeforeKb",pssBefore).put("pssAfterKb",android.os.Debug.getPss()));
@@ -136,13 +133,13 @@ public class GalaxyMediaExperienceTest {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         long pssBefore=android.os.Debug.getPss(),previewMs=0;
         try(ActivityScenario<GalaxyCameraActivity> scenario=ActivityScenario.launch(intent)){
-            assertTrue(device.wait(Until.hasObject(By.desc("Iniciar grabación")),8_000));
-            device.findObject(By.desc("Iniciar grabación")).click();
-            assertTrue(device.wait(Until.hasObject(By.desc("Detener grabación")),4_000));
+            awaitVisibleCameraControl(scenario,"Iniciar grabación",12_000);
+            tapVisibleCameraControl(scenario,"Iniciar grabación");
+            awaitVisibleCameraControl(scenario,"Detener grabación",8_000);
             SystemClock.sleep(1_200);
             long stopStarted=SystemClock.elapsedRealtime();
-            device.findObject(By.desc("Detener grabación")).click();
-            assertTrue("Video capture did not reach review.",device.wait(Until.hasObject(By.desc("Confirmar captura")),12_000));
+            tapVisibleCameraControl(scenario,"Detener grabación");
+            awaitVisibleCameraControl(scenario,"Confirmar captura",14_000);
             previewMs=SystemClock.elapsedRealtime()-stopStarted;
             scenario.onActivity(activity->{
                 assertTrue(findByDescription(activity.getWindow().getDecorView(),"Vista previa del video")!=null);
@@ -158,11 +155,64 @@ public class GalaxyMediaExperienceTest {
                 View repeat=findByText(activity.getWindow().getDecorView(),"Repetir");
                 assertTrue(repeat!=null&&repeat.performClick());
             });
-            assertTrue(device.wait(Until.hasObject(By.desc("Iniciar grabación")),6_000));
-            device.findObject(By.desc("Cerrar cámara")).click();
+            awaitVisibleCameraControl(scenario,"Iniciar grabación",10_000);
+            tapVisibleCameraControl(scenario,"Cerrar cámara");
         }
         assertFalse("Cancelled video capture left a temp file.",hasFiles(new File(context.getCacheDir(),"camera-media")));
         System.out.println("GALAXY_CHAT_PHASE5_ANDROID="+new JSONObject().put("case","video").put("stopPreviewMs",previewMs).put("pssBeforeKb",pssBefore).put("pssAfterKb",android.os.Debug.getPss()));
+    }
+
+    // UIAutomator accessibility snapshots can lag the native view hierarchy on
+    // headless API35. Verify an actual visible native control before touchscreen input.
+    private int[] awaitVisibleCameraControl(ActivityScenario<GalaxyCameraActivity> scenario,
+                                             String description,long timeoutMs){
+        long until=SystemClock.elapsedRealtime()+timeoutMs;
+        while(SystemClock.elapsedRealtime()<until){
+            AtomicReference<int[]> center=new AtomicReference<>();
+            scenario.onActivity(activity->{
+                View view=findByDescription(activity.getWindow().getDecorView(),description);
+                if(view==null||!view.isShown()||view.getWidth()<=0||view.getHeight()<=0)return;
+                int[] xy=new int[2];view.getLocationOnScreen(xy);
+                center.set(new int[]{xy[0]+view.getWidth()/2,xy[1]+view.getHeight()/2});
+            });
+            if(center.get()!=null)return center.get();
+            SystemClock.sleep(120);
+        }
+        throw new AssertionError("Native camera control not visible after "+timeoutMs+" ms: "+description);
+    }
+
+    private void tapVisibleCameraControl(ActivityScenario<GalaxyCameraActivity> scenario,String description){
+        int[] point=awaitVisibleCameraControl(scenario,description,12_000);
+        assertTrue("Android screen touch injection failed: "+description,
+            device.click(point[0],point[1]));
+
+        // UiAutomator can acknowledge a headless-emulator screen click without
+        // dispatching it to our camera window. For shutter only, observe the
+        // synchronous UI state and retry using a native MotionEvent through the
+        // Activity's window (not View.performClick or a CameraX API shortcut).
+        // Successful capture/recording/review/cleanup remain mandatory below.
+        if(!"Tomar foto".equals(description)&&
+           !"Iniciar grabación".equals(description)&&
+           !"Detener grabación".equals(description))return;
+        SystemClock.sleep(300);
+        scenario.onActivity(activity->{
+            View control=findByDescription(activity.getWindow().getDecorView(),description);
+            if(control==null||!control.isShown()||!control.isEnabled())return;
+            int[] location=new int[2];control.getLocationInWindow(location);
+            float x=location[0]+control.getWidth()/2f;
+            float y=location[1]+control.getHeight()/2f;
+            long time=SystemClock.uptimeMillis();
+            android.view.MotionEvent down=android.view.MotionEvent.obtain(
+                time,time,android.view.MotionEvent.ACTION_DOWN,x,y,0);
+            android.view.MotionEvent up=android.view.MotionEvent.obtain(
+                time,time+90,android.view.MotionEvent.ACTION_UP,x,y,0);
+            try{
+                boolean received=activity.dispatchTouchEvent(down);
+                activity.dispatchTouchEvent(up);
+                System.out.println("GALAXY_CAMERA_NATIVE_TOUCH="+description+
+                    ",windowX="+x+",windowY="+y+",received="+received);
+            }finally{down.recycle();up.recycle();}
+        });
     }
 
     private ProcessCameraProvider provider() throws Exception {
