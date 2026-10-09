@@ -1,6 +1,7 @@
 package com.nuestragalaxia.companion;
 
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
@@ -29,6 +30,20 @@ public class GalaxyGpsConsentDeviceTest {
             assertFalse("Unpaired profile enabled GPS sharing",device.tracking());
         }
         assertFalse(device.tracking());
+    }
+
+    @Test public void unpairErasesOfflineGpsHistoryBeforeAnotherIdentityPairs() throws Exception {
+        try(PendingPointStore queued=new PendingPointStore(context)){
+            queued.clear();
+            device.save("qa-only-token-0","0","Synthetic profile A");
+            queued.add(java.util.UUID.randomUUID().toString(),"2026-10-09T00:00:00Z",
+                4.6000,-74.1000,5.0,0.0,0.0,"still");
+            assertTrue("Synthetic offline location was not queued",queued.count()>0);
+            device.clear();
+            assertEquals("Unpair left previous account coordinates in the offline queue",0,queued.count());
+            device.save("qa-only-token-1","1","Synthetic profile B");
+            assertEquals("New pairing inherited another user's GPS backlog",0,queued.count());
+        }
     }
 
     @Test public void unpairRevokesStoredGpsConsent() throws Exception {

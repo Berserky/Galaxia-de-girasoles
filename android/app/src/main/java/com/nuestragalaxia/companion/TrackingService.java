@@ -29,7 +29,7 @@ public final class TrackingService extends Service {
         if(intent!=null&&ACTION_STOP.equals(intent.getAction())){stopTracking();return START_NOT_STICKY;}
         startVisible("Preparando GPS…");
         if(!hasLocationPermission()){
-            updateNotification("Falta permiso de ubicación"); store.setTracking(false); stopSelf(); return START_NOT_STICKY;
+            updateNotification("Falta permiso de ubicación"); store.setTracking(false); pending.clear(); stopSelf(); return START_NOT_STICKY;
         }
         if(!store.paired()){updateNotification("Vincula este teléfono primero");stopSelf();return START_NOT_STICKY;}
         store.setTracking(true); requestLocations(); return START_STICKY;
@@ -42,6 +42,7 @@ public final class TrackingService extends Service {
         if(callback!=null)return;
         if(!hasLocationPermission()){
             store.setTracking(false);
+            pending.clear();
             updateNotification("Falta permiso de ubicación");
             stopSelf();
             return;
@@ -54,12 +55,15 @@ public final class TrackingService extends Service {
         }catch(SecurityException e){
             callback=null;
             store.setTracking(false);
+            pending.clear();
             updateNotification("Android retiró el permiso de ubicación");
             stopForeground(STOP_FOREGROUND_REMOVE);
             stopSelf();
         }
     }
     private void handle(Location loc){
+        // A delayed FusedLocation callback must not reopen sharing after opt-out.
+        if(!store.tracking()||!store.pairedFast())return;
         MotionClassifier.Result m=classifier.classify(loc);
         long now=System.currentTimeMillis();
         boolean still="still".equals(m.motion);
@@ -73,6 +77,8 @@ public final class TrackingService extends Service {
         double heading=loc.hasBearing()?loc.getBearing():-1,accuracy=loc.hasAccuracy()?loc.getAccuracy():-1;
         String captured=Instant.ofEpochMilli(loc.getTime()>0?loc.getTime():now).toString(),sampleId=UUID.randomUUID().toString();
         io.execute(()->{
+            // Stop/revoke may happen after the callback but before this upload runs.
+            if(!store.tracking()||!store.pairedFast())return;
             String token=store.token(); if(token==null)return;
             try{
                 ApiClient.location(token,loc.getLatitude(),loc.getLongitude(),accuracy,m.speedMs,heading,m.motion,history,tripPoint,captured,sampleId);
@@ -85,13 +91,14 @@ public final class TrackingService extends Service {
                     stopSelf();
                     return;
                 }
-                if(history)pending.add(sampleId,captured,loc.getLatitude(),loc.getLongitude(),accuracy,m.speedMs,heading,m.motion);
+                if(history&&store.tracking())pending.add(sampleId,captured,loc.getLatitude(),loc.getLongitude(),accuracy,m.speedMs,heading,m.motion);
                 updateNotification("Sin conexión · "+pending.count()+" puntos pendientes");
             }
         });
     }
     private void flush(String token){
         for(PendingPointStore.Point p:pending.batch(50)){
+            if(!store.tracking()||!store.pairedFast())break;
             try{ApiClient.history(token,p);pending.remove(p.id);}catch(Exception e){break;}
         }
     }
@@ -101,6 +108,8 @@ public final class TrackingService extends Service {
     }
     private void stopTracking(){
         store.setTracking(false);
+        // Explicit opt-out revokes old offline samples as well as future updates.
+        pending.clear();
         if(callback!=null){fused.removeLocationUpdates(callback);callback=null;}
         String token=store.token();if(token!=null)io.execute(()->{try{ApiClient.stop(token);}catch(Exception ignored){}});
         stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();
