@@ -61,3 +61,15 @@ test('signed QA device candidate has a separate application ID and fail-closed Q
  const ci=readFileSync('.github/workflows/android-companion.yml','utf8');
  assert.match(ci,/assembleRelease assembleQaDevice/);
 });
+
+test('hermetic Android debug rejects production hosts and pins storage to QA',()=>{
+ const gradle=readFileSync('android/app/build.gradle.kts','utf8');
+ const debug=gradle.split('getByName("debug") {')[1]?.split('create("qaDevice") {')[0]||'';
+ assert.ok(debug,'debug build type is required');
+ assert.match(debug,/val qaOrigin = "https:\/\/vwtcncvmwjfywrzjmskw\.supabase\.co"/);
+ assert.match(debug,/qaEdgeUrl == "http:\/\/127\.0\.0\.1:18765"/);
+ assert.match(debug,/qaEdgeUrl == "\$qaOrigin\/functions\/v1\/android-companion"/);
+ assert.match(debug,/buildConfigField\("String","SUPABASE_URL","\\\"\$qaOrigin\\\""\)/);
+ assert.doesNotMatch(debug,/qaEdgeUrl\.substringBefore\("/);
+ assert.doesNotMatch(debug,/zqiknzivfahvvadmxrvt/);
+});
