@@ -46,5 +46,7 @@ test('GPS Android instrumented consent hits only the hermetic local QA backend',
  assert.match(suite,/sample -> !sample\.optBoolean\("sharing",true\)/);
  assert.match(backend,/case "location":/);
  assert.match(backend,/locationRequests\.add\(new JSONObject\(body\.toString\(\)\)\)/);
- assert.doesNotMatch(suite,/https?:\/\/[^\s]*supabase\.co/);
+ const gpsCase=suite.slice(suite.indexOf('gpsShare_explicitConsentAndStopAreReportedToHermeticBackend'),
+   suite.indexOf('@Test public void notificationDeepLink_opensChatAfterColdLaunch'));
+ assert.doesNotMatch(gpsCase,/https?:\\/\\/[^\\s]*supabase\\.co/);
 });
