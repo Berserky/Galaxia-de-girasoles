@@ -53,3 +53,27 @@ La protección está fusionada **solo en código**, sin desplegarse a QA/PROD. L
 6. **Gobernanza:** terminar y fusionar los PR F4 pendientes solo con sus checks verdes, registrar SHA final y conservar `qa`, `prod`, `main`, versionCode y APK estable intactos.
 
 **Regla de interpretación:** CI verde permite integrar un PR de alcance acotado en `desarrollo`; no autoriza declarar terminada toda la Fase 4 ni preparar un release.
+
+
+## Actualización posterior verificable — 2026-10-08 (Bogotá)
+
+> Esta sección **sustituye las conclusiones operativas desactualizadas** de la instantánea histórica anterior (incluidas "RLS aún por aplicar", "CameraX SKIPPED 2" como único resultado y "staging NOT_EXECUTED"). Se conserva el historial original por trazabilidad. **El dictamen global continúa NO GO**: cerrar CI no demuestra todos los flujos de notificaciones/GPS ni autoriza producción.
+
+### Evidencia aprobada
+
+| Control | Evidencia verificable | Estado |
+|---|---|---|
+| GPS RLS NG-AUD-004 | [PR #118](https://github.com/Berserky/Galaxia-de-girasoles/pull/118) integrado; migración `ng_phase4_member_location_rls` instalada en Supabase QA (registro `20261008205155`) y producción (`20261008215642`), con guardia de membresía en cuatro SELECT policies y smoke negativo de outsider en QA bajo rollback | PASS de política/SQL; NO equivale a GPS E2E Android |
+| Cápsulas NG-AUD-005 | [PR #132](https://github.com/Berserky/Galaxia-de-girasoles/pull/132), merge `e5273ef30cd0dbf9159493441e33539188406516`, 8/8 CI; migración `ng_aud_005_capsule_null_guard` y smoke denegación outsider en QA; **NO promovida a producción** | PASS desarrollo + QA; producción PENDIENTE |
+| QA code promotion | [PR #126](https://github.com/Berserky/Galaxia-de-girasoles/pull/126), merge a `qa` SHA `8d888c7745575dd1877ee025933677c56387231a` | MERGED solamente a QA |
+| QA Android Release Candidate | [run #37875085269](https://github.com/Berserky/Galaxia-de-girasoles/actions/runs/37875085269), 7/7 jobs SUCCESS: seguridad, DB replay, Android instrumentation/unit/lint, APK candidata firmada y checksum, upgrade sobre estable, **staging remoto estricto OIDC con identidades temporales y revocación** | PASS de esta corrida; candidata NO publicada como stable |
+| CameraX/entrada nativa de Android | [PR #130](https://github.com/Berserky/Galaxia-de-girasoles/pull/130), merge a `desarrollo` `ace40e41b0701b8cdcaec2062d096d8cea216b1b`; commit probado `19436312c59a003acc80ad00d011fc1f44613be8` con **12/12 workflows SUCCESS**. [CameraX #37881303411](https://github.com/Berserky/Galaxia-de-girasoles/actions/runs/37881303411) ejecutó foto+vídeo en AVD con cámara: 3 tests, 0 skips, 0 fallos, `CAMERAX_QA_EVIDENCE.status=VERIFIED`. [QA integration #37881303122](https://github.com/Berserky/Galaxia-de-girasoles/actions/runs/37881303122) pasó 25 tests, 0 fallos; **2 CameraX SKIPPED en el AVD genérico sin cámara**, cubiertos por el gate especializado | PASS de las suites citadas; no prueba todos los modelos físicos |
+
+### Bloqueos restantes para cierre global / Fase 5
+
+1. **FCM Android E2E** — foreground, background, notificación única, deep link, cambio de cuenta y revocación de token con dos dispositivos QA: no demostrado por el smoke remoto de chat/mapa/backup. Seguimiento [#133](https://github.com/Berserky/Galaxia-de-girasoles/issues/133).
+2. **GPS Android E2E** — consentimiento, desactivación, sharing on/off, historial, ETA y ausencia de señal. SQL/RLS PASS no equivale a verificación de navegación/sensores/dispositivos. Seguimiento [#125](https://github.com/Berserky/Galaxia-de-girasoles/issues/125).
+3. **Privacidad y release** — promoción controlada de NG-AUD-005 a producción requiere aprobación específica posterior; completar regresión remota de permisos, multimedia y revocación. No usar una suite informativa omitida como PASS.
+4. **UX, accesibilidad y rendimiento representativo** — completar matriz F4 pendiente en diferentes tamaños y condiciones de red, comparar antes/después real; CI sintético no basta.
+
+**Resultado actualizado:** cierre técnico de CameraX/Android harness en `desarrollo`, staging real QA verificado con OIDC en candidato, parches RLS GPS activos y cápsulas protegidas en QA. **Fase 4 sigue NO GO**. No publicar `android-stable`, no hacer nuevas modificaciones a producción por la mera integración de esta evidencia.

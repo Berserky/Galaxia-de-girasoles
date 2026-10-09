@@ -39,9 +39,12 @@ final class QaHttpServer implements Closeable {
 
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final CopyOnWriteArrayList<JSONObject> sentMessages = new CopyOnWriteArrayList<>();
+    private final CopyOnWriteArrayList<JSONObject> locationRequests = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<String> actions = new CopyOnWriteArrayList<>();
     private final AtomicLong sequence = new AtomicLong(200);
     private volatile NetworkMode networkMode = NetworkMode.NORMAL;
+    enum EtaScenario { DEFAULT, LIVE, PARTNER_PAUSED, OWN_STALE, OFFLINE }
+    private volatile EtaScenario etaScenario = EtaScenario.DEFAULT;
     private volatile boolean running;
     private ServerSocket server;
 
@@ -60,8 +63,11 @@ final class QaHttpServer implements Closeable {
         });
     }
 
-    void reset() { networkMode = NetworkMode.NORMAL; actions.clear(); sentMessages.clear(); sequence.set(200); }
+    void reset() { etaScenario = EtaScenario.DEFAULT; networkMode = NetworkMode.NORMAL; actions.clear(); sentMessages.clear(); locationRequests.clear(); sequence.set(200); }
+    List<JSONObject> locationRequests() { return Collections.unmodifiableList(new ArrayList<>(locationRequests)); }
     void setNetworkMode(NetworkMode mode) { networkMode = mode == null ? NetworkMode.NORMAL : mode; }
+    void setEtaScenario(EtaScenario scenario) { etaScenario = scenario==null?EtaScenario.DEFAULT:scenario; }
+
     List<String> actions() { return Collections.unmodifiableList(new ArrayList<>(actions)); }
     long sentCount() { return sentMessages.size(); }
     void receivePartner(int count) throws Exception {
@@ -163,6 +169,9 @@ final class QaHttpServer implements Closeable {
             case "intelligence-search": return new JSONObject().put("items", new JSONArray())
                     .put("results", new JSONArray()).put("answer", "QA");
             case "intelligence-connections": return new JSONObject().put("connections", new JSONArray());
+            case "location":
+                locationRequests.add(new JSONObject(body.toString()));
+                return new JSONObject().put("ok",true);
             case "push-token-register":
             case "push-token-unregister":
             case "push-preferences":
@@ -224,6 +233,10 @@ final class QaHttpServer implements Closeable {
             .put("settings", new JSONArray()).put("events", new JSONArray()).put("suggestions", new JSONArray());
         return new JSONObject()
             .put("locations", locations())
+            .put("destinations", etaScenario==EtaScenario.DEFAULT?new JSONArray():new JSONArray()
+                .put(new JSONObject().put("person",person).put("kind","person")
+                    .put("target_person","0".equals(person)?"1":"0")
+                    .put("active",true).put("label","Pareja QA")))
             .put("places", new JSONArray().put(new JSONObject().put("id", 1).put("name", "Lugar QA").put("kind", "favorite")
                 .put("latitude", 4.7110).put("longitude", -74.0721)))
             .put("tripPoints", new JSONArray())
@@ -231,11 +244,14 @@ final class QaHttpServer implements Closeable {
     }
 
     private JSONArray locations() throws Exception {
-        String now = Instant.now().toString();
+        String now = (etaScenario==EtaScenario.OWN_STALE
+            ?Instant.now().minusSeconds(3600):Instant.now()).toString();
+        boolean ownSharing=etaScenario!=EtaScenario.OFFLINE;
+        boolean partnerSharing=etaScenario!=EtaScenario.PARTNER_PAUSED && etaScenario!=EtaScenario.OFFLINE;
         return new JSONArray()
-            .put(new JSONObject().put("person", "0").put("sharing", true).put("latitude", 4.7110).put("longitude", -74.0721)
+            .put(new JSONObject().put("person", "0").put("sharing", ownSharing).put("latitude", 4.7110).put("longitude", -74.0721)
                 .put("accuracy", 8).put("speed", 0.5).put("heading", 0).put("motion", "walking").put("status", "QA").put("updated_at", now))
-            .put(new JSONObject().put("person", "1").put("sharing", true).put("latitude", 4.7150).put("longitude", -74.0690)
+            .put(new JSONObject().put("person", "1").put("sharing", partnerSharing).put("latitude", 4.7150).put("longitude", -74.0690)
                 .put("accuracy", 10).put("speed", 0).put("heading", 0).put("motion", "still").put("status", "QA").put("updated_at", now));
     }
 

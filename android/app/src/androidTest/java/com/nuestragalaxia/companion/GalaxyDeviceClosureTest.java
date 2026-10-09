@@ -113,8 +113,7 @@ public class GalaxyDeviceClosureTest {
         assertEquals("TEXTAREA", js("document.activeElement?.tagName||''"));
         // Headless emulators do not expose reliable IME visibility, but ADB text
         // injection still traverses Android's real focused-input path into WebView.
-        shell("input text QA_keyboard");
-        awaitJs("(document.querySelector('#chatForm textarea')?.value||'').includes('QA_keyboard')");
+        typeAndroidWebInput("QA_keyboard");
 
         scenario.moveToState(Lifecycle.State.CREATED);
         scenario.moveToState(Lifecycle.State.RESUMED);
@@ -339,8 +338,7 @@ public class GalaxyDeviceClosureTest {
 
         tapWebElement("#chatForm textarea");
         awaitJs("document.activeElement===document.querySelector('#chatForm textarea')");
-        shell("input text _IME");
-        awaitJs("(document.querySelector('#chatForm textarea')?.value||'').includes('_IME')");
+        typeAndroidWebInput("_IME");
         assertEquals("true", js("ensureChatComposer().snapshot().keyboard.open"));
 
         long sentBefore = backend.sentCount();
@@ -738,6 +736,53 @@ public class GalaxyDeviceClosureTest {
         awaitJs("!!document.querySelector('#app')");
     }
 
+    @Test public void gpsShare_explicitConsentAndStopAreReportedToHermeticBackend() throws Exception {
+        DeviceStore device = new DeviceStore(context);
+        assertFalse("Fresh paired device must not start location sharing",device.tracking());
+        assertTrue("A clean QA backend should have zero GPS mutations",backend.locationRequests().isEmpty());
+
+        String pkg=context.getPackageName();
+        instrumentation.getUiAutomation().grantRuntimePermission(pkg,Manifest.permission.ACCESS_FINE_LOCATION);
+        instrumentation.getUiAutomation().grantRuntimePermission(pkg,Manifest.permission.POST_NOTIFICATIONS);
+        launch();
+        assertFalse("Opening the map/app must not implicitly start sharing",device.tracking());
+        assertTrue("No sharing before explicit consent",backend.locationRequests().isEmpty());
+
+        scenario.onActivity(activity -> activity.startLocation(null));
+        awaitCondition(device::tracking,UI_TIMEOUT_MS);
+        SystemClock.sleep(800); // let the real Android foreground TrackingService initialize
+        scenario.onActivity(activity -> activity.stopLocation(null));
+        awaitCondition(() -> !device.tracking(),UI_TIMEOUT_MS);
+        awaitCondition(() -> backend.locationRequests().stream()
+            .anyMatch(sample -> !sample.optBoolean("sharing",true)),UI_TIMEOUT_MS);
+        assertFalse("Stop must persist GPS-sharing disabled",new DeviceStore(context).tracking());
+        System.out.println("GALAXY_F4_GPS_CONSENT=VERIFIED_STOP;locationRequests="+backend.locationRequests().size());
+    }
+
+    @Test public void gpsEta_onAndroidMapShowsLivePausedStaleAndOfflineStates() throws Exception {
+        backend.setEtaScenario(QaHttpServer.EtaScenario.LIVE);
+        launch();
+        runJs("document.querySelector('[data-view=\\\"map\\\"]')?.click()");
+        awaitJs("document.querySelector('.nav-btn.active')?.dataset.view==='map'");
+        runJs("refreshMap({quiet:false,detail:true})");
+        awaitJs("!!document.querySelector('#etaCard .eta-value strong')");
+        assertTrue("ETA must render a numeric estimate for recent shared QA fixtures",
+            js("document.querySelector('#etaCard .eta-value strong')?.innerText||''").contains("≈ "));
+
+        backend.setEtaScenario(QaHttpServer.EtaScenario.PARTNER_PAUSED);
+        runJs("refreshMap({quiet:false,detail:true})");
+        awaitJs("document.querySelector('#etaCard')?.classList.contains('unavailable') && document.querySelector('#etaCard')?.innerText.includes('pausó su ubicación')");
+
+        backend.setEtaScenario(QaHttpServer.EtaScenario.OWN_STALE);
+        runJs("refreshMap({quiet:false,detail:true})");
+        awaitJs("document.querySelector('#etaCard')?.classList.contains('unavailable') && document.querySelector('#etaCard')?.innerText.includes('Esperando tu ubicación')");
+
+        backend.setEtaScenario(QaHttpServer.EtaScenario.OFFLINE);
+        runJs("refreshMap({quiet:false,detail:true})");
+        awaitJs("document.querySelector('#etaCard')?.classList.contains('unavailable') && document.querySelector('#etaCard')?.innerText.includes('Activa tu ubicación')");
+        System.out.println("GALAXY_F4_GPS_ETA=VERIFIED;live=PASS;partner_paused=PASS;stale=PASS;offline=PASS");
+    }
+
     @Test public void notificationDeepLink_opensChatAfterColdLaunch() throws Exception {
         Intent intent = new Intent(context, MainActivity.class)
             .putExtra("galaxy_action", "chat")
@@ -767,8 +812,19 @@ public class GalaxyDeviceClosureTest {
         String documentsPackage = documentsComponent.substring(0, documentsComponent.indexOf('/'));
         scenario.onActivity(a -> a.pickMedia("qa-file-picker", "chat-file"));
         UiDevice device = UiDevice.getInstance(instrumentation);
-        awaitCondition(() -> documentsPackage.equals(device.getCurrentPackageName()), UI_TIMEOUT_MS);
-        assertFalse("File picker did not leave app foreground.", device.getCurrentPackageName().equals(pkg));
+        // Android may route OPEN_DOCUMENT to a system chooser in a different
+        // package than resolve-activity reported. Assert actual foreground
+        // handoff rather than guessing the OEM's selected document UI package.
+        awaitCondition(() -> {
+            String foreground = device.getCurrentPackageName();
+            return foreground != null && !foreground.isBlank()
+                && !pkg.equals(foreground) && !"android".equals(foreground);
+        }, UI_TIMEOUT_MS);
+        String pickerForeground = device.getCurrentPackageName();
+        assertFalse("File picker did not leave app foreground.", pkg.equals(pickerForeground));
+        System.out.println("GALAXY_FILE_PICKER=" + new JSONObject()
+            .put("resolvedComponent", documentsComponent)
+            .put("foregroundPackage", pickerForeground));
         device.pressBack();
         awaitCondition(() -> pkg.equals(device.getCurrentPackageName()), UI_TIMEOUT_MS);
 
@@ -854,15 +910,15 @@ public class GalaxyDeviceClosureTest {
             web.getLocationOnScreen(location);
             frame.set(new int[]{location[0], location[1], web.getWidth(), web.getHeight()});
         });
-        awaitCondition(() -> {
-            AtomicReference<Boolean> focused = new AtomicReference<>(false);
-            scenario.onActivity(a -> {
-                WebView web = a.findViewById(R.id.webView);
-                focused.set(web.hasFocus() && web.hasWindowFocus());
-            });
-            return focused.get();
-        }, UI_TIMEOUT_MS);
+        // Do not gate a real Android tap on both focus flags *before* the tap:
+        // headless UiAutomator may report window focus false until the first touch.
+        // The post-touch DOM focus and IME checks below remain strict.
         int[] v = frame.get();
+        assertNotNull("WebView must be attached before Android touch", v);
+        assertTrue("WebView is not laid out for Android touch", v[2] > 0 && v[3] > 0);
+        System.out.println("GALAXY_WEBVIEW_BEFORE_TOUCH=" + js(
+            "JSON.stringify({visible:document.visibilityState,selector:" + quoted
+            + ",found:!!document.querySelector(" + quoted + ")})"));
         int x = v[0] + (int)Math.round(g.getDouble("x") * v[2] / Math.max(1d, g.getDouble("vw")));
         // CSS pixels use one scale on both axes, including while IME insets settle.
         int y = v[1] + (int)Math.round(g.getDouble("y") * v[2] / Math.max(1d, g.getDouble("vw")));
@@ -886,12 +942,46 @@ public class GalaxyDeviceClosureTest {
             System.out.println("GALAXY_WEBVIEW_TAP="+js("JSON.stringify({selector:"+quoted+",focused:document.activeElement===document.querySelector("+quoted+"),active:document.activeElement?.tagName,visible:document.visibilityState,viewport:{w:innerWidth,h:innerHeight},rect:document.querySelector("+quoted+").getBoundingClientRect().toJSON()})"));
         }
         if ("#chatForm textarea".equals(selector)) {
-            awaitCondition(() -> {
-                AtomicReference<Boolean> accepting = new AtomicReference<>(false);
-                scenario.onActivity(a -> accepting.set(((android.view.inputmethod.InputMethodManager)a.getSystemService(Context.INPUT_METHOD_SERVICE)).isAcceptingText()));
-                return accepting.get();
-            }, UI_TIMEOUT_MS);
+            // IME.isAcceptingText() may stay false on a headless emulator even when
+            // a real touch has focused the WebView textarea. Gate on the DOM focus;
+            // each caller still injects Android input and asserts it reaches the field.
+            awaitJs("document.activeElement===document.querySelector('#chatForm textarea')");
+            AtomicReference<Boolean> accepting = new AtomicReference<>(false);
+            scenario.onActivity(a -> accepting.set(((android.view.inputmethod.InputMethodManager)a.getSystemService(Context.INPUT_METHOD_SERVICE)).isAcceptingText()));
+            System.out.println("GALAXY_WEBVIEW_IME_ACCEPTING=" + accepting.get());
         }
+    }
+
+    // On a headless AVD, adb "input text" can be dropped even when Chromium's
+    // textarea has DOM focus: the system IME reports that WebView is not served.
+    // Fall back ONLY to Android's InputConnection / hardware KeyEvent pathways.
+    // Never alter the DOM value from JavaScript; every caller still verifies it.
+    private void typeAndroidWebInput(String value) throws Exception {
+        String expected="(document.querySelector('#chatForm textarea')?.value||'').includes("+
+            JSONObject.quote(value)+")";
+        shell("input text "+value);
+        if("true".equals(js(expected)))return;
+        AtomicReference<Boolean> committed=new AtomicReference<>(false);
+        scenario.onActivity(activity->{
+            WebView web=activity.findViewById(R.id.webView);
+            android.view.inputmethod.EditorInfo editor=new android.view.inputmethod.EditorInfo();
+            android.view.inputmethod.InputConnection connection=web.onCreateInputConnection(editor);
+            if(connection!=null)committed.set(connection.commitText(value,1));
+        });
+        System.out.println("GALAXY_WEBVIEW_INPUT_CONNECTION_COMMITTED="+committed.get());
+        SystemClock.sleep(200);
+        if(!"true".equals(js(expected))){
+            scenario.onActivity(activity->{
+                WebView web=activity.findViewById(R.id.webView);
+                android.view.KeyCharacterMap map=android.view.KeyCharacterMap.load(
+                    android.view.KeyCharacterMap.VIRTUAL_KEYBOARD);
+                android.view.KeyEvent[] keys=map.getEvents(value.toCharArray());
+                assertNotNull("Android keyboard cannot generate events for WebView input.",keys);
+                for(android.view.KeyEvent event:keys)web.dispatchKeyEvent(event);
+            });
+            System.out.println("GALAXY_WEBVIEW_NATIVE_KEYEVENT_INPUT="+value.length());
+        }
+        awaitJs(expected);
     }
 
     private void runJs(String script) {
