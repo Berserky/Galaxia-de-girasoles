@@ -39,6 +39,7 @@ final class QaHttpServer implements Closeable {
 
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final CopyOnWriteArrayList<JSONObject> sentMessages = new CopyOnWriteArrayList<>();
+    private final CopyOnWriteArrayList<JSONObject> locationRequests = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<String> actions = new CopyOnWriteArrayList<>();
     private final AtomicLong sequence = new AtomicLong(200);
     private volatile NetworkMode networkMode = NetworkMode.NORMAL;
@@ -60,7 +61,8 @@ final class QaHttpServer implements Closeable {
         });
     }
 
-    void reset() { networkMode = NetworkMode.NORMAL; actions.clear(); sentMessages.clear(); sequence.set(200); }
+    void reset() { networkMode = NetworkMode.NORMAL; actions.clear(); sentMessages.clear(); locationRequests.clear(); sequence.set(200); }
+    List<JSONObject> locationRequests() { return Collections.unmodifiableList(new ArrayList<>(locationRequests)); }
     void setNetworkMode(NetworkMode mode) { networkMode = mode == null ? NetworkMode.NORMAL : mode; }
     List<String> actions() { return Collections.unmodifiableList(new ArrayList<>(actions)); }
     long sentCount() { return sentMessages.size(); }
@@ -163,6 +165,9 @@ final class QaHttpServer implements Closeable {
             case "intelligence-search": return new JSONObject().put("items", new JSONArray())
                     .put("results", new JSONArray()).put("answer", "QA");
             case "intelligence-connections": return new JSONObject().put("connections", new JSONArray());
+            case "location":
+                locationRequests.add(new JSONObject(body.toString()));
+                return new JSONObject().put("ok",true);
             case "push-token-register":
             case "push-token-unregister":
             case "push-preferences":

@@ -736,6 +736,29 @@ public class GalaxyDeviceClosureTest {
         awaitJs("!!document.querySelector('#app')");
     }
 
+    @Test public void gpsShare_explicitConsentAndStopAreReportedToHermeticBackend() throws Exception {
+        DeviceStore device = new DeviceStore(context);
+        assertFalse("Fresh paired device must not start location sharing",device.tracking());
+        assertTrue("A clean QA backend should have zero GPS mutations",backend.locationRequests().isEmpty());
+
+        String pkg=context.getPackageName();
+        instrumentation.getUiAutomation().grantRuntimePermission(pkg,Manifest.permission.ACCESS_FINE_LOCATION);
+        instrumentation.getUiAutomation().grantRuntimePermission(pkg,Manifest.permission.POST_NOTIFICATIONS);
+        launch();
+        assertFalse("Opening the map/app must not implicitly start sharing",device.tracking());
+        assertTrue("No sharing before explicit consent",backend.locationRequests().isEmpty());
+
+        scenario.onActivity(activity -> activity.startLocation(null));
+        awaitCondition(device::tracking,UI_TIMEOUT_MS);
+        SystemClock.sleep(800); // let the real Android foreground TrackingService initialize
+        scenario.onActivity(activity -> activity.stopLocation(null));
+        awaitCondition(() -> !device.tracking(),UI_TIMEOUT_MS);
+        awaitCondition(() -> backend.locationRequests().stream()
+            .anyMatch(sample -> !sample.optBoolean("sharing",true)),UI_TIMEOUT_MS);
+        assertFalse("Stop must persist GPS-sharing disabled",new DeviceStore(context).tracking());
+        System.out.println("GALAXY_F4_GPS_CONSENT=VERIFIED_STOP;locationRequests="+backend.locationRequests().size());
+    }
+
     @Test public void notificationDeepLink_opensChatAfterColdLaunch() throws Exception {
         Intent intent = new Intent(context, MainActivity.class)
             .putExtra("galaxy_action", "chat")
