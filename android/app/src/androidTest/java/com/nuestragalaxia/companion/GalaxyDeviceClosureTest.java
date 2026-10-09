@@ -896,11 +896,13 @@ public class GalaxyDeviceClosureTest {
             System.out.println("GALAXY_WEBVIEW_TAP="+js("JSON.stringify({selector:"+quoted+",focused:document.activeElement===document.querySelector("+quoted+"),active:document.activeElement?.tagName,visible:document.visibilityState,viewport:{w:innerWidth,h:innerHeight},rect:document.querySelector("+quoted+").getBoundingClientRect().toJSON()})"));
         }
         if ("#chatForm textarea".equals(selector)) {
-            awaitCondition(() -> {
-                AtomicReference<Boolean> accepting = new AtomicReference<>(false);
-                scenario.onActivity(a -> accepting.set(((android.view.inputmethod.InputMethodManager)a.getSystemService(Context.INPUT_METHOD_SERVICE)).isAcceptingText()));
-                return accepting.get();
-            }, UI_TIMEOUT_MS);
+            // IME.isAcceptingText() may stay false on a headless emulator even when
+            // a real touch has focused the WebView textarea. Gate on the DOM focus;
+            // each caller still injects Android input and asserts it reaches the field.
+            awaitJs("document.activeElement===document.querySelector('#chatForm textarea')");
+            AtomicReference<Boolean> accepting = new AtomicReference<>(false);
+            scenario.onActivity(a -> accepting.set(((android.view.inputmethod.InputMethodManager)a.getSystemService(Context.INPUT_METHOD_SERVICE)).isAcceptingText()));
+            System.out.println("GALAXY_WEBVIEW_IME_ACCEPTING=" + accepting.get());
         }
     }
 
