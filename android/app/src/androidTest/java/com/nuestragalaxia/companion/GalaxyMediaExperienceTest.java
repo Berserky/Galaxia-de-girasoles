@@ -19,10 +19,7 @@ import androidx.test.core.app.ActivityScenario;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
-import androidx.test.uiautomator.By;
 import androidx.test.uiautomator.UiDevice;
-import androidx.test.uiautomator.UiObject2;
-import androidx.test.uiautomator.Until;
 import com.google.common.util.concurrent.ListenableFuture;
 import org.junit.After;
 import org.junit.Assume;
@@ -116,7 +113,7 @@ public class GalaxyMediaExperienceTest {
                         assertTrue("Camera switch did not bind the front lens.",bound!=null&&!CameraSelector.DEFAULT_FRONT_CAMERA.filter(java.util.Collections.singletonList(bound.getCameraInfo())).isEmpty());
                     }catch(ReflectiveOperationException e){throw new AssertionError(e);}
                 });
-                device.findObject(By.desc("Tomar foto")).click();
+                tapVisibleCameraControl(scenario,"Tomar foto");
                 awaitVisibleCameraControl(scenario,"Confirmar captura",12_000);
                 scenario.onActivity(activity->{View repeat=findByText(activity.getWindow().getDecorView(),"Repetir");assertTrue(repeat!=null&&repeat.performClick());});
                 awaitVisibleCameraControl(scenario,"Tomar foto",8_000);
@@ -159,7 +156,7 @@ public class GalaxyMediaExperienceTest {
                 assertTrue(repeat!=null&&repeat.performClick());
             });
             awaitVisibleCameraControl(scenario,"Iniciar grabación",10_000);
-            device.findObject(By.desc("Cerrar cámara")).click();
+            tapVisibleCameraControl(scenario,"Cerrar cámara");
         }
         assertFalse("Cancelled video capture left a temp file.",hasFiles(new File(context.getCacheDir(),"camera-media")));
         System.out.println("GALAXY_CHAT_PHASE5_ANDROID="+new JSONObject().put("case","video").put("stopPreviewMs",previewMs).put("pssBeforeKb",pssBefore).put("pssAfterKb",android.os.Debug.getPss()));
