@@ -19,3 +19,15 @@ El `Android Release Candidate` ya crea y revoca dos identidades efímeras de QA 
 **No declarar QA-FCM-01 PASS ni GO por la existencia de este PR.** Requiere ejecución verde de CI del PR, integración a `desarrollo`, promoción a `qa` aprobada y ejecución del Release Candidate con el marcador `F4_FCM_LIVE_GATE=VERIFIED`. Si falla por Play Services/GMS o configuración Firebase, registrar como BLOCKED real en vez de simular entrega.
 
 Otros controles: GPS ETA/mock/background/ausencia de señal, privacidad integral y rendimiento siguen independientes.
+
+
+## Extensión Fase 4 — navegación exacta por notificación Android
+
+Una recepción FCM exitosa y un `PendingIntent` no demuestran que al pulsarlo se abra el mensaje correcto. El test real de QA incorpora ahora el siguiente requisito en la **misma ejecución con transporte Firebase**, sin introducir otro caso que pueda omitirse:
+
+1. Captura la notificación de fondo entregada realmente por FCM y el ID/texto único del mensaje sintético remitido por la segunda identidad temporal.
+2. Cierra la actividad Android, ejecuta el `PendingIntent.send()` emitido por el sistema y espera el nuevo `MainActivity`.
+3. Comprueba `galaxy_action=chat`, `galaxy_entity_id=<ID enviado>` y que el WebView realmente contiene el mensaje correspondiente dentro del chat, no solo que el intent contenga extras.
+4. Exige `GALAXY_F4_FCM_DEEPLINK=VERIFIED` en el log de la instrumentación. El script de Release Candidate sigue exigiendo 1 caso JUnit ejecutado sin skips/failures.
+
+**Alcance de la evidencia:** reinicio de actividad tras pulsar notificación (no reinicio forzado del proceso Android completo); envío de una notificación FCM de Google real con cuenta QA. Esto no sustituye la matriz de cambio de cuenta, interrupción de red, duplicados o accesibilidad en dispositivo físico. La actualización es solo QA Android/tests, sin publicación de APK estable ni cambios a producción.
