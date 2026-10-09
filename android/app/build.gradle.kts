@@ -45,3 +45,6 @@ dependencies {
  androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
  androidTestImplementation("androidx.test.uiautomator:uiautomator:2.4.0")
 }
+
+// Windows Java 17 defaults to Cp1252; all Android Java tests and string assertions are UTF-8.
+tasks.withType<org.gradle.api.tasks.compile.JavaCompile>().configureEach { options.encoding = "UTF-8" }
