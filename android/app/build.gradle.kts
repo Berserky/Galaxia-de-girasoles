@@ -20,6 +20,17 @@ android { namespace = "com.nuestragalaxia.companion"; compileSdk = 36
      }
      if (qaSupabasePublishableKey.isNotBlank()) buildConfigField("String","SUPABASE_PUBLISHABLE_KEY","\"$qaSupabasePublishableKey\"")
    }
+   // QA device candidate is installable beside stable and must never point at production.
+   // Deliberately do not reuse QA_EDGE_URL: Android hermetic tests override it with loopback.
+   create("qaDevice") {
+     initWith(getByName("release"))
+     applicationIdSuffix = ".qa"
+     versionNameSuffix = "-qa"
+     val qaDeviceOrigin = "https://vwtcncvmwjfywrzjmskw.supabase.co"
+     buildConfigField("String","EDGE_URL","\"$qaDeviceOrigin/functions/v1/android-companion\"")
+     buildConfigField("String","SUPABASE_URL","\"$qaDeviceOrigin\"")
+     buildConfigField("String","SUPABASE_PUBLISHABLE_KEY","\"$qaSupabasePublishableKey\"")
+   }
  }
  buildFeatures { buildConfig = true }; compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 } }
 dependencies {
