@@ -8,7 +8,7 @@ const android=readFileSync('android/app/src/androidTest/java/com/nuestragalaxia/
 
 test('a retried chat push cannot append the same event to notification history twice',()=>{
   assert.match(notification,/private static synchronized boolean rememberChatEvent\(/);
-  assert.match(notification,/person\+"\\|"\+eventId/);
+  assert.ok(notification.includes('person+"|"+eventId'));
   assert.match(notification,/key\.equals\(previous\.optString\(i\)\)\)return false;/);
   assert.match(notification,/if\("chat_message"\.equals\(eventType\)&&!rememberChatEvent\(context,id\)\)return;/);
   assert.match(notification,/Math\.max\(0,previous\.length\(\)-127\)/);
