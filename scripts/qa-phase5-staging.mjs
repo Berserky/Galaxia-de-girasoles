@@ -76,6 +76,22 @@ try{
   assert.equal(String(s0.person),'0','token 0 must resolve to profile 0');
   assert.equal(String(s1.person),'1','token 1 must resolve to profile 1');
 
+  // QA-only preflight: verified public Firebase configuration for both ephemeral
+  // sessions. Never print Firebase fields/tokens. This does NOT prove FCM transport.
+  const pushConfigs=await Promise.all([
+    api(token0,{action:'push-client-config'}),
+    api(token1,{action:'push-client-config'})
+  ]);
+  for(const response of pushConfigs){
+    assert.equal(response.available,true,'QA Firebase public client config unavailable');
+    for(const key of ['projectId','senderId','applicationId','apiKey'])
+      assert.ok(typeof response.config?.[key]==='string'&&response.config[key].length>0,
+        'QA Firebase client config missing '+key);
+  }
+  assert.notEqual(String(pushConfigs[0].deviceId),String(pushConfigs[1].deviceId),
+    'FCM bootstrap must resolve two distinct temporary devices');
+  console.log('VERIFIED: QA Firebase client bootstrap (not FCM delivery)');
+
   const [r0,r1]=await Promise.all([
     api(token0,{action:'chat-send',clientId:crypto.randomUUID(),clientCreatedAt:new Date().toISOString(),body:body0,messageType:'text',attachments:[]}),
     api(token1,{action:'chat-send',clientId:crypto.randomUUID(),clientCreatedAt:new Date().toISOString(),body:body1,messageType:'text',attachments:[]})
