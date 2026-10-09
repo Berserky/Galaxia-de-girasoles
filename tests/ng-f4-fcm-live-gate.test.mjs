@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 
-const workflow=readFileSync('.github/workflows/android-release-candidate.yml','utf8');
+const workflow=readFileSync('.github/workflows/android-release-candidate.yml','utf8').replace(/\r\n/g,'\n');
 const script=readFileSync('scripts/qa-f4-fcm-live.sh','utf8');
 const android=readFileSync('android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyFcmTransportQaTest.java','utf8');
 
