@@ -13,11 +13,13 @@ android { namespace = "com.nuestragalaxia.companion"; compileSdk = 36
    getByName("debug") {
      applicationIdSuffix = providers.gradleProperty("QA_APPLICATION_SUFFIX").orNull ?: ""
      if (qaEdgeUrl.isNotBlank()) buildConfigField("String","EDGE_URL","\"$qaEdgeUrl\"")
-     // Prevent QA media validation from referencing the production Supabase host.
-     if (qaEdgeUrl.startsWith("https://") && qaEdgeUrl.contains(".supabase.co/functions/v1/")) {
-       val qaOrigin = qaEdgeUrl.substringBefore("/functions/v1/")
-       buildConfigField("String","SUPABASE_URL","\"$qaOrigin\"")
+     // Debug apps must not expose production storage/media endpoints, even when
+     // hermetic Android instrumentation uses loopback for its mocked Edge server.
+     val qaOrigin = "https://vwtcncvmwjfywrzjmskw.supabase.co"
+     check(qaEdgeUrl == "$qaOrigin/functions/v1/android-companion" || qaEdgeUrl == "http://127.0.0.1:18765") {
+       "QA debug builds require exact QA Edge endpoint or isolated local QA instrumentation."
      }
+     buildConfigField("String","SUPABASE_URL","\"$qaOrigin\"")
      if (qaSupabasePublishableKey.isNotBlank()) buildConfigField("String","SUPABASE_PUBLISHABLE_KEY","\"$qaSupabasePublishableKey\"")
    }
    // QA device candidate is installable beside stable and must never point at production.
