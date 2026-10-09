@@ -12,3 +12,9 @@ El servidor puede revocar tokens FCM, pero un mensaje ya enviado puede alcanzar 
 Esta prueba **NO** equivale a una entrega FCM desde servidores de Firebase al dispositivo. La entrega foreground/background, la recreación por toque/deep link, los reintentos remotos y la revocación del token remoto deben comprobarse sobre un emulador con Google Play Services y credenciales de QA reales. Mantener `QA-FCM-01=PARCIAL/BLOCKED` y [issue #133](https://github.com/Berserky/Galaxia-de-girasoles/issues/133) abierto hasta dicha evidencia.
 
 Sin despliegue de producción, versión estable ni cambios de credenciales.
+
+
+## GPS: ciclo de consentimiento nativo, sin datos personales
+El mismo PR incorpora `GalaxyGpsConsentDeviceTest` (inicio desactivado, denegación cuando el dispositivo no está vinculado y limpieza de consentimiento al desvincular) y `GalaxyDeviceClosureTest.gpsShare_explicitConsentAndStopAreReportedToHermeticBackend`. Esta última usa el APK de depuración, permisos Android reales y `QaHttpServer` local en `127.0.0.1:18765`; se verifica que abrir la app no envía ubicación, que el inicio requiere una acción explícita y que la detención informa `sharing:false` al servidor. No envía coordenadas ni modifica Supabase QA o producción.
+
+La simulación de rutas reales, precisión, pérdida de señal, ETA y permisos en background siguen pendientes de prueba E2E dedicada. Mantener QA-GPS-01 PARCIAL hasta cubrir esos escenarios.
