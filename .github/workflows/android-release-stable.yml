@@ -44,7 +44,7 @@ jobs:
       - name: Explicit operator approval token
         run: test "$CONFIRMATION" = "PROMOTE_ANDROID_STABLE"
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Verify candidate workflow provenance
         shell: bash

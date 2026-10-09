@@ -17,7 +17,7 @@ jobs:
     name: Remote QA gate guardrails (offline)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
@@ -38,7 +38,7 @@ jobs:
       QA_STAGING_TOKEN_0: ${{ secrets.QA_STAGING_TOKEN_0 }}
       QA_STAGING_TOKEN_1: ${{ secrets.QA_STAGING_TOKEN_1 }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
