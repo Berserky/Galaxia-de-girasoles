@@ -8,10 +8,10 @@ const begin=app.indexOf('const CHAT_BACKEND_REACHABLE_GRACE_MS=45_000;');
 const end=app.indexOf('const api=(action,payload={})=>{',begin);
 assert.ok(begin>=0&&end>begin,'Chat reachability helper must precede API wrapper.');
 const helper=app.slice(begin,end);
-function connected({paired=true,webviewOnline=false,lastSuccess=0,now=100000}={}){
+function connected({paired=true,person='0',proofPerson=person,webviewOnline=false,lastSuccess=0,now=100000}={}){
  return vm.runInNewContext(helper+
-  '\nlastSuccessfulApiAt='+String(lastSuccess)+';chatTransportCanSend('+String(now)+');',
-  {native:{paired},navigator:{onLine:webviewOnline}});
+  '\nlastSuccessfulApiAt='+String(lastSuccess)+';lastSuccessfulApiPerson='+JSON.stringify(proofPerson)+';chatTransportCanSend('+String(now)+');',
+  {native:{paired,person},navigator:{onLine:webviewOnline}});
 }
 test('recent real backend response overrides Chromium false-offline for paired device',()=>{
  assert.equal(connected({lastSuccess:99000}),true);
@@ -28,6 +28,17 @@ test('unpaired device never drains private outbox',()=>{
 });
 test('paired WebView explicitly online retains original transport behavior',()=>{
  assert.equal(connected({webviewOnline:true}),true);
+});
+test('an authenticated response from another profile never unlocks a new profile outbox',()=>{
+ assert.equal(connected({person:'1',proofPerson:'0',lastSuccess:99000}),false);
+ assert.equal(connected({person:'0',proofPerson:'1',lastSuccess:99000}),false);
+ assert.equal(connected({person:'1',proofPerson:'1',lastSuccess:99000}),true);
+ assert.equal(connected({person:'',proofPerson:'',lastSuccess:99000}),false);
+});
+test('native pairing and profile changes revoke stale proof before any delayed delivery',()=>{
+ assert.match(app,/if\(!data\.paired\|\|String\(data\.person\?\?''\)!==String\(native\?\.person\?\?''\)\)/);
+ assert.match(app,/lastSuccessfulApiAt=0;lastSuccessfulApiPerson=''/);
+ assert.match(app,/lastSuccessfulApiPerson=String\(native\.person\)/);
 });
 test('API ack, chat-state wakeup, presence display and delivery agree on connectivity evidence',()=>{
  assert.match(app,/lastSuccessfulApiAt=Date\.now\(\)/);
