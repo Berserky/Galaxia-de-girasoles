@@ -759,6 +759,30 @@ public class GalaxyDeviceClosureTest {
         System.out.println("GALAXY_F4_GPS_CONSENT=VERIFIED_STOP;locationRequests="+backend.locationRequests().size());
     }
 
+    @Test public void gpsEta_onAndroidMapShowsLivePausedStaleAndOfflineStates() throws Exception {
+        backend.setEtaScenario(QaHttpServer.EtaScenario.LIVE);
+        launch();
+        runJs("document.querySelector('[data-view=\\\"map\\\"]')?.click()");
+        awaitJs("document.querySelector('.nav-btn.active')?.dataset.view==='map'");
+        runJs("refreshMap({quiet:false,detail:true})");
+        awaitJs("!!document.querySelector('#etaCard .eta-value strong')");
+        assertTrue("ETA must render a numeric estimate for recent shared QA fixtures",
+            js("document.querySelector('#etaCard .eta-value strong')?.innerText||''").contains("≈ "));
+
+        backend.setEtaScenario(QaHttpServer.EtaScenario.PARTNER_PAUSED);
+        runJs("refreshMap({quiet:false,detail:true})");
+        awaitJs("document.querySelector('#etaCard')?.classList.contains('unavailable') && document.querySelector('#etaCard')?.innerText.includes('pausó su ubicación')");
+
+        backend.setEtaScenario(QaHttpServer.EtaScenario.OWN_STALE);
+        runJs("refreshMap({quiet:false,detail:true})");
+        awaitJs("document.querySelector('#etaCard')?.classList.contains('unavailable') && document.querySelector('#etaCard')?.innerText.includes('Esperando tu ubicación')");
+
+        backend.setEtaScenario(QaHttpServer.EtaScenario.OFFLINE);
+        runJs("refreshMap({quiet:false,detail:true})");
+        awaitJs("document.querySelector('#etaCard')?.classList.contains('unavailable') && document.querySelector('#etaCard')?.innerText.includes('Activa tu ubicación')");
+        System.out.println("GALAXY_F4_GPS_ETA=VERIFIED;live=PASS;partner_paused=PASS;stale=PASS;offline=PASS");
+    }
+
     @Test public void notificationDeepLink_opensChatAfterColdLaunch() throws Exception {
         Intent intent = new Intent(context, MainActivity.class)
             .putExtra("galaxy_action", "chat")
