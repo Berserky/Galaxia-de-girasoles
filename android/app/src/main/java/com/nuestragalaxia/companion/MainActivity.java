@@ -78,7 +78,7 @@ public final class MainActivity extends FragmentActivity {
     private String pendingLocationRequest;
     private String pendingBondRequest;
     private String pendingGalaxyNotificationRequest;
-    private String pendingDeepLinkAction="",pendingDeepLinkEntity="",pendingDeepLinkEvent="";
+    private String pendingDeepLinkAction="",pendingDeepLinkEntity="",pendingDeepLinkEvent="",pendingDeepLinkRecipient="";
     private String pendingMediaRequest;
     private String pendingMediaKind;
     private String pendingVoiceStartRequest;
@@ -1554,19 +1554,43 @@ public final class MainActivity extends FragmentActivity {
         catch(Exception ignored){}
     }
 
+    // Drop stale notification links after unpair or account switch.
+    static boolean shouldAcceptNotificationDeepLink(Context context,Intent intent){
+        if(intent==null)return false;
+        String action=intent.getStringExtra("galaxy_action");
+        String recipient=intent.getStringExtra("galaxy_recipient_person");
+        if(action==null||action.isBlank()||(!"0".equals(recipient)&&!"1".equals(recipient)))return false;
+        DeviceStore current=new DeviceStore(context);
+        return current.pairedFast()&&recipient.equals(current.person());
+    }
+
+    private void clearPendingDeepLink(){
+        pendingDeepLinkAction="";pendingDeepLinkEntity="";pendingDeepLinkEvent="";pendingDeepLinkRecipient="";
+    }
+
     private void captureDeepLink(Intent intent){
-        if(intent==null)return;
-        String action=intent.getStringExtra("galaxy_action"),entity=intent.getStringExtra("galaxy_entity_id"),eventType=intent.getStringExtra("galaxy_event_type");
-        if(action!=null&&!action.isBlank()){pendingDeepLinkAction=action;if("chat".equals(action))GalaxyNotifications.resetChat(this);}
-        if(entity!=null)pendingDeepLinkEntity=entity;
-        if(eventType!=null)pendingDeepLinkEvent=eventType;
+        if(intent==null||intent.getStringExtra("galaxy_action")==null)return;
+        if(!shouldAcceptNotificationDeepLink(this,intent)){
+            clearPendingDeepLink();
+            return;
+        }
+        pendingDeepLinkAction=intent.getStringExtra("galaxy_action");
+        pendingDeepLinkEntity=intent.getStringExtra("galaxy_entity_id")==null?"":intent.getStringExtra("galaxy_entity_id");
+        pendingDeepLinkEvent=intent.getStringExtra("galaxy_event_type")==null?"":intent.getStringExtra("galaxy_event_type");
+        pendingDeepLinkRecipient=intent.getStringExtra("galaxy_recipient_person");
+        if("chat".equals(pendingDeepLinkAction))GalaxyNotifications.resetChat(this);
     }
 
     private void emitPendingDeepLink(){
         if(!pageReady||pendingDeepLinkAction==null||pendingDeepLinkAction.isBlank())return;
+        DeviceStore current=new DeviceStore(this);
+        if(!current.pairedFast()||!pendingDeepLinkRecipient.equals(current.person())){
+            clearPendingDeepLink();
+            return;
+        }
         JSONObject payload=new JSONObject();
         try{payload.put("action",pendingDeepLinkAction);payload.put("entityId",pendingDeepLinkEntity);payload.put("eventType",pendingDeepLinkEvent);}catch(Exception ignored){}
-        pendingDeepLinkAction="";pendingDeepLinkEntity="";pendingDeepLinkEvent="";
+        clearPendingDeepLink();
         event("deep-link",payload);
     }
 
