@@ -34,3 +34,17 @@ test('strict QA staging requires Firebase bootstrap from two OIDC devices withou
   assert.match(probe,/VERIFIED: QA Firebase client bootstrap \(not FCM delivery\)/);
   assert.doesNotMatch(probe,/console\.log\(.*pushConfigs\[0\]\.config/);
 });
+
+
+test('GPS Android instrumented consent hits only the hermetic local QA backend',()=>{
+ const suite=readFileSync('android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyDeviceClosureTest.java','utf8');
+ const backend=readFileSync('android/app/src/androidTest/java/com/nuestragalaxia/companion/QaHttpServer.java','utf8');
+ assert.match(suite,/gpsShare_explicitConsentAndStopAreReportedToHermeticBackend/);
+ assert.match(suite,/assertTrue\("No sharing before explicit consent"/);
+ assert.match(suite,/activity\.startLocation\(null\)/);
+ assert.match(suite,/activity\.stopLocation\(null\)/);
+ assert.match(suite,/sample -> !sample\.optBoolean\("sharing",true\)/);
+ assert.match(backend,/case "location":/);
+ assert.match(backend,/locationRequests\.add\(new JSONObject\(body\.toString\(\)\)\)/);
+ assert.doesNotMatch(suite,/https?:\/\/[^\s]*supabase\.co/);
+});
