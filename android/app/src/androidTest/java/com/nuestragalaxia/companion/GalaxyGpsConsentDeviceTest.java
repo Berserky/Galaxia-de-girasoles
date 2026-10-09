@@ -55,5 +55,28 @@ public class GalaxyGpsConsentDeviceTest {
         device.clear();
         assertFalse("Unpair retained GPS consent",device.tracking());
         assertFalse(device.pairedFast());
+    }    @Test public void stickyRestartCannotResumeAfterGpsConsentWasRevoked() throws Exception {
+        device.save("qa-token-only","0","QA device");
+        assertFalse("Sticky Android restart without prior opt-in must be blocked",
+            TrackingService.mayStartForConsent(null,device.tracking()));
+        assertTrue("Explicit user opt-in ACTION_START must remain allowed",
+            TrackingService.mayStartForConsent(
+                new android.content.Intent(context,TrackingService.class)
+                    .setAction(TrackingService.ACTION_START),false));
+        device.setTracking(true);
+        assertTrue("Previously consented sticky restart must remain supported",
+            TrackingService.mayStartForConsent(null,device.tracking()));
+        device.setTracking(false);
+        assertFalse("Consent turned off but sticky GPS restart still allowed",
+            TrackingService.mayStartForConsent(null,device.tracking()));
+        device.clear();
+        assertFalse("Unpaired device must not resume GPS sharing",
+            TrackingService.mayStartForConsent(null,device.tracking()));
+        assertFalse("Unknown service intent must not enable GPS",
+            TrackingService.mayStartForConsent(
+                new android.content.Intent(context,TrackingService.class)
+                    .setAction("com.nuestragalaxia.UNEXPECTED"),true));
     }
+
+
 }

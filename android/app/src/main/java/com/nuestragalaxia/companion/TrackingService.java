@@ -25,13 +25,29 @@ public final class TrackingService extends Service {
     @Override public void onCreate(){
         super.onCreate(); fused=LocationServices.getFusedLocationProviderClient(this); classifier=new MotionClassifier(); pending=new PendingPointStore(this); store=new DeviceStore(this); createChannel();
     }
+    // START_STICKY restarts without an Intent; persisted opt-in is mandatory.
+    static boolean mayStartForConsent(Intent intent,boolean priorConsent){
+        if(intent==null)return priorConsent;
+        return ACTION_START.equals(intent.getAction());
+    }
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         if(intent!=null&&ACTION_STOP.equals(intent.getAction())){stopTracking();return START_NOT_STICKY;}
+        if(!mayStartForConsent(intent,store.tracking())){
+            stopSelf(startId);
+            return START_NOT_STICKY;
+        }
         startVisible("Preparando GPS…");
         if(!hasLocationPermission()){
             updateNotification("Falta permiso de ubicación"); store.setTracking(false); pending.clear(); stopSelf(); return START_NOT_STICKY;
         }
-        if(!store.paired()){updateNotification("Vincula este teléfono primero");stopSelf();return START_NOT_STICKY;}
+        if(!store.pairedFast()){
+            store.setTracking(false);
+            pending.clear();
+            updateNotification("Vincula este teléfono primero");
+            stopForeground(STOP_FOREGROUND_REMOVE);
+            stopSelf();
+            return START_NOT_STICKY;
+        }
         store.setTracking(true); requestLocations(); return START_STICKY;
     }
     private boolean hasLocationPermission(){
