@@ -55,7 +55,9 @@ public class GalaxyGpsConsentDeviceTest {
         device.clear();
         assertFalse("Unpair retained GPS consent",device.tracking());
         assertFalse(device.pairedFast());
-    }    @Test public void stickyRestartCannotResumeAfterGpsConsentWasRevoked() throws Exception {
+    }
+
+    @Test public void stickyRestartCannotResumeAfterGpsConsentWasRevoked() throws Exception {
         device.save("qa-token-only","0","QA device");
         assertFalse("Sticky Android restart without prior opt-in must be blocked",
             TrackingService.mayStartForConsent(null,device.tracking()));
