@@ -897,6 +897,30 @@ public class GalaxyDeviceClosureTest {
         String safe = JSONObject.quote(body);
         runJs("const t=document.querySelector('#chatForm textarea');t.value=" + safe
             + ";t.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#chatForm').requestSubmit();");
+        // Log only booleans and delivery counters; never log the message body, ids or auth headers.
+        System.out.println("GALAXY_QA_CHAT_SUBMIT="+qaChatFailureDiagnostic());
+    }
+
+    private String qaChatFailureDiagnostic() {
+        long sent = backend == null ? -1 : backend.sentCount();
+        boolean sendSeen = backend != null && backend.actions().contains("chat-send");
+        if (scenario == null) return "scenario=false;sent="+sent+";sendSeen="+sendSeen;
+        try {
+            String state = js("JSON.stringify((()=>{"
+                + "const form=document.querySelector('#chatForm'),button=form?.querySelector('.chat-send'),"
+                + "composer=typeof ensureChatComposer==='function'?ensureChatComposer().snapshot():null,"
+                + "delivery=typeof chatDeliveryEngine==='undefined'||!chatDeliveryEngine?null:chatDeliveryEngine.snapshot();"
+                + "return {chat:typeof view!=='undefined'&&view==='chat',form:!!form,"
+                + "buttonType:button?.type||null,buttonDisabled:!!button?.disabled,"
+                + "composerHasText:!!composer?.text?.trim(),composerDisabled:!!composer?.disabled,"
+                + "composerSending:!!composer?.sending,paired:typeof native!=='undefined'&&!!native?.paired,"
+                + "navigatorOnline:navigator.onLine,deliveryOnline:delivery?.online??null,"
+                + "deliveryPending:delivery?.pending??null,deliverySending:delivery?.sending??null,"
+                + "deliveryFailed:delivery?.failed??null,visibility:document.visibilityState};})())");
+            return "sent="+sent+";sendSeen="+sendSeen+";state="+state;
+        } catch (Exception | AssertionError ignored) {
+            return "sent="+sent+";sendSeen="+sendSeen+";state=unavailable";
+        }
     }
 
     private boolean messagesContain(JSONArray rows, String text) {
@@ -1065,8 +1089,12 @@ public class GalaxyDeviceClosureTest {
             } catch (Exception ignored) {}
             SystemClock.sleep(100);
         }
-        if (last != null) throw last;
-        throw new AssertionError("Condition timed out after " + timeoutMs + " ms");
+        // Preserve the assertion while adding a privacy-safe snapshot for emulator-only failures.
+        // A remote CI pass does not negate a reproducible local WebView/Chat failure.
+        if (last != null) throw new AssertionError(last.getMessage()
+            + "; GALAXY_QA_CHAT_TIMEOUT=" + qaChatFailureDiagnostic(), last);
+        throw new AssertionError("Condition timed out after " + timeoutMs
+            + " ms; GALAXY_QA_CHAT_TIMEOUT=" + qaChatFailureDiagnostic());
     }
 
     private String shell(String command) throws Exception {
