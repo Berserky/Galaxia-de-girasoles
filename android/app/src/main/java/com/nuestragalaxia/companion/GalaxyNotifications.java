@@ -72,13 +72,15 @@ public final class GalaxyNotifications {
     }
 
     private static PendingIntent openIntent(Context context,String eventType,String id,String action,String entityId){
+        String recipient=new DeviceStore(context).person();
         Intent open=new Intent(context,MainActivity.class)
             .setAction("com.nuestragalaxia.OPEN_"+eventType+"_"+id)
+            .putExtra("galaxy_recipient_person",recipient)
             .putExtra("galaxy_action",action==null?"":action)
             .putExtra("galaxy_entity_id",entityId==null?"":entityId)
             .putExtra("galaxy_event_type",eventType==null?"":eventType)
             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        int requestCode=Math.abs((eventType+"|"+id).hashCode());
+        int requestCode=(recipient+"|"+eventType+"|"+id).hashCode() & 0x7fffffff;
         return PendingIntent.getActivity(context,requestCode,open,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
     }
 
