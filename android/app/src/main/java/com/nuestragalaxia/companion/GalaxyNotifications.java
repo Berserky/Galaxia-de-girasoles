@@ -32,6 +32,7 @@ public final class GalaxyNotifications {
     private static final String HISTORY_IV="history_iv";
     private static final String HISTORY_KEY_ALIAS="galaxy_chat_notification_history";
     private static final String COUNT="count";
+    private static final String SEEN_CHAT_EVENT_KEYS="seen_chat_event_keys";
     private static final int CHAT_NOTIFICATION_ID=320;
 
     private GalaxyNotifications(){}
@@ -147,9 +148,29 @@ public final class GalaxyNotifications {
     }
 
     public static void resetChat(Context context){
-        context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit().remove(LEGACY_HISTORY).remove(HISTORY_CIPHER).remove(HISTORY_IV).putInt(COUNT,0).apply();
+        context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit().remove(LEGACY_HISTORY).remove(HISTORY_CIPHER).remove(HISTORY_IV).remove(SEEN_CHAT_EVENT_KEYS).putInt(COUNT,0).apply();
         NotificationManager manager=context.getSystemService(NotificationManager.class);
         if(manager!=null)manager.cancel("galaxy-chat",CHAT_NOTIFICATION_ID);
+    }
+
+    // One backend event may be retried by FCM. Keep only opaque recipient/event keys,
+    // bounded to the most recent 128, and never persist notification text here.
+    private static synchronized boolean rememberChatEvent(Context context,String eventId){
+        if(eventId==null||eventId.isBlank())return true;
+        String person=new DeviceStore(context).person();
+        if(!"0".equals(person)&&!"1".equals(person))return false;
+        android.content.SharedPreferences prefs=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE);
+        JSONArray previous;
+        try{previous=new JSONArray(prefs.getString(SEEN_CHAT_EVENT_KEYS,"[]"));}
+        catch(Exception ignored){previous=new JSONArray();}
+        String key=person+"|"+eventId;
+        for(int i=0;i<previous.length();i++)if(key.equals(previous.optString(i)))return false;
+        JSONArray recent=new JSONArray();
+        for(int i=Math.max(0,previous.length()-127);i<previous.length();i++)
+            recent.put(previous.optString(i));
+        recent.put(key);
+        prefs.edit().putString(SEEN_CHAT_EVENT_KEYS,recent.toString()).apply();
+        return true;
     }
 
     public static void show(
@@ -160,6 +181,7 @@ public final class GalaxyNotifications {
         prepare(context);
         NotificationManager manager=context.getSystemService(NotificationManager.class);
         if(manager==null)return;
+        if("chat_message".equals(eventType)&&!rememberChatEvent(context,id))return;
 
         NotificationCompat.Builder builder=new NotificationCompat.Builder(context,channel(eventType))
             .setSmallIcon(R.drawable.ic_galaxy)
