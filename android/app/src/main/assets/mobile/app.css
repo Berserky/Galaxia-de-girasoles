@@ -140,6 +140,19 @@ textarea{min-height:110px;resize:vertical}
 .onboarding-logo{width:74px;height:74px;border-radius:25px;display:grid;place-items:center;background:linear-gradient(145deg,#7254c7,#b95468);color:#fff;font-size:34px;margin-bottom:18px}
 .onboarding h1{font-size:30px;letter-spacing:-.035em;margin:0 0 10px}
 .onboarding p{line-height:1.6}
+/* NG-AUD-003: shorten first landscape viewport without hiding linking controls. */
+@media (orientation:landscape) and (max-height:560px){
+ .onboarding{min-height:0;align-items:flex-start;padding-bottom:max(12px,env(safe-area-inset-bottom))}
+ .onboarding .card{width:min(100%,760px);padding:12px 16px}
+ .onboarding-logo{width:36px;height:36px;border-radius:12px;margin-bottom:6px}
+ .onboarding-logo .ui-icon{width:19px;height:19px}
+ .onboarding h1{font-size:clamp(18px,4.5vh,24px);line-height:1.12;margin:0 0 6px}
+ .onboarding p{font-size:12px;line-height:1.3;margin:5px 0}
+ .onboarding #pairForm{display:grid;grid-template-columns:minmax(0,1fr) minmax(145px,auto);gap:10px;align-items:end;margin-top:10px!important}
+ .onboarding #pairForm .field{min-width:0}
+ .onboarding #pairForm .btn{min-height:42px;padding:10px 14px}
+ .onboarding .muted{margin-top:8px!important}
+}
 .update-line{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center}
 .update-bar{height:5px;background:var(--surface2);border-radius:99px;margin-top:8px;overflow:hidden}
 .update-bar i{display:block;height:100%;background:var(--accent);transition:width .2s}

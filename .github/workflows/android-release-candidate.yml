@@ -298,8 +298,8 @@ jobs:
           test -n "$QA_STAGING_PUBLISHABLE_KEY"
           test -n "$QA_STAGING_TOKEN_0"
           test -n "$QA_STAGING_TOKEN_1"
-          node scripts/qa-phase5-staging.mjs 2>&1 | tee candidate-evidence/staging-smoke.txt
-          grep -q '^VERIFIED: remote staging dual-user concurrency/realtime/map/backup' candidate-evidence/staging-smoke.txt
+          node scripts/qa-phase4-strict-staging.mjs 2>&1 | tee candidate-evidence/staging-smoke.txt
+          grep -q '^F4_QA_REMOTE_GATE=VERIFIED$' candidate-evidence/staging-smoke.txt
       - name: Revoke ephemeral QA identities
         if: always()
         shell: bash

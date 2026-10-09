@@ -58,6 +58,9 @@ jobs:
           fi
           mv supabase/migrations/20261005011401_qa_phase1_data_integrity.sql /tmp/phase1.sql
           mv supabase/migrations/20261005023031_qa_phase2_chat_correctness.sql /tmp/phase2.sql
+          # Baseline parity must compare the immutable Phase-0 schema, not new Fase-4 changes.
+          mv supabase/migrations/20261008193000_ng_phase4_member_location_rls.sql /tmp/phase4.sql
+          mv supabase/migrations/20261008223000_ng_aud_005_capsule_null_guard.sql /tmp/ng-aud-005.sql
           supabase start
 
       - name: Compare clean replay against production Phase-0 schema

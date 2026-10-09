@@ -18,8 +18,10 @@ test('candidate requires the full automated release gate set',()=>{
   for(const marker of [
     'npm test','deno check','privacy-firewall.test.mjs','supabase start',
     'testDebugUnitTest','lintDebug','qa-phase5-emulator.sh','sha256sum',
-    'apksigner','qa-phase5-staging.mjs','android-candidate','release-gates.json'
+    'apksigner','qa-phase4-strict-staging.mjs','android-candidate','release-gates.json'
   ]) assert.ok(workflow.includes(marker),marker);
+  assert.match(read('scripts/qa-phase4-strict-staging.mjs'),/qa-phase5-staging\.mjs/,'strict gate reuses existing staging E2E');
+  assert.ok(workflow.includes('F4_QA_REMOTE_GATE=VERIFIED'),'QA smoke must require an actual verified E2E');
   const upgrade=read('scripts/qa-candidate-upgrade.sh');
   assert.ok(upgrade.includes('adb install -r candidate/NuestraGalaxia.apk'),'candidate must prove in-place upgrade over stable');
   assert.ok(workflow.includes('"upgradeInstall": "PASS"'),'candidate ledger must record upgrade install');

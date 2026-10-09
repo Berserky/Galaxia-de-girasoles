@@ -1,0 +1,72 @@
+name: NG-AUD-003 Onboarding Landscape Device QA
+on:
+  pull_request:
+    branches: [desarrollo, qa, prod]
+    paths:
+      - "android/app/src/main/assets/mobile/app.css"
+      - "android/app/src/main/assets/mobile/app.js"
+      - "android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyOnboardingViewportTest.java"
+      - "scripts/qa-onboarding-viewport.sh"
+      - "scripts/qa-onboarding-image-check.py"
+      - "tests/test_qa_onboarding_image_check.py"
+      - ".github/workflows/ng-aud-003-onboarding.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  onboarding:
+    name: Android onboarding real viewport + screenshots
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Pillow for rendered screenshot checks
+        run: python3 -m pip install --disable-pip-version-check Pillow==11.3.0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Prepare Android SDK
+        run: |
+          SDK_ROOT=/usr/local/lib/android/sdk
+          SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | head -1)
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "platforms;android-36" "build-tools;36.0.0" "platform-tools" "emulator"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.4.1"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm || true
+      - name: Package welcome audio
+        run: cp musica.mp3 android/app/src/main/assets/musica.mp3
+      - name: Screenshot verifier negative fixtures
+        run: python3 -m unittest discover -s tests -p test_qa_onboarding_image_check.py
+      - name: Verify portrait + landscape first viewport
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: bash scripts/qa-onboarding-viewport.sh
+      - name: Attach anonymized QA evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ng-aud-003-onboarding-portrait-landscape
+          path: |
+            qa-artifacts/ng-aud-003/**
+            android/app/build/outputs/androidTest-results/**
+          retention-days: 14

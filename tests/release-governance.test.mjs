@@ -31,10 +31,12 @@ test('qa creates a candidate only after required automated gates',()=>{
     'qa-phase5-emulator.sh',
     'sha256sum',
     'apksigner',
-    'qa-phase5-staging.mjs',
+    'qa-phase4-strict-staging.mjs',
     'android-candidate',
     'release-gates.json'
   ]) assert.ok(candidate.includes(marker),marker);
+  assert.match(read('scripts/qa-phase4-strict-staging.mjs'),/qa-phase5-staging\.mjs/,'strict wrapper must execute the real QA dual-user probe');
+  assert.match(candidate,/F4_QA_REMOTE_GATE=VERIFIED/,'candidate cannot record staging PASS without real E2E proof');
 });
 
 test('stable promotion is manual, provenance-bound and approval-gated',()=>{

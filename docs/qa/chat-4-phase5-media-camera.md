@@ -135,3 +135,10 @@ Cross-environment validation exposed three test-harness assumptions: duplicate `
 - Emulator coverage remains useful for deterministic regression, while the required physical-device pass was completed on Moto G75 5G / Android 16. Additional OEM/device coverage remains recommended for broader compatibility confidence.
 - Upload cancellation can stop client streaming and clean blobs already returned by the server. A server request that has crossed the final storage commit boundary may finish before cancellation arrives; `chat-media-discard` then performs safe unreferenced cleanup.
 - Advanced editing, filters, AR effects, global motion redesign and Voice Messages redesign remain outside Phase 5.
+
+
+## Fase 4/5: gate obligatorio de evidencia CameraX (2026-10-08)
+
+El resultado `BUILD SUCCESSFUL` del emulador no prueba por sí solo que los casos CameraX de foto/video se hayan ejecutado: JUnit permite pruebas marcadas `skipped` (por `Assume.assumeTrue`). El workflow específico `chat-4-phase5-media-camera.yml` ahora invoca `scripts/qa_camerax_report.py`, que inspecciona XML JUnit real y exige el resultado `passed` de **ambos** casos `cameraX_photoRearFrontReviewRetakeAndCancel_whenCameraExists` y `cameraX_videoHasBoundedRecordingPreviewPlaybackRetakeAndCleanup_whenCameraExists`.
+
+Cualquier caso omitido, ausente o fallido bloquea el check, aunque Gradle haya terminado en verde. También se documentan las capacidades de cámara anunciadas por el AVD. La suite `tests/test_qa_camerax_results.py` valida ese comportamiento sin dispositivos. Hasta obtener evidencia verde con ambos casos ejecutados, la cobertura CameraX en emulador se etiqueta **NOT_VERIFIED**, y el reporte físico existente del 2026-10-06 permanece como evidencia separada, sin repetir automáticamente la prueba sobre el teléfono personal.

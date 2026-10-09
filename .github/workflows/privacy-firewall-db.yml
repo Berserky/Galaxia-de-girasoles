@@ -6,10 +6,13 @@ on:
     paths:
       - 'supabase/**'
       - 'tests/privacy-firewall-db.sql'
+      - 'tests/phase4-member-location-rls.sql'
+      - 'tests/ng-aud-005-capsule-null-guard.sql'
       - 'tests/privacy-firewall-pre-migration.sql'
       - 'tests/privacy-firewall-chat-e2e.sh'
       - 'tests/privacy-firewall.test.mjs'
       - 'tests/supabase-rls.sql'
+      - 'tests/phase4-invitation-identity.sql'
       - '.github/workflows/privacy-firewall-db.yml'
   workflow_dispatch:
 
@@ -41,6 +44,8 @@ jobs:
           mv supabase/migrations/20261004232942_qa_phase0_privacy_firewall.sql /tmp/phase0.sql
           mv supabase/migrations/20261005011401_qa_phase1_data_integrity.sql /tmp/phase1.sql
           mv supabase/migrations/20261005023031_qa_phase2_chat_correctness.sql /tmp/phase2.sql
+          mv supabase/migrations/20261008193000_ng_phase4_member_location_rls.sql /tmp/phase4.sql
+          mv supabase/migrations/20261008223000_ng_aud_005_capsule_null_guard.sql /tmp/ng-aud-005.sql
           supabase start
 
       - name: Seed pre-Phase-0 orphan
@@ -54,8 +59,13 @@ jobs:
       - name: Run RLS regression
         run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/supabase-rls.sql
 
+      - name: NG-FNC invitation expiry, replacement, reuse and profile isolation
+        run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/phase4-invitation-identity.sql
+
       - name: Run Phase 0 two-profile attack probes
         run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/privacy-firewall-db.sql
+
+
 
       - name: Validate Phase 0 rollback and re-apply
         run: |
@@ -69,6 +79,19 @@ jobs:
           supabase migration up
           mv /tmp/phase2.sql supabase/migrations/20261005023031_qa_phase2_chat_correctness.sql
           supabase migration up
+          mv /tmp/phase4.sql supabase/migrations/20261008193000_ng_phase4_member_location_rls.sql
+          supabase migration up
+
+      - name: NG-AUD-004 Verify authenticated outsiders cannot read shared GPS
+        run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/phase4-member-location-rls.sql
+
+      - name: Apply NG-AUD-005 capsule guard in isolated database
+        run: |
+          mv /tmp/ng-aud-005.sql supabase/migrations/20261008223000_ng_aud_005_capsule_null_guard.sql
+          supabase migration up
+
+      - name: NG-AUD-005 Verify capsule access for members A/B and outsiders C/D
+        run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/ng-aud-005-capsule-null-guard.sql
 
       - name: Run delete-for-both and privacy Edge E2E
         run: bash tests/privacy-firewall-chat-e2e.sh
