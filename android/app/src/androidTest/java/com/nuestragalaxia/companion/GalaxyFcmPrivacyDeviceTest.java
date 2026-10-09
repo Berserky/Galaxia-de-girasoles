@@ -81,9 +81,20 @@ public class GalaxyFcmPrivacyDeviceTest {
                 hasOpenIntent=true;
         assertTrue("Chat notification has no Android deep link PendingIntent",hasOpenIntent);
 
-        device.clear(); // cancels notifications and revokes local pairing state
+        device.clear(); // requests async NotificationManager.cancelAll
         assertFalse(device.pairedFast());
+
+        // Let Android finish removing the previous paired notification before
+        // sending another FCM payload. Otherwise we cannot distinguish a late
+        // notification from one that was already queued for cancellation.
+        long deadline=android.os.SystemClock.elapsedRealtime()+5_000;
+        while(chatNotificationVisible()&&android.os.SystemClock.elapsedRealtime()<deadline)
+            android.os.SystemClock.sleep(100);
+        assertFalse("Previous paired notification was not cancelled by unpair",
+            chatNotificationVisible());
+
         GalaxyFirebaseService.handleIncoming(context,payload("qa-revoked"));
+        android.os.SystemClock.sleep(300);
         assertFalse("Late push was shown after account unpair",chatNotificationVisible());
     }
 }
