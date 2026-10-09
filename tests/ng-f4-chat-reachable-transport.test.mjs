@@ -35,3 +35,8 @@ test('API ack, chat-state wakeup, presence display and delivery agree on connect
  assert.match(app,/online:\(\)=>chatTransportCanSend\(\)/);
  assert.match(app,/if\(!chatTransportCanSend\(\)\)\{const pending/);
 });
+
+test('Java 17 Windows Cp1252 cannot corrupt Android instrumentation Spanish and ETA literals',()=>{
+ const gradle=readFileSync('android/app/build.gradle.kts','utf8');
+ assert.match(gradle,/tasks\.withType<org\.gradle\.api\.tasks\.compile\.JavaCompile>\(\)\.configureEach \{ options\.encoding = "UTF-8" \}/);
+});
