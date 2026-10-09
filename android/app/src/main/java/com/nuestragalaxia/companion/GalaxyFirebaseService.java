@@ -17,24 +17,30 @@ public final class GalaxyFirebaseService extends FirebaseMessagingService {
     }
 
     @Override public void onMessageReceived(RemoteMessage message){
-        Map<String,String> data=message.getData();
+        handleIncoming(getApplicationContext(),message.getData());
+    }
+
+    // Package-private to test native notification handling without simulating FCM transport.
+    static void handleIncoming(Context context,Map<String,String> data){
+        // An in-flight notification must not reveal private content after unpair.
+        if(!new DeviceStore(context).pairedFast())return;
         String eventType=data.getOrDefault("eventType","");
         if(!EVENTS.contains(eventType))return;
         if("chat_message".equals(eventType)||"chat_sync".equals(eventType)){
-            Intent sync=new Intent("com.nuestragalaxia.CHAT_SYNC").setPackage(getPackageName());
+            Intent sync=new Intent("com.nuestragalaxia.CHAT_SYNC").setPackage(context.getPackageName());
             sync.putExtra("entityId",data.getOrDefault("entityId",""));
-            sendBroadcast(sync);
-            if("chat_sync".equals(eventType)){BondWidget.updateAll(this);return;}
+            context.sendBroadcast(sync);
+            if("chat_sync".equals(eventType)){BondWidget.updateAll(context);return;}
         }
 
-        BondStore bond=new BondStore(this);
+        BondStore bond=new BondStore(context);
         String behavior=data.getOrDefault("behavior","message");
         String gestureHistoryId=data.getOrDefault("gestureId","");
         boolean duplicate="gesture".equals(eventType)&&!gestureHistoryId.isEmpty()&&bond.hasSeen(gestureHistoryId);
         if("gesture".equals(eventType)&&!gestureHistoryId.isEmpty())bond.markSeen(gestureHistoryId);
-        if(duplicate){BondWidget.updateAll(this);return;}
+        if(duplicate){BondWidget.updateAll(context);return;}
 
-        if(("haptic".equals(behavior)||"message_haptic".equals(behavior))&&bond.hapticEnabled())performHaptic(this);
+        if(("haptic".equals(behavior)||"message_haptic".equals(behavior))&&bond.hapticEnabled())performHaptic(context);
 
         boolean messageAllowed=!"haptic".equals(behavior);
         String title=data.getOrDefault("title","Nuestra Galaxia");
@@ -42,14 +48,14 @@ public final class GalaxyFirebaseService extends FirebaseMessagingService {
         String id=data.getOrDefault("eventId",String.valueOf(System.currentTimeMillis()));
         if(messageAllowed){
             if("gesture".equals(eventType)){
-                if(bond.enabled()&&GalaxyNotifications.allowed(this)){
-                    GalaxyNotifications.show(this,eventType,id,title,body,data.getOrDefault("action","moments"),data.getOrDefault("entityId",""),data.getOrDefault("senderName",title),"true".equalsIgnoreCase(data.getOrDefault("silent","false")));
+                if(bond.enabled()&&GalaxyNotifications.allowed(context)){
+                    GalaxyNotifications.show(context,eventType,id,title,body,data.getOrDefault("action","moments"),data.getOrDefault("entityId",""),data.getOrDefault("senderName",title),"true".equalsIgnoreCase(data.getOrDefault("silent","false")));
                 }
-            }else if(GalaxyNotifications.allowed(this)){
-                GalaxyNotifications.show(this,eventType,id,title,body,data.getOrDefault("action","home"),data.getOrDefault("entityId",""),data.getOrDefault("senderName",title),"true".equalsIgnoreCase(data.getOrDefault("silent","false")));
+            }else if(GalaxyNotifications.allowed(context)){
+                GalaxyNotifications.show(context,eventType,id,title,body,data.getOrDefault("action","home"),data.getOrDefault("entityId",""),data.getOrDefault("senderName",title),"true".equalsIgnoreCase(data.getOrDefault("silent","false")));
             }
         }
-        BondWidget.updateAll(this);
+        BondWidget.updateAll(context);
     }
 
     public static void performHaptic(Context context){
