@@ -44,3 +44,20 @@ test('real provider gate taps the Android PendingIntent and validates exact chat
  assert.match(android,/GALAXY_F4_FCM_DEEPLINK=VERIFIED/);
  assert.doesNotMatch(android,/GalaxyFirebaseService\.handleIncoming\(/);
 });
+
+test('signed QA device candidate has a separate application ID and fail-closed QA backend',()=>{
+ const gradle=readFileSync('android/app/build.gradle.kts','utf8');
+ const qa=gradle.split('create("qaDevice") {')[1]?.split('\n   }')[0]||'';
+ assert.ok(qa,'dedicated qaDevice build type is required');
+ assert.match(qa,/initWith\(getByName\("release"\)\)/);
+ assert.match(qa,/applicationIdSuffix = "\.qa"/);
+ assert.match(qa,/vwtcncvmwjfywrzjmskw\.supabase\.co/);
+ assert.doesNotMatch(qa,/zqiknzivfahvvadmxrvt/);
+ assert.match(workflow,/assembleQaDevice/);
+ assert.match(workflow,/QA_BUILD_CONFIG/);
+ assert.match(workflow,/FAIL: production host in QA candidate BuildConfig/);
+ assert.match(workflow,/name: android-qa-device-candidate/);
+ assert.match(workflow,/backendEnvironment:"qa"/);
+ const ci=readFileSync('.github/workflows/android-companion.yml','utf8');
+ assert.match(ci,/assembleRelease assembleQaDevice/);
+});
