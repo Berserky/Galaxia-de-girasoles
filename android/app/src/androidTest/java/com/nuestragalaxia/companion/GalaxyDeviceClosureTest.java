@@ -783,13 +783,36 @@ public class GalaxyDeviceClosureTest {
         System.out.println("GALAXY_F4_GPS_ETA=VERIFIED;live=PASS;partner_paused=PASS;stale=PASS;offline=PASS");
     }
 
+    @Test public void notificationDeepLink_deniesUnpairedAndChangedAccount() throws Exception {
+        DeviceStore device=new DeviceStore(context);
+        Intent notification=new Intent(context,MainActivity.class)
+            .putExtra("galaxy_action","chat")
+            .putExtra("galaxy_recipient_person","0")
+            .putExtra("galaxy_entity_id","50000000-0000-4000-8000-000000000001")
+            .putExtra("galaxy_event_type","chat_message");
+        assertTrue("Recipient 0 must accept own notification",MainActivity.shouldAcceptNotificationDeepLink(context,notification));
+        device.setPerson("1");
+        assertFalse("Old notification must not redirect to newly selected profile",
+            MainActivity.shouldAcceptNotificationDeepLink(context,notification));
+        device.clear();
+        assertFalse("Revoked phone must reject prior notification",
+            MainActivity.shouldAcceptNotificationDeepLink(context,notification));
+        device.save("qa-token-1","1","Second QA profile");
+        assertFalse("New pairing must not inherit prior recipient's deep link",
+            MainActivity.shouldAcceptNotificationDeepLink(context,notification));
+        assertFalse("Unbound external intents cannot open a private chat",
+            MainActivity.shouldAcceptNotificationDeepLink(context,new Intent(context,MainActivity.class)
+                .putExtra("galaxy_action","chat")));
+    }
+
     @Test public void notificationDeepLink_opensChatAfterColdLaunch() throws Exception {
         Intent intent = new Intent(context, MainActivity.class)
             .putExtra("galaxy_action", "chat")
+            .putExtra("galaxy_recipient_person", "0")
             .putExtra("galaxy_entity_id", "50000000-0000-4000-8000-000000000001")
             .putExtra("galaxy_event_type", "chat_message");
         scenario = ActivityScenario.launch(intent);
-        awaitJs("!!document.querySelector('.chat-shell')");
+        awaitJs("view==='chat' && !!document.querySelector('.chat-shell')");
         awaitCondition(() -> backend.actions().contains("chat-state"), UI_TIMEOUT_MS);
         runJs("document.activeElement?.blur();");
         scenario.onActivity(activity -> ((android.view.inputmethod.InputMethodManager)activity.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(activity.getWindow().getDecorView().getWindowToken(),0));

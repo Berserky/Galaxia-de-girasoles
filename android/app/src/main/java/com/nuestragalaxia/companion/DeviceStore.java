@@ -85,6 +85,8 @@ public final class DeviceStore {
         prefs.edit().clear().commit();
         new BondStore(context).clear();
         context.stopService(new android.content.Intent(context,TrackingService.class));
+        // Revoking the identity also revokes consent to retransmit offline fixes.
+        try(PendingPointStore queued=new PendingPointStore(context)){queued.clear();}
         BondWorker.cancel(context);
         context.getSystemService(android.app.NotificationManager.class).cancelAll();
         BondWidget.updateAll(context);
