@@ -31,3 +31,16 @@ test('transport Android test exercises actual FCM token and provider dispatch',(
  assert.match(android,/assertFalse\("Revoked phone displayed a late private push"/);
  assert.doesNotMatch(android,/GalaxyFirebaseService\.handleIncoming\(/);
 });
+
+
+test('real provider gate taps the Android PendingIntent and validates exact chat message after activity relaunch',()=>{
+ assert.match(android,/Instrumentation\.ActivityMonitor monitor=instrumentation\.addMonitor/);
+ assert.match(android,/activity\.close\(\);\s*click\.send\(\)/);
+ assert.match(android,/waitForMonitorWithTimeout\(monitor,25_000\)/);
+ assert.match(android,/getStringExtra\("galaxy_entity_id"\)/);
+ assert.match(android,/getStringExtra\("galaxy_action"\)/);
+ assert.match(android,/awaitExactChatMessage\(reopened,background\.getString\("body"\),60_000\)/);
+ assert.match(android,/document\.querySelector\('#chatMessages'\)/);
+ assert.match(android,/GALAXY_F4_FCM_DEEPLINK=VERIFIED/);
+ assert.doesNotMatch(android,/GalaxyFirebaseService\.handleIncoming\(/);
+});
