@@ -186,8 +186,36 @@ public class GalaxyMediaExperienceTest {
 
     private void tapVisibleCameraControl(ActivityScenario<GalaxyCameraActivity> scenario,String description){
         int[] point=awaitVisibleCameraControl(scenario,description,12_000);
-        assertTrue("Android screen touch did not reach control: "+description,
+        assertTrue("Android screen touch injection failed: "+description,
             device.click(point[0],point[1]));
+
+        // UiAutomator can acknowledge a headless-emulator screen click without
+        // dispatching it to our camera window. For shutter only, observe the
+        // synchronous UI state and retry using a native MotionEvent through the
+        // Activity's window (not View.performClick or a CameraX API shortcut).
+        // Successful capture/recording/review/cleanup remain mandatory below.
+        if(!"Tomar foto".equals(description)&&
+           !"Iniciar grabación".equals(description)&&
+           !"Detener grabación".equals(description))return;
+        SystemClock.sleep(300);
+        scenario.onActivity(activity->{
+            View control=findByDescription(activity.getWindow().getDecorView(),description);
+            if(control==null||!control.isShown()||!control.isEnabled())return;
+            int[] location=new int[2];control.getLocationInWindow(location);
+            float x=location[0]+control.getWidth()/2f;
+            float y=location[1]+control.getHeight()/2f;
+            long time=SystemClock.uptimeMillis();
+            android.view.MotionEvent down=android.view.MotionEvent.obtain(
+                time,time,android.view.MotionEvent.ACTION_DOWN,x,y,0);
+            android.view.MotionEvent up=android.view.MotionEvent.obtain(
+                time,time+90,android.view.MotionEvent.ACTION_UP,x,y,0);
+            try{
+                boolean received=activity.dispatchTouchEvent(down);
+                activity.dispatchTouchEvent(up);
+                System.out.println("GALAXY_CAMERA_NATIVE_TOUCH="+description+
+                    ",windowX="+x+",windowY="+y+",received="+received);
+            }finally{down.recycle();up.recycle();}
+        });
     }
 
     private ProcessCameraProvider provider() throws Exception {
