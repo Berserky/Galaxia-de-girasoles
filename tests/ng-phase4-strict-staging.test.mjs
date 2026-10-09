@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
 
 const script=new URL('../scripts/qa-phase4-strict-staging.mjs',import.meta.url);
 const child=new URL('../scripts/qa-phase5-staging.mjs',import.meta.url);
@@ -12,7 +13,7 @@ const run=(file,overrides={})=>spawnSync(process.execPath,[fileURL(file)],{
   encoding:'utf8',
   timeout:5000
 });
-function fileURL(value){return value.pathname;}
+function fileURL(value){return fileURLToPath(value);}
 
 test('Strict QA remote gate fails closed when tokens and endpoint are absent',()=>{
  const result=run(script,{QA_STAGING_EDGE_URL:'',QA_STAGING_PUBLISHABLE_KEY:'',QA_STAGING_TOKEN_0:'',QA_STAGING_TOKEN_1:''});
