@@ -113,7 +113,12 @@ window.GalaxyNative={
  },
  event(name,json){
    let data={};try{data=JSON.parse(json||'{}');}catch{}
-   if(name==='native'){native=data;window.GalaxyChatMotion?.setNativeReduced(data.reducedMotion);render();}
+   if(name==='native'){
+    if(!data.paired||String(data.person??'')!==String(native?.person??'')){
+     lastSuccessfulApiAt=0;lastSuccessfulApiPerson='';
+    }
+    native=data;window.GalaxyChatMotion?.setNativeReduced(data.reducedMotion);render();
+   }
    if(name==='update'){updateState=data;renderUpdateOnly();}
    if(name==='deep-link'){pendingDeepLink=data;if(cloud)setTimeout(()=>consumeDeepLink(),0);}
    if(name==='chat-sync'&&native.paired){consumeChatSync(String(data.entityId||'')).catch(()=>{});}
@@ -138,10 +143,27 @@ window.GalaxyNative={
 function nativeState(){return native&&typeof native==='object'?native:{paired:false};}
 native={paired:false};
 
+// navigator.onLine is advisory in Android WebView. Real successful backend
+// responses briefly prove connectivity even if Chromium reports offline.
+const CHAT_BACKEND_REACHABLE_GRACE_MS=45_000;
+let lastSuccessfulApiAt=0,lastSuccessfulApiPerson='';
+function chatTransportCanSend(now=Date.now()){
+ const person=String(native?.person??'');
+ return !!native.paired&&(navigator.onLine!==false||
+   (lastSuccessfulApiAt>0&&lastSuccessfulApiPerson===person&&person!==''
+    &&now>=lastSuccessfulApiAt&&now-lastSuccessfulApiAt<CHAT_BACKEND_REACHABLE_GRACE_MS));
+}
 const api=(action,payload={})=>{
  const perf=window.GalaxyChatPerf,token=perf?.apiStart?.(action);
  const promise=GalaxyNative.call('api',JSON.stringify({action,...payload}));
- Promise.resolve(promise).then(()=>perf?.apiEnd?.(token,true),()=>perf?.apiEnd?.(token,false));
+ Promise.resolve(promise).then(()=>{
+  if(native.paired&&native.person!=null){
+   lastSuccessfulApiAt=Date.now();lastSuccessfulApiPerson=String(native.person);
+  }
+  perf?.apiEnd?.(token,true);
+  if(action==='chat-state'&&navigator.onLine===false&&chatDeliveryEngine?.snapshot?.().pending>0)
+   queueMicrotask(()=>flushChatOutbox().catch(()=>{}));
+ },()=>perf?.apiEnd?.(token,false));
  return promise;
 };
 const toast=message=>{toastEl.textContent=message;toastEl.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toastEl.classList.remove('show'),3500);};
@@ -1379,7 +1401,7 @@ function chatDelivery(m){
  return {text:'Enviado',icon:'check',cls:'sent'};
 }
 function chatPresenceLabel(){
- if(navigator.onLine===false){const pending=chatDeliveryEngine?.snapshot?.().total||0;return pending?'Sin conexión · '+pending+' pendiente'+(pending===1?'':'s'):'Sin conexión';}
+ if(!chatTransportCanSend()){const pending=chatDeliveryEngine?.snapshot?.().total||0;return pending?'Sin conexión · '+pending+' pendiente'+(pending===1?'':'s'):'Sin conexión';}
  const p=chatState?.partnerPresence||{};
  if(p.state==='PRIVATE')return'Privacidad activada';
  if(p.state==='TYPING')return'Escribiendo…';
@@ -1971,7 +1993,7 @@ function createChatDeliveryEngine(){
  return window.GalaxyDeliveryEngine.create({
   load:()=>readChatOutbox(),
   save:rows=>writeChatOutbox(rows),
-  online:()=>!!native.paired&&navigator.onLine!==false,
+  online:()=>chatTransportCanSend(),
   send:item=>api('chat-send',chatDeliveryPayload(item)),
   onChange:event=>{
    if(view!=='chat'||event.type==='queued'||event.type==='sent'||event.type==='reconciled')return;
