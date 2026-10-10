@@ -74,7 +74,7 @@ jobs:
           node --test tests/android-chat-premium.test.mjs tests/multimedia-android-phase3.test.mjs tests/release-governance.test.mjs
           node scripts/qa-android-mobile.mjs
       - name: Android unit, lint y release no firmado
-        run: gradle -p android testDebugUnitTest lintDebug assembleDebug assembleRelease
+        run: gradle -p android testDebugUnitTest lintDebug assembleDebug assembleRelease assembleQaDevice
       - name: Reporte Android Lint
         if: always()
         run: |

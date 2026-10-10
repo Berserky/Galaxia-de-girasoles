@@ -13,12 +13,24 @@ android { namespace = "com.nuestragalaxia.companion"; compileSdk = 36
    getByName("debug") {
      applicationIdSuffix = providers.gradleProperty("QA_APPLICATION_SUFFIX").orNull ?: ""
      if (qaEdgeUrl.isNotBlank()) buildConfigField("String","EDGE_URL","\"$qaEdgeUrl\"")
-     // Prevent QA media validation from referencing the production Supabase host.
-     if (qaEdgeUrl.startsWith("https://") && qaEdgeUrl.contains(".supabase.co/functions/v1/")) {
-       val qaOrigin = qaEdgeUrl.substringBefore("/functions/v1/")
-       buildConfigField("String","SUPABASE_URL","\"$qaOrigin\"")
+     // Every debug APK is QA-only, even with a hermetic loopback API.
+     val qaOrigin = "https://vwtcncvmwjfywrzjmskw.supabase.co"
+     check(qaEdgeUrl == "$qaOrigin/functions/v1/android-companion" || qaEdgeUrl == "http://127.0.0.1:18765") {
+       "QA debug builds require exact QA Edge endpoint or isolated local instrumentation."
      }
+     buildConfigField("String","SUPABASE_URL","\"$qaOrigin\"")
      if (qaSupabasePublishableKey.isNotBlank()) buildConfigField("String","SUPABASE_PUBLISHABLE_KEY","\"$qaSupabasePublishableKey\"")
+   }
+   // QA device candidate is installable beside stable and must never point at production.
+   // Deliberately do not reuse QA_EDGE_URL: Android hermetic tests override it with loopback.
+   create("qaDevice") {
+     initWith(getByName("release"))
+     applicationIdSuffix = ".qa"
+     versionNameSuffix = "-qa"
+     val qaDeviceOrigin = "https://vwtcncvmwjfywrzjmskw.supabase.co"
+     buildConfigField("String","EDGE_URL","\"$qaDeviceOrigin/functions/v1/android-companion\"")
+     buildConfigField("String","SUPABASE_URL","\"$qaDeviceOrigin\"")
+     buildConfigField("String","SUPABASE_PUBLISHABLE_KEY","\"$qaSupabasePublishableKey\"")
    }
  }
  buildFeatures { buildConfig = true }; compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 } }
@@ -44,3 +56,6 @@ dependencies {
  androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
  androidTestImplementation("androidx.test.uiautomator:uiautomator:2.4.0")
 }
+
+// Windows Java 17 defaults to Cp1252; all Android Java tests and string assertions are UTF-8.
+tasks.withType<org.gradle.api.tasks.compile.JavaCompile>().configureEach { options.encoding = "UTF-8" }

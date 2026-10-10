@@ -188,11 +188,40 @@ jobs:
           VERSION_NAME=$(printf '%s' "$VERSION_LINE" | sed -E 's/.*versionName = "([^"]+)".*/\1/')
           SHA256=$(awk '{print $1}' candidate/NuestraGalaxia.apk.sha256)
           jq -n             --arg sourceSha "$GITHUB_SHA"             --argjson runId "$GITHUB_RUN_ID"             --argjson versionCode "$VERSION_CODE"             --arg versionName "$VERSION_NAME"             --arg sha256 "$SHA256"             --arg builtAt "$(date -u +%FT%TZ)"             '{schema:1,sourceSha:$sourceSha,runId:$runId,versionCode:$versionCode,versionName:$versionName,sha256:$sha256,builtAt:$builtAt}'             > candidate/candidate.json
+          # Distinct installable QA APK. Never install the production-compatible upgrade
+          # candidate above to exercise QA accounts; its release BuildConfig is production.
+          gradle -p android --no-daemon assembleQaDevice \
+            -Pandroid.injected.signing.store.file="$PWD/android/release.keystore" \
+            -Pandroid.injected.signing.store.password="$STORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+          QA_BUILD_CONFIG=$(find android/app/build/generated/source/buildConfig/qaDevice -name BuildConfig.java -type f -print -quit)
+          test -s "$QA_BUILD_CONFIG"
+          grep -Fq 'APPLICATION_ID = "com.nuestragalaxia.companion.qa"' "$QA_BUILD_CONFIG"
+          grep -Fq 'EDGE_URL = "https://vwtcncvmwjfywrzjmskw.supabase.co/functions/v1/android-companion"' "$QA_BUILD_CONFIG"
+          grep -Fq 'SUPABASE_URL = "https://vwtcncvmwjfywrzjmskw.supabase.co"' "$QA_BUILD_CONFIG"
+          if grep -Fq 'zqiknzivfahvvadmxrvt' "$QA_BUILD_CONFIG"; then
+            echo "FAIL: production host in QA candidate BuildConfig"; exit 1
+          fi
+          QA_APK=$(find android/app/build/outputs/apk/qaDevice -maxdepth 1 -type f -name '*.apk' ! -name '*unsigned.apk' -print -quit)
+          test -n "$QA_APK" && test -s "$QA_APK"
+          mkdir -p candidate-qa
+          cp "$QA_APK" candidate-qa/NuestraGalaxia-QA.apk
+          (cd candidate-qa && sha256sum NuestraGalaxia-QA.apk > NuestraGalaxia-QA.apk.sha256)
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs candidate-qa/NuestraGalaxia-QA.apk > candidate-qa/signature.txt
+          QA_SHA256=$(awk '{print $1}' candidate-qa/NuestraGalaxia-QA.apk.sha256)
+          jq -n --arg sourceSha "$GITHUB_SHA" --argjson runId "$GITHUB_RUN_ID" --argjson versionCode "$VERSION_CODE" --arg versionName "${VERSION_NAME}-qa" --arg sha256 "$QA_SHA256" '{schema:1,sourceSha:$sourceSha,runId:$runId,versionCode:$versionCode,versionName:$versionName,sha256:$sha256,applicationId:"com.nuestragalaxia.companion.qa",backendEnvironment:"qa",safeForSyntheticQa:true}' > candidate-qa/candidate-qa.json
           rm -f android/release.keystore
       - uses: actions/upload-artifact@v7
         with:
           name: android-candidate
           path: candidate/**
+          retention-days: 30
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-qa-device-candidate
+          path: candidate-qa/**
           retention-days: 30
           if-no-files-found: error
 
