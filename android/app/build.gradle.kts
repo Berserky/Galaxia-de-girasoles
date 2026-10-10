@@ -26,7 +26,7 @@ android { namespace = "com.nuestragalaxia.companion"; compileSdk = 36
 dependencies {
  implementation("com.google.firebase:firebase-messaging:25.1.3")
  implementation("com.google.android.gms:play-services-location:21.4.0")
- implementation("androidx.core:core:1.17.0")
+ implementation("androidx.core:core:1.19.1")
  implementation("androidx.activity:activity:1.13.0")
  implementation("androidx.fragment:fragment:1.9.1")
  implementation("androidx.biometric:biometric:1.1.0")
