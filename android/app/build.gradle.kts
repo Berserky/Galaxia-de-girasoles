@@ -13,11 +13,10 @@ android { namespace = "com.nuestragalaxia.companion"; compileSdk = 36
    getByName("debug") {
      applicationIdSuffix = providers.gradleProperty("QA_APPLICATION_SUFFIX").orNull ?: ""
      if (qaEdgeUrl.isNotBlank()) buildConfigField("String","EDGE_URL","\"$qaEdgeUrl\"")
-     // Debug apps must not expose production storage/media endpoints, even when
-     // hermetic Android instrumentation uses loopback for its mocked Edge server.
+     // Every debug APK is QA-only, even with a hermetic loopback API.
      val qaOrigin = "https://vwtcncvmwjfywrzjmskw.supabase.co"
      check(qaEdgeUrl == "$qaOrigin/functions/v1/android-companion" || qaEdgeUrl == "http://127.0.0.1:18765") {
-       "QA debug builds require exact QA Edge endpoint or isolated local QA instrumentation."
+       "QA debug builds require exact QA Edge endpoint or isolated local instrumentation."
      }
      buildConfigField("String","SUPABASE_URL","\"$qaOrigin\"")
      if (qaSupabasePublishableKey.isNotBlank()) buildConfigField("String","SUPABASE_PUBLISHABLE_KEY","\"$qaSupabasePublishableKey\"")
@@ -57,3 +56,6 @@ dependencies {
  androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
  androidTestImplementation("androidx.test.uiautomator:uiautomator:2.4.0")
 }
+
+// Windows Java 17 defaults to Cp1252; all Android Java tests and string assertions are UTF-8.
+tasks.withType<org.gradle.api.tasks.compile.JavaCompile>().configureEach { options.encoding = "UTF-8" }
