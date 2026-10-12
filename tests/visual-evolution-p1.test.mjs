@@ -36,7 +36,7 @@ test('P1 theme roles cover all seven native palettes, preserve selected-theme re
 
 test('P1 navigation has six preserved entries and announces only current route', () => {
   for(const route of ['home','map','moments','ai','memories','more'])assert.ok(app.includes("['"+route+"'"),'Missing nav route '+route);
-  assert.match(app, /aria-current=\\"page\\"/);
+  assert.match(app, /aria-current="page"/);
   for(const route of ['home','map','moments','memories','goals','ai','chat','more'])assert.ok(app.includes("view==='"+route+"'"),'Missing renderer '+route);
   assert.match(app, /window\.GalaxyCelestialShell\?\.beforeOpen/);
   assert.match(app, /window\.GalaxyCelestialShell\?\.afterOpen/);
