@@ -349,7 +349,7 @@ function header(){
 }
 function renderNav(){
  navEl.style.display=native.paired&&!shouldShowAdriWelcome()&&view!=='chat'?'grid':'none';
- navEl.innerHTML=nav.map(([id,label])=>'<button type="button" class="nav-btn '+(view===id?'active':'')+'" data-view="'+id+'"'+(view===id?' aria-current="page"':'')+'>+ico(icons[id],'nav-icon')+'<span>'+label+'</span></button>').join('');
+ navEl.innerHTML=nav.map(([id,label])=>'<button type="button" class="nav-btn '+(view===id?'active':'')+'" data-view="'+id+'"'+(view===id?' aria-current="page"':'')+'>'+ico(icons[id],'nav-icon')+'<span>'+label+'</span></button>').join('');
 }
 function renderChatFab(){
  if(!chatFab)return;
