@@ -15,8 +15,8 @@
 | Android lint + unit + debug/release | **PENDIENTE de resultado remoto** | `android-companion.yml` se activa por cambio de `tests/`, consultar run del PR |
 | Capturas *sintéticas* por viewport/tema | **PENDIENTE de resultado remoto** | Acción P0 produce 9 PNG de la maqueta (7 skins a 393; daylight 320 y 412) |
 | Métricas estáticas | **IMPLEMENTADO — captura pendiente** | `scripts/visual-evolution-p0-baseline.mjs` mide bytes/líneas, rutas, temas; artefacto JSON en Actions |
-| Capturas de **APK real** y comportamiento en pantalla | **BLOCKED — sin dispositivo/emulador disponible** | PC Bati-Compu OFFLINE; ejecutar después AVD hermético con identidades ficticias, conservar pantallas sanas |
-| FPS de scroll, p95 frame time, cold start, memoria, batería | **NOT MEASURED** | Solo PASS con AVD/Perfetto/FrameMetrics/benchmark documentado (device, API, SHA, repeticiones); jamás inferir de bytes CSS |
+| Capturas de **APK real** y comportamiento en pantalla | **EN EJECUCIÓN — AVD GitHub, aceptación pendiente** | Workflow P0 genera 3 screenshots reales de onboarding **no vinculado** + 5 arranques y gfxinfo; vistas autenticadas se mantienen BLOCKED sin fixtures |
+| FPS de scroll, p95 frame time, cold start, memoria, batería | **PARCIAL: recolección AVD en progreso** | Script AVD captura `am start -W` (5 arranques), `gfxinfo framestats` y meminfo sin perfil; no extrapolar como FPS del shell autenticado ni batería |
 | Contrato visual aprobado por PO | **PENDIENTE** | Aceptación visual de capturas del prototipo/variantes |
 | Datos privados y producción | **PASS — alcance de cambios** | No tocar secrets ni datos, backend, APK, `qa` ni `prod`; cotejar diff del PR antes de merge |
 
