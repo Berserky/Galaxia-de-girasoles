@@ -2,14 +2,15 @@
 
 **Actualizado 2026-10-12.** **Fase de descubrimiento COMPLETADA** para los módulos seleccionados; IA diferida. **Implementación NO comenzada**. Ningún cambio CSS/JS/Java ni migración realizado por esta preparación. Todas las casillas VE siguen sin marcar.
 
-## Estado Git confirmado
+## Estado Git confirmado — post cierre administrativo 12/10/2026
 
-- Repo: [Berserky/Galaxia-de-girasoles](https://github.com/Berserky/Galaxia-de-girasoles).
-- Fuente estable: `prod@fde141d4c8e7622ac1d6f10f1abbfbda8e8e7d0c`; `qa` misma SHA al auditar. Android `4.1.2` / `versionCode 39` en Gradle.
-- Rama principal en GitHub: `prod`. `main` histórica.
-- `desarrollo@15d196a4204a9dc435e31c29a94455d927c0d4d3` estaba detrás de `prod` por 8 commits sin divergencias propias.
-- Rama de **documentación solamente**: `docs/visual-evolution-5-audit-20261012`, nacida de `desarrollo`; contiene este catálogo y plan. El siguiente chat debe verificar su PR/merge, cambios de HEAD y nueva comparación antes de iniciar PR de implementación.
-- **Nunca** forzar ramas protegidas, promover QA/prod, publicar APK, modificar firmas/secrets ni declarar cerrado release sin sus gates.
+- **Referencia estable inmutable del upgrade:** `prod` = `qa` = `fde141d4c8e7622ac1d6f10f1abbfbda8e8e7d0c`, Android `4.1.2/code39`. RC #38307619766 y Stable Promotion #38310720521 SUCCESS.
+- `desarrollo` **ya conciliada** tras PR #161: `d4eba8a1356c2a5e98ed5d2e40251f7903f668bd`. Comparación `prod...desarrollo` **ahead=2, behind=0, diff solo 11 archivos de docs** tras PR #159. **No repetir reconciliación** si la comparación actual confirma ese estado.
+- Los tres tickets anteriores #129, #133 y #147 se cerraron por aceptación del propietario y publicación 4.1.2; #125 y #131 ya tenían mitigación QA+prod cerrada. Cierre administrativo no es PASS de toda prueba física imaginable.
+- Backlogs separados y **no bloqueantes para V5-P0**: #162 estabilidad/push/GPS residual, #163 dependencias incompatibles/diferidas, #164 higiene de ramas/reglas/proveniencia APK. Siete PR Dependabot viejos cerrados sin merge.
+- **Acta obligatoria:** [NG-4.1.2-PRE-V5-CLOSEOUT.md](../releases/NG-4.1.2-PRE-V5-CLOSEOUT.md).
+- **Nunca** forzar ramas protegidas, promover QA/prod, publicar APK o modificar firmas/secrets sin sus gates y autorización.
+- La siguiente acción es comenzar **V5-P0 en rama temporal nueva desde desarrollo actualizado**, no volver a ejecutar la Fase 4.
 
 ## Qué leer al iniciar
 
@@ -21,7 +22,7 @@
 
 ## Primera tarea de implementación propuesta — V5-P0
 
-1. Consultar branches/PR y confirmar fuente. Revisar y fusionar documentación a `desarrollo` tras CI/revisión; resolver que `desarrollo` estaba ocho commits detrás del baseline estable por vía segura conforme a gobernanza (no forzar `prod`). Crear rama corta de implementación desde `desarrollo` actualizado; NO reusar la rama de documentación.
+1. Confirmar SHA actual de `desarrollo` y que contiene `prod@fde141d4` por PR #161; no repetir el merge ya completado. Crear rama corta V5-P0 desde `desarrollo` actualizado; NO reusar ramas de documentación.
 2. Ejecutar baseline hermético de `npm test`, Android lint/unit tests/build y mediciones iniciales de rendimiento/scroll. Registrar versión, SHA, build variant, emulador/OS, entorno y PASS/FAIL real. **Si no hay emulador o credenciales, anotar BLOCKED, nunca PASS ficticio.**
 3. Levantar inventario de vistas desde `render()`: home/map/moments/memories/goals/ai/chat/more y modales; verificar visualmente shell, teclado, temas, barra status/navigation Android, chat FAB. QA con datos sintéticos que no expongan ubicación/fotos/conversaciones personales.
 4. Establecer tokens visuales compartidos y especificación de tipografía, spacing, esquinas, elevación, superficies, estados, iconografía, materiales, animación (duración/easing), reduced motion y safe-area por los ocho temas. Crear matriz de componentes y screenshots de QA para aprobación antes de construir P1.
@@ -41,8 +42,8 @@
 
 ## Prompt de arranque para el próximo chat
 
-> Continúa Nuestra Galaxia Visual Evolution 5.0 desde la documentación en `docs/visual-evolution-5/README.md` del repositorio `Berserky/Galaxia-de-girasoles`. Lee `HANDOFF.md`, `TECHNICAL_BASELINE.md`, `ROADMAP.md` y los seis catálogos VE-001 a VE-260. Comprueba el PR documental y reconciliación de `desarrollo` con la base estable prod 4.1.2/code39 sin forzar ramas. **Ejecuta solo V5-P0**, creando su rama a partir de desarrollo conforme a la política. Establece baseline QA reproducible, mediciones, arquitectura de diseño y criterios del sistema visual; no cambies IA, backend, GPS, FCM, lógica de Galaxy Chat ni publiques prod. Documenta la evidencia y el estado de cada gate en GitHub; termina con el PR de P0 listo para revisión.
+> Continúa Nuestra Galaxia Visual Evolution 5.0 desde la documentación en `docs/visual-evolution-5/README.md` del repositorio `Berserky/Galaxia-de-girasoles`. Lee `HANDOFF.md`, `TECHNICAL_BASELINE.md`, `ROADMAP.md` y los seis catálogos VE-001 a VE-260. Comprueba los PR documentados #159 y #161 ya fusionados y la línea base 4.1.2/code39, con acta en `docs/releases/NG-4.1.2-PRE-V5-CLOSEOUT.md`. No repetir reconciliaciones concluidas ni QA física antigua. **Ejecuta solo V5-P0**, creando su rama a partir de desarrollo conforme a la política. Establece baseline QA reproducible, mediciones, arquitectura de diseño y criterios del sistema visual; no cambies IA, backend, GPS, FCM, lógica de Galaxy Chat ni publiques prod. Documenta la evidencia y el estado de cada gate en GitHub; termina con el PR de P0 listo para revisión.
 
 ## Definición de listo para siguiente conversación
 
-La documentación está disponible en una rama del repo con IDs, arquitectura y plan. **No afirmar que la implementación está lista ni que pasó QA**, solo que su ejecución tiene un punto de arranque rastreable.
+La documentación está integrada en `desarrollo` con IDs, arquitectura, release baseline sincronizado y plan. **Está habilitado comenzar V5-P0; no afirmar que la implementación visual está lista ni que pasó nueva QA.**
