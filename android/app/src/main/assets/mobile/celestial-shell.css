@@ -16,7 +16,7 @@
   --v5-elevation:0 8px 28px rgba(11,8,32,.08);
   --v5-elevation-overlay:0 22px 64px rgba(11,8,32,.28);
 }
-html[data-theme="daylight"] {--v5-action:#7254c7;--v5-on-action:#fff}
+html[data-theme="daylight"] {--v5-action:#7254c7;--v5-on-action:#ffffff}
 html[data-theme="cosmic"] {--v5-action:#b99bff;--v5-on-action:#15111f}
 html[data-theme="halloween"] {--v5-action:#f1a854;--v5-on-action:#17111d}
 html[data-theme="christmas"] {--v5-action:#91dfad;--v5-on-action:#091c11}
