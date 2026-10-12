@@ -6,6 +6,9 @@ on:
     paths:
       - "docs/visual-evolution-5/**"
       - "tests/visual-evolution-p0.test.mjs"
+      - "tests/visual-evolution-p1.test.mjs"
+      - "android/app/src/main/assets/mobile/**"
+      - "scripts/visual-evolution-p0-avd.sh"
       - "scripts/visual-evolution-p0-baseline.mjs"
       - ".github/workflows/visual-evolution-p0.yml"
   workflow_dispatch:
