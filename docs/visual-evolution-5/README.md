@@ -1,6 +1,6 @@
 # NUESTRA GALAXIA — VISUAL EVOLUTION 5.0
 
-**ESTADO:** Diseño planificado, implementación **NO iniciada**. **Fecha:** 12 oct 2026. **Referencia estable auditada:** `prod@fde141d4c8e7622ac1d6f10f1abbfbda8e8e7d0c` (Android `4.1.2`, `versionCode=39`), misma SHA en `qa` al consultar. **Rama de documentación:** `docs/visual-evolution-5-audit-20261012` derivada de `desarrollo` (ocho commits detrás de `prod` en ese momento). No tocar prod, QA ni releases en preparación.
+**ESTADO:** Diseño planificado, implementación **NO iniciada**. **Fecha:** 12 oct 2026. **Referencia estable auditada:** `prod@fde141d4c8e7622ac1d6f10f1abbfbda8e8e7d0c` (Android `4.1.2`, `versionCode=39`), misma SHA en `qa` al consultar. **Preparación completada:** PR #159 y reconciliación de historial estable PR #161 integrados en `desarrollo` (SHA `d4eba8a1356c2a5e98ed5d2e40251f7903f668bd` tras #161), ver [acta cierre 4.1.2](../releases/NG-4.1.2-PRE-V5-CLOSEOUT.md). `qa`/`prod`/APK permanecen intactos. No iniciar nueva promoción en la fase visual.
 
 ## Entrar aquí en cualquier chat / Work / Codex
 
@@ -41,7 +41,7 @@ Inspección visual de 4 Inicio, 2 búsqueda/avisos, 5 Mapa, 5 Momentos, 15 Recue
 - [x] Recopilar 260 VE a partir de capturas.
 - [x] Inspeccionar árbol de producción y principales puntos de entrada/documentación/tests.
 - [x] Definir roadmap, seguridad, pruebas, fases e instrucciones de continuación.
-- [ ] Revisar/mergear PR documental, sincronizar baseline en desarrollo conforme a política.
+- [x] Revisar/mergear PR documental #159 y sincronizar baseline de prod a desarrollo mediante PR #161 (ver acta cierre).
 - [ ] V5-P0 QA baseline + composición visual aprobada.
 - [ ] V5-P1 sistema visual transversal.
 - [ ] V5-P2/P3/P4/P5/P6/P7 mejoras por módulo.
@@ -49,3 +49,7 @@ Inspección visual de 4 Inicio, 2 búsqueda/avisos, 5 Mapa, 5 Momentos, 15 Recue
 - [ ] V5-P9 release bajo aprobaciones expresas.
 
 **Nota:** Los ítems [x] representan documentación completada, NO nuevas verificaciones ejecutadas en Android o en producción.
+
+## Seguimiento post-release heredado
+
+La antigua F4 quedó cerrada administrativamente: #129/#133/#147 aceptados como completados por el propietario de producto, seguridad #125/#131 previamente mitigada. **No confundir cierre del release con PASS de escenarios no ejecutados.** Backlogs no bloqueantes: [#162 regresiones residuales](https://github.com/Berserky/Galaxia-de-girasoles/issues/162), [#163 dependencias](https://github.com/Berserky/Galaxia-de-girasoles/issues/163), [#164 reglas/ramas](https://github.com/Berserky/Galaxia-de-girasoles/issues/164). Acta: [NG-4.1.2-PRE-V5-CLOSEOUT.md](../releases/NG-4.1.2-PRE-V5-CLOSEOUT.md).
