@@ -122,7 +122,20 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
-          script: bash scripts/visual-evolution-p0-avd.sh
+          script: |
+            set -euo pipefail
+            bash scripts/visual-evolution-p0-avd.sh
+            # P1: test the actual APK WebView with a hermetic local QA fixture,
+            # never a paired production account or live remote credentials.
+            gradle -p android --no-daemon :app:connectedDebugAndroidTest \
+              -PQA_EDGE_URL=http://127.0.0.1:18765 \
+              -PQA_SUPABASE_PUBLISHABLE_KEY=qa_v5p1 \
+              -PQA_APPLICATION_SUFFIX=.v5p1qa \
+              -Pandroid.testInstrumentationRunnerArguments.class=com.nuestragalaxia.companion.GalaxyDeviceClosureTest#visualEvolutionP1_realWebViewThemesFloatingRailAndModalFocus_areSafe \
+              2>&1 | tee /tmp/v5-p1-device-qa.log
+            grep 'V5_P1_ANDROID_SHELL=' /tmp/v5-p1-device-qa.log > build/p0-avd/p1-device-summary.txt || true
+            echo "V5-P1 real Android WebView instrumentation finished: see Android test report and gradle step."
+
       - uses: actions/upload-artifact@v7
         if: always()
         with:
