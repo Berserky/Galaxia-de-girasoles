@@ -9,16 +9,29 @@
   const modal=doc.getElementById('modal');
   let restoreTarget=null;
   let pendingFocus=false;
+  let lastInvoker=null;
+  let lastInvokedAt=0;
   const isEditable=el=>Boolean(el?.matches?.('input:not([type="checkbox"]):not([type="radio"]),textarea,select,[contenteditable="true"]'));
   function syncEditing(){
     doc.body?.classList.toggle('v5-input-focused',isEditable(doc.activeElement));
   }
+  // WebView touch/JS .click() need not focus the button. Remember the latest
+  // actual invoker, so dialog close restores a meaningful location for all inputs.
+  doc.addEventListener('click',event=>{
+    const candidate=event.target?.closest?.('button,[data-action],[data-view],[role="button"]');
+    if(candidate&&!modal?.contains?.(candidate)){
+      lastInvoker=candidate;
+      lastInvokedAt=Date.now();
+    }
+  },true);
   doc.addEventListener('focusin',syncEditing);
   doc.addEventListener('focusout',()=>root.requestAnimationFrame(syncEditing));
   function beforeOpen(isChat){
     if(isChat||!modal||modal.open)return;
     const active=doc.activeElement;
-    restoreTarget=active&&active!==doc.body&&active.isConnected?active:null;
+    const focused=active&&active!==doc.body&&active.isConnected?active:null;
+    const recent=Date.now()-lastInvokedAt<=1000&&lastInvoker?.isConnected?lastInvoker:null;
+    restoreTarget=focused||recent;
   }
   function afterOpen(isChat){
     if(isChat||!modal)return;
