@@ -349,7 +349,7 @@ function header(){
 }
 function renderNav(){
  navEl.style.display=native.paired&&!shouldShowAdriWelcome()&&view!=='chat'?'grid':'none';
- navEl.innerHTML=nav.map(([id,label])=>'<button class="nav-btn '+(view===id?'active':'')+'" data-view="'+id+'">'+ico(icons[id],'nav-icon')+'<span>'+label+'</span></button>').join('');
+ navEl.innerHTML=nav.map(([id,label])=>'<button type="button" class="nav-btn '+(view===id?'active':'')+'" data-view="'+id+'"'+(view===id?' aria-current="page"':'')+'>+ico(icons[id],'nav-icon')+'<span>'+label+'</span></button>').join('');
 }
 function renderChatFab(){
  if(!chatFab)return;
@@ -2627,6 +2627,7 @@ function drawMap({fit=true}={}){
 function showChatSurface(title,body,formId='',sheet=false){
  if(modal.dataset.form==='chat-attach-sheet')ensureChatComposer().setAttachmentIntent(null);
  const isChat=String(formId||'').startsWith('chat-');
+ window.GalaxyCelestialShell?.beforeOpen?.(isChat);
  modal.classList.toggle('chat-bottom-sheet',!!sheet);
  modal.classList.toggle('chat-surface',isChat);
  if(isChat){
@@ -2636,6 +2637,7 @@ function showChatSurface(title,body,formId='',sheet=false){
  }
  if(formId)modal.dataset.form=formId;else delete modal.dataset.form;
  if(!modal.open)modal.showModal();
+ window.GalaxyCelestialShell?.afterOpen?.(isChat);
  if(isChat&&(sheet||formId==='chat-message-menu'))window.GalaxyChatMotion?.animate(modal.querySelector('.modal-inner'),sheet?'sheet':'enter');
  refreshIcons();
  const focusTarget=modal.querySelector('[autofocus]');
@@ -2645,6 +2647,7 @@ function showModal(title,body,formId=''){showChatSurface(title,body,formId,false
 function showBottomSheet(title,body,formId=''){showChatSurface(title,body,formId,true);}
 
 function closeModal(){
+ const wasChat=modal.classList.contains('chat-surface');
  const form=modal.dataset.form;
  if(form==='voice'&&pendingVoiceDraft!==null)resetVoiceDraft();
  if(form==='chat-attach-sheet')ensureChatComposer().setAttachmentIntent(null);
@@ -2656,6 +2659,7 @@ function closeModal(){
   modal.close();
  }
  modal.classList.remove('chat-bottom-sheet','chat-surface');
+ window.GalaxyCelestialShell?.afterClose?.(wasChat);
  delete modal.dataset.editId;delete modal.dataset.version;delete modal.dataset.kind;delete modal.dataset.form;
 }
 function openItemForm(kind,item){
