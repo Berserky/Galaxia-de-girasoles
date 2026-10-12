@@ -1,0 +1,71 @@
+name: V5 P0 baseline and synthetic visual preview
+
+on:
+  pull_request:
+    branches: [desarrollo]
+    paths:
+      - "docs/visual-evolution-5/**"
+      - "tests/visual-evolution-p0.test.mjs"
+      - "scripts/visual-evolution-p0-baseline.mjs"
+      - ".github/workflows/visual-evolution-p0.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-and-contract:
+    name: Node 24 full suite + V5 P0 measurements
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Versiones y tests completos (incluye tema, acceso y regresiones)
+        run: |
+          node --version
+          npm test
+      - name: Registrar baseline de tamaño y rutas (no FPS)
+        run: node scripts/visual-evolution-p0-baseline.mjs --out build/visual-evolution-p0-baseline.json
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: v5-p0-static-source-baseline
+          path: build/visual-evolution-p0-baseline.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  synthetic-design-captures:
+    name: Chrome screenshots - DEMO sintética, NO APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Fotografiar prototipo en siete temas y dos viewports
+        shell: bash
+        run: |
+          set -euo pipefail
+          BROWSER=$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)
+          if [ -z "$BROWSER" ]; then echo "BLOCKED: runner sin Chrome/Chromium"; exit 1; fi
+          mkdir -p build/p0-previews
+          for theme in daylight cosmic halloween christmas valentine friendship easter; do
+            "$BROWSER" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --hide-scrollbars --window-size=393,852 --screenshot="$PWD/build/p0-previews/$theme-393.png" "file://$PWD/docs/visual-evolution-5/prototypes/celestial-shell.html?theme=$theme" >/dev/null 2>&1
+          done
+          for width in 320 412; do
+            "$BROWSER" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --hide-scrollbars --window-size="$width,852" --screenshot="$PWD/build/p0-previews/daylight-$width.png" "file://$PWD/docs/visual-evolution-5/prototypes/celestial-shell.html?theme=daylight" >/dev/null 2>&1
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          files=list(Path('build/p0-previews').glob('*.png'))
+          assert len(files)==9, f'Expected 9 synthetic preview images, got {len(files)}'
+          for p in files:
+              assert p.read_bytes().startswith(b'\x89PNG\r\n\x1a\n'), f'Invalid PNG: {p}'
+          print('9 valid synthetic preview PNGs (NOT app screenshots).')
+          PY
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: v5-p0-synthetic-design-screenshots
+          path: build/p0-previews/*.png
+          if-no-files-found: warn
+          retention-days: 30
