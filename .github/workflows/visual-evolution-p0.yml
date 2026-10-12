@@ -144,7 +144,7 @@ jobs:
             paths=list(Path('build/p0-avd/p1-synthetic-themes').glob('*.png'))
             assert len(paths)==7, f'Expected 7 synthetic QA Android screenshots, got {len(paths)}'
             for path in paths:
-                assert path.read_bytes().startswith(b'\\x89PNG\\r\\n\\x1a\\n'), f'Invalid PNG: {path}'
+                assert path.read_bytes().startswith(b'\x89PNG\r\n\x1a\n'), f'Invalid PNG: {path}'
             unique=len(set(hashlib.sha256(path.read_bytes()).hexdigest() for path in paths))
             assert unique>=5, f'Android themed captures unexpectedly identical: {unique}/7'
             print(f'Seven REAL Android WebView PNG previews, synthetic QA only; {unique} unique screens.')
