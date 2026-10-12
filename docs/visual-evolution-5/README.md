@@ -1,3 +1,5 @@
+> **Actualización P0 (12-oct-2026):** Ya existe ejecución en rama aislada `feat/visual-evolution-5-p0-baseline`: [Contrato visual](P0_DESIGN_CONTRACT.md), [tokens](CELESTIAL_TOKENS.json), [QA ledger](P0_QA_LEDGER.md), [prototipo sintético](prototypes/celestial-shell.html), [P1 preparado](P1_EXECUTION.md). **P0 aún no certificada:** tests/actions, evidencia Android y aprobación visual deben verificarse en su PR; no hay cambio al APK, `qa` ni `prod`. Los estados anteriores describen la preparación pre-P0.
+
 # NUESTRA GALAXIA — VISUAL EVOLUTION 5.0
 
 **ESTADO:** Diseño planificado, implementación **NO iniciada**. **Fecha:** 12 oct 2026. **Referencia estable auditada:** `prod@fde141d4c8e7622ac1d6f10f1abbfbda8e8e7d0c` (Android `4.1.2`, `versionCode=39`), misma SHA en `qa` al consultar. **Preparación completada:** PR #159 y reconciliación de historial estable PR #161 integrados en `desarrollo` (SHA `d4eba8a1356c2a5e98ed5d2e40251f7903f668bd` tras #161), ver [acta cierre 4.1.2](../releases/NG-4.1.2-PRE-V5-CLOSEOUT.md). `qa`/`prod`/APK permanecen intactos. No iniciar nueva promoción en la fase visual.
