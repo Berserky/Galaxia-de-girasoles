@@ -1,3 +1,5 @@
+> **Actualización operativa P0 (12-oct-2026, posterior a cierre 4.1.2):** P0 tiene implementación **en la rama temporal** `feat/visual-evolution-5-p0-baseline` creada de `desarrollo@143d1e7885c860b21799938bc2208f696360ee10`. Consultar [ledger P0](P0_QA_LEDGER.md), [contrato](P0_DESIGN_CONTRACT.md), [prototipo](prototypes/celestial-shell.html), [P1](P1_EXECUTION.md) y el PR enlazado en el issue #160. **No reutilizar el prompt viejo para iniciar otra rama P0**; verificar los gates reales del PR. El PC remoto `Bati-Compu` está offline en esta sesión; screenshots del APK, FPS/batería, aceptación visual siguen pendientes salvo evidencia posterior. El texto siguiente es el handoff histórico anterior al inicio de P0.
+
 # Handoff ejecutable — Visual Evolution 5.0
 
 **Actualizado 2026-10-12.** **Fase de descubrimiento COMPLETADA** para los módulos seleccionados; IA diferida. **Implementación NO comenzada**. Ningún cambio CSS/JS/Java ni migración realizado por esta preparación. Todas las casillas VE siguen sin marcar.
