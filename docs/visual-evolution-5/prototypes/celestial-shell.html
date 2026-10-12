@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es" data-theme="daylight">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>V5-P0 · Celestial Shell · Demo sintética</title>
+<style>
+:root,[data-theme="daylight"]{color-scheme:light;--bg:#f7f6fa;--surface:#fff;--text:#292638;--muted:#706b80;--accent:#7254c7;--on-accent:#fff}
+[data-theme="cosmic"]{color-scheme:dark;--bg:#10101d;--surface:#17172a;--text:#f4f1ff;--muted:#b4afca;--accent:#b99bff;--on-accent:#15111f}
+[data-theme="halloween"]{color-scheme:dark;--bg:#100913;--surface:#1e1223;--text:#fbf2ff;--muted:#d4bbd6;--accent:#f1a854;--on-accent:#17111d}
+[data-theme="christmas"]{color-scheme:dark;--bg:#071510;--surface:#11251b;--text:#f3fff6;--muted:#bdd5c6;--accent:#91dfad;--on-accent:#091c11}
+[data-theme="valentine"]{color-scheme:dark;--bg:#180810;--surface:#301521;--text:#fff4f7;--muted:#f2c9d6;--accent:#fda2c2;--on-accent:#21131c}
+[data-theme="friendship"]{color-scheme:dark;--bg:#120b22;--surface:#241a3e;--text:#fff5ff;--muted:#d5c9eb;--accent:#ceb4ff;--on-accent:#171025}
+[data-theme="easter"]{color-scheme:dark;--bg:#11162c;--surface:#202946;--text:#f6f5ff;--muted:#c9cee7;--accent:#dbc4ff;--on-accent:#18182b}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);padding:env(safe-area-inset-top) 0 calc(112px + env(safe-area-inset-bottom))}
+main{width:min(100%,700px);margin:auto;padding:20px 16px 28px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px}
+.logo{display:flex;align-items:center;gap:12px}.orb{width:44px;height:44px;border-radius:16px;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-size:23px}
+h1,h2,h3,p{margin:0}.top h1{font-size:17px}.muted{color:var(--muted)}.micro{font-size:11px;font-weight:700;letter-spacing:.07em}
+button,select{font:inherit;cursor:pointer}button:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.actions{display:flex;gap:8px}.circle{border:1px solid var(--muted);color:var(--text);background:var(--surface);border-radius:13px;min-height:44px;min-width:44px}
+.hero{position:relative;overflow:hidden;border-radius:28px;background:linear-gradient(135deg,var(--accent),#4b3b6e);color:white;padding:24px 22px;min-height:210px;box-shadow:0 16px 48px rgba(18,9,45,.12)}
+.hero:before{content:"";position:absolute;width:230px;height:230px;border-radius:50%;right:-70px;top:-110px;border:26px solid rgba(255,255,255,.10)}
+.hero h2{font-size:clamp(27px,7vw,36px);line-height:1.14;letter-spacing:-.04em;margin:15px 0 10px}.hero p{max-width:290px;font-size:13px;color:#fff}
+.btn{min-height:48px;border:0;border-radius:15px;padding:10px 16px;background:var(--accent);color:var(--on-accent);font-weight:750}
+.hero .btn{margin-top:18px;background:white;color:#322149}
+.label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:800;margin:24px 0 10px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.card{background:var(--surface);color:var(--text);border:1px solid color-mix(in srgb,var(--muted) 25%,transparent);border-radius:22px;padding:17px;min-width:0;min-height:128px;display:flex;flex-direction:column;justify-content:space-between}
+.card.wide{grid-column:1/-1;min-height:102px}.card h3{font-size:17px;margin:8px 0 3px}.card p{color:var(--muted);font-size:12px}
+.state{display:inline-flex;align-items:center;gap:7px;color:var(--muted);font-size:12px}.dot{height:7px;width:7px;border-radius:50%;background:currentColor}
+.bottom{position:fixed;bottom:max(8px,env(safe-area-inset-bottom));left:12px;right:12px;max-width:690px;margin:auto;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));padding:6px 4px;gap:2px;background:var(--surface);border-radius:23px;border:1px solid color-mix(in srgb,var(--muted) 25%,transparent);box-shadow:0 12px 40px rgba(0,0,0,.14)}
+.bottom button{background:transparent;color:var(--muted);border:0;min-height:51px;min-width:0;border-radius:15px;font-size:11px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.bottom button b{font-size:17px;font-weight:600}.bottom button.selected{background:color-mix(in srgb,var(--accent) 13%,var(--surface));color:var(--accent)}
+.fab{position:fixed;right:20px;bottom:calc(87px + env(safe-area-inset-bottom));border:0;width:48px;height:48px;border-radius:17px;background:var(--accent);color:var(--on-accent);box-shadow:0 11px 30px rgba(0,0,0,.2)}
+#demo-dialog{max-width:min(92vw,450px);border:0;border-radius:24px;background:var(--surface);color:var(--text);padding:24px}
+#demo-dialog::backdrop{background:rgba(0,0,0,.55)}
+.demo-header{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.theme-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;flex-wrap:wrap}select{border-radius:12px;min-height:44px;color:var(--text);background:var(--surface);border:1px solid var(--muted);padding:8px}
+#demo-toast{position:fixed;bottom:calc(150px + env(safe-area-inset-bottom));left:16px;right:16px;max-width:420px;margin:auto;border-radius:16px;color:var(--on-accent);background:var(--accent);padding:11px 16px;display:none;text-align:center}
+@media(min-width:700px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}.card.wide{grid-column:span 1}}
+@media(prefers-reduced-motion:no-preference){.card{transition:transform .22s cubic-bezier(.2,.8,.2,1)}.card:hover{transform:translateY(-3px)}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<main>
+<header class="top"><div class="logo"><span class="orb" aria-hidden="true">✦</span><div><h1>Nuestra Galaxia</h1><p class="muted micro">DEMO SINTÉTICA · V5-P0</p></div></div><div class="actions"><button class="circle" type="button" data-demo="avisos" aria-label="Vista previa de notificaciones">♢</button><button class="circle" type="button" data-demo="busqueda" aria-label="Vista previa del buscador">⌕</button></div></header>
+<section class="hero" aria-label="Bienvenida"><span class="micro">UN ESPACIO PARA DOS</span><h2>Un universo de pequeños momentos.</h2><p>Propuesta visual: contenido cálido, accesos intuitivos y un lienzo que se siente vivo sin distraer.</p><button class="btn" type="button" data-demo="recuerdos">Explorar recuerdos →</button></section>
+<div class="theme-row"><label for="theme">Tema de la maqueta</label><select id="theme"><option value="daylight">Luz suave</option><option value="cosmic">Universo oscuro</option><option value="halloween">Halloween</option><option value="christmas">Navidad</option><option value="valentine">San Valentín</option><option value="friendship">Amor y amistad</option><option value="easter">Pascua</option></select></div>
+<p class="label">A tu alcance</p>
+<section class="grid" aria-label="Módulos de demostración"><div class="card"><div class="state"><span class="dot"></span>Privacidad primero</div><div><h3>Mapa</h3><p>Ubicación no disponible · sin datos simulados</p></div></div><div class="card"><div class="state">◈ Pequeños gestos</div><div><h3>Momentos</h3><p>Una experiencia emocional y ligera</p></div></div><div class="card wide"><div class="state">◇ Un lugar para guardar</div><div><h3>Recuerdos</h3><p>Historias, música, planes y fotografías</p></div></div></section>
+<p class="label">Estado del diseño</p><section class="card wide"><p>Esta maqueta NO está conectada al backend ni al chat; muestra la jerarquía, el color y las superficies de P0. No es una captura real del APK.</p></section>
+</main>
+<nav class="bottom" aria-label="Navegación de maqueta">
+<button class="selected" type="button" data-demo="inicio"><b>⌂</b><span>Inicio</span></button>
+<button type="button" data-demo="mapa"><b>⌖</b><span>Mapa</span></button>
+<button type="button" data-demo="momentos"><b>♡</b><span>Momentos</span></button>
+<button type="button" data-demo="recuerdos"><b>▣</b><span>Recuerdos</span></button>
+<button type="button" data-demo="ia"><b>✧</b><span>IA</span></button>
+<button type="button" data-demo="mas"><b>☷</b><span>Más</span></button>
+</nav>
+<button class="fab" type="button" data-demo="chat" aria-label="Vista previa del acceso a chat">☏</button>
+<dialog id="demo-dialog" aria-labelledby="dialog-title"><div class="demo-header"><h2 id="dialog-title">Vista previa</h2><button class="circle" id="close" aria-label="Cerrar" type="button">×</button></div><p id="dialog-desc" class="muted" style="margin-top:15px">Solo estructura de navegación. La funcionalidad real permanece sin cambios.</p></dialog>
+<div role="status" aria-live="polite" id="demo-toast"></div>
+<script>
+const params=new URLSearchParams(location.search),theme=document.querySelector('#theme');
+const themeId=params.get('theme');if([...theme.options].some(x=>x.value===themeId))theme.value=themeId;
+document.documentElement.dataset.theme=theme.value;theme.addEventListener('change',()=>{document.documentElement.dataset.theme=theme.value});
+const dialog=document.querySelector('#demo-dialog');
+document.querySelector('#close').addEventListener('click',()=>dialog.close());
+document.querySelectorAll('[data-demo]').forEach(button=>button.addEventListener('click',()=>{
+ document.querySelector('#dialog-title').textContent='Vista previa: '+button.dataset.demo;
+ document.querySelector('#dialog-desc').textContent='Prototipo de diseño sin acceso a datos reales. La navegación, IA, chat y funciones nativas actuales no se modifican en P0.';
+ dialog.showModal();
+}));
+</script>
+</body></html>
