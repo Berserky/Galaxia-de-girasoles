@@ -31,7 +31,7 @@
     const active=doc.activeElement;
     const focused=active&&active!==doc.body&&active.isConnected?active:null;
     const recent=Date.now()-lastInvokedAt<=1000&&lastInvoker?.isConnected?lastInvoker:null;
-    restoreTarget=focused||recent;
+    restoreTarget=recent||focused;
   }
   function afterOpen(isChat){
     if(isChat||!modal)return;
