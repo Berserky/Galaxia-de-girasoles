@@ -1,3 +1,5 @@
+> **Estado actualizado:** V5-P0 en ejecución con artefactos verificables en rama aislada; P1 únicamente preparado, **no implementado**. Seguir el ledger [P0_QA_LEDGER.md](P0_QA_LEDGER.md) antes de marcar DoD. La frase “no iniciado” más abajo pertenece al roadmap previo a este arranque y no equivale al estado Git actual.
+
 # Nuestra Galaxia — Visual Evolution 5.0 / Plan maestro de implementación
 
 **Estado:** PLANEADO / NO INICIADO. **Fuente:** auditoría de capturas VE-001…VE-260, lectura de `prod@fde141d4c8e7622ac1d6f10f1abbfbda8e8e7d0c`. **Objetivo:** diseño moderno, hermoso, coherente, accesible y fluido en el APK Android estable, conservando sus funciones. **Fuera de alcance:** rediseño/motor de IA (upgrade separado), refactor Chat 4.1, sustitución de backend, despliegue y promoción automática. Las mejoras de notificaciones nativas/FCM solo se documentan como *follow-up funcional*, no se tocan hasta autorización.
