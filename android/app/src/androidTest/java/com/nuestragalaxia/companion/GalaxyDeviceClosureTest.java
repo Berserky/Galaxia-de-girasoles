@@ -127,6 +127,86 @@ public class GalaxyDeviceClosureTest {
         awaitJs("!!document.querySelector('#chatForm textarea')");
     }
 
+    /**
+     * Visual Evolution P1: instrument the actual Android WebView against the isolated
+     * QaHttpServer account. No real couple account, GPS, media or backend is used.
+     * These are interaction/layout assertions, not owner-approved screenshot QA.
+     */
+    @Test public void visualEvolutionP1_realWebViewThemesFloatingRailAndModalFocus_areSafe() throws Exception {
+        launch();
+        awaitJs("!!document.querySelector('#bottomNav .nav-btn.active') && !!document.querySelector('#chatFab:not(.hidden)')");
+        assertEquals("true", js("!!document.querySelector('link[href=\"./celestial-shell.css\"]')"
+            + " && !!window.GalaxyCelestialShell && document.querySelectorAll('#bottomNav .nav-btn').length===6"));
+
+        String themeJson = js("JSON.stringify((()=>{"
+            + "const ids=['daylight','cosmic','halloween','christmas','valentine','friendship','easter'];"
+            + "const b=document.createElement('button');b.className='btn';b.textContent='QA';"
+            + "document.querySelector('#app').append(b);"
+            + "function lum(s){let c=s.slice(s.indexOf('(')+1,s.indexOf(')')).split(',').slice(0,3).map(Number);"
+            + "return c.reduce((v,x,i)=>v+([.2126,.7152,.0722][i])*((x=x/255)<=.04045?x/12.92:Math.pow((x+.055)/1.055,2.4)),0)}"
+            + "function ratio(a,b){const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)}"
+            + "const out=ids.map(id=>{const v=GalaxyTheme.applyTheme(id);"
+            + "const bg=getComputedStyle(b).backgroundColor,fg=getComputedStyle(b).color;"
+            + "return {id,active:v.active,contrast:Number(ratio(bg,fg).toFixed(2))}});"
+            + "b.remove();GalaxyTheme.applyTheme('auto');"
+            + "return {palettes:out,auto:document.documentElement.dataset.themeChoice==='auto'};"
+            + "})())");
+        JSONObject themes = new JSONObject(themeJson);
+        assertTrue("Automatic theme selection was not restored", themes.getBoolean("auto"));
+        assertEquals("Seven Android palette modes must be measured", 7, themes.getJSONArray("palettes").length());
+        for (int i = 0; i < themes.getJSONArray("palettes").length(); i++) {
+            JSONObject palette = themes.getJSONArray("palettes").getJSONObject(i);
+            assertEquals("Resolved theme changed unexpectedly", palette.getString("id"), palette.getString("active"));
+            assertTrue("P1 primary button contrast must be AA in " + palette,
+                palette.getDouble("contrast") >= 4.5d);
+        }
+
+        // Measure real layout rectangles; the extra add FAB and player are synthetic
+        // UI-only fixtures and are removed before leaving this test.
+        String railJson = js("JSON.stringify((()=>{"
+            + "const nav=document.getElementById('bottomNav'),fab=document.getElementById('chatFab'),"
+            + "player=document.getElementById('globalPlayer'),oldClass=player.className;"
+            + "const add=document.createElement('button');add.className='floating-add';"
+            + "add.setAttribute('aria-label','Accion QA sintetica');document.getElementById('app').append(add);"
+            + "function overlap(a,b){const x=a.getBoundingClientRect(),y=b.getBoundingClientRect();"
+            + "return x.left<y.right-1&&x.right>y.left+1&&x.top<y.bottom-1&&x.bottom>y.top+1}"
+            + "const withoutPlayer=!overlap(nav,fab)&&!overlap(nav,add)&&!overlap(fab,add);"
+            + "player.classList.add('visible');"
+            + "const withPlayer=!overlap(nav,fab)&&!overlap(nav,add)&&!overlap(nav,player)"
+            + "&&!overlap(fab,add)&&!overlap(fab,player)&&!overlap(add,player);"
+            + "const dims={width:innerWidth,height:innerHeight,navCount:nav.children.length};"
+            + "player.className=oldClass;add.remove();"
+            + "return {...dims,withoutPlayer,withPlayer}})())");
+        JSONObject rail = new JSONObject(railJson);
+        assertEquals("The bottom rail must keep all six controls", 6, rail.getInt("navCount"));
+        assertTrue("FAB/add collide with Android nav: " + rail, rail.getBoolean("withoutPlayer"));
+        assertTrue("FAB/add/player collide on real WebView: " + rail, rail.getBoolean("withPlayer"));
+
+        for (String id : new String[]{"map","moments","ai","memories","more","home"}) {
+            runJs("document.querySelector('[data-view=\"" + id + "\"]').click()");
+            awaitJs("document.querySelectorAll('#bottomNav [aria-current=\"page\"]').length===1");
+            assertEquals("Active route was not announced to accessibility for " + id, id,
+                js("document.querySelector('#bottomNav [aria-current=\"page\"]')?.dataset.view||''"));
+        }
+
+        // Real global dialog (not Galaxy Chat) must focus search, then restore its
+        // launcher after Escape/cancel using the preexisting closeModal cleanup.
+        runJs("document.querySelector('[data-action=\"universal-search-open\"]').click()");
+        awaitJs("document.getElementById('modal').open");
+        awaitJs("document.activeElement?.id==='universalSearchInput'");
+        assertEquals("v5-modal-title", js("document.getElementById('modal').getAttribute('aria-labelledby')"));
+        assertEquals("true", js("document.body.classList.contains('v5-input-focused')"));
+        runJs("document.getElementById('modal').dispatchEvent(new Event('cancel',{cancelable:true}))");
+        awaitJs("!document.getElementById('modal').open && document.activeElement?.dataset.action==='universal-search-open'");
+        assertEquals("false", js("document.body.classList.contains('v5-input-focused')"));
+        assertEquals("", js("document.getElementById('modal').getAttribute('aria-labelledby')||''"));
+        System.out.println("V5_P1_ANDROID_SHELL=" + new JSONObject()
+            .put("result","VERIFIED_SYNTHETIC_QA")
+            .put("themes",themes)
+            .put("rail",rail)
+            .put("nonChatModalFocusRestore",true));
+    }
+
     @Test public void galaxyChat_renders13Cards_pollChecklistAndSend() throws Exception {
         launchChat();
         awaitJs("document.querySelectorAll('.chat-galaxy-card').length===13");
