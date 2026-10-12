@@ -835,13 +835,15 @@ public class GalaxyDeviceClosureTest {
         String documentsPackage = documentsComponent.substring(0, documentsComponent.indexOf('/'));
         scenario.onActivity(a -> a.pickMedia("qa-file-picker", "chat-file"));
         UiDevice device = UiDevice.getInstance(instrumentation);
-        // Android may route OPEN_DOCUMENT to a system chooser in a different
-        // package than resolve-activity reported. Assert actual foreground
-        // handoff rather than guessing the OEM's selected document UI package.
+        // Android may route OPEN_DOCUMENT to a DocumentsUI or platform
+        // ResolverActivity owned by the "android" package. In either case the
+        // external picker has taken foreground away from Nuestra Galaxia.
+        // Reject only a blank package or our own package; excluding "android"
+        // incorrectly times out while a valid system chooser is visible.
         awaitCondition(() -> {
             String foreground = device.getCurrentPackageName();
             return foreground != null && !foreground.isBlank()
-                && !pkg.equals(foreground) && !"android".equals(foreground);
+                && !pkg.equals(foreground);
         }, UI_TIMEOUT_MS);
         String pickerForeground = device.getCurrentPackageName();
         assertFalse("File picker did not leave app foreground.", pkg.equals(pickerForeground));
