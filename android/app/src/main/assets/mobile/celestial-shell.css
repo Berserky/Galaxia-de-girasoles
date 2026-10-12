@@ -1,0 +1,146 @@
+/*
+ * Visual Evolution 5.0 · P1 / Celestial Shell
+ * Rendered only by the packaged Android WebView. The original app.css,
+ * GalaxyTheme and Galaxy Chat engine retain ownership of existing contracts.
+ */
+:root {
+  --v5-space-1:4px;--v5-space-2:8px;--v5-space-3:12px;--v5-space-4:16px;
+  --v5-space-5:20px;--v5-space-6:24px;
+  --v5-radius-control:12px;--v5-radius-button:16px;--v5-radius-card:22px;
+  --v5-radius-sheet:28px;
+  --v5-motion-fast:150ms;--v5-motion-standard:220ms;--v5-motion-enter:280ms;
+  --v5-ease:cubic-bezier(.2,.8,.2,1);
+  --v5-ring:3px;
+  --v5-bottom-inset:env(safe-area-inset-bottom,0px);
+  --v5-action:#7254c7;--v5-on-action:#fff;
+  --v5-elevation:0 8px 28px rgba(11,8,32,.08);
+  --v5-elevation-overlay:0 22px 64px rgba(11,8,32,.28);
+}
+html[data-theme="daylight"] {--v5-action:#7254c7;--v5-on-action:#fff}
+html[data-theme="cosmic"] {--v5-action:#b99bff;--v5-on-action:#15111f}
+html[data-theme="halloween"] {--v5-action:#f1a854;--v5-on-action:#17111d}
+html[data-theme="christmas"] {--v5-action:#91dfad;--v5-on-action:#091c11}
+html[data-theme="valentine"] {--v5-action:#fda2c2;--v5-on-action:#21131c}
+html[data-theme="friendship"] {--v5-action:#ceb4ff;--v5-on-action:#171025}
+html[data-theme="easter"] {--v5-action:#dbc4ff;--v5-on-action:#18182b}
+html:not([data-theme="daylight"]) {--v5-elevation:0 10px 34px rgba(0,0,0,.23);--v5-elevation-overlay:0 22px 64px rgba(0,0,0,.45)}
+
+/* Shared visual language; Chat is explicitly excluded from this shell slice. */
+body:not(.chat-mode) #app {min-width:0;padding-inline:clamp(12px,4vw,24px)}
+body:not(.chat-mode) #app .header {min-width:0;gap:8px}
+body:not(.chat-mode) #app .brand {min-width:0}
+body:not(.chat-mode) #app .brand>div:last-child {min-width:0}
+body:not(.chat-mode) #app .brand strong {line-height:1.25;letter-spacing:-.025em}
+body:not(.chat-mode) #app .brand small {display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:38vw}
+body:not(.chat-mode) #app .brand-mark {flex:0 0 auto;border-radius:15px}
+body:not(.chat-mode) #app .header-search {
+  min-width:44px;min-height:44px;width:44px;height:44px;
+  border-radius:15px;transition:transform var(--v5-motion-fast) var(--v5-ease),border-color var(--v5-motion-fast);
+}
+body:not(.chat-mode) #app .header-search:active {transform:scale(.96)}
+body:not(.chat-mode) #app .card {
+  border-radius:var(--v5-radius-card);
+  background:linear-gradient(160deg,var(--surface),color-mix(in srgb,var(--surface2) 16%,var(--surface)));
+  box-shadow:var(--v5-elevation);
+}
+body:not(.chat-mode) #app .action-card {
+  border-radius:var(--v5-radius-card);
+  background:var(--surface);min-width:0;
+  transition:transform var(--v5-motion-fast) var(--v5-ease),border-color var(--v5-motion-standard);
+}
+body:not(.chat-mode) #app .action-card:active {transform:scale(.985)}
+body:not(.chat-mode) .btn:not(.secondary):not(.ghost):not(.danger) {
+  background:var(--v5-action);color:var(--v5-on-action);
+  border-radius:var(--v5-radius-button);min-height:44px;
+}
+body:not(.chat-mode) #app :is(input:not([type="checkbox"]),textarea,select) {font-size:max(16px,1rem)}
+body:not(.chat-mode) :is(button,a[href],[role="button"],input,textarea,select):focus-visible,
+#modal:not(.chat-surface) :is(button,a[href],[role="button"],input,textarea,select):focus-visible {
+  outline:var(--v5-ring) solid var(--v5-action);outline-offset:3px;
+}
+body:not(.chat-mode) :is(.card,.action-card,.header,.hero) {overflow-wrap:anywhere}
+
+/* Navigation: current page is announced in JS, visible in all seven palettes. */
+body:not(.chat-mode) .bottom-nav {
+  height:72px;padding:6px;gap:1px;border-radius:24px;
+  background:var(--nav-glass);
+  box-shadow:var(--v5-elevation-overlay);
+}
+body:not(.chat-mode) .nav-btn {
+  position:relative;min-width:0;min-height:48px;
+  border-radius:17px;padding:3px 1px;gap:3px;
+  transition:background-color var(--v5-motion-standard),color var(--v5-motion-standard),transform var(--v5-motion-fast);
+}
+body:not(.chat-mode) .nav-btn[aria-current="page"] {
+  background:color-mix(in srgb,var(--v5-action) 12%,var(--surface));
+  color:var(--v5-action);
+}
+body:not(.chat-mode) .nav-btn[aria-current="page"]::before {
+  content:"";position:absolute;left:34%;right:34%;top:0;height:3px;
+  border-radius:0 0 4px 4px;background:var(--v5-action);
+}
+body:not(.chat-mode) .nav-btn:active {transform:scale(.96)}
+body:not(.chat-mode) .nav-btn span {font-size:clamp(9px,2.8vw,11px);line-height:1.25}
+body:not(.chat-mode) .chat-fab,
+body:not(.chat-mode) #app .floating-add {
+  width:52px;height:52px;min-width:48px;min-height:48px;
+  background:var(--v5-action);color:var(--v5-on-action);
+  box-shadow:var(--v5-elevation-overlay);
+  transition:bottom var(--v5-motion-standard) var(--v5-ease),transform var(--v5-motion-fast);
+}
+body:not(.chat-mode) .chat-fab {bottom:calc(100px + var(--v5-bottom-inset))}
+body:not(.chat-mode) #app .floating-add {bottom:calc(100px + var(--v5-bottom-inset))}
+body:not(.chat-mode) #app:has(.floating-add:not(.hidden)) ~ #chatFab:not(.hidden) {
+  bottom:calc(164px + var(--v5-bottom-inset));
+}
+body:not(.chat-mode):has(.global-player.visible) #app .floating-add {
+  bottom:calc(158px + var(--v5-bottom-inset));
+}
+body:not(.chat-mode):has(.global-player.visible) #chatFab:not(.hidden) {
+  bottom:calc(158px + var(--v5-bottom-inset));
+}
+body:not(.chat-mode):has(.global-player.visible) #app:has(.floating-add:not(.hidden)) ~ #chatFab:not(.hidden) {
+  bottom:calc(222px + var(--v5-bottom-inset));
+}
+body:not(.chat-mode):has(.global-player.visible) {padding-bottom:calc(160px + var(--v5-bottom-inset))}
+body:not(.chat-mode):has(#app .floating-add:not(.hidden)):has(#chatFab:not(.hidden)) {
+  padding-bottom:calc(240px + var(--v5-bottom-inset));
+}
+body:not(.chat-mode):has(.global-player.visible):has(#app .floating-add:not(.hidden)):has(#chatFab:not(.hidden)) {
+  padding-bottom:calc(300px + var(--v5-bottom-inset));
+}
+
+/* Global non-chat overlays: browser dialog remains the focus-trapping primitive. */
+#modal:not(.chat-surface) {border-radius:var(--v5-radius-sheet);box-shadow:var(--v5-elevation-overlay);max-width:min(560px,calc(100vw - 20px))}
+#modal:not(.chat-surface) .modal-inner {padding:clamp(16px,4.5vw,24px);overscroll-behavior:contain}
+#modal:not(.chat-surface) .modal-inner h2 {font-size:clamp(19px,5vw,23px);line-height:1.25;padding-right:44px;letter-spacing:-.025em}
+#modal:not(.chat-surface) .close {width:44px;height:44px;background:var(--surface2);color:var(--text)}
+#modal.chat-bottom-sheet:not(.chat-surface) {
+  margin:auto auto 0;width:min(100%,560px);
+  max-height:min(88dvh,740px);border-radius:28px 28px 0 0;
+}
+#modal.chat-bottom-sheet:not(.chat-surface) .modal-inner {padding-bottom:max(20px,var(--v5-bottom-inset))}
+#modal:not(.chat-surface)[open] .modal-inner {animation:v5-surface-enter var(--v5-motion-enter) var(--v5-ease) both}
+@keyframes v5-surface-enter {from {opacity:.75;transform:translateY(12px)}to {opacity:1;transform:none}}
+
+/* With software keyboard or a focused editable field, action rail is non-obstructing. */
+body.v5-input-focused:not(.chat-mode) :is(.bottom-nav,.chat-fab,.global-player.visible),
+body.v5-input-focused:not(.chat-mode) #app .floating-add {
+  visibility:hidden;pointer-events:none;
+}
+@media(max-width:360px){
+  body:not(.chat-mode) #app .header-actions {gap:4px}
+  body:not(.chat-mode) #app .brand-mark {width:36px;height:36px;border-radius:13px}
+  body:not(.chat-mode) #app .avatar {display:none}
+  body:not(.chat-mode) #app .brand small {max-width:115px}
+  body:not(.chat-mode) .bottom-nav {left:7px;right:7px;padding:5px}
+}
+@media(orientation:landscape) and (max-height:560px){
+  #modal:not(.chat-surface) {max-height:calc(100dvh - 8px)}
+  #modal:not(.chat-surface) .modal-inner {max-height:calc(100dvh - 8px)}
+  body:not(.chat-mode) .bottom-nav {height:60px}
+}
+@media(prefers-reduced-motion:reduce) {
+  body:not(.chat-mode) :is(.nav-btn,.chat-fab,.header-search,.action-card,.floating-add,.btn),
+  #modal:not(.chat-surface) .modal-inner {animation:none!important;transition:none!important;transform:none!important}
+}
