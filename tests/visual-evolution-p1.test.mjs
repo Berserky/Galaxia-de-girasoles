@@ -47,7 +47,7 @@ test('P1 CSS reserves separate zones for add + chat FAB + player + keyboard', ()
   assert.match(css, /#app:has\(\.floating-add:not\(\.hidden\)\) ~ #chatFab/);
   assert.match(css, /:has\(\.global-player\.visible\)/);
   assert.match(css, /v5-input-focused:not\(\.chat-mode\)/);
-  assert.match(css, /#modal:not\\(\\.chat-surface\\)/);
+  assert.ok(css.includes('#modal:not(.chat-surface)'));
   assert.match(css, /prefers-reduced-motion:reduce/);
   assert.match(css, /max-width:360px/);
   assert.match(css, /orientation:landscape/);
