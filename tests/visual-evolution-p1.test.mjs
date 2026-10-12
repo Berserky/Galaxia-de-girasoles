@@ -101,6 +101,20 @@ test('P1 normal modal focuses input and restores launcher, Escape uses existing 
   assert.equal(h.attrs['aria-labelledby'],undefined);
 });
 
+test('P1 touch-only launcher restores focus even when click does not focus the button', () => {
+  const h=harness();
+  h.root.document.activeElement=h.root.document.body;
+  h.listeners.click({target:{closest(){return h.origin;}}});
+  h.root.GalaxyCelestialShell.beforeOpen(false);
+  h.modal.open=true;
+  h.root.GalaxyCelestialShell.afterOpen(false);
+  while(h.tasks.length)h.tasks.shift()();
+  h.modal.open=false;
+  h.root.GalaxyCelestialShell.afterClose(false);
+  while(h.tasks.length)h.tasks.shift()();
+  assert.equal(h.origin.focused,true);
+});
+
 test('P1 Chat surface is not restyled or focus-restored by the shared helper', () => {
   const h=harness();
   h.root.GalaxyCelestialShell.beforeOpen(true);
