@@ -1,0 +1,150 @@
+{
+  "version": "5.0.0-p0",
+  "status": "propuesta-para-aprobacion",
+  "source": "docs/visual-evolution-5/ROADMAP.md",
+  "engines": {
+    "android": "WebView assets/mobile",
+    "js": "vanilla JS; mantener contratos",
+    "web": "fuera del rollout Android P0"
+  },
+  "themes": [
+    "auto",
+    "daylight",
+    "cosmic",
+    "halloween",
+    "christmas",
+    "valentine",
+    "friendship",
+    "easter"
+  ],
+  "themeResolution": {
+    "auto": "delegar en GalaxyTheme.resolve; sin paleta auto independiente"
+  },
+  "type": {
+    "body": "system-ui, -apple-system, Segoe UI, sans-serif",
+    "sizesPx": {
+      "caption": 12,
+      "body": 14,
+      "bodyLarge": 16,
+      "heading3": 20,
+      "heading2": 24,
+      "hero": 32
+    },
+    "lineHeight": {
+      "body": 1.5,
+      "heading": 1.2
+    },
+    "minInputFontPx": 16
+  },
+  "spacePx": [
+    0,
+    4,
+    8,
+    12,
+    16,
+    20,
+    24,
+    32,
+    40,
+    48
+  ],
+  "radiiPx": {
+    "control": 12,
+    "button": 16,
+    "card": 22,
+    "sheet": 28,
+    "pill": 999
+  },
+  "touch": {
+    "minimumCssPx": 44,
+    "recommendedAndroidDp": 48,
+    "focusRingCssPx": 3
+  },
+  "elevation": {
+    "card": "0 8px 28px rgba(11,8,32,.08)",
+    "overlay": "0 22px 64px rgba(11,8,32,.28)"
+  },
+  "motion": {
+    "fastMs": 150,
+    "standardMs": 220,
+    "enterMs": 280,
+    "easingStandard": "cubic-bezier(.2,.8,.2,1)",
+    "easingExit": "cubic-bezier(.4,0,1,1)",
+    "reduced": "sin movimiento no esencial; misma funcionalidad",
+    "perf": "priorizar transform y opacity; no filtros animados permanentes"
+  },
+  "geometry": {
+    "viewportsCssPx": [
+      320,
+      360,
+      393,
+      412
+    ],
+    "bottomNavSafeArea": "env(safe-area-inset-bottom)",
+    "keyboard": "visualViewport; no alterar chat composer",
+    "floatingControls": "reserved-area; FAB sin solapar controles"
+  },
+  "contrast": {
+    "normalText": 4.5,
+    "largeText": 3,
+    "control": 3
+  },
+  "palettes": {
+    "daylight": {
+      "bg": "#f7f6fa",
+      "surface": "#ffffff",
+      "text": "#292638",
+      "muted": "#706b80",
+      "accent": "#7254c7",
+      "onAccent": "#ffffff"
+    },
+    "cosmic": {
+      "bg": "#10101d",
+      "surface": "#17172a",
+      "text": "#f4f1ff",
+      "muted": "#b4afca",
+      "accent": "#b99bff",
+      "onAccent": "#15111f"
+    },
+    "halloween": {
+      "bg": "#100913",
+      "surface": "#1e1223",
+      "text": "#fbf2ff",
+      "muted": "#d4bbd6",
+      "accent": "#f1a854",
+      "onAccent": "#17111d"
+    },
+    "christmas": {
+      "bg": "#071510",
+      "surface": "#11251b",
+      "text": "#f3fff6",
+      "muted": "#bdd5c6",
+      "accent": "#91dfad",
+      "onAccent": "#091c11"
+    },
+    "valentine": {
+      "bg": "#180810",
+      "surface": "#301521",
+      "text": "#fff4f7",
+      "muted": "#f2c9d6",
+      "accent": "#fda2c2",
+      "onAccent": "#21131c"
+    },
+    "friendship": {
+      "bg": "#120b22",
+      "surface": "#241a3e",
+      "text": "#fff5ff",
+      "muted": "#d5c9eb",
+      "accent": "#ceb4ff",
+      "onAccent": "#171025"
+    },
+    "easter": {
+      "bg": "#11162c",
+      "surface": "#202946",
+      "text": "#f6f5ff",
+      "muted": "#c9cee7",
+      "accent": "#dbc4ff",
+      "onAccent": "#18182b"
+    }
+  }
+}
