@@ -161,6 +161,16 @@ public class GalaxyDeviceClosureTest {
                 palette.getDouble("contrast") >= 4.5d);
         }
 
+        // Capture ONLY this hermetic QA persona, never a private paired user.
+        // Capture settled pixels for approval; token and credentials are absent.
+        for (String theme : new String[]{"daylight","cosmic","halloween","christmas",
+                "valentine","friendship","easter"}) {
+            runJs("GalaxyTheme.applyTheme('" + theme + "')");
+            SystemClock.sleep(450);
+            shell("screencap -p /sdcard/Download/V5-P1-synthetic-" + theme + ".png");
+        }
+        runJs("GalaxyTheme.applyTheme('auto')");
+
         // Measure real layout rectangles; the extra add FAB and player are synthetic
         // UI-only fixtures and are removed before leaving this test.
         String railJson = js("JSON.stringify((()=>{"
