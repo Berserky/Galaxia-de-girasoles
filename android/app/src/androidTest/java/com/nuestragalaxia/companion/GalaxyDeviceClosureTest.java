@@ -146,11 +146,14 @@ public class GalaxyDeviceClosureTest {
         for (String theme : new String[]{"daylight","cosmic","halloween","christmas",
                 "valentine","friendship","easter"}) {
             runJs("GalaxyTheme.applyTheme('" + theme + "')");
-            String raw = js("JSON.stringify((()=>{const e=document.createElement('button');"
+            long themeStarted = SystemClock.elapsedRealtime();
+            String raw = jsWithDeadline("JSON.stringify((()=>{const e=document.createElement('button');"
                 + "e.className='btn';document.body.appendChild(e);"
                 + "const s=getComputedStyle(e);const active=document.documentElement.dataset.theme;"
                 + "const bg=s.backgroundColor,fg=s.color;e.remove();"
-                + "return {active,bg,fg}})())");
+                + "return {active,bg,fg}})())", 20);
+            long themeJsMs = SystemClock.elapsedRealtime()-themeStarted;
+            System.out.println("V5_P1_THEME_WEBVIEW_LATENCY_MS=" + theme + ":" + themeJsMs);
             assertTrue("P1 Android WebView computed color failed in " + theme + ": " + raw,
                 raw.startsWith("{"));
             JSONObject colors = new JSONObject(raw);
@@ -1155,7 +1158,11 @@ public class GalaxyDeviceClosureTest {
         SystemClock.sleep(300);
     }
 
-    private String js(String expression) {
+    private String js(String expression) { return jsWithDeadline(expression,5); }
+
+    // Only the P1 synthetic visual CSS sampling uses 20 seconds. Existing
+    // Chat and onboarding tests retain their original 5-second hard timeout.
+    private String jsWithDeadline(String expression, int timeoutSeconds) {
         if (scenario == null) throw new IllegalStateException("Activity not launched");
         AtomicReference<String> raw = new AtomicReference<>();
         CountDownLatch latch = new CountDownLatch(1);
@@ -1167,7 +1174,8 @@ public class GalaxyDeviceClosureTest {
             });
         });
         try {
-            if (!latch.await(5, TimeUnit.SECONDS)) throw new AssertionError("JavaScript callback timed out: " + expression);
+            if (!latch.await(timeoutSeconds, TimeUnit.SECONDS)) throw new AssertionError(
+                "JavaScript callback timed out after " + timeoutSeconds + "s: " + expression);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new AssertionError(e);
