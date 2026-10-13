@@ -121,3 +121,43 @@ test('P2B mood options remain tappable and readable on narrow screens',()=>{
  assert.match(css,/@media\(min-width:540px\)/);
  assert.match(home,/aria-pressed/);
 });
+
+
+const dailyAnswerSource=extract('function dailyAnswerMarkup(', 'function dailyQuestionCard(');
+const dailyQuestionSource=extract('function dailyQuestionCard(', 'function personCard(');
+function renderDaily(own={},partner={}){
+ const context={
+  dateContext:{question:{}},cloud:{today:'2026-10-13'},
+  dailyQuestion:()=> '¿Qué te hizo sonreír hoy?',ico:()=>'',esc:v=>String(v),attr:v=>String(v),
+  myName:()=> 'Yo',partnerName:()=> 'Mi persona',own,partner
+ };
+ return runInNewContext(dailyAnswerSource+'\\n'+dailyQuestionSource+'\\ndailyQuestionCard(own,partner)',context);
+}
+
+test('P2C daily progress reflects 0, 1 and 2 actual answers, without adding server calls',()=>{
+ const zero=renderDaily(),one=renderDaily({answer:'Guardada'}),both=renderDaily({answer:'Guardada'},{answer:'En privado'});
+ assert.match(zero,/0 de 2 respuestas listas/);
+ assert.match(one,/1 de 2 respuestas listas/);
+ assert.match(both,/2 de 2 respuestas listas/);
+ assert.match(one,/role="status" aria-label="1 de 2 respuestas registradas"/);
+ assert.match(one,/date-question-privacy/);
+ assert.doesNotMatch(one,/En privado/);
+ assert.doesNotMatch(both,/date-question-privacy/);
+ assert.match(both,/En privado/);
+ for(const html of [zero,one,both]){
+  for(const a of ['galaxy-share','date-question-decks','date-question-memory','date-question-favorite'])
+   assert.ok(html.includes('data-action="'+a+'"'),'Missing existing action '+a);
+ }
+});
+
+test('P2C daily actions have touch targets and responsive layout without sharing answer text',()=>{
+ assert.match(css,/V5 P2C: daily question and actions/);
+ assert.match(css,/date-question-actions > \.btn \{[\s\S]*?min-width:0;min-height:44px/);
+ assert.match(css,/date-question-privacy \{[\s\S]*?font-size:12px/);
+ assert.match(css,/date-question-progress \{[\s\S]*?font-size:12px/);
+ assert.match(css,/grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+ assert.match(css,/@media\(min-width:540px\)/);
+ const one=renderDaily({answer:'texto exclusivo'});
+ assert.match(one,/data-card-type="DAILY_QUESTION"/);
+ assert.doesNotMatch(one,/data-title="texto exclusivo"/);
+});
