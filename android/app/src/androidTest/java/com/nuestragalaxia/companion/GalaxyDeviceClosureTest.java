@@ -143,13 +143,16 @@ public class GalaxyDeviceClosureTest {
         // evaluateJavascript invocation; the emulator's 5-second JS callback
         // deadline could expire without indicating a contrast problem.
         org.json.JSONArray samples = new org.json.JSONArray();
-        runJs("const p=document.createElement('button');p.id='v5-color-probe';p.className='btn';p.textContent='QA';document.querySelector('#app').append(p)");
         for (String theme : new String[]{"daylight","cosmic","halloween","christmas",
                 "valentine","friendship","easter"}) {
             runJs("GalaxyTheme.applyTheme('" + theme + "')");
-            String raw = js("JSON.stringify((()=>{const e=document.getElementById('v5-color-probe');"
-                + "const s=getComputedStyle(e);return {active:document.documentElement.dataset.theme,"
-                + "bg:s.backgroundColor,fg:s.color}})())");
+            String raw = js("JSON.stringify((()=>{const e=document.createElement('button');"
+                + "e.className='btn';document.body.appendChild(e);"
+                + "const s=getComputedStyle(e);const active=document.documentElement.dataset.theme;"
+                + "const bg=s.backgroundColor,fg=s.color;e.remove();"
+                + "return {active,bg,fg}})())");
+            assertTrue("P1 Android WebView computed color failed in " + theme + ": " + raw,
+                raw.startsWith("{"));
             JSONObject colors = new JSONObject(raw);
             assertEquals("Theme did not resolve in Android WebView", theme, colors.getString("active"));
             double contrast = v5ColorContrast(colors.getString("bg"), colors.getString("fg"));
@@ -161,7 +164,7 @@ public class GalaxyDeviceClosureTest {
             SystemClock.sleep(450);
             shell("screencap -p /sdcard/Download/V5-P1-synthetic-" + theme + ".png");
         }
-        runJs("document.getElementById('v5-color-probe')?.remove();GalaxyTheme.applyTheme('auto')");
+        runJs("GalaxyTheme.applyTheme('auto')");
         assertEquals("true", js("document.documentElement.dataset.themeChoice==='auto'"));
         JSONObject themes = new JSONObject().put("palettes",samples).put("auto",true);
 
