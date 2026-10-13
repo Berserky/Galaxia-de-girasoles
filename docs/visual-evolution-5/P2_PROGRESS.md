@@ -48,3 +48,8 @@
 - En HEAD `418e2dc`, QA Phase 5 y Phase 11 Android fallaron en el mismo caso `dailyGoalsPlansEventsCapsulesMapContextBackupAndUpdate_areReachable`: XML JUnit `GalaxyDeviceClosureTest.java:864` exige texto visible `PRÓXIMA FECHA`. El Home P2 ocultaba la tarjeta duplicada cuando el evento próximo ya figuraba como momento destacado, pero el destacado tenía otro rótulo.
 - Corrección P2-A: se sigue evitando la tarjeta duplicada, pero el destacado reutilizado muestra `PRÓXIMA FECHA` cuando efectivamente enseña el evento. La función de tarjeta conserva comportamiento anterior para el resto de estados.
 - Contrato Node P2 ampliado y aserción de Android preexistente mantenida **sin suprimir tests ni aflojar seguridad**. Resultado final **PENDIENTE** hasta completar CI del SHA que contiene esta corrección.
+
+### Compatibilidad del test histórico (13-oct-2026)
+
+- Se conserva la firma **`function livingMomentCard()`** que utiliza `tests/android-insights.test.mjs` para delimitar el bloque de aniversario derivado. No se cambia el contrato histórico ni se desactiva su test.
+- Cuando `livingMoment()` presenta la próxima fecha, el rótulo de **esa misma tarjeta** cambia de «Se acerca algo especial» a «PRÓXIMA FECHA»; ningún componente extra, evento duplicado o petición adicional. Comprobar P2/Node completo y Android en el nuevo SHA antes de aprobación.
