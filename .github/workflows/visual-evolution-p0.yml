@@ -103,6 +103,21 @@ jobs:
             sleep $((attempt * 10))
           done
           test "$sdk_ok" -eq 1
+          # Emulator Runner otherwise downloads this huge image itself once,
+          # with no retry if Google's CDN serves a corrupt ZIP. Preinstall and
+          # validate source.properties, retry safely before the AVD startup.
+          SYS_IMAGE="$SDK_ROOT/system-images/android-35/google_apis/x86_64"
+          image_ok=0
+          for attempt in 1 2 3; do
+            if "$SDKMANAGER" "system-images;android-35;google_apis;x86_64" && test -f "$SYS_IMAGE/source.properties"; then
+              image_ok=1
+              break
+            fi
+            echo "::warning::Android API 35 Google APIs x86_64 system image was unavailable or corrupt (attempt $attempt/3)"
+            rm -rf "$SYS_IMAGE"
+            sleep $((attempt * 10))
+          done
+          test "$image_ok" -eq 1
           echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
       - name: Enable KVM
