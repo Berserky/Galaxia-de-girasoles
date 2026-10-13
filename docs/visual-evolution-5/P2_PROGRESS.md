@@ -84,3 +84,11 @@
 - Prueba Node de contrato añadida al archivo `tests/visual-evolution-p2.test.mjs` para prevenir regresar al selector comprimido.
 - **Pendiente**: verificar en artefactos Android de los cuatro anchos y siete temas, fuente ampliada, teclado y respuesta de guardado/error; no cerrar VE-018 aún.
 - El último SHA con cambios de selector deberá revalidar los 15 workflows; los PASS anteriores no se transfieren.
+
+## P2-C · Pregunta diaria y contrato de privacidad (13-oct-2026)
+
+- VE-022/023: las tres acciones existentes (Galaxy Chat, Barajas, Guardar como recuerdo) se mantienen accesibles; se ordenan en grid 2 columnas para teléfonos compactos y 3 columnas desde 540px, con objetivos táctiles de altura mínima de 44px. El favorito tiene objetivo táctil 44x44. No se cambia ningún `data-action`, endpoint, persistencia ni flujo de consentimiento.
+- VE-024: contador visible y accesible `0/1/2 de 2 respuestas listas` basado **exclusivamente** en las respuestas que el estado del usuario ya entrega al cliente. Nunca incluye el texto privado en `data-title`, rutas compartidas ni payloads nuevos. `role=status` facilita tecnología asistiva. Respeta la regla existente que impide crear un recuerdo conjunto hasta que ambos respondan.
+- VE-010/014, robustez: `nowPersonCard` exige latitud y longitud no nulas y marca como no verificables timestamps futuros más de 60s antes de reutilizar `locationFreshState`; datos insuficientes nunca se presentan como GPS en vivo o velocidad. El motor de tracking, `GalaxyDistance` y el mapa NO se modificaron.
+- Pruebas Node con VM aislado de `dailyQuestionCard` para estados 0/1/2 y acciones; con ubicaciones sintéticas ausentes/futuras para ocultamiento de movimiento/velocidad. CSS de estado y controles verificado por contrato.
+- **No declarar PASS sin CI del HEAD vigente**. Verificar Android instrumentado, fuente grande, contraste, modal/IME, privacidad y aprobación del propietario. Todos los IDs anteriores permanecen ABIERTOS hasta su evidencia.
