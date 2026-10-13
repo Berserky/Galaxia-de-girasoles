@@ -47,6 +47,9 @@
       pendingFocus=false;
       const target=modal.querySelector('[autofocus],input:not([type="hidden"]):not(:disabled),textarea:not(:disabled),select:not(:disabled),button:not(.close):not(:disabled),.close');
       target?.focus({preventScroll:true});
+      // Some Android WebViews can update activeElement without bubbling focusin.
+      // Sync directly after programmatic focus, not only via the document event.
+      syncEditing();
     });
   }
   function afterClose(isChat){
@@ -58,8 +61,11 @@
     const previous=restoreTarget;
     restoreTarget=null;
     if(!isChat&&previous?.isConnected&&typeof previous.focus==='function'){
-      root.requestAnimationFrame(()=>{if(!modal?.open)previous.focus({preventScroll:true});});
-    }
+      root.requestAnimationFrame(()=>{
+        if(!modal?.open)previous.focus({preventScroll:true});
+        syncEditing();
+      });
+    } else if(!isChat)root.requestAnimationFrame(syncEditing);
   }
   if(modal){
     modal.addEventListener('cancel',event=>{
