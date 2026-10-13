@@ -209,7 +209,7 @@ function nowPersonCard(person,isOwn){
  const locationTimestamp=Date.parse(loc.updated_at||'');
  const fresh=loc.latitude!=null&&loc.longitude!=null&&Number.isFinite(locationTimestamp)&&locationTimestamp<=Date.now()+60_000&&locationFreshState(loc),age=locationAgeMs(loc);
  const movement=!loc.sharing?'Ubicación pausada':fresh?transportLabel(loc):'Ubicación sin actualizar';
- const ageLabel=!loc.sharing?'':fresh?' · '+distanceAgeLabel(loc.updated_at):Number.isFinite(age)?' · hace '+ageDurationLabel(age):' · sin lectura reciente';
+ const ageLabel=!loc.sharing?'':fresh?' · '+distanceAgeLabel(loc.updated_at):locationTimestamp>Date.now()+60_000?' · hora del dispositivo por verificar':Number.isFinite(age)?' · hace '+ageDurationLabel(age):' · sin lectura reciente';
  const battery=isOwn?(native.battery==null?NaN:Number(native.battery)):(p.shareBattery===true&&p.battery!=null?Number(p.battery):NaN);
  const listening=isOwn?currentTrackTitle():(p.shareListening===true?String(p.listening||''):'');
  const speed=loc.speed==null?NaN:Number(loc.speed);
