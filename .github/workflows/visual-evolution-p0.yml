@@ -9,6 +9,7 @@ on:
       - "tests/visual-evolution-p1.test.mjs"
       - "android/app/src/main/assets/mobile/**"
       - "scripts/visual-evolution-p0-avd.sh"
+      - "scripts/visual-evolution-p1-avd.sh"
       - "scripts/visual-evolution-p0-baseline.mjs"
       - ".github/workflows/visual-evolution-p0.yml"
   workflow_dispatch:
@@ -122,40 +123,15 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
-          script: |
-            set -euo pipefail
-            bash scripts/visual-evolution-p0-avd.sh
-            # P1: test the actual APK WebView with a hermetic local QA fixture,
-            # never a paired production account or live remote credentials.
-            gradle -p android --no-daemon :app:connectedDebugAndroidTest \
-              -PQA_EDGE_URL=http://127.0.0.1:18765 \
-              -PQA_SUPABASE_PUBLISHABLE_KEY=qa_v5p1 \
-              -PQA_APPLICATION_SUFFIX=.v5p1qa \
-              -Pandroid.testInstrumentationRunnerArguments.class=com.nuestragalaxia.companion.GalaxyDeviceClosureTest#visualEvolutionP1_realWebViewThemesFloatingRailAndModalFocus_areSafe \
-              2>&1 | tee /tmp/v5-p1-device-qa.log
-            grep 'V5_P1_ANDROID_SHELL=' /tmp/v5-p1-device-qa.log > build/p0-avd/p1-device-summary.txt || true
-            mkdir -p build/p0-avd/p1-synthetic-themes
-            for theme in daylight cosmic halloween christmas valentine friendship easter; do
-              adb pull "/sdcard/Download/V5-P1-synthetic-${theme}.png" "build/p0-avd/p1-synthetic-themes/${theme}.png" >/dev/null
-            done
-            python3 - <<'PY'
-            from pathlib import Path
-            import hashlib
-            paths=list(Path('build/p0-avd/p1-synthetic-themes').glob('*.png'))
-            assert len(paths)==7, f'Expected 7 synthetic QA Android screenshots, got {len(paths)}'
-            for path in paths:
-                assert path.read_bytes().startswith(b'\x89PNG\r\n\x1a\n'), f'Invalid PNG: {path}'
-            unique=len(set(hashlib.sha256(path.read_bytes()).hexdigest() for path in paths))
-            assert unique>=5, f'Android themed captures unexpectedly identical: {unique}/7'
-            print(f'Seven REAL Android WebView PNG previews, synthetic QA only; {unique} unique screens.')
-            PY
-
-            echo "V5-P1 real Android WebView instrumentation finished: see Android test report and gradle step."
+          script: bash scripts/visual-evolution-p1-avd.sh
 
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: v5-p0-android-unpaired-avd-evidence
-          path: build/p0-avd/**
+          path: |
+            build/p0-avd/**
+            android/app/build/outputs/androidTest-results/**
+            android/app/build/reports/androidTests/**
           if-no-files-found: warn
           retention-days: 30
