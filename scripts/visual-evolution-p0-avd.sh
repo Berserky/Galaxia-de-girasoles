@@ -16,6 +16,29 @@ for iteration in 1 2 3 4 5; do
   grep -E 'Status:|TotalTime:|WaitTime:|ThisTime:' "$OUT/start-$iteration.txt" || true
   sleep 2
 done
+# PNG signature alone is NOT visual QA. Assert Android accessibility hierarchy
+# exposes the real, unpaired pairing form before every capture. This catches
+# launcher/system ANR dialogs that previously produced valid but useless PNGs.
+assert_onboarding_visible() {
+  local label="$1" xml="$OUT/ui-$1.xml" ok=0
+  for attempt in 1 2 3 4; do
+    adb shell uiautomator dump /sdcard/Download/v5-unpaired-ui.xml >/dev/null 2>&1 || true
+    adb exec-out cat /sdcard/Download/v5-unpaired-ui.xml >"$xml" 2>/dev/null || true
+    if grep -Eqi 'Vincular este teléfono|Código de vinculación|Todo lo nuestro, ahora en el teléfono' "$xml" \
+      && ! grep -Eqi 'Pixel Launcher isn.t responding|System UI isn.t responding|isn.t responding|no responde' "$xml"; then
+      ok=1
+      break
+    fi
+    echo "Visual QA: onboarding inaccessible on $label, attempt $attempt/4." >&2
+    sleep 3
+  done
+  if [[ "$ok" != 1 ]]; then
+    echo "FAIL VISUAL QA: screenshot $label blocked by system UI or app not accessible." >&2
+    adb shell dumpsys window windows >"$OUT/focus-$label.txt" || true
+    return 1
+  fi
+}
+assert_onboarding_visible portrait
 adb exec-out screencap -p >"$OUT/android-unpaired-portrait.png"
 adb shell dumpsys window >"$OUT/window-portrait.txt"
 adb shell dumpsys gfxinfo "$PKG" reset >/dev/null
@@ -27,11 +50,13 @@ adb shell dumpsys gfxinfo "$PKG" framestats >"$OUT/gfxinfo-framestats.txt"
 adb shell dumpsys meminfo "$PKG" >"$OUT/meminfo.txt"
 adb shell settings put system font_scale 1.3
 sleep 2
+assert_onboarding_visible largefont
 adb exec-out screencap -p >"$OUT/android-unpaired-largefont.png"
 adb shell settings put system font_scale 1.0
 adb shell settings put system accelerometer_rotation 0
 adb shell settings put system user_rotation 1
 sleep 3
+assert_onboarding_visible landscape
 adb exec-out screencap -p >"$OUT/android-unpaired-landscape.png"
 adb shell settings put system user_rotation 0
 adb shell settings put system accelerometer_rotation 1
@@ -49,6 +74,7 @@ for f in sorted(base.glob('start-*.txt')):
 for path in base.glob('*.png'):
     assert path.read_bytes().startswith(b'\x89PNG\r\n\x1a\n'),f'Invalid PNG: {path}'
 assert len(list(base.glob('*.png')))==3, 'Must capture 3 AVD screenshots'
+assert len(list(base.glob('ui-*.xml')))==3, 'Must verify onboarding accessibility for 3 screen captures'
 summary={'scope':'fresh isolated Android QA debug/unpaired onboarding ONLY',
  'coldStartProxy':'am force-stop then am start -W; not fully cold CPU/network',
  'launchIterations':starts,
