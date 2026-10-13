@@ -204,17 +204,20 @@ async function togglePresence(kind){
 }
 function nowPersonCard(person,isOwn){
  const loc=(cloud.locations||[]).find(l=>String(l.person)===String(person))||{},daily=todayRows().find(r=>String(r.person)===String(person))||{};
- const p=cloud?.settings?.data?.presence?.[String(person)]||{},name=names()[Number(person)]||(isOwn?'Yo':'Mi persona');
+ const p=normalizedPresence(String(person)),name=names()[Number(person)]||(isOwn?'Yo':'Mi persona');
  const mood=daily.mood?(moods[daily.mood]?.[1]||daily.mood):'Sin estado';
- const movement=loc.sharing?transportLabel(loc):'Ubicación pausada';
+ const fresh=locationFreshState(loc),age=locationAgeMs(loc);
+ const movement=!loc.sharing?'Ubicación pausada':fresh?transportLabel(loc):'Ubicación sin actualizar';
+ const ageLabel=!loc.sharing?'':fresh?' · '+distanceAgeLabel(loc.updated_at):Number.isFinite(age)?' · hace '+ageDurationLabel(age):' · sin lectura reciente';
  const battery=isOwn?(native.battery==null?NaN:Number(native.battery)):(p.shareBattery===true&&p.battery!=null?Number(p.battery):NaN);
  const listening=isOwn?currentTrackTitle():(p.shareListening===true?String(p.listening||''):'');
- const kmh=loc.sharing?Math.max(0,Number(loc.speed||0)*3.6):null;
- return '<div class="now-person card"><div class="row between"><div><span class="badge">'+esc(isOwn?'Tú':'Ahora')+'</span><h3>'+esc(name)+'</h3></div><span class="now-mood">'+esc(mood)+'</span></div>'+
- '<div class="now-facts"><span>'+ico('navigation')+esc(movement)+(kmh!==null?' · '+kmh.toFixed(kmh<10?1:0)+' km/h':'')+'</span>'+
+ const speed=loc.speed==null?NaN:Number(loc.speed);
+ const kmh=fresh&&Number.isFinite(speed)&&speed>=0?speed*3.6:null;
+ return '<div class="now-person card"><div class="row between"><div><span class="badge">'+esc(isOwn?'Tú':'Tu persona')+'</span><h3>'+esc(name)+'</h3></div><span class="now-mood">'+esc(mood)+'</span></div>'+
+ '<div class="now-facts"><span>'+ico('navigation')+esc(movement)+esc(ageLabel)+(kmh!==null?' · '+kmh.toFixed(kmh<10?1:0)+' km/h':'')+'</span>'+
  (loc.status?'<span>'+ico('message-circle')+esc(loc.status)+'</span>':'')+
  (listening?'<span>'+ico('music')+esc(listening)+'</span>':'')+
- (Number.isFinite(battery)?'<span>'+ico('battery-charging')+Math.round(battery)+'%</span>':'')+'</div></div>';
+ (Number.isFinite(battery)&&battery>=0&&battery<=100?'<span>'+ico('battery-charging')+Math.round(battery)+'%</span>':'')+'</div></div>';
 }
 function nowCard(){
  const me=String(cloud.person),other=me==='0'?'1':'0';
