@@ -57,8 +57,8 @@ test('P1 CSS reserves separate zones for add + chat FAB + player + keyboard', ()
 
 function harness(){
   const tasks=[],listeners={},attrs={};
-  const origin={isConnected:true,focused:false,focus(){this.focused=true;}};
-  const firstInput={focused:false,focus(){this.focused=true;}};
+  const origin={isConnected:true,focused:false,matches:()=>false,focus(){this.focused=true;doc.activeElement=this;}};
+  const firstInput={focused:false,matches:()=>true,focus(){this.focused=true;doc.activeElement=this;}};
   const heading={id:''};
   const modal={
     open:false,
@@ -74,11 +74,12 @@ function harness(){
     setAttribute(k,v){attrs[k]=v;},
     removeAttribute(k){delete attrs[k];}
   };
-  const body={classList:{toggle(){}}};
+  const classes=new Set();
+  const body={classList:{toggle(k,v){if(v)classes.add(k);else classes.delete(k)},contains:k=>classes.has(k)}};
   const doc={activeElement:origin,body,getElementById:id=>id==='modal'?modal:null,addEventListener:(name,fn)=>{listeners[name]=fn}};
   const root={document:doc,requestAnimationFrame:fn=>tasks.push(fn),closed:0,closeModal(){this.closed++;}};
   vm.runInNewContext(js,{window:root,globalThis:root});
-  return {root,modal,origin,firstInput,heading,attrs,tasks,listeners};
+  return {root,modal,origin,firstInput,heading,attrs,tasks,listeners,body};
 }
 
 test('P1 normal modal focuses input and restores launcher, Escape uses existing lifecycle', () => {
@@ -90,6 +91,7 @@ test('P1 normal modal focuses input and restores launcher, Escape uses existing 
   assert.equal(h.attrs['aria-labelledby'],'v5-modal-title');
   while(h.tasks.length)h.tasks.shift()();
   assert.equal(h.firstInput.focused,true);
+  assert.equal(h.body.classList.contains('v5-input-focused'),true);
   let prevented=false;
   h.modal.listeners.cancel({preventDefault(){prevented=true;}});
   assert.equal(prevented,true);
@@ -98,6 +100,7 @@ test('P1 normal modal focuses input and restores launcher, Escape uses existing 
   h.root.GalaxyCelestialShell.afterClose(false);
   while(h.tasks.length)h.tasks.shift()();
   assert.equal(h.origin.focused,true);
+  assert.equal(h.body.classList.contains('v5-input-focused'),false);
   assert.equal(h.attrs['aria-labelledby'],undefined);
 });
 
