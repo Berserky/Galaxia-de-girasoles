@@ -138,38 +138,32 @@ public class GalaxyDeviceClosureTest {
         assertEquals("true", js("!!document.querySelector('link[href=\"./celestial-shell.css\"]')"
             + " && !!window.GalaxyCelestialShell && document.querySelectorAll('#bottomNav .nav-btn').length===6"));
 
-        String themeJson = js("JSON.stringify((()=>{"
-            + "const ids=['daylight','cosmic','halloween','christmas','valentine','friendship','easter'];"
-            + "const b=document.createElement('button');b.className='btn';b.textContent='QA';"
-            + "document.querySelector('#app').append(b);"
-            + "function lum(s){let c=s.slice(s.indexOf('(')+1,s.indexOf(')')).split(',').slice(0,3).map(Number);"
-            + "return c.reduce((v,x,i)=>v+([.2126,.7152,.0722][i])*((x=x/255)<=.04045?x/12.92:Math.pow((x+.055)/1.055,2.4)),0)}"
-            + "function ratio(a,b){const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)}"
-            + "const out=ids.map(id=>{const v=GalaxyTheme.applyTheme(id);"
-            + "const bg=getComputedStyle(b).backgroundColor,fg=getComputedStyle(b).color;"
-            + "return {id,active:v.active,contrast:Number(ratio(bg,fg).toFixed(2))}});"
-            + "b.remove();GalaxyTheme.applyTheme('auto');"
-            + "return {palettes:out,auto:document.documentElement.dataset.themeChoice==='auto'};"
-            + "})())");
-        JSONObject themes = new JSONObject(themeJson);
-        assertTrue("Automatic theme selection was not restored", themes.getBoolean("auto"));
-        assertEquals("Seven Android palette modes must be measured", 7, themes.getJSONArray("palettes").length());
-        for (int i = 0; i < themes.getJSONArray("palettes").length(); i++) {
-            JSONObject palette = themes.getJSONArray("palettes").getJSONObject(i);
-            assertEquals("Resolved theme changed unexpectedly", palette.getString("id"), palette.getString("active"));
-            assertTrue("P1 primary button contrast must be AA in " + palette,
-                palette.getDouble("contrast") >= 4.5d);
-        }
-
-        // Capture ONLY this hermetic QA persona, never a private paired user.
-        // Capture settled pixels for approval; token and credentials are absent.
+        // Run one cheap WebView callback per theme. The old one-shot call
+        // applied all seven themes and computed their luminance in one
+        // evaluateJavascript invocation; the emulator's 5-second JS callback
+        // deadline could expire without indicating a contrast problem.
+        org.json.JSONArray samples = new org.json.JSONArray();
+        runJs("const p=document.createElement('button');p.id='v5-color-probe';p.className='btn';p.textContent='QA';document.querySelector('#app').append(p)");
         for (String theme : new String[]{"daylight","cosmic","halloween","christmas",
                 "valentine","friendship","easter"}) {
             runJs("GalaxyTheme.applyTheme('" + theme + "')");
+            String raw = js("JSON.stringify((()=>{const e=document.getElementById('v5-color-probe');"
+                + "const s=getComputedStyle(e);return {active:document.documentElement.dataset.theme,"
+                + "bg:s.backgroundColor,fg:s.color}})())");
+            JSONObject colors = new JSONObject(raw);
+            assertEquals("Theme did not resolve in Android WebView", theme, colors.getString("active"));
+            double contrast = v5ColorContrast(colors.getString("bg"), colors.getString("fg"));
+            assertTrue("P1 action contrast below WCAG AA in " + theme + ": " + contrast,
+                contrast >= 4.5d);
+            samples.put(new JSONObject().put("id",theme)
+                .put("active",colors.getString("active")).put("contrast",contrast));
+            // Capture ONLY this hermetic QA persona, never a private paired user.
             SystemClock.sleep(450);
             shell("screencap -p /sdcard/Download/V5-P1-synthetic-" + theme + ".png");
         }
-        runJs("GalaxyTheme.applyTheme('auto')");
+        runJs("document.getElementById('v5-color-probe')?.remove();GalaxyTheme.applyTheme('auto')");
+        assertEquals("true", js("document.documentElement.dataset.themeChoice==='auto'"));
+        JSONObject themes = new JSONObject().put("palettes",samples).put("auto",true);
 
         // Measure real layout rectangles; the extra add FAB and player are synthetic
         // UI-only fixtures and are removed before leaving this test.
@@ -1121,6 +1115,28 @@ public class GalaxyDeviceClosureTest {
             System.out.println("GALAXY_WEBVIEW_NATIVE_KEYEVENT_INPUT="+value.length());
         }
         awaitJs(expected);
+    }
+
+    // WCAG contrast of computed RGB colors, calculated on Android's Java side
+    // to avoid long synchronous JavaScript on slow emulator GPUs.
+    private static double v5ColorContrast(String background, String foreground) {
+        double a=v5ColorLuminance(background), b=v5ColorLuminance(foreground);
+        return (Math.max(a,b)+0.05d)/(Math.min(a,b)+0.05d);
+    }
+
+    private static double v5ColorLuminance(String rgb) {
+        int open=rgb.indexOf('('), close=rgb.indexOf(')');
+        if (open<0 || close<=open) throw new IllegalArgumentException("Unexpected CSS color: "+rgb);
+        String[] channels=rgb.substring(open+1,close).split(",");
+        if (channels.length<3) throw new IllegalArgumentException("Incomplete CSS RGB: "+rgb);
+        double[] weights={0.2126d,0.7152d,0.0722d};
+        double sum=0d;
+        for (int i=0;i<3;i++) {
+            double value=Double.parseDouble(channels[i].trim())/255d;
+            double linear=value<=0.04045d?value/12.92d:Math.pow((value+0.055d)/1.055d,2.4d);
+            sum+=weights[i]*linear;
+        }
+        return sum;
     }
 
     private void runJs(String script) {
