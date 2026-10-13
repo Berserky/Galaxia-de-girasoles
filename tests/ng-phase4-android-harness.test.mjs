@@ -31,9 +31,17 @@ test('Android picker waits for the resolved external app, not a transient system
  assert.match(source,/private void cancelPickerAndVerifyForeground\(UiDevice device, String appPkg, String pickerPkg\)/);
  assert.match(source,/isResumedPackage\(appPkg\)/);
  assert.match(source,/document\.visibilityState/);
- assert.match(source,/boolean uiBackAcknowledged = device\.pressBack\(\)/);
- assert.match(source,/if \(!uiBackAcknowledged\)\s*\{\s*shell\("input keyevent KEYCODE_BACK"\)/);
- assert.match(source,/isResumedPackage\(appPkg\)\s*&&\s*"visible"\.equals\(js\("document\.visibilityState"\)\)/);
+ assert.match(source,/boolean acknowledged=device\.pressBack\(\)/);
+ assert.match(source,/if \(!acknowledged && pickerStillResumed && !isResumedPackage\(appPkg\)\)/);
+ assert.match(source,/shell\("input keyevent KEYCODE_BACK"\)/);
+ assert.match(source,/awaitPickerMainActivityVisible\(appPkg, 4_000\)/);
+ assert.match(source,/scenario\.getState\(\)==Lifecycle\.State\.DESTROYED/);
+ assert.match(source,/scenario\.getState\(\)==Lifecycle\.State\.RESUMED/);
+ assert.match(source,/"visible"\.equals\(js\("document\.visibilityState"\)\)/);
+ assert.ok(source.indexOf('awaitPickerMainActivityVisible(appPkg, 4_000)') <
+   source.indexOf('shell("input keyevent KEYCODE_BACK")'),
+   'Wait for actual MainActivity return BEFORE fallback to avoid double Back');
+ assert.doesNotMatch(source,/if \(!uiBackAcknowledged\)\s*\{\s*shell\("input keyevent KEYCODE_BACK"\)/);
  assert.doesNotMatch(source,/assertTrue\("Android did not handle Back while closing document picker"/);
  assert.doesNotMatch(helper,/com\.google\.android\.documentsui\s*\)/);
 });
