@@ -1090,19 +1090,22 @@ public class GalaxyDeviceClosureTest {
                 .put("resolvedComponent", documentsComponent)
                 .put("foregroundPackage", pickerForeground)
                 .put("resumedHandler", actualPickerResumed));
-            // Closing a ready picker is the actual cancel behavior under test.
-            device.pressBack();
-            awaitCondition(() -> pkg.equals(device.getCurrentPackageName()), UI_TIMEOUT_MS);
+            // Cancel the REAL Android picker and prove that MainActivity resumes.
+            // DocumentsUI may consume a Back inside its own navigation before closing.
+            // Do not accept an accessibility package alone: the underlying WebView
+            // must return to the foreground; this gate is never skipped.
+            cancelPickerAndVerifyForeground(device, pkg, documentsPackage);
         } finally {
             // Keep the whole instrumented suite hermetic even when a picker
             // assertion fails. Do not mask the failure or bypass its checks.
             for (int cleanup = 0; cleanup < 3; cleanup++) {
-                if (pkg.equals(device.getCurrentPackageName())) break;
+                if (isResumedPackage(pkg)) break;
                 device.pressBack();
                 SystemClock.sleep(450);
             }
             // Never force-stop another provider on a physical owner's phone.
-            if (!isPhysicalDevice() && !pkg.equals(device.getCurrentPackageName())) {
+            // A transient accessibility-root package is NOT proof of resumed UI.
+            if (!isPhysicalDevice() && !isResumedPackage(pkg)) {
                 shell("am force-stop " + documentsPackage);
                 System.out.println("GALAXY_FILE_PICKER_QA_CLEANUP=emulator_picker_stopped");
             }
@@ -1125,6 +1128,35 @@ public class GalaxyDeviceClosureTest {
         SystemClock.sleep(700);
         scenario.onActivity(a -> a.stopVoiceRecording("qa-mic-stop"));
         awaitJs("!!document.querySelector('#app')");
+    }
+
+    /**
+     * Android's document picker can contain its own internal back-stack; the
+     * first Back does not always finish its Activity on an emulator. Test real
+     * cancellation and actual return to the app rather than an a11y-root label.
+     * A broken return still fails after the bounded attempts.
+     */
+    private void cancelPickerAndVerifyForeground(UiDevice device, String appPkg, String pickerPkg) throws Exception {
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            assertTrue("Android did not handle Back while closing document picker", device.pressBack());
+            long until = SystemClock.elapsedRealtime() + 5_000;
+            while (SystemClock.elapsedRealtime() < until) {
+                if (isResumedPackage(appPkg)
+                    && "visible".equals(js("document.visibilityState"))) {
+                    System.out.println("GALAXY_FILE_PICKER_RETURN=verified;backPresses=" + attempt);
+                    return;
+                }
+                SystemClock.sleep(250);
+            }
+            System.out.println("GALAXY_FILE_PICKER_RETURN_PENDING=attempt:" + attempt
+                + ";pickerResumed:" + isResumedPackage(pickerPkg)
+                + ";appResumed:" + isResumedPackage(appPkg)
+                + ";rootApp:" + appPkg.equals(device.getCurrentPackageName()));
+        }
+        assertTrue("OPEN_DOCUMENT cancellation left MainActivity hidden; picker="
+                + pickerPkg + ", appResumed=" + isResumedPackage(appPkg)
+                + ", rootApp=" + appPkg.equals(device.getCurrentPackageName()),
+            isResumedPackage(appPkg) && "visible".equals(js("document.visibilityState")));
     }
 
     /** Match the ACTUAL foreground activity; task history alone is insufficient. */
