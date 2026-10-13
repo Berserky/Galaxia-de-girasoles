@@ -54,7 +54,7 @@ test('P2A preserves mood, daily answer, history, encounters and calendar routing
 
 test('P2A upcoming event has a visible next-date label in exactly one featured card',()=>{
  assert.match(home,/nextCard=next&&!nextAlreadyFeatured/);
- assert.match(home,/livingMomentCard\(nextAlreadyFeatured\?'PRÓXIMA FECHA':'\'\)/);
+ assert.ok(home.includes("livingMomentCard(nextAlreadyFeatured?'PRÓXIMA FECHA':'')"));
  assert.match(app,/function livingMomentCard\(eyebrowLabel=''\)/);
  assert.match(app,/esc\(eyebrowLabel\|\|m\.label\)/);
  // The original native device regression requires visible text, not just an aria label.
