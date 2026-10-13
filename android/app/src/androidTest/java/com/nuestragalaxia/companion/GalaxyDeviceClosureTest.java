@@ -1107,7 +1107,7 @@ public class GalaxyDeviceClosureTest {
             // Keep the whole instrumented suite hermetic even when a picker
             // assertion fails. Do not mask the failure or bypass its checks.
             for (int cleanup = 0; cleanup < 3; cleanup++) {
-                if (isResumedPackage(pkg)) break;
+                if (scenario.getState()==Lifecycle.State.DESTROYED || isResumedPackage(pkg)) break;
                 device.pressBack();
                 SystemClock.sleep(450);
             }
@@ -1146,33 +1146,70 @@ public class GalaxyDeviceClosureTest {
      */
     private void cancelPickerAndVerifyForeground(UiDevice device, String appPkg, String pickerPkg) throws Exception {
         for (int attempt = 1; attempt <= 3; attempt++) {
-            // UiAutomator's boolean reports dispatch acknowledgement, not a
-            // verified Activity transition. On headless AVDs it may return false
-            // although the input can be delivered via Android's own input shell.
-            // Require the actual resumed app + visible WebView below either way.
-            boolean uiBackAcknowledged = device.pressBack();
-            if (!uiBackAcknowledged) {
-                shell("input keyevent KEYCODE_BACK");
-                System.out.println("GALAXY_FILE_PICKER_BACK_FALLBACK=android_keyevent;attempt:" + attempt);
+            // UiAutomator.pressBack() can RETURN FALSE while still dispatching
+            // a real Back event. CI proved this: DocumentsUI closed, MainActivity
+            // resumed, then an immediate shell fallback delivered a SECOND Back
+            // and destroyed MainActivity. Never trust a single boolean to decide
+            // that it is safe to send another navigation event.
+            if (awaitPickerMainActivityVisible(appPkg, 1_000)) {
+                System.out.println("GALAXY_FILE_PICKER_RETURN=verified;backPresses:"+(attempt-1));
+                return;
             }
-            long until = SystemClock.elapsedRealtime() + 5_000;
-            while (SystemClock.elapsedRealtime() < until) {
-                if (isResumedPackage(appPkg)
-                    && "visible".equals(js("document.visibilityState"))) {
-                    System.out.println("GALAXY_FILE_PICKER_RETURN=verified;backPresses=" + attempt);
+            if (isResumedPackage(appPkg)) {
+                throw new AssertionError("Document picker closed but MainActivity WebView did not recover visibility; no extra Back sent");
+            }
+
+            boolean acknowledged=device.pressBack();
+            if (awaitPickerMainActivityVisible(appPkg, 4_000)) {
+                System.out.println("GALAXY_FILE_PICKER_RETURN=verified;backPresses:"+attempt+";uiAck:"+acknowledged);
+                return;
+            }
+            if (isResumedPackage(appPkg)) {
+                throw new AssertionError("Document picker returned MainActivity but its WebView stayed hidden; refusing a second Back");
+            }
+
+            // Fallback only after the OS has had time to finish the first Back,
+            // and only while DocumentsUI is STILL the actually resumed Activity.
+            // A late picker close must not result in a second Back to our app.
+            boolean pickerStillResumed=isResumedPackage(pickerPkg);
+            if (!acknowledged && pickerStillResumed && !isResumedPackage(appPkg)) {
+                shell("input keyevent KEYCODE_BACK");
+                System.out.println("GALAXY_FILE_PICKER_BACK_FALLBACK=pickerStillResumed;attempt:"+attempt);
+                if (awaitPickerMainActivityVisible(appPkg, 4_000)) {
+                    System.out.println("GALAXY_FILE_PICKER_RETURN=verified;fallback:"+attempt);
                     return;
                 }
-                SystemClock.sleep(250);
+                if (isResumedPackage(appPkg)) {
+                    throw new AssertionError("Picker fallback returned MainActivity but its WebView stayed hidden");
+                }
             }
-            System.out.println("GALAXY_FILE_PICKER_RETURN_PENDING=attempt:" + attempt
-                + ";pickerResumed:" + isResumedPackage(pickerPkg)
-                + ";appResumed:" + isResumedPackage(appPkg)
-                + ";rootApp:" + appPkg.equals(device.getCurrentPackageName()));
+            System.out.println("GALAXY_FILE_PICKER_RETURN_PENDING=attempt:"+attempt
+                +";pickerResumed:"+isResumedPackage(pickerPkg)
+                +";appResumed:"+isResumedPackage(appPkg)
+                +";rootApp:"+appPkg.equals(device.getCurrentPackageName()));
         }
-        assertTrue("OPEN_DOCUMENT cancellation left MainActivity hidden; picker="
-                + pickerPkg + ", appResumed=" + isResumedPackage(appPkg)
-                + ", rootApp=" + appPkg.equals(device.getCurrentPackageName()),
-            isResumedPackage(appPkg) && "visible".equals(js("document.visibilityState")));
+        throw new AssertionError("OPEN_DOCUMENT cancellation did not restore resumed visible MainActivity;picker="
+            +pickerPkg+";appResumed="+isResumedPackage(appPkg)
+            +";rootApp="+appPkg.equals(device.getCurrentPackageName()));
+    }
+
+    /**
+     * ActivityScenario.getState() can be checked even when the Activity has
+     * been destroyed. Never call onActivity/evaluateJavascript on a dead
+     * scenario: fail with an actionable lifecycle assertion instead.
+     */
+    private boolean awaitPickerMainActivityVisible(String appPkg,long timeoutMs) throws Exception {
+        long until=SystemClock.elapsedRealtime()+timeoutMs;
+        while (SystemClock.elapsedRealtime()<until) {
+            if (scenario.getState()==Lifecycle.State.DESTROYED) {
+                throw new AssertionError("MainActivity destroyed during document-picker return; unexpected extra Android Back");
+            }
+            if (isResumedPackage(appPkg)
+                && scenario.getState()==Lifecycle.State.RESUMED
+                && "visible".equals(js("document.visibilityState"))) return true;
+            SystemClock.sleep(250);
+        }
+        return false;
     }
 
     /** Match the ACTUAL foreground activity; task history alone is insufficient. */
