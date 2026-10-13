@@ -161,3 +161,13 @@ test('P2C daily actions have touch targets and responsive layout without sharing
  assert.match(one,/data-card-type="DAILY_QUESTION"/);
  assert.doesNotMatch(one,/data-title="texto exclusivo"/);
 });
+
+
+test('P2B missing coordinates and future timestamps are never presented as live GPS',()=>{
+ const missing=renderPartner({location:{sharing:true,latitude:null,longitude:null,speed:4,updated_at:new Date().toISOString()}});
+ assert.match(missing,/Ubicación sin actualizar/);
+ assert.doesNotMatch(missing,/Caminando|km\/h/);
+ const future=renderPartner({location:{sharing:true,latitude:4.6,longitude:-74.1,speed:4,updated_at:new Date(Date.now()+24*3600_000).toISOString()}});
+ assert.match(future,/Ubicación sin actualizar · hora del dispositivo por verificar/);
+ assert.doesNotMatch(future,/Caminando|km\/h/);
+});
