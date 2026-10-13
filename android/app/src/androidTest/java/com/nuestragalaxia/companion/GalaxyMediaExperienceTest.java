@@ -164,7 +164,7 @@ public class GalaxyMediaExperienceTest {
     /**
      * Strict CameraX switch verification: the visible UI touch must result in a
      * bound camera with the requested lens. A headless emulator can acknowledge
-     * UiAutomator.click without dispatching it to this Activity; after 2s only,
+     * UiAutomator.click without dispatching it to this Activity; after 3s only if the Activity did NOT select the requested lens,
      * retry once with a native window MotionEvent, never View.performClick().
      * Failing to bind the expected camera remains an unconditional test failure.
      */
@@ -179,7 +179,10 @@ public class GalaxyMediaExperienceTest {
                     + ";elapsedMs:"+(SystemClock.elapsedRealtime()-start));
                 return;
             }
-            if(!nativeRetried&&SystemClock.elapsedRealtime()-start>=2_000){
+            // If the Activity already selected the requested lens, the UI
+            // click landed; wait for CameraX async binding instead of toggling back.
+            if(!nativeRetried&&SystemClock.elapsedRealtime()-start>=3_000
+                && !isCameraLensSelected(scenario,expectedLens)){
                 nativeRetried=true;
                 scenario.onActivity(activity->{
                     View control=findByDescription(activity.getWindow().getDecorView(),"Cambiar cámara");
@@ -197,6 +200,18 @@ public class GalaxyMediaExperienceTest {
         }
         throw new AssertionError("Camera switch did not bind the "+(expectedLens==CameraSelector.LENS_FACING_FRONT?"front":"back")
             +" lens after "+timeoutMs+" ms;nativeRetried="+nativeRetried);
+    }
+
+    private boolean isCameraLensSelected(ActivityScenario<GalaxyCameraActivity> scenario,int expectedLens){
+        AtomicReference<Boolean> selected=new AtomicReference<>(false);
+        scenario.onActivity(activity->{
+            try{
+                java.lang.reflect.Field field=GalaxyCameraActivity.class.getDeclaredField("lensFacing");
+                field.setAccessible(true);
+                selected.set(field.getInt(activity)==expectedLens);
+            }catch(ReflectiveOperationException e){throw new AssertionError(e);}
+        });
+        return Boolean.TRUE.equals(selected.get());
     }
 
     private boolean isBoundCameraLens(ActivityScenario<GalaxyCameraActivity> scenario,int expectedLens){
