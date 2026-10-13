@@ -47,7 +47,7 @@ assert all(p.is_file() for p in responsive), f'Missing P1 physical viewport scre
 dimensions={}
 for css,path in zip(viewports,responsive):
     blob=path.read_bytes()
-    assert blob.startswith(b'\\x89PNG\\r\\n\\x1a\\n'), f'Invalid responsive viewport PNG: {path}'
+    assert blob.startswith(b'\x89PNG\r\n\x1a\n'), f'Invalid responsive viewport PNG: {path}'
     width,height=struct.unpack('>II',blob[16:24])
     assert width<height, f'Responsive viewport expected portrait: {path}: {width}x{height}'
     dimensions[css]=(width,height)
