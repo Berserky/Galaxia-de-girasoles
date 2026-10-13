@@ -53,3 +53,25 @@
 
 - Se conserva la firma **`function livingMomentCard()`** que utiliza `tests/android-insights.test.mjs` para delimitar el bloque de aniversario derivado. No se cambia el contrato histórico ni se desactiva su test.
 - Cuando `livingMoment()` presenta la próxima fecha, el rótulo de **esa misma tarjeta** cambia de «Se acerca algo especial» a «PRÓXIMA FECHA»; ningún componente extra, evento duplicado o petición adicional. Comprobar P2/Node completo y Android en el nuevo SHA antes de aprobación.
+
+## P2-B · Calidad de presencia en Inicio (13-oct-2026)
+
+**Motivo:** El nuevo `nowPersonCard` del Inicio heredaba velocidad de un registro GPS aunque su última lectura fuera antigua, y consumía presencia de `settings.data.presence` pese a que `normalizedPresence` ya admite filas más recientes de `cloud.presence`. Ello daba apariencia de telemetría en vivo sin frescura comprobada.
+
+**Corrección implementada en la MISMA rama aislada:**
+- Reutiliza `locationFreshState`, `locationAgeMs`, `distanceAgeLabel` y `ageDurationLabel`, sin cambiar API ni clasificación de GPS.
+- Diferencia ubicación pausada, sin lectura, desactualizada y reciente; velocidad solo si hay lectura fresca y un número válido.
+- Un `speed: null` nunca se presenta como 0.0 km/h. Actividad/mood de hoy permanece independiente de GPS.
+- Fuente `normalizedPresence` única para batería y canción compartida de la pareja; respeta `shareBattery` / `shareListening` y oculta porcentajes fuera de 0–100.
+- «Tu persona» reemplaza el ambiguo badge «Ahora» para no simular presencia en tiempo real.
+- Tres pruebas Node de comportamiento con escenarios sintéticos: GPS antiguo, velocidad ausente y privacidad con GPS pausado. No contienen fotografías, ubicaciones privadas ni tokens.
+
+**Cobertura de hallazgos:** VE-010/013/014/015/016 en curso; **sin cerrar IDs** hasta Android AVD y aceptación visual. VE-011/017/018/022/023/024/029 pendientes para el siguiente incremento.
+
+**Estado de CI por revisión:**
+- `e3609aca` (P2-A, antes de este parche): 15/15 workflows SUCCESS confirmados sobre ese SHA.
+- Los nuevos commits P2-B requieren nuevamente `npm test`, Android QA, JUnit y APK para declarar PASS. **No trasladar automáticamente el 15/15 anterior.**
+- Verificar explícitamente los tests sobre `nowPersonCard` y que no se alteraron GPS/FCM, permisos, RLS ni acciones de Chat.
+- AVD no sustituye pruebas físicas de GPS y privacidad. Revisión visual 7 temas, 4 anchuras, keyboard/FAB/scroll y aceptación del propietario siguen pendientes de cierre final.
+
+**Protecciones:** PR #168 continúa DRAFT, `desarrollo` no se modifica por P2-B; `qa` y `prod` siguen en 4.1.2.
