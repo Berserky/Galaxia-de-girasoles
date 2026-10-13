@@ -324,28 +324,36 @@ public class GalaxyDeviceClosureTest {
                 assertTrue("P2 page has horizontal overflow at "+targetCss+": "+row,
                     row.getBoolean("noHorizontalOverflow"));
                 shell("screencap -p /sdcard/Download/V5-P1-viewport-"+targetCss+".png");
-                // A top-of-screen capture cannot prove the last card is reachable.
-                // Scroll the REAL Android WebView to the document end, verify its
-                // last interactive card sits fully above the fixed bottom nav,
-                // and archive a bottom-screen screenshot for human review.
-                runV5Js("window.scrollTo(0,document.documentElement.scrollHeight)");
-                awaitJs("window.scrollY>100");
-                String bottom=jsWithDeadline("JSON.stringify((()=>{"
-                    + "const last=document.querySelector('.welcome-memories .living-moment'),"
-                    + "nav=document.getElementById('bottomNav'),r=last?.getBoundingClientRect(),"
-                    + "n=nav.getBoundingClientRect();"
-                    + "return {atEnd:window.scrollY>=document.documentElement.scrollHeight-innerHeight-3,"
-                    + "lastVisible:!!r&&r.bottom<=n.top-4&&r.top>=-innerHeight,"
-                    + "scrollY:window.scrollY}})())",20);
-                JSONObject bottomState=new JSONObject(bottom);
-                assertTrue("P2 did not scroll to document end at "+targetCss+": "+bottom,
-                    bottomState.getBoolean("atEnd"));
-                assertTrue("P2 final card hidden by fixed navbar at "+targetCss+": "+bottom,
-                    bottomState.getBoolean("lastVisible"));
-                responsive.put(row.put("requestedCssWidth",targetCss)
-                    .put("bottomReached",true));
-                shell("screencap -p /sdcard/Download/V5-P2-bottom-"+targetCss+".png");
-                runV5Js("window.scrollTo(0,0)");
+                // JS scrollY can update before the Android compositor paints the
+                // frame. CI previously archived byte-identical TOP and BOTTOM
+                // images for all four widths despite passing DOM geometry tests.
+                // Require observable real display changes before saving evidence.
+                android.graphics.Bitmap topFrame=instrumentation.getUiAutomation().takeScreenshot();
+                assertTrue("V5 P2 top Android screenshot unavailable at "+targetCss,topFrame!=null);
+                try {
+                    runV5Js("window.scrollTo(0,document.documentElement.scrollHeight)");
+                    awaitJs("window.scrollY>100");
+                    String bottom=jsWithDeadline("JSON.stringify((()=>{"
+                        + "const last=document.querySelector('.welcome-memories .living-moment'),"
+                        + "nav=document.getElementById('bottomNav'),r=last?.getBoundingClientRect(),"
+                        + "n=nav.getBoundingClientRect();"
+                        + "return {atEnd:window.scrollY>=document.documentElement.scrollHeight-innerHeight-3,"
+                        + "lastVisible:!!r&&r.bottom<=n.top-4&&r.top>=-innerHeight,"
+                        + "scrollY:window.scrollY}})())",20);
+                    JSONObject bottomState=new JSONObject(bottom);
+                    assertTrue("P2 did not scroll to document end at "+targetCss+": "+bottom,
+                        bottomState.getBoolean("atEnd"));
+                    assertTrue("P2 final card hidden by fixed navbar at "+targetCss+": "+bottom,
+                        bottomState.getBoolean("lastVisible"));
+                    double displayChange=awaitV5BottomFramePainted(topFrame,targetCss);
+                    responsive.put(row.put("requestedCssWidth",targetCss)
+                        .put("bottomReached",true)
+                        .put("realDisplayChange",displayChange));
+                    shell("screencap -p /sdcard/Download/V5-P2-bottom-"+targetCss+".png");
+                } finally {
+                    topFrame.recycle();
+                    runV5Js("window.scrollTo(0,0)");
+                }
             }
         } finally {
             shell("wm size reset");
@@ -1341,6 +1349,57 @@ public class GalaxyDeviceClosureTest {
      * dialog or stale activity has no visible mark, and must NOT produce a PASS.
      * No visual OCR or user data is required. The mark is removed after capture.
      */
+    /**
+     * Verifies pixels on the actual Android display, not just WebView scrollY.
+     * Crop out the fixed header, status/nav bars and paint QA marker. UI and
+     * compositor can diverge briefly on software-rendered emulators. Insist
+     * on two consecutive changed frames or FAIL instead of archiving a false
+     * "bottom" screenshot. No screenshot bytes are sent outside CI artifacts.
+     */
+    private double awaitV5BottomFramePainted(android.graphics.Bitmap top,int widthCss) {
+        long until=SystemClock.elapsedRealtime()+15_000;
+        int consecutive=0;
+        double latest=0;
+        while(SystemClock.elapsedRealtime()<until) {
+            android.graphics.Bitmap candidate=null;
+            try {
+                candidate=instrumentation.getUiAutomation().takeScreenshot();
+                latest=v5DisplayChangeRatio(top,candidate);
+                if(latest>=0.15d) {
+                    if(++consecutive>=2) {
+                        System.out.println("V5_P2_BOTTOM_REAL_DISPLAY=css:"+widthCss
+                            + ";changedPixelRatio:"+latest+";verified:true");
+                        return latest;
+                    }
+                } else consecutive=0;
+            } catch(RuntimeException ignored){consecutive=0;}
+            finally {if(candidate!=null)candidate.recycle();}
+            SystemClock.sleep(250);
+        }
+        throw new AssertionError("P2 bottom screenshot rejected: Android display never painted"
+            +" a visibly different lower scroll frame at css "+widthCss
+            +";changedPixelRatio:"+latest
+            +";JS scroll geometry alone is not screenshot evidence");
+    }
+
+    private static double v5DisplayChangeRatio(android.graphics.Bitmap top,android.graphics.Bitmap bottom) {
+        if(top==null||bottom==null||top.getWidth()!=bottom.getWidth()
+            ||top.getHeight()!=bottom.getHeight())return 0;
+        int width=top.getWidth(),height=top.getHeight(),total=0,changed=0;
+        // Text/content zone, avoiding fixed rails, wallpaper and QA marker.
+        for(int y=height/4;y<height*7/10;y+=16) {
+            for(int x=width/6;x<width*5/6;x+=16) {
+                int a=top.getPixel(x,y),b=bottom.getPixel(x,y);
+                int delta=Math.max(Math.abs(android.graphics.Color.red(a)-android.graphics.Color.red(b)),
+                    Math.max(Math.abs(android.graphics.Color.green(a)-android.graphics.Color.green(b)),
+                        Math.abs(android.graphics.Color.blue(a)-android.graphics.Color.blue(b))));
+                total++;
+                if(delta>36)changed++;
+            }
+        }
+        return total>0?(double)changed/total:0d;
+    }
+
     private void awaitV5QaPainted(String theme) {
         long deadline=SystemClock.elapsedRealtime()+15_000;
         int consecutive=0;
