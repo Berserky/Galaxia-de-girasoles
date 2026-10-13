@@ -92,7 +92,10 @@ public class GalaxyMediaExperienceTest {
                 assertTrue(switchView!=null&&switchView.getHeight()>=dp(context,48));
             });
             if(provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)){
-                tapVisibleCameraControl(scenario,"Cambiar cámara");SystemClock.sleep(600);tapVisibleCameraControl(scenario,"Cambiar cámara");SystemClock.sleep(600);
+                tapVisibleCameraControl(scenario,"Cambiar cámara");
+                awaitCameraLensBound(scenario,CameraSelector.LENS_FACING_FRONT,12_000);
+                tapVisibleCameraControl(scenario,"Cambiar cámara");
+                awaitCameraLensBound(scenario,CameraSelector.LENS_FACING_BACK,12_000);
             }
             long captureStarted=SystemClock.elapsedRealtime();
             tapVisibleCameraControl(scenario,"Tomar foto");
@@ -107,12 +110,8 @@ public class GalaxyMediaExperienceTest {
             boolean hasFront=provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA);
             if(!android.os.Build.HARDWARE.equals("ranchu")&&!android.os.Build.HARDWARE.equals("goldfish"))assertTrue("Physical front-camera gate requires a front camera.",hasFront);
             if(hasFront){
-                tapVisibleCameraControl(scenario,"Cambiar cámara");SystemClock.sleep(600);
-                scenario.onActivity(activity->{
-                    try{java.lang.reflect.Field f=GalaxyCameraActivity.class.getDeclaredField("camera");f.setAccessible(true);androidx.camera.core.Camera bound=(androidx.camera.core.Camera)f.get(activity);
-                        assertTrue("Camera switch did not bind the front lens.",bound!=null&&!CameraSelector.DEFAULT_FRONT_CAMERA.filter(java.util.Collections.singletonList(bound.getCameraInfo())).isEmpty());
-                    }catch(ReflectiveOperationException e){throw new AssertionError(e);}
-                });
+                tapVisibleCameraControl(scenario,"Cambiar cámara");
+                awaitCameraLensBound(scenario,CameraSelector.LENS_FACING_FRONT,12_000);
                 tapVisibleCameraControl(scenario,"Tomar foto");
                 awaitVisibleCameraControl(scenario,"Confirmar captura",12_000);
                 scenario.onActivity(activity->{View repeat=findByText(activity.getWindow().getDecorView(),"Repetir");assertTrue(repeat!=null&&repeat.performClick());});
@@ -160,6 +159,58 @@ public class GalaxyMediaExperienceTest {
         }
         assertFalse("Cancelled video capture left a temp file.",hasFiles(new File(context.getCacheDir(),"camera-media")));
         System.out.println("GALAXY_CHAT_PHASE5_ANDROID="+new JSONObject().put("case","video").put("stopPreviewMs",previewMs).put("pssBeforeKb",pssBefore).put("pssAfterKb",android.os.Debug.getPss()));
+    }
+
+    /**
+     * Strict CameraX switch verification: the visible UI touch must result in a
+     * bound camera with the requested lens. A headless emulator can acknowledge
+     * UiAutomator.click without dispatching it to this Activity; after 2s only,
+     * retry once with a native window MotionEvent, never View.performClick().
+     * Failing to bind the expected camera remains an unconditional test failure.
+     */
+    private void awaitCameraLensBound(ActivityScenario<GalaxyCameraActivity> scenario,
+                                      int expectedLens,long timeoutMs){
+        long start=SystemClock.elapsedRealtime(),deadline=start+timeoutMs;
+        boolean nativeRetried=false;
+        while(SystemClock.elapsedRealtime()<deadline){
+            if(isBoundCameraLens(scenario,expectedLens)){
+                System.out.println("GALAXY_CAMERA_SWITCH_VERIFIED=lens:"+expectedLens
+                    + ";nativeRetried:"+nativeRetried
+                    + ";elapsedMs:"+(SystemClock.elapsedRealtime()-start));
+                return;
+            }
+            if(!nativeRetried&&SystemClock.elapsedRealtime()-start>=2_000){
+                nativeRetried=true;
+                scenario.onActivity(activity->{
+                    View control=findByDescription(activity.getWindow().getDecorView(),"Cambiar cámara");
+                    if(control==null||!control.isShown())return;
+                    int[] xy=new int[2];control.getLocationInWindow(xy);
+                    float x=xy[0]+control.getWidth()/2f,y=xy[1]+control.getHeight()/2f;
+                    long t=SystemClock.uptimeMillis();
+                    android.view.MotionEvent down=android.view.MotionEvent.obtain(t,t,android.view.MotionEvent.ACTION_DOWN,x,y,0);
+                    android.view.MotionEvent up=android.view.MotionEvent.obtain(t,t+90,android.view.MotionEvent.ACTION_UP,x,y,0);
+                    try{activity.dispatchTouchEvent(down);activity.dispatchTouchEvent(up);}
+                    finally{down.recycle();up.recycle();}
+                });
+            }
+            SystemClock.sleep(150);
+        }
+        throw new AssertionError("Camera switch did not bind the "+(expectedLens==CameraSelector.LENS_FACING_FRONT?"front":"back")
+            +" lens after "+timeoutMs+" ms;nativeRetried="+nativeRetried);
+    }
+
+    private boolean isBoundCameraLens(ActivityScenario<GalaxyCameraActivity> scenario,int expectedLens){
+        AtomicReference<Boolean> found=new AtomicReference<>(false);
+        scenario.onActivity(activity->{
+            try{
+                java.lang.reflect.Field f=GalaxyCameraActivity.class.getDeclaredField("camera");
+                f.setAccessible(true);
+                androidx.camera.core.Camera bound=(androidx.camera.core.Camera)f.get(activity);
+                CameraSelector selector=new CameraSelector.Builder().requireLensFacing(expectedLens).build();
+                found.set(bound!=null&&!selector.filter(java.util.Collections.singletonList(bound.getCameraInfo())).isEmpty());
+            }catch(ReflectiveOperationException e){throw new AssertionError(e);}
+        });
+        return Boolean.TRUE.equals(found.get());
     }
 
     // UIAutomator accessibility snapshots can lag the native view hierarchy on
