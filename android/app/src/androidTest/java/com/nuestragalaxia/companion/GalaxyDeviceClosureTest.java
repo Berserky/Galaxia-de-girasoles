@@ -140,7 +140,7 @@ public class GalaxyDeviceClosureTest {
 
         // P2 Welcome must be backed by REAL paired QA state and keep all entry points.
         assertEquals("P2 Welcome not loaded from Android APK", "true",
-            js("!!document.querySelector('link[href=\\\"./galaxy-welcome.css\\\"]')"
+            js("!!document.querySelector('link[href=\"./galaxy-welcome.css\"]')"
               + " && !!document.querySelector('.galaxy-welcome .welcome-hero')"
               + " && document.querySelectorAll('.welcome-bento .action-card').length===5"
               + " && !!document.querySelector('.welcome-rituals')"

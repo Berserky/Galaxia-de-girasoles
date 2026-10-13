@@ -58,7 +58,7 @@ bottom=[Path('build/p0-avd/p2-bottom-viewports')/f'{w}.png' for w in viewports]
 assert all(p.is_file() for p in bottom), f'Missing P2 scroll-bottom screenshot: {[str(p) for p in bottom if not p.is_file()]}'
 for css,path in zip(viewports,bottom):
     blob=path.read_bytes()
-    assert blob.startswith(b'\\x89PNG\\r\\n\\x1a\\n'), f'Invalid P2 scroll-bottom PNG: {path}'
+    assert blob.startswith(b'\x89PNG\r\n\x1a\n'), f'Invalid P2 scroll-bottom PNG: {path}'
     width,height=struct.unpack('>II',blob[16:24])
     assert (width,height)==dimensions[css], f'P2 bottom screenshot dimension mismatch at {css}: {width}x{height}'
 print('P2 Welcome Android bottom-scroll matrix PASS: 4/4; final card above navbar.')
