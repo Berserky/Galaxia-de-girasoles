@@ -22,7 +22,7 @@ test('Android picker waits for the resolved external app, not a transient system
  assert.match(helper,/isResumedPackage\(documentsPackage\)/);
  assert.match(source,/private boolean isResumedPackage\(String expectedPackage\)/);
  assert.match(source,/dumpsys activity activities.*mResumedActivity\|topResumedActivity/);
- assert.match(helper,/assertEquals\("OPEN_DOCUMENT did not reach resolved picker"/);
+ assert.match(helper,/assertTrue\("OPEN_DOCUMENT did not reach resolved picker"/);
  assert.doesNotMatch(helper,/!pkg\.equals\(foreground\)/);
  assert.match(helper,/device\.pressBack\(\)/);
  assert.match(helper,/finally\s*\{[\s\S]*GALAXY_FILE_PICKER_QA_CLEANUP/);
