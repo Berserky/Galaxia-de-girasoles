@@ -43,6 +43,14 @@ test('P1 navigation has six preserved entries and announces only current route',
   assert.match(app, /window\.GalaxyCelestialShell\?\.afterClose/);
 });
 
+test('P1 compact header hides only decorative avatar and preserves searchable actions', () => {
+  assert.match(css, /@media\(max-width:430px\)\s*\{/);
+  assert.match(css, /#app \.header \.avatar\s*\{display:none\}/);
+  assert.match(css, /#app \.header \.header-actions\s*\{flex:0 0 auto\}/);
+  assert.match(app, /data-action="notifications-open"/);
+  assert.match(app, /data-action="universal-search-open"/);
+});
+
 test('P1 CSS reserves separate zones for add + chat FAB + player + keyboard', () => {
   assert.match(css, /#app:has\(\.floating-add:not\(\.hidden\)\) ~ #chatFab/);
   assert.match(css, /:has\(\.global-player\.visible\)/);

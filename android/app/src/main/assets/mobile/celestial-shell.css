@@ -128,6 +128,13 @@ body.v5-input-focused:not(.chat-mode) :is(.bottom-nav,.chat-fab,.global-player.v
 body.v5-input-focused:not(.chat-mode) #app .floating-add {
   visibility:hidden;pointer-events:none;
 }
+/* The profile initial is non-interactive; on compact screens it must not
+ * turn into a floating letter beside Search or clip useful header controls. */
+@media(max-width:430px){
+  body:not(.chat-mode) #app .header .avatar {display:none}
+  body:not(.chat-mode) #app .header .header-actions {flex:0 0 auto}
+  body:not(.chat-mode) #app .header .brand {flex:1 1 auto}
+}
 @media(max-width:360px){
   body:not(.chat-mode) #app .header-actions {gap:4px}
   body:not(.chat-mode) #app .brand-mark {width:36px;height:36px;border-radius:13px}

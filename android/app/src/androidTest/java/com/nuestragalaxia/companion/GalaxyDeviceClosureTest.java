@@ -273,9 +273,16 @@ public class GalaxyDeviceClosureTest {
                     + "const withinScreen=n.left>=-1&&n.right<=innerWidth+1&&f.right<=innerWidth+1"
                     + "&&a.right<=innerWidth+1&&p.right<=innerWidth+1;"
                     + "const heights=[...nav.querySelectorAll('.nav-btn')].map(el=>el.getBoundingClientRect().height);"
+                    + "const header=document.querySelector('#app .header'),"
+                    + "hButtons=[...header.querySelectorAll('.header-actions button')],"
+                    + "avatar=header.querySelector('.avatar');"
+                    + "const headerFits=hButtons.length===2&&[...hButtons,header.querySelector('.brand')]"
+                    + ".every(el=>{const r=el.getBoundingClientRect();return r.left>=-1&&r.right<=innerWidth+1});"
+                    + "const headerTouch=hButtons.every(el=>el.getBoundingClientRect().width>=44);"
+                    + "const avatarHidden=getComputedStyle(avatar).display==='none';"
                     + "add.remove();player.className=original;"
                     + "return {cssWidth:innerWidth,navCount:heights.length,minTouch:Math.min(...heights),"
-                    + "noOverlap,withinScreen}})())",20);
+                    + "noOverlap,withinScreen,headerFits,headerTouch,avatarHidden}})())",20);
                 assertTrue("Responsive metrics are not JSON at CSS "+targetCss+": "+measured,
                     measured.startsWith("{"));
                 JSONObject row=new JSONObject(measured);
@@ -287,6 +294,12 @@ public class GalaxyDeviceClosureTest {
                     row.getBoolean("noOverlap"));
                 assertTrue("Control outside viewport at "+targetCss+": "+row,
                     row.getBoolean("withinScreen"));
+                assertTrue("Notification/Search header clipped at "+targetCss+": "+row,
+                    row.getBoolean("headerFits"));
+                assertTrue("Header search actions narrower than 44px at "+targetCss+": "+row,
+                    row.getBoolean("headerTouch"));
+                assertTrue("Decorative avatar must not crowd narrow header at "+targetCss+": "+row,
+                    row.getBoolean("avatarHidden"));
                 responsive.put(row.put("requestedCssWidth",targetCss));
                 shell("screencap -p /sdcard/Download/V5-P1-viewport-"+targetCss+".png");
             }
