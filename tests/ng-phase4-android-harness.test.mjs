@@ -26,6 +26,10 @@ test('Android picker waits for the resolved external app, not a transient system
  assert.doesNotMatch(helper,/!pkg\.equals\(foreground\)/);
  assert.match(helper,/device\.pressBack\(\)/);
  assert.match(helper,/finally\s*\{[\s\S]*GALAXY_FILE_PICKER_QA_CLEANUP/);
- assert.match(helper,/!isPhysicalDevice\(\)\s*&&\s*!pkg\.equals\(device\.getCurrentPackageName\(\)\)/);
+ assert.match(helper,/!isPhysicalDevice\(\)\s*&&\s*!isResumedPackage\(pkg\)/);
+ assert.match(helper,/cancelPickerAndVerifyForeground\(device, pkg, documentsPackage\)/);
+ assert.match(source,/private void cancelPickerAndVerifyForeground\(UiDevice device, String appPkg, String pickerPkg\)/);
+ assert.match(source,/isResumedPackage\(appPkg\)/);
+ assert.match(source,/document\.visibilityState/);
  assert.doesNotMatch(helper,/com\.google\.android\.documentsui\s*\)/);
 });
