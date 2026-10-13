@@ -16,6 +16,54 @@ for iteration in 1 2 3 4 5; do
   grep -E 'Status:|TotalTime:|WaitTime:|ThisTime:' "$OUT/start-$iteration.txt" || true
   sleep 2
 done
+# PNG signature alone is NOT visual QA. Assert Android accessibility hierarchy
+# exposes the real, unpaired pairing form before every capture. This catches
+# launcher/system ANR dialogs that previously produced valid but useless PNGs.
+assert_onboarding_visible() {
+  local label="$1" xml="$OUT/ui-$1.xml" ok=0
+  for attempt in 1 2 3 4; do
+    adb shell uiautomator dump /sdcard/Download/v5-unpaired-ui.xml >/dev/null 2>&1 || true
+    adb exec-out cat /sdcard/Download/v5-unpaired-ui.xml >"$xml" 2>/dev/null || true
+    if grep -Eqi 'Vincular este teléfono|Código de vinculación|Todo lo nuestro, ahora en el teléfono' "$xml" \
+      && ! grep -Eqi 'Pixel Launcher isn.t responding|System UI isn.t responding|isn.t responding|no responde' "$xml"; then
+      ok=1
+      break
+    fi
+    # Only the known emulator launcher ANR may be dismissed automatically.
+    # App ANRs, permission prompts or unexpected dialogs always fail closed.
+    if grep -Eqi 'Pixel Launcher isn.t responding' "$xml"; then
+      coords=$(python3 - "$xml" <<'PY'
+import re, sys, xml.etree.ElementTree as ET
+try:
+    root=ET.parse(sys.argv[1]).getroot()
+    for node in root.iter('node'):
+        if node.get('resource-id')=='android:id/aerr_wait':
+            m=re.fullmatch(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',node.get('bounds',''))
+            if m:
+                x1,y1,x2,y2=map(int,m.groups())
+                print((x1+x2)//2,(y1+y2)//2)
+                break
+except (OSError,ET.ParseError): pass
+PY
+)
+      if [[ -n "$coords" ]]; then
+        read -r tap_x tap_y <<< "$coords"
+        echo "Emulator launcher ANR acknowledged via system Wait; app still must pass visibility gate." >&2
+        adb shell input tap "$tap_x" "$tap_y" || true
+        sleep 1
+        adb shell am start -n "$ACT" >/dev/null || true
+      fi
+    fi
+    echo "Visual QA: onboarding inaccessible on $label, attempt $attempt/4." >&2
+    sleep 3
+  done
+  if [[ "$ok" != 1 ]]; then
+    echo "FAIL VISUAL QA: screenshot $label blocked by system UI or app not accessible." >&2
+    adb shell dumpsys window windows >"$OUT/focus-$label.txt" || true
+    return 1
+  fi
+}
+assert_onboarding_visible portrait
 adb exec-out screencap -p >"$OUT/android-unpaired-portrait.png"
 adb shell dumpsys window >"$OUT/window-portrait.txt"
 adb shell dumpsys gfxinfo "$PKG" reset >/dev/null
@@ -27,11 +75,13 @@ adb shell dumpsys gfxinfo "$PKG" framestats >"$OUT/gfxinfo-framestats.txt"
 adb shell dumpsys meminfo "$PKG" >"$OUT/meminfo.txt"
 adb shell settings put system font_scale 1.3
 sleep 2
+assert_onboarding_visible largefont
 adb exec-out screencap -p >"$OUT/android-unpaired-largefont.png"
 adb shell settings put system font_scale 1.0
 adb shell settings put system accelerometer_rotation 0
 adb shell settings put system user_rotation 1
 sleep 3
+assert_onboarding_visible landscape
 adb exec-out screencap -p >"$OUT/android-unpaired-landscape.png"
 adb shell settings put system user_rotation 0
 adb shell settings put system accelerometer_rotation 1
@@ -49,6 +99,17 @@ for f in sorted(base.glob('start-*.txt')):
 for path in base.glob('*.png'):
     assert path.read_bytes().startswith(b'\x89PNG\r\n\x1a\n'),f'Invalid PNG: {path}'
 assert len(list(base.glob('*.png')))==3, 'Must capture 3 AVD screenshots'
+assert len(list(base.glob('ui-*.xml')))==3, 'Must verify onboarding accessibility for 3 screen captures'
+import struct
+dims={}
+for path in base.glob('*.png'):
+    raw=path.read_bytes()
+    w,h=struct.unpack('>II',raw[16:24])
+    dims[path.stem]=(w,h)
+assert dims['android-unpaired-portrait'][0]<dims['android-unpaired-portrait'][1],f'Portrait is not portrait: {dims}'
+assert dims['android-unpaired-largefont'][0]<dims['android-unpaired-largefont'][1],f'Large-font is not portrait: {dims}'
+assert dims['android-unpaired-landscape'][0]>dims['android-unpaired-landscape'][1],f'Landscape never rotated: {dims}'
+
 summary={'scope':'fresh isolated Android QA debug/unpaired onboarding ONLY',
  'coldStartProxy':'am force-stop then am start -W; not fully cold CPU/network',
  'launchIterations':starts,

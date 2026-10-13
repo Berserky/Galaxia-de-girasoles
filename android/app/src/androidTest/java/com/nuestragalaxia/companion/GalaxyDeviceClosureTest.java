@@ -127,6 +127,197 @@ public class GalaxyDeviceClosureTest {
         awaitJs("!!document.querySelector('#chatForm textarea')");
     }
 
+    /**
+     * Visual Evolution P1: instrument the actual Android WebView against the isolated
+     * QaHttpServer account. No real couple account, GPS, media or backend is used.
+     * These are interaction/layout assertions, not owner-approved screenshot QA.
+     */
+    @Test public void visualEvolutionP1_realWebViewThemesFloatingRailAndModalFocus_areSafe() throws Exception {
+        launch();
+        awaitJs("!!document.querySelector('#bottomNav .nav-btn.active') && !!document.querySelector('#chatFab:not(.hidden)')");
+        assertEquals("true", js("!!document.querySelector('link[href=\"./celestial-shell.css\"]')"
+            + " && !!window.GalaxyCelestialShell && document.querySelectorAll('#bottomNav .nav-btn').length===6"));
+
+        // QA-only proof-of-paint marker, not a product UI element. A previous
+        // Android run showed a stale pairing screen although the in-process
+        // WebView navigation had finished loading. Verify actual display pixels
+        // before accepting any of the seven theme screenshots.
+        runJs("document.querySelector('[data-view=\\\"home\\\"]')?.click()");
+        awaitJs("document.querySelector('#bottomNav .nav-btn.active')?.dataset.view==='home'"
+            + " && getComputedStyle(document.getElementById('bottomNav')).display!=='none'");
+        runJs("const marker=document.createElement('div');marker.id='v5-qa-paint-marker';"
+            + "marker.setAttribute('aria-hidden','true');"
+            + "marker.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;'+"
+            + "'background:#07e1f7;z-index:2147483647;pointer-events:none';"
+            + "document.body.appendChild(marker)");
+        awaitJs("!!document.getElementById('v5-qa-paint-marker')");
+        awaitV5QaPainted("before-first-theme");
+
+        // Run one cheap WebView callback per theme. The old one-shot call
+        // applied all seven themes and computed their luminance in one
+        // evaluateJavascript invocation; the emulator's 5-second JS callback
+        // deadline could expire without indicating a contrast problem.
+        org.json.JSONArray samples = new org.json.JSONArray();
+        for (String theme : new String[]{"daylight","cosmic","halloween","christmas",
+                "valentine","friendship","easter"}) {
+            runJs("GalaxyTheme.applyTheme('" + theme + "')");
+            long themeStarted = SystemClock.elapsedRealtime();
+            String raw = jsWithDeadline("JSON.stringify((()=>{const e=document.createElement('button');"
+                + "e.className='btn';document.body.appendChild(e);"
+                + "const s=getComputedStyle(e);const active=document.documentElement.dataset.theme;"
+                + "const bg=s.backgroundColor,fg=s.color;e.remove();"
+                + "return {active,bg,fg}})())", 20);
+            long themeJsMs = SystemClock.elapsedRealtime()-themeStarted;
+            System.out.println("V5_P1_THEME_WEBVIEW_LATENCY_MS=" + theme + ":" + themeJsMs);
+            assertTrue("P1 Android WebView computed color failed in " + theme + ": " + raw,
+                raw.startsWith("{"));
+            JSONObject colors = new JSONObject(raw);
+            assertEquals("Theme did not resolve in Android WebView", theme, colors.getString("active"));
+            double contrast = v5ColorContrast(colors.getString("bg"), colors.getString("fg"));
+            assertTrue("P1 action contrast below WCAG AA in " + theme + ": " + contrast,
+                contrast >= 4.5d);
+            samples.put(new JSONObject().put("id",theme)
+                .put("active",colors.getString("active")).put("contrast",contrast));
+            // Check the REAL display, not just JS state: no pairing overlay or
+            // stale screen may pass as a themed home screenshot.
+            awaitJs("document.documentElement.dataset.theme==='" + theme + "'"
+                + " && document.querySelector('#bottomNav .nav-btn.active')?.dataset.view==='home'");
+            awaitV5QaPainted(theme);
+            shell("screencap -p /sdcard/Download/V5-P1-synthetic-" + theme + ".png");
+        }
+        runJs("document.getElementById('v5-qa-paint-marker')?.remove();GalaxyTheme.applyTheme('auto')");
+        assertEquals("true", js("document.documentElement.dataset.themeChoice==='auto'"));
+        JSONObject themes = new JSONObject().put("palettes",samples).put("auto",true);
+
+        // Measure real layout rectangles; the extra add FAB and player are synthetic
+        // UI-only fixtures and are removed before leaving this test.
+        String railJson = js("JSON.stringify((()=>{"
+            + "const nav=document.getElementById('bottomNav'),fab=document.getElementById('chatFab'),"
+            + "player=document.getElementById('globalPlayer'),oldClass=player.className;"
+            + "const add=document.createElement('button');add.className='floating-add';"
+            + "add.setAttribute('aria-label','Accion QA sintetica');document.getElementById('app').append(add);"
+            + "function overlap(a,b){const x=a.getBoundingClientRect(),y=b.getBoundingClientRect();"
+            + "return x.left<y.right-1&&x.right>y.left+1&&x.top<y.bottom-1&&x.bottom>y.top+1}"
+            + "const withoutPlayer=!overlap(nav,fab)&&!overlap(nav,add)&&!overlap(fab,add);"
+            + "player.classList.add('visible');"
+            + "const withPlayer=!overlap(nav,fab)&&!overlap(nav,add)&&!overlap(nav,player)"
+            + "&&!overlap(fab,add)&&!overlap(fab,player)&&!overlap(add,player);"
+            + "const dims={width:innerWidth,height:innerHeight,navCount:nav.children.length};"
+            + "player.className=oldClass;add.remove();"
+            + "return {...dims,withoutPlayer,withPlayer}})())");
+        JSONObject rail = new JSONObject(railJson);
+        assertEquals("The bottom rail must keep all six controls", 6, rail.getInt("navCount"));
+        assertTrue("FAB/add collide with Android nav: " + rail, rail.getBoolean("withoutPlayer"));
+        assertTrue("FAB/add/player collide on real WebView: " + rail, rail.getBoolean("withPlayer"));
+
+        for (String id : new String[]{"map","moments","ai","memories","more","home"}) {
+            runJs("document.querySelector('[data-view=\"" + id + "\"]').click()");
+            awaitJs("document.querySelectorAll('#bottomNav [aria-current=\"page\"]').length===1");
+            assertEquals("Active route was not announced to accessibility for " + id, id,
+                js("document.querySelector('#bottomNav [aria-current=\"page\"]')?.dataset.view||''"));
+        }
+
+        // Real global dialog (not Galaxy Chat) must focus search, then restore its
+        // launcher after Escape/cancel using the preexisting closeModal cleanup.
+        runJs("document.querySelector('[data-action=\"universal-search-open\"]').click()");
+        awaitJs("document.getElementById('modal').open");
+        awaitJs("document.activeElement?.id==='universalSearchInput'");
+        assertEquals("v5-modal-title", js("document.getElementById('modal').getAttribute('aria-labelledby')"));
+        assertEquals("true", js("document.body.classList.contains('v5-input-focused')"));
+        runJs("document.getElementById('modal').dispatchEvent(new Event('cancel',{cancelable:true}))");
+        awaitJs("!document.getElementById('modal').open && document.activeElement?.dataset.action==='universal-search-open'");
+        assertEquals("false", js("document.body.classList.contains('v5-input-focused')"));
+        assertEquals("", js("document.getElementById('modal').getAttribute('aria-labelledby')||''"));
+        // Real Android WebView responsive audit. wm size changes physical
+        // display resolution, not a browser-mocked viewport. Keep density
+        // unchanged so the CSS px targets correspond to the app's WebView.
+        android.graphics.Bitmap initialFrame=instrumentation.getUiAutomation().takeScreenshot();
+        assertNotNull("Cannot determine Android baseline display for responsive QA",initialFrame);
+        final int displayWidthPx=initialFrame.getWidth();
+        final int displayHeightPx=initialFrame.getHeight();
+        initialFrame.recycle();
+        final int baselineCssWidth=Integer.parseInt(js("String(Math.round(innerWidth))"));
+        assertTrue("Bad CSS/native viewport scale",baselineCssWidth>200 && displayWidthPx>300);
+        final double deviceScale=(double)displayWidthPx/baselineCssWidth;
+        JSONArray responsive=new JSONArray();
+        runJs("const m=document.createElement('div');m.id='v5-qa-paint-marker';"
+            + "m.setAttribute('aria-hidden','true');"
+            + "m.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;"
+            + "background:#07e1f7;z-index:2147483647;pointer-events:none';"
+            + "document.body.appendChild(m)");
+        try {
+            for (int targetCss : new int[]{320,360,393,412}) {
+                int displayTargetPx=(int)Math.round(targetCss*deviceScale);
+                String resizeResult=shell("wm size "+displayTargetPx+"x"+displayHeightPx);
+                assertFalse("Android virtual screen resize was rejected: "+resizeResult,
+                    resizeResult.toLowerCase(java.util.Locale.ROOT).contains("error"));
+                awaitCondition(() -> {
+                    String size=js("String(Math.round(innerWidth))");
+                    return Math.abs(Integer.parseInt(size)-targetCss)<=5;
+                },UI_TIMEOUT_MS);
+                awaitJs("document.querySelector('#bottomNav .nav-btn.active')?.dataset.view==='home'");
+                awaitV5QaPainted("viewport-"+targetCss);
+                String measured=jsWithDeadline("JSON.stringify((()=>{"
+                    + "const nav=document.getElementById('bottomNav'),fab=document.getElementById('chatFab'),"
+                    + "player=document.getElementById('globalPlayer');"
+                    + "const original=player.className;player.classList.add('visible');"
+                    + "const add=document.createElement('button');add.className='floating-add';"
+                    + "add.setAttribute('aria-label','Accion QA sintetica');"
+                    + "document.getElementById('app').append(add);"
+                    + "function intersects(a,b){const x=a.getBoundingClientRect(),y=b.getBoundingClientRect();"
+                    + "return x.left<y.right-1&&x.right>y.left+1&&x.top<y.bottom-1&&x.bottom>y.top+1}"
+                    + "const n=nav.getBoundingClientRect(),f=fab.getBoundingClientRect(),"
+                    + "a=add.getBoundingClientRect(),p=player.getBoundingClientRect();"
+                    + "const noOverlap=![nav,fab,add,player].some((el,i,all)=>"
+                    + "all.slice(i+1).some(other=>intersects(el,other)));"
+                    + "const withinScreen=n.left>=-1&&n.right<=innerWidth+1&&f.right<=innerWidth+1"
+                    + "&&a.right<=innerWidth+1&&p.right<=innerWidth+1;"
+                    + "const heights=[...nav.querySelectorAll('.nav-btn')].map(el=>el.getBoundingClientRect().height);"
+                    + "const header=document.querySelector('#app .header'),"
+                    + "hButtons=[...header.querySelectorAll('.header-actions button')],"
+                    + "avatar=header.querySelector('.avatar');"
+                    + "const headerFits=hButtons.length===2&&[...hButtons,header.querySelector('.brand')]"
+                    + ".every(el=>{const r=el.getBoundingClientRect();return r.left>=-1&&r.right<=innerWidth+1});"
+                    + "const headerTouch=hButtons.every(el=>el.getBoundingClientRect().width>=44);"
+                    + "const avatarHidden=getComputedStyle(avatar).display==='none';"
+                    + "add.remove();player.className=original;"
+                    + "return {cssWidth:innerWidth,navCount:heights.length,minTouch:Math.min(...heights),"
+                    + "noOverlap,withinScreen,headerFits,headerTouch,avatarHidden}})())",20);
+                assertTrue("Responsive metrics are not JSON at CSS "+targetCss+": "+measured,
+                    measured.startsWith("{"));
+                JSONObject row=new JSONObject(measured);
+                assertEquals("Viewport has unexpected CSS width",targetCss,
+                    row.getInt("cssWidth"),5);
+                assertEquals("Lost navigation actions at narrow viewport",6,row.getInt("navCount"));
+                assertTrue("Navigation touch target too small: "+row,row.getDouble("minTouch")>=44d);
+                assertTrue("Navigation/player/FAB/add overlap at "+targetCss+": "+row,
+                    row.getBoolean("noOverlap"));
+                assertTrue("Control outside viewport at "+targetCss+": "+row,
+                    row.getBoolean("withinScreen"));
+                assertTrue("Notification/Search header clipped at "+targetCss+": "+row,
+                    row.getBoolean("headerFits"));
+                assertTrue("Header search actions narrower than 44px at "+targetCss+": "+row,
+                    row.getBoolean("headerTouch"));
+                assertTrue("Decorative avatar must not crowd narrow header at "+targetCss+": "+row,
+                    row.getBoolean("avatarHidden"));
+                responsive.put(row.put("requestedCssWidth",targetCss));
+                shell("screencap -p /sdcard/Download/V5-P1-viewport-"+targetCss+".png");
+            }
+        } finally {
+            shell("wm size reset");
+            runJs("document.getElementById('v5-qa-paint-marker')?.remove()");
+            awaitCondition(() -> Math.abs(Integer.parseInt(js(
+                "String(Math.round(innerWidth))"))-baselineCssWidth)<=5,UI_TIMEOUT_MS);
+        }
+
+        System.out.println("V5_P1_ANDROID_SHELL=" + new JSONObject()
+            .put("result","VERIFIED_SYNTHETIC_QA")
+            .put("themes",themes)
+            .put("rail",rail)
+            .put("nonChatModalFocusRestore",true)
+            .put("responsiveViewports",responsive));
+    }
+
     @Test public void galaxyChat_renders13Cards_pollChecklistAndSend() throws Exception {
         launchChat();
         awaitJs("document.querySelectorAll('.chat-galaxy-card').length===13");
@@ -835,23 +1026,43 @@ public class GalaxyDeviceClosureTest {
         String documentsPackage = documentsComponent.substring(0, documentsComponent.indexOf('/'));
         scenario.onActivity(a -> a.pickMedia("qa-file-picker", "chat-file"));
         UiDevice device = UiDevice.getInstance(instrumentation);
-        // Android may route OPEN_DOCUMENT to a DocumentsUI or platform
-        // ResolverActivity owned by the "android" package. In either case the
-        // external picker has taken foreground away from Nuestra Galaxia.
-        // Reject only a blank package or our own package; excluding "android"
-        // incorrectly times out while a valid system chooser is visible.
-        awaitCondition(() -> {
-            String foreground = device.getCurrentPackageName();
-            return foreground != null && !foreground.isBlank()
-                && !pkg.equals(foreground);
-        }, UI_TIMEOUT_MS);
-        String pickerForeground = device.getCurrentPackageName();
-        assertFalse("File picker did not leave app foreground.", pkg.equals(pickerForeground));
-        System.out.println("GALAXY_FILE_PICKER=" + new JSONObject()
-            .put("resolvedComponent", documentsComponent)
-            .put("foregroundPackage", pickerForeground));
-        device.pressBack();
-        awaitCondition(() -> pkg.equals(device.getCurrentPackageName()), UI_TIMEOUT_MS);
+        // A transient android-owned ResolverActivity can appear BEFORE the
+        // resolved DocumentsUI picker. Waiting for merely any non-app package
+        // let QA press Back too early, after which DocumentsUI opened later and
+        // hid MainActivity. Only the fully resolved picker is acceptable.
+        try {
+            // UiDevice's accessibility-root package can remain "android"
+            // while ActivityTaskManager has already resumed DocumentsUI.
+            // Do not accept that transient root alone: require the resolved
+            // handler through accessibility OR Android's resumed activity.
+            awaitCondition(() -> documentsPackage.equals(device.getCurrentPackageName())
+                || isResumedPackage(documentsPackage), UI_TIMEOUT_MS);
+            String pickerForeground = device.getCurrentPackageName();
+            boolean actualPickerResumed = isResumedPackage(documentsPackage);
+            assertTrue("OPEN_DOCUMENT did not reach resolved picker: a11y="
+                    + pickerForeground + ", resolved=" + documentsComponent,
+                documentsPackage.equals(pickerForeground) || actualPickerResumed);
+            System.out.println("GALAXY_FILE_PICKER=" + new JSONObject()
+                .put("resolvedComponent", documentsComponent)
+                .put("foregroundPackage", pickerForeground)
+                .put("resumedHandler", actualPickerResumed));
+            // Closing a ready picker is the actual cancel behavior under test.
+            device.pressBack();
+            awaitCondition(() -> pkg.equals(device.getCurrentPackageName()), UI_TIMEOUT_MS);
+        } finally {
+            // Keep the whole instrumented suite hermetic even when a picker
+            // assertion fails. Do not mask the failure or bypass its checks.
+            for (int cleanup = 0; cleanup < 3; cleanup++) {
+                if (pkg.equals(device.getCurrentPackageName())) break;
+                device.pressBack();
+                SystemClock.sleep(450);
+            }
+            // Never force-stop another provider on a physical owner's phone.
+            if (!isPhysicalDevice() && !pkg.equals(device.getCurrentPackageName())) {
+                shell("am force-stop " + documentsPackage);
+                System.out.println("GALAXY_FILE_PICKER_QA_CLEANUP=emulator_picker_stopped");
+            }
+        }
 
         Instrumentation.ActivityMonitor cameraMonitor = instrumentation.addMonitor(GalaxyCameraActivity.class.getName(), null, false);
         try {
@@ -870,6 +1081,13 @@ public class GalaxyDeviceClosureTest {
         SystemClock.sleep(700);
         scenario.onActivity(a -> a.stopVoiceRecording("qa-mic-stop"));
         awaitJs("!!document.querySelector('#app')");
+    }
+
+    /** Match the ACTUAL foreground activity; task history alone is insufficient. */
+    private boolean isResumedPackage(String expectedPackage) throws Exception {
+        if (expectedPackage == null || expectedPackage.isBlank()) return false;
+        String resumed = shell("dumpsys activity activities | grep -m1 -E 'mResumedActivity|topResumedActivity'");
+        return resumed.contains(expectedPackage + "/");
     }
 
     private boolean isPhysicalDevice() {
@@ -1033,6 +1251,70 @@ public class GalaxyDeviceClosureTest {
         awaitJs(expected);
     }
 
+    /**
+     * Display-level QA gate: the fixed cyan 64x8 CSS-pixel mark is inserted only
+     * by instrumentation. A rendered WebView behind a pairing screen, system
+     * dialog or stale activity has no visible mark, and must NOT produce a PASS.
+     * No visual OCR or user data is required. The mark is removed after capture.
+     */
+    private void awaitV5QaPainted(String theme) {
+        long deadline=SystemClock.elapsedRealtime()+15_000;
+        int consecutive=0;
+        while (SystemClock.elapsedRealtime()<deadline) {
+            android.graphics.Bitmap shot=null;
+            try {
+                shot=instrumentation.getUiAutomation().takeScreenshot();
+                int matched=0;
+                if(shot!=null){
+                    int maxX=Math.min(shot.getWidth(),260);
+                    int maxY=Math.min(shot.getHeight(),260);
+                    for(int y=20;y<maxY;y+=4){
+                        for(int x=4;x<maxX;x+=4){
+                            int pixel=shot.getPixel(x,y);
+                            if(Math.abs(android.graphics.Color.red(pixel)-7)<=2
+                                && Math.abs(android.graphics.Color.green(pixel)-225)<=2
+                                && Math.abs(android.graphics.Color.blue(pixel)-247)<=2){
+                                matched++;
+                            }
+                        }
+                    }
+                }
+                if(matched>=20){
+                    consecutive++;
+                    if(consecutive>=2){
+                        System.out.println("V5_P1_ANDROID_VISIBLE_FRAME="+theme+":true");
+                        return;
+                    }
+                }else consecutive=0;
+            } catch(RuntimeException ignored) { consecutive=0; }
+            finally {if(shot!=null)shot.recycle();}
+            SystemClock.sleep(200);
+        }
+        throw new AssertionError("V5 P1 screenshot rejected: real Android display has no QA home paint marker for "+theme);
+    }
+
+    // WCAG contrast of computed RGB colors, calculated on Android's Java side
+    // to avoid long synchronous JavaScript on slow emulator GPUs.
+    private static double v5ColorContrast(String background, String foreground) {
+        double a=v5ColorLuminance(background), b=v5ColorLuminance(foreground);
+        return (Math.max(a,b)+0.05d)/(Math.min(a,b)+0.05d);
+    }
+
+    private static double v5ColorLuminance(String rgb) {
+        int open=rgb.indexOf('('), close=rgb.indexOf(')');
+        if (open<0 || close<=open) throw new IllegalArgumentException("Unexpected CSS color: "+rgb);
+        String[] channels=rgb.substring(open+1,close).split(",");
+        if (channels.length<3) throw new IllegalArgumentException("Incomplete CSS RGB: "+rgb);
+        double[] weights={0.2126d,0.7152d,0.0722d};
+        double sum=0d;
+        for (int i=0;i<3;i++) {
+            double value=Double.parseDouble(channels[i].trim())/255d;
+            double linear=value<=0.04045d?value/12.92d:Math.pow((value+0.055d)/1.055d,2.4d);
+            sum+=weights[i]*linear;
+        }
+        return sum;
+    }
+
     private void runJs(String script) {
         js("(function(){" + script + ";return 'ok';})()");
     }
@@ -1046,7 +1328,11 @@ public class GalaxyDeviceClosureTest {
         SystemClock.sleep(300);
     }
 
-    private String js(String expression) {
+    private String js(String expression) { return jsWithDeadline(expression,5); }
+
+    // Only the P1 synthetic visual CSS sampling uses 20 seconds. Existing
+    // Chat and onboarding tests retain their original 5-second hard timeout.
+    private String jsWithDeadline(String expression, int timeoutSeconds) {
         if (scenario == null) throw new IllegalStateException("Activity not launched");
         AtomicReference<String> raw = new AtomicReference<>();
         CountDownLatch latch = new CountDownLatch(1);
@@ -1058,7 +1344,8 @@ public class GalaxyDeviceClosureTest {
             });
         });
         try {
-            if (!latch.await(5, TimeUnit.SECONDS)) throw new AssertionError("JavaScript callback timed out: " + expression);
+            if (!latch.await(timeoutSeconds, TimeUnit.SECONDS)) throw new AssertionError(
+                "JavaScript callback timed out after " + timeoutSeconds + "s: " + expression);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new AssertionError(e);

@@ -6,6 +6,10 @@ on:
     paths:
       - "docs/visual-evolution-5/**"
       - "tests/visual-evolution-p0.test.mjs"
+      - "tests/visual-evolution-p1.test.mjs"
+      - "android/app/src/main/assets/mobile/**"
+      - "scripts/visual-evolution-p0-avd.sh"
+      - "scripts/visual-evolution-p1-avd.sh"
       - "scripts/visual-evolution-p0-baseline.mjs"
       - ".github/workflows/visual-evolution-p0.yml"
   workflow_dispatch:
@@ -88,7 +92,32 @@ jobs:
           SDK_ROOT=/usr/local/lib/android/sdk
           SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | head -1)
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platforms;android-35" "platforms;android-36" "build-tools;36.0.0" "platform-tools" "emulator"
+          # SDK mirror sometimes serves a transient corrupt ZIP; retry instead of failing before compilation.
+          sdk_ok=0
+          for attempt in 1 2 3; do
+            if "$SDKMANAGER" "platforms;android-35" "platforms;android-36" "build-tools;36.0.0" "platform-tools" "emulator"; then
+              sdk_ok=1
+              break
+            fi
+            echo "::warning::Android SDK package download failed (attempt $attempt/3)"
+            sleep $((attempt * 10))
+          done
+          test "$sdk_ok" -eq 1
+          # Emulator Runner otherwise downloads this huge image itself once,
+          # with no retry if Google's CDN serves a corrupt ZIP. Preinstall and
+          # validate source.properties, retry safely before the AVD startup.
+          SYS_IMAGE="$SDK_ROOT/system-images/android-35/google_apis/x86_64"
+          image_ok=0
+          for attempt in 1 2 3; do
+            if "$SDKMANAGER" "system-images;android-35;google_apis;x86_64" && test -f "$SYS_IMAGE/source.properties"; then
+              image_ok=1
+              break
+            fi
+            echo "::warning::Android API 35 Google APIs x86_64 system image was unavailable or corrupt (attempt $attempt/3)"
+            rm -rf "$SYS_IMAGE"
+            sleep $((attempt * 10))
+          done
+          test "$image_ok" -eq 1
           echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
       - name: Enable KVM
@@ -109,11 +138,15 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
-          script: bash scripts/visual-evolution-p0-avd.sh
+          script: bash scripts/visual-evolution-p1-avd.sh
+
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: v5-p0-android-unpaired-avd-evidence
-          path: build/p0-avd/**
+          path: |
+            build/p0-avd/**
+            android/app/build/outputs/androidTest-results/**
+            android/app/build/reports/androidTests/**
           if-no-files-found: warn
           retention-days: 30
