@@ -1026,23 +1026,35 @@ public class GalaxyDeviceClosureTest {
         String documentsPackage = documentsComponent.substring(0, documentsComponent.indexOf('/'));
         scenario.onActivity(a -> a.pickMedia("qa-file-picker", "chat-file"));
         UiDevice device = UiDevice.getInstance(instrumentation);
-        // Android may route OPEN_DOCUMENT to a DocumentsUI or platform
-        // ResolverActivity owned by the "android" package. In either case the
-        // external picker has taken foreground away from Nuestra Galaxia.
-        // Reject only a blank package or our own package; excluding "android"
-        // incorrectly times out while a valid system chooser is visible.
-        awaitCondition(() -> {
-            String foreground = device.getCurrentPackageName();
-            return foreground != null && !foreground.isBlank()
-                && !pkg.equals(foreground);
-        }, UI_TIMEOUT_MS);
-        String pickerForeground = device.getCurrentPackageName();
-        assertFalse("File picker did not leave app foreground.", pkg.equals(pickerForeground));
-        System.out.println("GALAXY_FILE_PICKER=" + new JSONObject()
-            .put("resolvedComponent", documentsComponent)
-            .put("foregroundPackage", pickerForeground));
-        device.pressBack();
-        awaitCondition(() -> pkg.equals(device.getCurrentPackageName()), UI_TIMEOUT_MS);
+        // A transient android-owned ResolverActivity can appear BEFORE the
+        // resolved DocumentsUI picker. Waiting for merely any non-app package
+        // let QA press Back too early, after which DocumentsUI opened later and
+        // hid MainActivity. Only the fully resolved picker is acceptable.
+        try {
+            awaitCondition(() -> documentsPackage.equals(device.getCurrentPackageName()),
+                UI_TIMEOUT_MS);
+            String pickerForeground = device.getCurrentPackageName();
+            assertEquals("OPEN_DOCUMENT did not reach resolved picker",
+                documentsPackage, pickerForeground);
+            System.out.println("GALAXY_FILE_PICKER=" + new JSONObject()
+                .put("resolvedComponent", documentsComponent)
+                .put("foregroundPackage", pickerForeground));
+            // Closing a ready picker is the actual cancel behavior under test.
+            device.pressBack();
+            awaitCondition(() -> pkg.equals(device.getCurrentPackageName()), UI_TIMEOUT_MS);
+        } finally {
+            // Keep the whole instrumented suite hermetic even when a picker
+            // assertion fails. Do not mask the failure or bypass its checks.
+            for (int cleanup = 0; cleanup < 3; cleanup++) {
+                if (pkg.equals(device.getCurrentPackageName())) break;
+                device.pressBack();
+                SystemClock.sleep(450);
+            }
+            if (!pkg.equals(device.getCurrentPackageName())) {
+                shell("am force-stop " + documentsPackage);
+                System.out.println("GALAXY_FILE_PICKER_QA_CLEANUP=external_picker_stopped");
+            }
+        }
 
         Instrumentation.ActivityMonitor cameraMonitor = instrumentation.addMonitor(GalaxyCameraActivity.class.getName(), null, false);
         try {
