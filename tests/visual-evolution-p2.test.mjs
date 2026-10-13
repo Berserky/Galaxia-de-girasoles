@@ -131,7 +131,7 @@ function renderDaily(own={},partner={}){
   dailyQuestion:()=> '¿Qué te hizo sonreír hoy?',ico:()=>'',esc:v=>String(v),attr:v=>String(v),
   myName:()=> 'Yo',partnerName:()=> 'Mi persona',own,partner
  };
- return runInNewContext(dailyAnswerSource+'\\n'+dailyQuestionSource+'\\ndailyQuestionCard(own,partner)',context);
+ return runInNewContext(dailyAnswerSource+'\n'+dailyQuestionSource+'\ndailyQuestionCard(own,partner)',context);
 }
 
 test('P2C daily progress reflects 0, 1 and 2 actual answers, without adding server calls',()=>{
