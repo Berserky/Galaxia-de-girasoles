@@ -1145,18 +1145,32 @@ public class GalaxyDeviceClosureTest {
      * A broken return still fails after the bounded attempts.
      */
     private void cancelPickerAndVerifyForeground(UiDevice device, String appPkg, String pickerPkg) throws Exception {
+        // DocumentsUI may be reported RESUMED while Android is still
+        // transitioning the foreground from MainActivity to the picker.
+        // CI reproduced a false "app foreground / WebView hidden" assertion
+        // during this launch gap, BEFORE the first Back was even pressed.
+        // Verify a stable resolved picker before sending any cancellation.
+        long readyUntil=SystemClock.elapsedRealtime()+10_000;
+        int stablePickerPolls=0;
+        while(SystemClock.elapsedRealtime()<readyUntil && stablePickerPolls<3) {
+            if(scenario.getState()==Lifecycle.State.DESTROYED)
+                throw new AssertionError("MainActivity destroyed before picker cancellation");
+            stablePickerPolls=isResumedPackage(pickerPkg)?stablePickerPolls+1:0;
+            if(stablePickerPolls<3)SystemClock.sleep(250);
+        }
+        assertTrue("OPEN_DOCUMENT picker never became stably resumed before cancellation",stablePickerPolls>=3);
+        System.out.println("GALAXY_FILE_PICKER_STABLE=pickerResumed;polls:"+stablePickerPolls);
+
         for (int attempt = 1; attempt <= 3; attempt++) {
-            // UiAutomator.pressBack() can RETURN FALSE while still dispatching
-            // a real Back event. CI proved this: DocumentsUI closed, MainActivity
-            // resumed, then an immediate shell fallback delivered a SECOND Back
-            // and destroyed MainActivity. Never trust a single boolean to decide
-            // that it is safe to send another navigation event.
-            if (awaitPickerMainActivityVisible(appPkg, 1_000)) {
-                System.out.println("GALAXY_FILE_PICKER_RETURN=verified;backPresses:"+(attempt-1));
-                return;
-            }
-            if (isResumedPackage(appPkg)) {
-                throw new AssertionError("Document picker closed but MainActivity WebView did not recover visibility; no extra Back sent");
+            // The boolean returned by UiAutomator is NOT evidence that Back
+            // did/didn't dispatch. Only send Back when the picker is still the
+            // foreground Activity. Never cancel while MainActivity is resuming.
+            if(!isResumedPackage(pickerPkg)) {
+                if(awaitPickerMainActivityVisible(appPkg, 8_000)) {
+                    System.out.println("GALAXY_FILE_PICKER_RETURN=verified;alreadyReturned:true");
+                    return;
+                }
+                throw new AssertionError("Picker no longer foreground, but resumed visible MainActivity did not return; refusing another Back");
             }
 
             boolean acknowledged=device.pressBack();
@@ -1165,7 +1179,11 @@ public class GalaxyDeviceClosureTest {
                 return;
             }
             if (isResumedPackage(appPkg)) {
-                throw new AssertionError("Document picker returned MainActivity but its WebView stayed hidden; refusing a second Back");
+                if(awaitPickerMainActivityVisible(appPkg, 8_000)) {
+                    System.out.println("GALAXY_FILE_PICKER_RETURN=verified;lateResume:"+attempt);
+                    return;
+                }
+                throw new AssertionError("MainActivity resumed after picker cancellation but WebView remained hidden; no second Back");
             }
 
             // Fallback only after the OS has had time to finish the first Back,
