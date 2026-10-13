@@ -3,7 +3,7 @@
 **Repositorio:** `Berserky/Galaxia-de-girasoles` · **rama:** `feat/visual-evolution-5-p1-shell` · **PR:** [#167](https://github.com/Berserky/Galaxia-de-girasoles/pull/167) (**DRAFT**).
 **Base:** `desarrollo@077089822b9a2775f4bdd8f4c6c5ab8fba11a697` (P0 fusionado, PR #166).
 **Objetivo:** modernizar interfaz compartida Android WebView sin reescribir Galaxy Chat, IA, GPS, FCM, backend, datos ni contratos de puente nativo.
-**Estado al 13 octubre 2026 UTC:** ingeniería del primer slice de P1 implementada y automatización Android real aprobada. **P1 no cerrado ni fusionado**; sigue pendiente aprobación estética y cobertura manual/validación de dispositivos.
+**Estado al 13 octubre 2026 UTC:** ingeniería del primer slice de P1 implementada; 15/15 workflows PASS en HEAD `24e8464`; se incorporó una nueva auditoría de cuatro anchos Android físicos en HEAD posterior, **todavía pendiente de CI**. **P1 no cerrado ni fusionado**; sigue pendiente aprobación estética y cobertura manual/validación de dispositivos.
 
 ## Cambios implementados
 
@@ -31,10 +31,12 @@
 | 658 pruebas Node; CSS/módulo nav/modal en suite | **PASS** en V5 run 38338089833 |
 | Android instrumentado: 7 temas y WCAG AA de acción primaria, solapamientos, rutas, foco modal | **PASS** en run 38338089833 |
 | Capturas APK homogéneas con evidencia de pantalla realmente pintada | **PASS técnico**, 7/7 inspeccionadas |
-| AVD no emparejado, 5 arranques y capturas portrait/landscape/font | **PASS técnico** |
+| AVD no emparejado, 5 arranques y capturas portrait/landscape/font | **PASS técnico** en HEAD `24e8464` |
+| Vista emparejada 320/360/393/412 px CSS: barra, FAB, reproductor, botón añadir, targets >=44, límites de pantalla | **IMPLEMENTADO EN INSTRUMENTACIÓN; nuevo CI pendiente**, no declarar PASS |
+| IME/teclado físico en cuatro anchos y aceptación de dispositivo real | **PENDIENTE** |
 | Android lint, unit, debug/release y Chat CI completo | **PASS en revisión previa**; revalidar CI sobre el HEAD antes de merge |
 | Contraste de absolutamente todos los componentes y tamaño táctil por dispositivo | **PENDIENTE**; solo acción primaria y shell medidos en gate actual |
-| UX manual 320/360/393/412, fuente grande y teclado físico/IME reales | **PENDIENTE** |
+| Inspección estética manual 320/360/393/412, fuentes grandes y teclado real | **PENDIENTE**; los tests automatizados no sustituyen la revisión humana |
 | Funciones autenticadas completas (Chat, mapas, memorias, objetivos, integraciones) | **NO VALIDADO POR ESTA PRUEBA VISUAL**; suite regresiva de otras fases no equivale a aceptación de diseño |
 | Rendimiento visual/FPS-jank/batería de todo P1 en dispositivo objetivo | **PENDIENTE**; no extrapolar métricas parciales |
 | Aprobación estética del propietario, cierre de P1/VE issues, merge a desarrollo | **NO REALIZADO** |
@@ -45,6 +47,7 @@
 1. Consultar **HEAD del PR #167 y sus 15 workflows de ese SHA**, especialmente V5 Android y Galaxy Chat Phase 11; nunca asumir que el PASS de un SHA anterior aplica al siguiente.
 2. Abrir artifact `v5-p0-android-unpaired-avd-evidence` del HEAD; verificar 7 capturas, `p1-device-summary.json` y Android JUnit, además de los resultados de la comparación visual. El marcador turquesa es intencional, únicamente QA.
 3. Ejecutar o coordinar aceptación manual del propietario de los siete temas y estados sensibles (modal, teclado, carriles flotantes) antes de fusionar. Reservar P2 y la futura IA avanzada como upgrades independientes.
-4. Documentar pendientes en [issue #160](https://github.com/Berserky/Galaxia-de-girasoles/issues/160) y PR #167; **no declarar cerrado** sin evidencia de los gates pendientes.
+4. Revisar `build/p0-avd/p1-responsive-viewports/*.png` (cuatro anchos físicos con contenido QA sintético), y el JSON de resultados, generados solo si la nueva instrumentación aprueba. Registrar eventuales bugs de solapamiento en CSS y reejecutar QA tras corregir.
+5. Documentar pendientes en [issue #160](https://github.com/Berserky/Galaxia-de-girasoles/issues/160) y PR #167; **no declarar cerrado** sin evidencia de los gates pendientes.
 
 **Reproducción básica:** `node --test tests/visual-evolution-p1.test.mjs`, `npm test`; en GitHub, workflow `.github/workflows/visual-evolution-p0.yml` con AVD Android QA aislado. **Rollback:** revertir PR P1 antes de su merge, sin migraciones ni cambios en versión estable.
