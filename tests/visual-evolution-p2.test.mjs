@@ -213,3 +213,18 @@ test('P2E detailed GPS card refuses future/missing/stale/paused positions as liv
  assert.match(paused,/Ubicación pausada/);
  assert.doesNotMatch(paused,/Caminando|>18<small>km\/h/);
 });
+
+test('P2G Android screenshot gate checks real bottom pixels, not only DOM scrollY',()=>{
+ const android=readFileSync(resolve(ROOT,'android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyDeviceClosureTest.java'),'utf8');
+ assert.match(android,/android\.graphics\.Bitmap topFrame=instrumentation\.getUiAutomation\(\)\.takeScreenshot\(\)/);
+ assert.match(android,/awaitV5BottomFramePainted\(topFrame,targetCss\)/);
+ assert.match(android,/realDisplayChange/);
+ assert.match(android,/P2 bottom screenshot rejected: Android display never painted/);
+ assert.match(android,/changedPixelRatio/);
+ assert.match(android,/latest>=0\.15d/);
+ assert.match(android,/if\(\+\+consecutive>=2\)/);
+ assert.match(android,/topFrame\.recycle\(\)/);
+ assert.ok(android.indexOf('awaitV5BottomFramePainted(topFrame,targetCss)')<
+   android.indexOf('shell("screencap -p /sdcard/Download/V5-P2-bottom-"'),
+   'Screenshot must not be saved until real display evidence is visible');
+});
