@@ -1,0 +1,104 @@
+/*
+ * Visual Evolution 5.0 · P2A / Galaxy Welcome
+ * Layout-only presentation of existing state and actions.
+ * Scope: paired Android WebView home; no chat, GPS logic or backend changes.
+ */
+body:not(.chat-mode) #app .galaxy-welcome {display:grid;gap:clamp(18px,4vw,28px);padding-bottom:16px}
+body:not(.chat-mode) #app .galaxy-welcome > .section {margin:0}
+body:not(.chat-mode) #app .welcome-hero {
+ position:relative;isolation:isolate;min-height:0;overflow:hidden;
+ border:1px solid color-mix(in srgb,var(--v5-action) 30%,transparent);
+ padding:clamp(22px,6vw,32px);border-radius:var(--v5-radius-sheet);
+ display:grid;gap:clamp(20px,4vw,28px);
+ background:linear-gradient(130deg,var(--hero-a),var(--hero-b) 56%,var(--hero-c));
+ box-shadow:var(--v5-elevation-overlay);
+}
+body:not(.chat-mode) #app .welcome-hero::before {
+ content:"";position:absolute;width:215px;height:215px;right:-90px;top:-110px;
+ border:1px solid rgba(255,255,255,.24);border-radius:50%;
+ box-shadow:0 0 0 38px rgba(255,255,255,.045),0 0 0 81px rgba(255,255,255,.025);
+ pointer-events:none;z-index:-1;
+}
+body:not(.chat-mode) #app .welcome-hero-copy {position:relative;max-width:45ch}
+body:not(.chat-mode) #app .welcome-hero-copy h1 {
+ margin:5px 0 8px;font-size:clamp(25px,6.5vw,38px);
+ line-height:1.12;letter-spacing:-.045em;text-wrap:balance;
+}
+body:not(.chat-mode) #app .welcome-hero-copy > p:last-child {max-width:38ch;line-height:1.55}
+body:not(.chat-mode) #app .welcome-hero-stats {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+body:not(.chat-mode) #app .welcome-hero-stat {
+ display:flex;flex-direction:column;align-items:flex-start;justify-content:center;
+ min-width:0;min-height:76px;gap:5px;padding:13px clamp(9px,2.4vw,16px);
+ background:rgba(10,10,30,.19);border:1px solid rgba(255,255,255,.18);
+ border-radius:17px;color:inherit;text-align:left;backdrop-filter:blur(6px);
+}
+body:not(.chat-mode) #app .welcome-hero-stat b {font-size:clamp(19px,5vw,27px);line-height:1;font-variant-numeric:tabular-nums}
+body:not(.chat-mode) #app .welcome-hero-stat small {display:inline-flex;align-items:center;gap:3px;font-size:clamp(10px,2.8vw,12px);line-height:1.25}
+body:not(.chat-mode) #app .welcome-hero-stat small svg {width:13px;height:13px;flex:0 0 auto}
+body:not(.chat-mode) #app button.welcome-stat-link {cursor:pointer;transition:background-color var(--v5-motion-standard),transform var(--v5-motion-fast)}
+body:not(.chat-mode) #app button.welcome-stat-link:active {transform:scale(.98)}
+body:not(.chat-mode) #app button.welcome-stat-link:focus-visible {outline:3px solid var(--v5-on-action);outline-offset:2px}
+body:not(.chat-mode) #app .welcome-feature-grid {display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+body:not(.chat-mode) #app .welcome-feature-grid > .section {margin:0;min-width:0}
+body:not(.chat-mode) #app .welcome-feature-grid .card {height:100%;min-width:0}
+body:not(.chat-mode) #app .welcome-feature-grid .card > span:nth-child(2) {min-width:0}
+body:not(.chat-mode) #app .welcome-feature-grid .card h3 {overflow-wrap:anywhere}
+body:not(.chat-mode) #app .welcome-connection {
+ display:grid;gap:12px;padding:clamp(14px,4vw,22px);
+ border:1px solid var(--border);border-radius:26px;
+ background:color-mix(in srgb,var(--surface2) 23%,var(--surface));
+}
+body:not(.chat-mode) #app .welcome-block-head {display:grid;gap:3px}
+body:not(.chat-mode) #app .welcome-block-head h2 {margin:0;font-size:clamp(20px,5vw,25px)}
+body:not(.chat-mode) #app .welcome-block-head p:last-child {margin:0;color:var(--muted);line-height:1.5}
+body:not(.chat-mode) #app .welcome-connection > .section {margin:0;min-width:0}
+body:not(.chat-mode) #app .welcome-connection .now-section {display:grid;gap:12px}
+body:not(.chat-mode) #app .welcome-connection .now-section .section-head {margin:0}
+body:not(.chat-mode) #app .welcome-connection .now-grid {gap:10px}
+body:not(.chat-mode) #app .welcome-presence-details {
+ border:1px solid var(--border);border-radius:18px;background:var(--surface);overflow:hidden;
+}
+body:not(.chat-mode) #app .welcome-presence-details summary {
+ list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;
+ min-height:48px;padding:10px 14px;font-size:13px;font-weight:700;
+}
+body:not(.chat-mode) #app .welcome-presence-details summary::-webkit-details-marker {display:none}
+body:not(.chat-mode) #app .welcome-presence-details summary > svg {width:19px;height:19px;color:var(--v5-action)}
+body:not(.chat-mode) #app .welcome-presence-details summary > span {margin-left:auto}
+body:not(.chat-mode) #app .welcome-presence-details[open] summary > span {transform:rotate(180deg)}
+body:not(.chat-mode) #app .welcome-presence-details > .stack {padding:0 10px 10px}
+body:not(.chat-mode) #app .welcome-rituals {display:grid;gap:12px}
+body:not(.chat-mode) #app .welcome-rituals > .section {margin:0;min-width:0}
+body:not(.chat-mode) #app .welcome-mood-section .mood-grid {margin-top:12px}
+body:not(.chat-mode) #app .welcome-mood-section .mood[aria-pressed="true"] {outline:2px solid var(--v5-action);outline-offset:1px}
+body:not(.chat-mode) #app .welcome-partner-mood {margin-top:10px;display:flex;align-items:center;gap:10px}
+body:not(.chat-mode) #app .date-question-card textarea[name="answer"] {
+ box-sizing:border-box;min-height:90px;max-height:240px;field-sizing:content;resize:vertical;
+}
+body:not(.chat-mode) #app .welcome-shortcuts {margin:0}
+body:not(.chat-mode) #app .welcome-bento {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+body:not(.chat-mode) #app .welcome-bento .action-card {
+ display:grid;align-content:start;justify-items:start;min-height:122px;gap:9px;
+ padding:clamp(13px,3.5vw,20px);text-align:left;
+}
+body:not(.chat-mode) #app .welcome-bento .action-card b {font-size:clamp(13px,3.6vw,16px)}
+body:not(.chat-mode) #app .welcome-bento .action-card small {line-height:1.45;max-width:26ch}
+body:not(.chat-mode) #app .welcome-bento .action-card:last-child {grid-column:span 2;min-height:100px}
+body:not(.chat-mode) #app .welcome-memories {display:grid;gap:12px}
+body:not(.chat-mode) #app .welcome-memories > .section {margin:0}
+@media(min-width:640px) {
+ body:not(.chat-mode) #app .welcome-feature-grid {grid-template-columns:repeat(2,minmax(0,1fr))}
+ body:not(.chat-mode) #app .welcome-feature-grid > .section:last-child {grid-column:span 2}
+ body:not(.chat-mode) #app .welcome-bento {grid-template-columns:repeat(3,minmax(0,1fr))}
+ body:not(.chat-mode) #app .welcome-bento .action-card:last-child {grid-column:span 2}
+}
+@media(max-width:360px) {
+ body:not(.chat-mode) #app .welcome-hero {padding:20px 14px}
+ body:not(.chat-mode) #app .welcome-hero-stats {gap:5px}
+ body:not(.chat-mode) #app .welcome-hero-stat {padding:10px 7px}
+ body:not(.chat-mode) #app .welcome-connection {padding:13px}
+}
+@media(prefers-reduced-motion:reduce) {
+ body:not(.chat-mode) #app button.welcome-stat-link,
+ body:not(.chat-mode) #app .welcome-presence-details summary > span {transition:none;animation:none}
+}

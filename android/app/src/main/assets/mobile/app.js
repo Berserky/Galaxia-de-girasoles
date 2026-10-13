@@ -489,19 +489,35 @@ function renderTourOverlay(){
 
 function homeView(){
  const own=ownDaily(),partner=partnerDaily(),next=cloud.nextEvent,garden=cloud.bond?.garden||{days:0,stage:0};
- const locs=cloud.locations||[];
- return anniversaryInsightsBanner()+'<section class="hero"><p class="eyebrow">NUESTRO UNIVERSO</p><h1>'+esc(myName())+' & '+esc(partnerName())+'</h1><p>Un lugar para acompañarnos, guardar lo vivido y seguir construyendo lo que viene.</p><div class="hero-stats"><div class="hero-stat"><b>'+coupleDays()+'</b><small>días juntos</small></div><div class="hero-stat"><b>'+items('memory').length+'</b><small>recuerdos</small></div><div class="hero-stat"><b>'+garden.days+'</b><small>días del girasol</small></div></div></section>'+monthlySummaryTeaser()+todayHistoryTeaser()+coupleDistanceCard()+encounterStatsTeaser()+nowCard()+
- '<section class="section"><div class="section-head"><div><h2>¿Cómo estás hoy?</h2><p>Tu estado se comparte solo con tu persona.</p></div></div><div class="mood-grid">'+Object.entries(moods).map(([id,m])=>'<button class="mood '+(own.mood===id?'active':'')+'" data-action="mood" data-value="'+id+'"><span>'+ico(m[0])+'</span>'+m[1]+'</button>').join('')+'</div>'+(partner.mood?'<div class="card" style="margin-top:10px"><span class="badge">'+esc(partnerName())+'</span> <b>'+esc(moods[partner.mood]?.[1]||partner.mood)+'</b></div>':'')+'</section>'+
- dailyQuestionCard(own,partner)+
- '<section class="section"><div class="grid">'+
+ const locs=cloud.locations||[],started=!!cloud?.settings?.data?.startDate;
+ const daysUntil=next?.date?dateDistance(next.date):NaN;
+ const nextAlreadyFeatured=Number.isFinite(daysUntil)&&daysUntil>=0&&daysUntil<=14;
+ const nextCard=next&&!nextAlreadyFeatured?'<section class="section"><div class="card welcome-next-event"><p class="eyebrow">PRÓXIMA FECHA</p><h3>'+esc(next.title)+'</h3><p>'+esc(fmtDate(next.date))+'</p></div></section>':'';
+ return anniversaryInsightsBanner()+
+ '<main class="galaxy-welcome" aria-label="Inicio de Nuestra Galaxia">'+
+ '<section class="hero welcome-hero" aria-labelledby="welcomeTitle"><div class="welcome-hero-copy"><p class="eyebrow">NUESTRO UNIVERSO</p><h1 id="welcomeTitle">'+esc(myName())+' & '+esc(partnerName())+'</h1><p>Lo que vivimos, lo que sentimos y todo lo que todavía nos espera.</p></div>'+
+ '<div class="welcome-hero-stats" aria-label="Nuestra historia en cifras">'+
+ '<div class="welcome-hero-stat"><b>'+(started?coupleDays():'—')+'</b><small>'+(started?'días juntos':'Historia por comenzar')+'</small></div>'+
+ '<button type="button" class="welcome-hero-stat welcome-stat-link" data-view="memories" aria-label="Abrir nuestros recuerdos"><b>'+items('memory').length+'</b><small>recuerdos '+ico('arrow-up-right')+'</small></button>'+
+ '<button type="button" class="welcome-hero-stat welcome-stat-link" data-view="moments" aria-label="Abrir nuestros momentos"><b>'+Number(garden.days||0)+'</b><small>días del girasol '+ico('arrow-up-right')+'</small></button>'+
+ '</div></section>'+
+ '<div class="welcome-feature-grid" aria-label="Momentos destacados">'+monthlySummaryTeaser()+todayHistoryTeaser()+encounterStatsTeaser()+'</div>'+
+ '<section class="welcome-connection" aria-label="Conexión compartida"><div class="welcome-block-head"><p class="eyebrow">CERCA, ESTEMOS DONDE ESTEMOS</p><h2>Nuestra conexión</h2><p>Solo datos compartidos y el momento de su última actualización.</p></div>'+
+ coupleDistanceCard()+nowCard()+
+ (locs.length?'<details class="welcome-presence-details"><summary>'+ico('map-pin')+' Ver estado detallado de ubicación <span>'+ico('chevron-down')+'</span></summary><div class="stack">'+locs.map(personCard).join('')+'</div></details>':'')+
+ '</section>'+
+ '<div class="welcome-rituals">'+
+ '<section class="section welcome-mood-section"><div class="section-head"><div><h2>¿Cómo estás hoy?</h2><p>Tu estado se comparte solo con tu persona.</p></div></div><div class="mood-grid">'+Object.entries(moods).map(([id,m])=>'<button class="mood '+(own.mood===id?'active':'')+'" data-action="mood" data-value="'+id+'" aria-pressed="'+(own.mood===id?'true':'false')+'"><span>'+ico(m[0])+'</span>'+m[1]+'</button>').join('')+'</div>'+(partner.mood?'<div class="card welcome-partner-mood"><span class="badge">'+esc(partnerName())+'</span> <b>'+esc(moods[partner.mood]?.[1]||partner.mood)+'</b></div>':'')+'</section>'+
+ dailyQuestionCard(own,partner)+'</div>'+
+ '<section class="section welcome-shortcuts"><div class="section-head"><div><p class="eyebrow">HAGAMOS ALGO JUNTOS</p><h2>Explorar y crear</h2><p>Un acceso directo a lo que importa hoy.</p></div></div><div class="welcome-bento">'+
  actionCard('map-pin','Nuestro mapa','Ver dónde estamos y nuestros recorridos','map')+
  actionCard('heart','Enviar un gesto','Abrazo, beso o “te extraño”','moments')+
  actionCard('images','Guardar recuerdo','Algo que no queremos olvidar','add-memory')+
  actionCard('circle-check-big','Nuevo plan','Algo para hacer juntos','add-plan')+
  actionCard('target','Nuestros objetivos','Metas, pasos y ahorro manual','goals-open')+
- '</div></section>'+livingMomentCard()+
- (next?'<section class="section"><div class="card"><p class="eyebrow">PRÓXIMA FECHA</p><h3>'+esc(next.title)+'</h3><p>'+esc(fmtDate(next.date))+'</p></div></section>':'')+
- '<section class="section"><div class="section-head"><div><h2>Cerca, aunque estemos lejos</h2><p>Estado actual del mapa compartido.</p></div></div><div class="stack">'+locs.map(personCard).join('')+'</div></section>';
+ '</div></section>'+
+ '<div class="welcome-memories">'+livingMomentCard()+nextCard+'</div>'+
+ '</main>';
 }
 function actionCard(iconName,title,copy,action){return '<button class="action-card" data-action="'+action+'"><span class="icon">'+ico(iconName)+'</span><b>'+esc(title)+'</b><small>'+esc(copy)+'</small></button>';}
 function insightsTeaser(){
@@ -903,7 +919,7 @@ async function openUniversalSearchResult(btn){
 
 function dailyAnswerMarkup(own,partner){
  let html='';
- if(!own.answer)html='<form id="dailyForm" class="stack" style="margin-top:14px"><textarea name="answer" placeholder="Tu respuesta…" required></textarea><button class="btn" type="submit">Guardar respuesta</button></form>';
+ if(!own.answer)html='<form id="dailyForm" class="stack" style="margin-top:14px"><textarea name="answer" rows="2" maxlength="6000" placeholder="Tu respuesta…" required></textarea><button class="btn" type="submit">Guardar respuesta</button></form>';
  else html='<div class="card" style="margin-top:12px;background:var(--surface2)"><span class="badge">'+esc(myName())+'</span><p style="margin-top:7px">'+esc(own.answer)+'</p></div>';
  if(partner.answer)html+='<div class="card partner-answer" style="margin-top:10px"><span class="badge">'+esc(partnerName())+'</span><p style="margin-top:7px">'+esc(partner.answer)+'</p></div>';
  else if(own.answer)html+='<p class="muted" style="font-size:12px;margin-top:10px">La respuesta de '+esc(partnerName())+' aparecerá cuando ambos hayan respondido.</p>';
@@ -912,7 +928,7 @@ function dailyAnswerMarkup(own,partner){
 function dailyQuestionCard(own,partner){
  const q=dateContext?.question||{},both=!!own?.answer&&!!partner?.answer;
  const deckLabels={funny:'Divertidas',memories:'Recuerdos',future:'Futuro',intimate:'Íntimas y emocionales',absurd:'Absurdas',travel:'Viajes','would-you-rather':'¿Qué prefieres?'};
- return '<section class="section"><div class="card date-question-card"><div class="row between"><div><p class="eyebrow">PREGUNTA DEL DÍA 2.0</p><small class="muted">'+esc(deckLabels[q.deck]||'Una pregunta para hoy')+'</small></div><button class="icon-btn '+(q.favorite?'active':'')+'" data-action="date-question-favorite" aria-label="'+(q.favorite?'Quitar de favoritas':'Marcar como favorita')+'">'+ico('star')+'</button></div><h3>'+esc(dailyQuestion())+'</h3>'+dailyAnswerMarkup(own,partner)+'<div class="row wrap date-question-actions"><button class="btn small secondary" data-action="galaxy-share" data-card-type="DAILY_QUESTION" data-kind="daily_question" data-id="'+attr(cloud.today)+'" data-title="'+attr(dailyQuestion())+'">'+ico('send')+' Galaxy Chat</button><button class="btn small secondary" data-action="date-question-decks">'+ico('layers-3')+' Barajas</button><button class="btn small ghost" data-action="date-question-memory" '+(both?'':'disabled')+'>'+ico('bookmark-plus')+' '+(q.memoryId?'Ver recuerdo':'Guardar como recuerdo')+'</button></div>'+(both?'':'<p class="muted date-question-privacy">'+ico('lock')+' Las dos respuestas se unen a un recuerdo solo cuando ambos hayan contestado.</p>')+'</div></section>';
+ return '<section class="section"><div class="card date-question-card"><div class="row between"><div><p class="eyebrow">PREGUNTA DE HOY</p><small class="muted">'+esc(deckLabels[q.deck]||'Una pregunta para hoy')+'</small></div><button class="icon-btn '+(q.favorite?'active':'')+'" data-action="date-question-favorite" aria-label="'+(q.favorite?'Quitar de favoritas':'Marcar como favorita')+'">'+ico('star')+'</button></div><h3>'+esc(dailyQuestion())+'</h3>'+dailyAnswerMarkup(own,partner)+'<div class="row wrap date-question-actions"><button class="btn small secondary" data-action="galaxy-share" data-card-type="DAILY_QUESTION" data-kind="daily_question" data-id="'+attr(cloud.today)+'" data-title="'+attr(dailyQuestion())+'">'+ico('send')+' Galaxy Chat</button><button class="btn small secondary" data-action="date-question-decks">'+ico('layers-3')+' Barajas</button><button class="btn small ghost" data-action="date-question-memory" '+(both?'':'disabled')+'>'+ico('bookmark-plus')+' '+(q.memoryId?'Ver recuerdo':'Guardar como recuerdo')+'</button></div>'+(both?'':'<p class="muted date-question-privacy">'+ico('lock')+' Las dos respuestas se unen a un recuerdo solo cuando ambos hayan contestado.</p>')+'</div></section>';
 }
 
 function personCard(l){
