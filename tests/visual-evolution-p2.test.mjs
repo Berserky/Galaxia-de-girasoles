@@ -40,7 +40,7 @@ test('P2A retains location privacy and state controls without fake live telemetr
 });
 
 test('P2A preserves mood, daily answer, history, encounters and calendar routing',()=>{
- for(const part of ['monthlySummaryTeaser()','todayHistoryTeaser()','encounterStatsTeaser()','dailyQuestionCard(own,partner)','livingMomentCard()','data-action="mood"'])
+ for(const part of ['monthlySummaryTeaser()','todayHistoryTeaser()','encounterStatsTeaser()','dailyQuestionCard(own,partner)',"livingMomentCard(nextAlreadyFeatured?'PRÓXIMA FECHA':'')",'data-action="mood"'])
   assert.ok(home.includes(part),'Missing existing Home element '+part);
  assert.match(home,/aria-pressed/);
  assert.match(app,/data-action="date-question-memory"/);
@@ -50,4 +50,13 @@ test('P2A preserves mood, daily answer, history, encounters and calendar routing
  assert.match(app,/name="answer" rows="2"/);
  assert.match(home,/nextAlreadyFeatured/);
  assert.match(home,/!nextAlreadyFeatured/);
+});
+
+test('P2A upcoming event has a visible next-date label in exactly one featured card',()=>{
+ assert.match(home,/nextCard=next&&!nextAlreadyFeatured/);
+ assert.match(home,/livingMomentCard\(nextAlreadyFeatured\?'PRÓXIMA FECHA':'\'\)/);
+ assert.match(app,/function livingMomentCard\(eyebrowLabel=''\)/);
+ assert.match(app,/esc\(eyebrowLabel\|\|m\.label\)/);
+ // The original native device regression requires visible text, not just an aria label.
+ assert.match(home,/PRÓXIMA FECHA/);
 });
