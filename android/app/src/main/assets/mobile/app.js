@@ -206,7 +206,8 @@ function nowPersonCard(person,isOwn){
  const loc=(cloud.locations||[]).find(l=>String(l.person)===String(person))||{},daily=todayRows().find(r=>String(r.person)===String(person))||{};
  const p=normalizedPresence(String(person)),name=names()[Number(person)]||(isOwn?'Yo':'Mi persona');
  const mood=daily.mood?(moods[daily.mood]?.[1]||daily.mood):'Sin estado';
- const fresh=locationFreshState(loc),age=locationAgeMs(loc);
+ const locationTimestamp=Date.parse(loc.updated_at||'');
+ const fresh=loc.latitude!=null&&loc.longitude!=null&&Number.isFinite(locationTimestamp)&&locationTimestamp<=Date.now()+60_000&&locationFreshState(loc),age=locationAgeMs(loc);
  const movement=!loc.sharing?'Ubicación pausada':fresh?transportLabel(loc):'Ubicación sin actualizar';
  const ageLabel=!loc.sharing?'':fresh?' · '+distanceAgeLabel(loc.updated_at):Number.isFinite(age)?' · hace '+ageDurationLabel(age):' · sin lectura reciente';
  const battery=isOwn?(native.battery==null?NaN:Number(native.battery)):(p.shareBattery===true&&p.battery!=null?Number(p.battery):NaN);
