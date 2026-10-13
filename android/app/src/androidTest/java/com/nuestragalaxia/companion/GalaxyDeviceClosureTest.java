@@ -138,6 +138,14 @@ public class GalaxyDeviceClosureTest {
         assertEquals("true", js("!!document.querySelector('link[href=\"./celestial-shell.css\"]')"
             + " && !!window.GalaxyCelestialShell && document.querySelectorAll('#bottomNav .nav-btn').length===6"));
 
+        // P2 Welcome must be backed by REAL paired QA state and keep all entry points.
+        assertEquals("P2 Welcome not loaded from Android APK", "true",
+            js("!!document.querySelector('link[href=\\\"./galaxy-welcome.css\\\"]')"
+              + " && !!document.querySelector('.galaxy-welcome .welcome-hero')"
+              + " && document.querySelectorAll('.welcome-bento .action-card').length===5"
+              + " && !!document.querySelector('.welcome-rituals')"
+              + " && !!document.querySelector('.welcome-connection')"));
+
         // QA-only proof-of-paint marker, not a product UI element. A previous
         // Android run showed a stale pairing screen although the in-process
         // WebView navigation had finished loading. Verify actual display pixels
@@ -280,9 +288,18 @@ public class GalaxyDeviceClosureTest {
                     + ".every(el=>{const r=el.getBoundingClientRect();return r.left>=-1&&r.right<=innerWidth+1});"
                     + "const headerTouch=hButtons.every(el=>el.getBoundingClientRect().width>=44);"
                     + "const avatarHidden=getComputedStyle(avatar).display==='none';"
+                    + "const welcome=document.querySelector('.galaxy-welcome'),"
+                    + "hero=welcome?.querySelector('.welcome-hero'),"
+                    + "cards=[...document.querySelectorAll('.welcome-bento .action-card')];"
+                    + "const heroRect=hero?.getBoundingClientRect();"
+                    + "const heroFits=!!heroRect&&heroRect.left>=-1&&heroRect.right<=innerWidth+1;"
+                    + "const bentoFits=cards.length===5&&cards.every(el=>{"
+                    + "const r=el.getBoundingClientRect();return r.left>=-1&&r.right<=innerWidth+1});"
+                    + "const noHorizontalOverflow=document.documentElement.scrollWidth<=innerWidth+2;"
                     + "add.remove();player.className=original;"
                     + "return {cssWidth:innerWidth,navCount:heights.length,minTouch:Math.min(...heights),"
-                    + "noOverlap,withinScreen,headerFits,headerTouch,avatarHidden}})())",20);
+                    + "noOverlap,withinScreen,headerFits,headerTouch,avatarHidden,"
+                    + "heroFits,bentoFits,noHorizontalOverflow}})())",20);
                 assertTrue("Responsive metrics are not JSON at CSS "+targetCss+": "+measured,
                     measured.startsWith("{"));
                 JSONObject row=new JSONObject(measured);
@@ -300,8 +317,35 @@ public class GalaxyDeviceClosureTest {
                     row.getBoolean("headerTouch"));
                 assertTrue("Decorative avatar must not crowd narrow header at "+targetCss+": "+row,
                     row.getBoolean("avatarHidden"));
-                responsive.put(row.put("requestedCssWidth",targetCss));
+                assertTrue("P2 hero clipped horizontally at "+targetCss+": "+row,
+                    row.getBoolean("heroFits"));
+                assertTrue("P2 5-action bento clipped or missing at "+targetCss+": "+row,
+                    row.getBoolean("bentoFits"));
+                assertTrue("P2 page has horizontal overflow at "+targetCss+": "+row,
+                    row.getBoolean("noHorizontalOverflow"));
                 shell("screencap -p /sdcard/Download/V5-P1-viewport-"+targetCss+".png");
+                // A top-of-screen capture cannot prove the last card is reachable.
+                // Scroll the REAL Android WebView to the document end, verify its
+                // last interactive card sits fully above the fixed bottom nav,
+                // and archive a bottom-screen screenshot for human review.
+                runJs("window.scrollTo(0,document.documentElement.scrollHeight)");
+                awaitJs("window.scrollY>100");
+                String bottom=jsWithDeadline("JSON.stringify((()=>{"
+                    + "const last=document.querySelector('.welcome-memories .living-moment'),"
+                    + "nav=document.getElementById('bottomNav'),r=last?.getBoundingClientRect(),"
+                    + "n=nav.getBoundingClientRect();"
+                    + "return {atEnd:window.scrollY>=document.documentElement.scrollHeight-innerHeight-3,"
+                    + "lastVisible:!!r&&r.bottom<=n.top-4&&r.top>=-innerHeight,"
+                    + "scrollY:window.scrollY}})())",20);
+                JSONObject bottomState=new JSONObject(bottom);
+                assertTrue("P2 did not scroll to document end at "+targetCss+": "+bottom,
+                    bottomState.getBoolean("atEnd"));
+                assertTrue("P2 final card hidden by fixed navbar at "+targetCss+": "+bottom,
+                    bottomState.getBoolean("lastVisible"));
+                responsive.put(row.put("requestedCssWidth",targetCss)
+                    .put("bottomReached",true));
+                shell("screencap -p /sdcard/Download/V5-P2-bottom-"+targetCss+".png");
+                runJs("window.scrollTo(0,0)");
             }
         } finally {
             shell("wm size reset");

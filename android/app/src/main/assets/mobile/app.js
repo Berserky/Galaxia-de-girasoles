@@ -919,7 +919,7 @@ async function openUniversalSearchResult(btn){
 
 function dailyAnswerMarkup(own,partner){
  let html='';
- if(!own.answer)html='<form id="dailyForm" class="stack" style="margin-top:14px"><textarea name="answer" rows="2" maxlength="6000" placeholder="Tu respuesta…" required></textarea><button class="btn" type="submit">Guardar respuesta</button></form>';
+ if(!own.answer)html='<form id="dailyForm" class="stack" style="margin-top:14px"><textarea name="answer" rows="2" placeholder="Tu respuesta…" required></textarea><button class="btn" type="submit">Guardar respuesta</button></form>';
  else html='<div class="card" style="margin-top:12px;background:var(--surface2)"><span class="badge">'+esc(myName())+'</span><p style="margin-top:7px">'+esc(own.answer)+'</p></div>';
  if(partner.answer)html+='<div class="card partner-answer" style="margin-top:10px"><span class="badge">'+esc(partnerName())+'</span><p style="margin-top:7px">'+esc(partner.answer)+'</p></div>';
  else if(own.answer)html+='<p class="muted" style="font-size:12px;margin-top:10px">La respuesta de '+esc(partnerName())+' aparecerá cuando ambos hayan respondido.</p>';

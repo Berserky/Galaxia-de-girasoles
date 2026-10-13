@@ -36,3 +36,9 @@
 **Cuidado:** el Home usa datos existentes; privacidad GPS depende de permisos previos y frescura del motor, no se redefine aquí. El nuevo <details> solo organiza una vista ya expuesta para usuarios vinculados. No se agregan dependencias, migrations ni cambios de versión.
 
 **Rollback:** revertir PR P2, sin esquema de datos ni pérdida de contenido.
+
+## QA incremental P2-A · Android scroll/geometry (sin PASS hasta CI)
+
+- Se añadió verificación real Android por cada ancho CSS 320/360/393/412: hero dentro del viewport, 5 acciones bento, ausencia de desbordamiento horizontal, desplazamiento completo y última tarjeta **por encima de la barra fija**.
+- Evidencias nuevas `build/p0-avd/p2-bottom-viewports/{320,360,393,412}.png` exportadas por script; JUnit y recibo JSON deben verificar 4/4. Antes de terminar CI: **PENDIENTE**.
+- Se eliminó un límite artificial de caracteres que no pertenecía al contrato original de respuesta de la pregunta diaria.

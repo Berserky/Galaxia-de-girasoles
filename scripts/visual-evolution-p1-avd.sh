@@ -7,7 +7,7 @@ bash scripts/visual-evolution-p0-avd.sh
 
 # Instrumentation is separated from the unpaired baseline. Failures retain
 # any screenshots already produced for diagnosis; no production token is loaded.
-mkdir -p build/p0-avd/p1-synthetic-themes build/p0-avd/p1-responsive-viewports
+mkdir -p build/p0-avd/p1-synthetic-themes build/p0-avd/p1-responsive-viewports build/p0-avd/p2-bottom-viewports
 # Preserve partial theme captures even if instrumentation fails later.
 # This runs only against the isolated QA emulator; screenshots are synthetic.
 pull_theme_evidence() {
@@ -16,6 +16,7 @@ pull_theme_evidence() {
   done
   for css in 320 360 393 412; do
     adb pull "/sdcard/Download/V5-P1-viewport-${css}.png" "build/p0-avd/p1-responsive-viewports/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P2-bottom-${css}.png" "build/p0-avd/p2-bottom-viewports/${css}.png" >/dev/null 2>&1 || true
   done
 }
 trap pull_theme_evidence EXIT
@@ -53,6 +54,14 @@ for css,path in zip(viewports,responsive):
     dimensions[css]=(width,height)
 assert all(dimensions[a][0]<dimensions[b][0] for a,b in zip(viewports,viewports[1:])), f'Viewport capture widths not increasing: {dimensions}'
 print(f'P1 Android physical viewport matrix PASS: {dimensions}')
+bottom=[Path('build/p0-avd/p2-bottom-viewports')/f'{w}.png' for w in viewports]
+assert all(p.is_file() for p in bottom), f'Missing P2 scroll-bottom screenshot: {[str(p) for p in bottom if not p.is_file()]}'
+for css,path in zip(viewports,bottom):
+    blob=path.read_bytes()
+    assert blob.startswith(b'\\x89PNG\\r\\n\\x1a\\n'), f'Invalid P2 scroll-bottom PNG: {path}'
+    width,height=struct.unpack('>II',blob[16:24])
+    assert (width,height)==dimensions[css], f'P2 bottom screenshot dimension mismatch at {css}: {width}x{height}'
+print('P2 Welcome Android bottom-scroll matrix PASS: 4/4; final card above navbar.')
 
 # Keep a machine-readable success receipt based on the actual Android JUnit
 # report (System.out from instrumented tests is not forwarded by Gradle).
@@ -70,6 +79,7 @@ receipt={'status':'VERIFIED_SYNTHETIC_QA','android_junit_tests':tests,
          'seven_themes':sorted(p.stem for p in paths),
          'unique_screenshots':unique,
          'responsive_css_widths':viewports,
+         'p2_bottom_scroll_screenshots':len(bottom),
          'responsive_png_dimensions':{str(k):list(v) for k,v in dimensions.items()},
          'verification':'display-pixel-marker-plus-instrumented-css-layout-focus'}
 Path('build/p0-avd/p1-device-summary.json').write_text(
