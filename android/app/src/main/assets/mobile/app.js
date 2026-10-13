@@ -937,10 +937,15 @@ function dailyQuestionCard(own,partner){
 }
 
 function personCard(l){
- const name=names()[Number(l.person)]||'Nosotros',sharing=!!l.sharing,fresh=locationFreshState(l),motion=transportLabel(l),kmh=Math.max(0,Number(l.speed||0)*3.6),mine=String(l.person)===String(cloud.person);
- const state=!sharing?'Ubicación pausada':fresh?(esc(motion)+(l.status?' · '+esc(l.status):'')):'Sin actualizar · hace '+ageDurationLabel(locationAgeMs(l));
+ const name=names()[Number(l.person)]||'Nosotros',sharing=!!l.sharing,mine=String(l.person)===String(cloud.person);
+ const timestamp=Date.parse(l.updated_at||'');
+ const hasFix=l.latitude!=null&&l.longitude!=null&&Number.isFinite(timestamp)&&timestamp<=Date.now()+60_000;
+ const fresh=hasFix&&locationFreshState(l);
+ const speed=l.speed==null?NaN:Number(l.speed);
+ const kmh=fresh&&Number.isFinite(speed)&&speed>=0?speed*3.6:null;
+ const state=!sharing?'Ubicación pausada':!hasFix?(timestamp>Date.now()+60_000?'Hora del dispositivo por verificar':'Sin lectura GPS reciente'):fresh?(esc(transportLabel(l))+(l.status?' · '+esc(l.status):'')):'Sin actualizar · hace '+ageDurationLabel(locationAgeMs(l));
  const statusAction=l.status?'<button class="btn small secondary" data-action="'+(mine?'galaxy-share':'status-chat-reply')+'" '+(mine?'data-card-type="STATUS" data-kind="status" ':'')+'data-id="'+attr(l.person)+'" data-title="'+attr(l.status)+'">'+ico(mine?'send':'message-circle-reply')+' '+(mine?'Compartir estado':'Responder en Galaxy Chat')+'</button>':'';
- return '<div class="card person-card '+(sharing&&!fresh?'stale':'')+'"><div class="bubble">'+esc(name.slice(0,1))+'</div><div><b><span class="status-dot '+(fresh?'live':sharing?'stale':'')+'"></span>'+esc(name)+'</b><p>'+state+'</p>'+statusAction+'</div><div class="speed">'+(fresh?kmh.toFixed(kmh<10?1:0):'—')+'<small>km/h</small></div></div>';
+ return '<div class="card person-card '+(sharing&&!fresh?'stale':'')+'"><div class="bubble">'+esc(name.slice(0,1))+'</div><div><b><span class="status-dot '+(fresh?'live':sharing?'stale':'')+'"></span>'+esc(name)+'</b><p>'+state+'</p>'+statusAction+'</div><div class="speed"'+(kmh===null?' aria-label="Velocidad sin lectura"':'')+'>'+(kmh===null?'—':kmh.toFixed(kmh<10?1:0))+'<small>km/h</small></div></div>';
 }
 function transportLabel(l){
  if(!l.sharing)return'Ubicación pausada';
