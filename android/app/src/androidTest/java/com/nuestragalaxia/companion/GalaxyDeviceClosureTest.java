@@ -1138,7 +1138,15 @@ public class GalaxyDeviceClosureTest {
      */
     private void cancelPickerAndVerifyForeground(UiDevice device, String appPkg, String pickerPkg) throws Exception {
         for (int attempt = 1; attempt <= 3; attempt++) {
-            assertTrue("Android did not handle Back while closing document picker", device.pressBack());
+            // UiAutomator's boolean reports dispatch acknowledgement, not a
+            // verified Activity transition. On headless AVDs it may return false
+            // although the input can be delivered via Android's own input shell.
+            // Require the actual resumed app + visible WebView below either way.
+            boolean uiBackAcknowledged = device.pressBack();
+            if (!uiBackAcknowledged) {
+                shell("input keyevent KEYCODE_BACK");
+                System.out.println("GALAXY_FILE_PICKER_BACK_FALLBACK=android_keyevent;attempt:" + attempt);
+            }
             long until = SystemClock.elapsedRealtime() + 5_000;
             while (SystemClock.elapsedRealtime() < until) {
                 if (isResumedPackage(appPkg)
