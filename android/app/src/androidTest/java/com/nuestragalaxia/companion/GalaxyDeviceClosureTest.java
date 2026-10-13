@@ -138,6 +138,21 @@ public class GalaxyDeviceClosureTest {
         assertEquals("true", js("!!document.querySelector('link[href=\"./celestial-shell.css\"]')"
             + " && !!window.GalaxyCelestialShell && document.querySelectorAll('#bottomNav .nav-btn').length===6"));
 
+        // QA-only proof-of-paint marker, not a product UI element. A previous
+        // Android run showed a stale pairing screen although the in-process
+        // WebView navigation had finished loading. Verify actual display pixels
+        // before accepting any of the seven theme screenshots.
+        runJs("document.querySelector('[data-view=\\\"home\\\"]')?.click()");
+        awaitJs("document.querySelector('#bottomNav .nav-btn.active')?.dataset.view==='home'"
+            + " && getComputedStyle(document.getElementById('bottomNav')).display!=='none'");
+        runJs("const marker=document.createElement('div');marker.id='v5-qa-paint-marker';"
+            + "marker.setAttribute('aria-hidden','true');"
+            + "marker.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;'+"
+            + "'background:#07e1f7;z-index:2147483647;pointer-events:none';"
+            + "document.body.appendChild(marker)");
+        awaitJs("!!document.getElementById('v5-qa-paint-marker')");
+        awaitV5QaPainted("before-first-theme");
+
         // Run one cheap WebView callback per theme. The old one-shot call
         // applied all seven themes and computed their luminance in one
         // evaluateJavascript invocation; the emulator's 5-second JS callback
@@ -163,11 +178,14 @@ public class GalaxyDeviceClosureTest {
                 contrast >= 4.5d);
             samples.put(new JSONObject().put("id",theme)
                 .put("active",colors.getString("active")).put("contrast",contrast));
-            // Capture ONLY this hermetic QA persona, never a private paired user.
-            SystemClock.sleep(450);
+            // Check the REAL display, not just JS state: no pairing overlay or
+            // stale screen may pass as a themed home screenshot.
+            awaitJs("document.documentElement.dataset.theme==='" + theme + "'"
+                + " && document.querySelector('#bottomNav .nav-btn.active')?.dataset.view==='home'");
+            awaitV5QaPainted(theme);
             shell("screencap -p /sdcard/Download/V5-P1-synthetic-" + theme + ".png");
         }
-        runJs("GalaxyTheme.applyTheme('auto')");
+        runJs("document.getElementById('v5-qa-paint-marker')?.remove();GalaxyTheme.applyTheme('auto')");
         assertEquals("true", js("document.documentElement.dataset.themeChoice==='auto'"));
         JSONObject themes = new JSONObject().put("palettes",samples).put("auto",true);
 
@@ -1121,6 +1139,48 @@ public class GalaxyDeviceClosureTest {
             System.out.println("GALAXY_WEBVIEW_NATIVE_KEYEVENT_INPUT="+value.length());
         }
         awaitJs(expected);
+    }
+
+    /**
+     * Display-level QA gate: the fixed cyan 64x8 CSS-pixel mark is inserted only
+     * by instrumentation. A rendered WebView behind a pairing screen, system
+     * dialog or stale activity has no visible mark, and must NOT produce a PASS.
+     * No visual OCR or user data is required. The mark is removed after capture.
+     */
+    private void awaitV5QaPainted(String theme) {
+        long deadline=SystemClock.elapsedRealtime()+15_000;
+        int consecutive=0;
+        while (SystemClock.elapsedRealtime()<deadline) {
+            android.graphics.Bitmap shot=null;
+            try {
+                shot=instrumentation.getUiAutomation().takeScreenshot();
+                int matched=0;
+                if(shot!=null){
+                    int maxX=Math.min(shot.getWidth(),260);
+                    int maxY=Math.min(shot.getHeight(),260);
+                    for(int y=20;y<maxY;y+=4){
+                        for(int x=4;x<maxX;x+=4){
+                            int pixel=shot.getPixel(x,y);
+                            if(Math.abs(android.graphics.Color.red(pixel)-7)<=2
+                                && Math.abs(android.graphics.Color.green(pixel)-225)<=2
+                                && Math.abs(android.graphics.Color.blue(pixel)-247)<=2){
+                                matched++;
+                            }
+                        }
+                    }
+                }
+                if(matched>=20){
+                    consecutive++;
+                    if(consecutive>=2){
+                        System.out.println("V5_P1_ANDROID_VISIBLE_FRAME="+theme+":true");
+                        return;
+                    }
+                }else consecutive=0;
+            } catch(RuntimeException ignored) { consecutive=0; }
+            finally {if(shot!=null)shot.recycle();}
+            SystemClock.sleep(200);
+        }
+        throw new AssertionError("V5 P1 screenshot rejected: real Android display has no QA home paint marker for "+theme);
     }
 
     // WCAG contrast of computed RGB colors, calculated on Android's Java side
