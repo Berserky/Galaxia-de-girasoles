@@ -1031,14 +1031,21 @@ public class GalaxyDeviceClosureTest {
         // let QA press Back too early, after which DocumentsUI opened later and
         // hid MainActivity. Only the fully resolved picker is acceptable.
         try {
-            awaitCondition(() -> documentsPackage.equals(device.getCurrentPackageName()),
-                UI_TIMEOUT_MS);
+            // UiDevice's accessibility-root package can remain "android"
+            // while ActivityTaskManager has already resumed DocumentsUI.
+            // Do not accept that transient root alone: require the resolved
+            // handler through accessibility OR Android's resumed activity.
+            awaitCondition(() -> documentsPackage.equals(device.getCurrentPackageName())
+                || isResumedPackage(documentsPackage), UI_TIMEOUT_MS);
             String pickerForeground = device.getCurrentPackageName();
-            assertEquals("OPEN_DOCUMENT did not reach resolved picker",
-                documentsPackage, pickerForeground);
+            boolean actualPickerResumed = isResumedPackage(documentsPackage);
+            assertTrue("OPEN_DOCUMENT did not reach resolved picker: a11y="
+                    + pickerForeground + ", resolved=" + documentsComponent,
+                documentsPackage.equals(pickerForeground) || actualPickerResumed);
             System.out.println("GALAXY_FILE_PICKER=" + new JSONObject()
                 .put("resolvedComponent", documentsComponent)
-                .put("foregroundPackage", pickerForeground));
+                .put("foregroundPackage", pickerForeground)
+                .put("resumedHandler", actualPickerResumed));
             // Closing a ready picker is the actual cancel behavior under test.
             device.pressBack();
             awaitCondition(() -> pkg.equals(device.getCurrentPackageName()), UI_TIMEOUT_MS);
@@ -1074,6 +1081,13 @@ public class GalaxyDeviceClosureTest {
         SystemClock.sleep(700);
         scenario.onActivity(a -> a.stopVoiceRecording("qa-mic-stop"));
         awaitJs("!!document.querySelector('#app')");
+    }
+
+    /** Match the ACTUAL foreground activity; task history alone is insufficient. */
+    private boolean isResumedPackage(String expectedPackage) {
+        if (expectedPackage == null || expectedPackage.isBlank()) return false;
+        String resumed = shell("dumpsys activity activities | grep -m1 -E 'mResumedActivity|topResumedActivity'");
+        return resumed.contains(expectedPackage + "/");
     }
 
     private boolean isPhysicalDevice() {
