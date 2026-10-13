@@ -75,3 +75,12 @@
 - AVD no sustituye pruebas físicas de GPS y privacidad. Revisión visual 7 temas, 4 anchuras, keyboard/FAB/scroll y aceptación del propietario siguen pendientes de cierre final.
 
 **Protecciones:** PR #168 continúa DRAFT, `desarrollo` no se modifica por P2-B; `qa` y `prod` siguen en 4.1.2.
+
+## P2-B · Selector emocional responsivo y accesibilidad
+
+- Hallazgo VE-018: la cuadrícula original de cinco columnas con texto de 11px comprimía «Sin energía» y estados similares.
+- P2 adapta el selector a **tres columnas por debajo de 540px**, cinco columnas a partir de 540px, control con altura mínima de 56px, fuente de 13px y foco visible.
+- Preserva los cinco `data-action="mood"`, las claves, `aria-pressed`, los eventos existentes y el motor de guardado; solo CSS visual.
+- Prueba Node de contrato añadida al archivo `tests/visual-evolution-p2.test.mjs` para prevenir regresar al selector comprimido.
+- **Pendiente**: verificar en artefactos Android de los cuatro anchos y siete temas, fuente ampliada, teclado y respuesta de guardado/error; no cerrar VE-018 aún.
+- El último SHA con cambios de selector deberá revalidar los 15 workflows; los PASS anteriores no se transfieren.
