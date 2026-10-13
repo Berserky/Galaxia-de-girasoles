@@ -1084,7 +1084,7 @@ public class GalaxyDeviceClosureTest {
     }
 
     /** Match the ACTUAL foreground activity; task history alone is insufficient. */
-    private boolean isResumedPackage(String expectedPackage) {
+    private boolean isResumedPackage(String expectedPackage) throws Exception {
         if (expectedPackage == null || expectedPackage.isBlank()) return false;
         String resumed = shell("dumpsys activity activities | grep -m1 -E 'mResumedActivity|topResumedActivity'");
         return resumed.contains(expectedPackage + "/");
