@@ -1050,9 +1050,10 @@ public class GalaxyDeviceClosureTest {
                 device.pressBack();
                 SystemClock.sleep(450);
             }
-            if (!pkg.equals(device.getCurrentPackageName())) {
+            // Never force-stop another provider on a physical owner's phone.
+            if (!isPhysicalDevice() && !pkg.equals(device.getCurrentPackageName())) {
                 shell("am force-stop " + documentsPackage);
-                System.out.println("GALAXY_FILE_PICKER_QA_CLEANUP=external_picker_stopped");
+                System.out.println("GALAXY_FILE_PICKER_QA_CLEANUP=emulator_picker_stopped");
             }
         }
 

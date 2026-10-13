@@ -23,5 +23,6 @@ test('Android picker waits for the resolved external app, not a transient system
  assert.doesNotMatch(helper,/!pkg\.equals\(foreground\)/);
  assert.match(helper,/device\.pressBack\(\)/);
  assert.match(helper,/finally\s*\{[\s\S]*GALAXY_FILE_PICKER_QA_CLEANUP/);
+ assert.match(helper,/!isPhysicalDevice\(\)\s*&&\s*!pkg\.equals\(device\.getCurrentPackageName\(\)\)/);
  assert.doesNotMatch(helper,/com\.google\.android\.documentsui\s*\)/);
 });
