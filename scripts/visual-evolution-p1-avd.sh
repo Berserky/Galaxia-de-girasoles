@@ -53,7 +53,7 @@ receipt={'status':'VERIFIED_SYNTHETIC_QA','android_junit_tests':tests,
          'unique_screenshots':unique,
          'verification':'display-pixel-marker-plus-instrumented-css-layout-focus'}
 Path('build/p0-avd/p1-device-summary.json').write_text(
-    json.dumps(receipt,sort_keys=True,indent=2)+'\\n',encoding='utf-8')
+    json.dumps(receipt,sort_keys=True,indent=2)+chr(10),encoding='utf-8')
 print('V5_P1_ANDROID_SHELL='+json.dumps(receipt,sort_keys=True))
 PY
 
