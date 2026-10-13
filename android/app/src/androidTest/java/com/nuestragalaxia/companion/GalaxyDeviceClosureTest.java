@@ -228,11 +228,81 @@ public class GalaxyDeviceClosureTest {
         awaitJs("!document.getElementById('modal').open && document.activeElement?.dataset.action==='universal-search-open'");
         assertEquals("false", js("document.body.classList.contains('v5-input-focused')"));
         assertEquals("", js("document.getElementById('modal').getAttribute('aria-labelledby')||''"));
+        // Real Android WebView responsive audit. wm size changes physical
+        // display resolution, not a browser-mocked viewport. Keep density
+        // unchanged so the CSS px targets correspond to the app's WebView.
+        android.graphics.Bitmap initialFrame=instrumentation.getUiAutomation().takeScreenshot();
+        assertNotNull("Cannot determine Android baseline display for responsive QA",initialFrame);
+        final int displayWidthPx=initialFrame.getWidth();
+        final int displayHeightPx=initialFrame.getHeight();
+        initialFrame.recycle();
+        final int baselineCssWidth=Integer.parseInt(js("String(Math.round(innerWidth))"));
+        assertTrue("Bad CSS/native viewport scale",baselineCssWidth>200 && displayWidthPx>300);
+        final double deviceScale=(double)displayWidthPx/baselineCssWidth;
+        JSONArray responsive=new JSONArray();
+        runJs("const m=document.createElement('div');m.id='v5-qa-paint-marker';"
+            + "m.setAttribute('aria-hidden','true');"
+            + "m.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;"
+            + "background:#07e1f7;z-index:2147483647;pointer-events:none';"
+            + "document.body.appendChild(m)");
+        try {
+            for (int targetCss : new int[]{320,360,393,412}) {
+                int displayTargetPx=(int)Math.round(targetCss*deviceScale);
+                String resizeResult=shell("wm size "+displayTargetPx+"x"+displayHeightPx);
+                assertFalse("Android virtual screen resize was rejected: "+resizeResult,
+                    resizeResult.toLowerCase(java.util.Locale.ROOT).contains("error"));
+                awaitCondition(() -> {
+                    String size=js("String(Math.round(innerWidth))");
+                    return Math.abs(Integer.parseInt(size)-targetCss)<=5;
+                },UI_TIMEOUT_MS);
+                awaitJs("document.querySelector('#bottomNav .nav-btn.active')?.dataset.view==='home'");
+                awaitV5QaPainted("viewport-"+targetCss);
+                String measured=jsWithDeadline("JSON.stringify((()=>{"
+                    + "const nav=document.getElementById('bottomNav'),fab=document.getElementById('chatFab'),"
+                    + "player=document.getElementById('globalPlayer');"
+                    + "const original=player.className;player.classList.add('visible');"
+                    + "const add=document.createElement('button');add.className='floating-add';"
+                    + "add.setAttribute('aria-label','Accion QA sintetica');"
+                    + "document.getElementById('app').append(add);"
+                    + "function intersects(a,b){const x=a.getBoundingClientRect(),y=b.getBoundingClientRect();"
+                    + "return x.left<y.right-1&&x.right>y.left+1&&x.top<y.bottom-1&&x.bottom>y.top+1}"
+                    + "const n=nav.getBoundingClientRect(),f=fab.getBoundingClientRect(),"
+                    + "a=add.getBoundingClientRect(),p=player.getBoundingClientRect();"
+                    + "const noOverlap=![nav,fab,add,player].some((el,i,all)=>"
+                    + "all.slice(i+1).some(other=>intersects(el,other)));"
+                    + "const withinScreen=n.left>=-1&&n.right<=innerWidth+1&&f.right<=innerWidth+1"
+                    + "&&a.right<=innerWidth+1&&p.right<=innerWidth+1;"
+                    + "const heights=[...nav.querySelectorAll('.nav-btn')].map(el=>el.getBoundingClientRect().height);"
+                    + "add.remove();player.className=original;"
+                    + "return {cssWidth:innerWidth,navCount:heights.length,minTouch:Math.min(...heights),"
+                    + "noOverlap,withinScreen}})())",20);
+                assertTrue("Responsive metrics are not JSON at CSS "+targetCss+": "+measured,
+                    measured.startsWith("{"));
+                JSONObject row=new JSONObject(measured);
+                assertEquals("Viewport has unexpected CSS width",targetCss,
+                    row.getInt("cssWidth"),5);
+                assertEquals("Lost navigation actions at narrow viewport",6,row.getInt("navCount"));
+                assertTrue("Navigation touch target too small: "+row,row.getDouble("minTouch")>=44d);
+                assertTrue("Navigation/player/FAB/add overlap at "+targetCss+": "+row,
+                    row.getBoolean("noOverlap"));
+                assertTrue("Control outside viewport at "+targetCss+": "+row,
+                    row.getBoolean("withinScreen"));
+                responsive.put(row.put("requestedCssWidth",targetCss));
+                shell("screencap -p /sdcard/Download/V5-P1-viewport-"+targetCss+".png");
+            }
+        } finally {
+            shell("wm size reset");
+            runJs("document.getElementById('v5-qa-paint-marker')?.remove()");
+            awaitCondition(() -> Math.abs(Integer.parseInt(js(
+                "String(Math.round(innerWidth))"))-baselineCssWidth)<=5,UI_TIMEOUT_MS);
+        }
+
         System.out.println("V5_P1_ANDROID_SHELL=" + new JSONObject()
             .put("result","VERIFIED_SYNTHETIC_QA")
             .put("themes",themes)
             .put("rail",rail)
-            .put("nonChatModalFocusRestore",true));
+            .put("nonChatModalFocusRestore",true)
+            .put("responsiveViewports",responsive));
     }
 
     @Test public void galaxyChat_renders13Cards_pollChecklistAndSend() throws Exception {
