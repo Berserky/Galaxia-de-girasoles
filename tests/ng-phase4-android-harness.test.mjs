@@ -38,6 +38,15 @@ test('Android picker waits for the resolved external app, not a transient system
  assert.match(source,/scenario\.getState\(\)==Lifecycle\.State\.DESTROYED/);
  assert.match(source,/scenario\.getState\(\)==Lifecycle\.State\.RESUMED/);
  assert.match(source,/"visible"\.equals\(js\("document\.visibilityState"\)\)/);
+ const pickerReturn=source.slice(source.indexOf('private void cancelPickerAndVerifyForeground('),
+   source.indexOf('/** Match the ACTUAL foreground activity'));
+ assert.match(pickerReturn,/stablePickerPolls=isResumedPackage\(pickerPkg\)\?stablePickerPolls\+1:0/);
+ assert.match(pickerReturn,/stablePickerPolls>=3/);
+ assert.match(pickerReturn,/if\(!isResumedPackage\(pickerPkg\)\)/);
+ assert.ok(pickerReturn.indexOf('stablePickerPolls>=3') <
+   pickerReturn.indexOf('boolean acknowledged=device.pressBack()'),
+   'Never issue Back before resolved DocumentsUI is stably foreground');
+ assert.doesNotMatch(pickerReturn,/Document picker closed but MainActivity WebView did not recover visibility/);
  assert.ok(source.indexOf('awaitPickerMainActivityVisible(appPkg, 4_000)') <
    source.indexOf('shell("input keyevent KEYCODE_BACK")'),
    'Wait for actual MainActivity return BEFORE fallback to avoid double Back');
