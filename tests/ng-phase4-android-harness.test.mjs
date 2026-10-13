@@ -31,5 +31,9 @@ test('Android picker waits for the resolved external app, not a transient system
  assert.match(source,/private void cancelPickerAndVerifyForeground\(UiDevice device, String appPkg, String pickerPkg\)/);
  assert.match(source,/isResumedPackage\(appPkg\)/);
  assert.match(source,/document\.visibilityState/);
+ assert.match(source,/boolean uiBackAcknowledged = device\.pressBack\(\)/);
+ assert.match(source,/if \(!uiBackAcknowledged\)\s*\{\s*shell\("input keyevent KEYCODE_BACK"\)/);
+ assert.match(source,/isResumedPackage\(appPkg\)\s*&&\s*"visible"\.equals\(js\("document\.visibilityState"\)\)/);
+ assert.doesNotMatch(source,/assertTrue\("Android did not handle Back while closing document picker"/);
  assert.doesNotMatch(helper,/com\.google\.android\.documentsui\s*\)/);
 });
