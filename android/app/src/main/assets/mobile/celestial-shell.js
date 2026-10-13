@@ -45,7 +45,10 @@
     root.requestAnimationFrame(()=>{
       if(!pendingFocus||!modal.open||modal.classList.contains('chat-surface'))return;
       pendingFocus=false;
-      const target=modal.querySelector('[autofocus],input:not([type="hidden"]):not(:disabled),textarea:not(:disabled),select:not(:disabled),button:not(.close):not(:disabled),.close');
+      // querySelector() returns DOM order, not selector order. The close button
+      // precedes the search input in a regular dialog; keep it a fallback only.
+      const target=modal.querySelector('[autofocus],input:not([type="hidden"]):not(:disabled),textarea:not(:disabled),select:not(:disabled),button:not(.close):not(:disabled)')
+        || modal.querySelector('.close');
       target?.focus({preventScroll:true});
       // Some Android WebViews can update activeElement without bubbling focusin.
       // Sync directly after programmatic focus, not only via the document event.
