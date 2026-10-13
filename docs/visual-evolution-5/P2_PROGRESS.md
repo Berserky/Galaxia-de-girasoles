@@ -92,3 +92,17 @@
 - VE-010/014, robustez: `nowPersonCard` exige latitud y longitud no nulas y marca como no verificables timestamps futuros más de 60s antes de reutilizar `locationFreshState`; datos insuficientes nunca se presentan como GPS en vivo o velocidad. El motor de tracking, `GalaxyDistance` y el mapa NO se modificaron.
 - Pruebas Node con VM aislado de `dailyQuestionCard` para estados 0/1/2 y acciones; con ubicaciones sintéticas ausentes/futuras para ocultamiento de movimiento/velocidad. CSS de estado y controles verificado por contrato.
 - **No declarar PASS sin CI del HEAD vigente**. Verificar Android instrumentado, fuente grande, contraste, modal/IME, privacidad y aprobación del propietario. Todos los IDs anteriores permanecen ABIERTOS hasta su evidencia.
+
+## P2-D · Cierre de gates Android en CI (13-oct-2026)
+
+**Resultado confirmado de HEAD `1024512` antes de este incremento:** 13/15 GitHub workflows SUCCESS, dos FAIL. Se confirmó **Galaxy Chat Phase 11 Torture SUCCESS** (ambos jobs: instrumentación stress y gate Node). El arreglo de volver desde `ACTION_OPEN_DOCUMENT` pasó la prueba instrumentada real; nunca se sustituyó por mocks ni se saltó el retorno de la WebView.
+
+**Riesgos/bloqueos detectados (sin ocultar fallas):**
+- `V5 P0 baseline and synthetic visual preview`, job `AVD QA unpaired APK`: `visualEvolutionP1_realWebViewThemesFloatingRailAndModalFocus_areSafe` falló en `runJs` para clic del botón Inicio, con timeout de callback JavaScript de **5s** en emulador tras una matriz de arranques en frío. APK startup, capturas unpaired y mediciones brutas sí se generaron, pero el workflow es **FAIL**. No atribuir causalidad al render sin repetir el test.
+- `Galaxy Chat 4 Phase 5 Camera Media`, job CameraX emulator: `cameraX_photoRearFrontReviewRetakeAndCancel_whenCameraExists` falló con *Camera switch did not bind the front lens.* La prueba anterior usaba `tapVisibleCameraControl`, `sleep(600)` y luego comprobación única, sin esperar asincronía de CameraX. Los otros 2 casos de la misma matriz no fallaron.
+
+**Endurecimiento implementado solo en pruebas (sin cambiar código productivo):**
+- La instrumentación V5 usa `runV5Js` con timeout delimitado de 20s **y aserción explícita de que JS devolvió `ok`** para 11 acciones V5 de navegación, tema, scroll y limpieza. Chat y el resto de tests mantienen plazo original de 5s; las capturas reales, marcador de píxeles y contraste permanecen obligatorios.
+- La instrumentación CameraX reemplaza sleeps fijos por `awaitCameraLensBound` (máximo 12s), validando con CameraX el sensor trasero/frontal realmente vinculado. Si el emulador reconoce el toque pero no lo entrega, se permite **una** segunda pulsación real mediante MotionEvent de ventana **solo si** `lensFacing` interno nunca cambió después de 3s. Si cambió, se espera el bind sin pulsar dos veces. Si no vincula, **FAIL**. Conserva foto, revisión, retoma, vídeo y borrado de temporales obligatorios.
+
+**Estado de salida:** revalidar CI de HEAD actual (este ledger no certifica PASS por adelantado), evidencia del runner Android V5 y CameraX, revisiones por temas/ancho/IME y aprobación estética humana. PR #168 DRAFT; **no merge a desarrollo ni promoción QA/prod**. IA excluida.
