@@ -23,8 +23,6 @@ gradle -p android --no-daemon :app:connectedDebugAndroidTest \
   '-Pandroid.testInstrumentationRunnerArguments.class=com.nuestragalaxia.companion.GalaxyDeviceClosureTest#visualEvolutionP1_realWebViewThemesFloatingRailAndModalFocus_areSafe' \
   2>&1 | tee build/p0-avd/p1-device-instrumentation.log
 
-grep 'V5_P1_ANDROID_SHELL=' build/p0-avd/p1-device-instrumentation.log > build/p0-avd/p1-device-summary.txt || true
-
 pull_theme_evidence
 trap - EXIT
 
@@ -38,6 +36,25 @@ for path in paths:
 unique=len(set(hashlib.sha256(path.read_bytes()).hexdigest() for path in paths))
 assert unique>=5, f'Android themed captures unexpectedly identical: {unique}/7'
 print(f'Seven REAL Android WebView PNG previews, synthetic QA only; {unique} unique screens.')
+# Keep a machine-readable success receipt based on the actual Android JUnit
+# report (System.out from instrumented tests is not forwarded by Gradle).
+import json
+import xml.etree.ElementTree as ET
+reports=sorted(Path('android/app/build/outputs/androidTest-results/connected/debug').rglob('TEST-*.xml'))
+assert reports, 'Android JUnit XML missing: instrumentation cannot be marked PASS'
+suites=[node for p in reports for node in ET.parse(p).getroot().iter('testsuite')]
+tests=sum(int(s.get('tests','0')) for s in suites)
+failures=sum(int(s.get('failures','0')) for s in suites)
+errors=sum(int(s.get('errors','0')) for s in suites)
+assert tests==1 and failures==0 and errors==0, (tests,failures,errors)
+receipt={'status':'VERIFIED_SYNTHETIC_QA','android_junit_tests':tests,
+         'android_junit_failures':failures,'android_junit_errors':errors,
+         'seven_themes':sorted(p.stem for p in paths),
+         'unique_screenshots':unique,
+         'verification':'display-pixel-marker-plus-instrumented-css-layout-focus'}
+Path('build/p0-avd/p1-device-summary.json').write_text(
+    json.dumps(receipt,sort_keys=True,indent=2)+'\\n',encoding='utf-8')
+print('V5_P1_ANDROID_SHELL='+json.dumps(receipt,sort_keys=True))
 PY
 
 echo "V5-P1 Android WebView instrumentation PASS: synthetic QA only."
