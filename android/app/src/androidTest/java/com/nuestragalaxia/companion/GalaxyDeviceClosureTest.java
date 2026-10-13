@@ -150,10 +150,10 @@ public class GalaxyDeviceClosureTest {
         // Android run showed a stale pairing screen although the in-process
         // WebView navigation had finished loading. Verify actual display pixels
         // before accepting any of the seven theme screenshots.
-        runJs("document.querySelector('[data-view=\\\"home\\\"]')?.click()");
+        runV5Js("document.querySelector('[data-view=\\\"home\\\"]')?.click()");
         awaitJs("document.querySelector('#bottomNav .nav-btn.active')?.dataset.view==='home'"
             + " && getComputedStyle(document.getElementById('bottomNav')).display!=='none'");
-        runJs("const marker=document.createElement('div');marker.id='v5-qa-paint-marker';"
+        runV5Js("const marker=document.createElement('div');marker.id='v5-qa-paint-marker';"
             + "marker.setAttribute('aria-hidden','true');"
             + "marker.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;'+"
             + "'background:#07e1f7;z-index:2147483647;pointer-events:none';"
@@ -168,7 +168,7 @@ public class GalaxyDeviceClosureTest {
         org.json.JSONArray samples = new org.json.JSONArray();
         for (String theme : new String[]{"daylight","cosmic","halloween","christmas",
                 "valentine","friendship","easter"}) {
-            runJs("GalaxyTheme.applyTheme('" + theme + "')");
+            runV5Js("GalaxyTheme.applyTheme('" + theme + "')");
             long themeStarted = SystemClock.elapsedRealtime();
             String raw = jsWithDeadline("JSON.stringify((()=>{const e=document.createElement('button');"
                 + "e.className='btn';document.body.appendChild(e);"
@@ -193,7 +193,7 @@ public class GalaxyDeviceClosureTest {
             awaitV5QaPainted(theme);
             shell("screencap -p /sdcard/Download/V5-P1-synthetic-" + theme + ".png");
         }
-        runJs("document.getElementById('v5-qa-paint-marker')?.remove();GalaxyTheme.applyTheme('auto')");
+        runV5Js("document.getElementById('v5-qa-paint-marker')?.remove();GalaxyTheme.applyTheme('auto')");
         assertEquals("true", js("document.documentElement.dataset.themeChoice==='auto'"));
         JSONObject themes = new JSONObject().put("palettes",samples).put("auto",true);
 
@@ -219,7 +219,7 @@ public class GalaxyDeviceClosureTest {
         assertTrue("FAB/add/player collide on real WebView: " + rail, rail.getBoolean("withPlayer"));
 
         for (String id : new String[]{"map","moments","ai","memories","more","home"}) {
-            runJs("document.querySelector('[data-view=\"" + id + "\"]').click()");
+            runV5Js("document.querySelector('[data-view=\"" + id + "\"]').click()");
             awaitJs("document.querySelectorAll('#bottomNav [aria-current=\"page\"]').length===1");
             assertEquals("Active route was not announced to accessibility for " + id, id,
                 js("document.querySelector('#bottomNav [aria-current=\"page\"]')?.dataset.view||''"));
@@ -227,12 +227,12 @@ public class GalaxyDeviceClosureTest {
 
         // Real global dialog (not Galaxy Chat) must focus search, then restore its
         // launcher after Escape/cancel using the preexisting closeModal cleanup.
-        runJs("document.querySelector('[data-action=\"universal-search-open\"]').click()");
+        runV5Js("document.querySelector('[data-action=\"universal-search-open\"]').click()");
         awaitJs("document.getElementById('modal').open");
         awaitJs("document.activeElement?.id==='universalSearchInput'");
         assertEquals("v5-modal-title", js("document.getElementById('modal').getAttribute('aria-labelledby')"));
         assertEquals("true", js("document.body.classList.contains('v5-input-focused')"));
-        runJs("document.getElementById('modal').dispatchEvent(new Event('cancel',{cancelable:true}))");
+        runV5Js("document.getElementById('modal').dispatchEvent(new Event('cancel',{cancelable:true}))");
         awaitJs("!document.getElementById('modal').open && document.activeElement?.dataset.action==='universal-search-open'");
         assertEquals("false", js("document.body.classList.contains('v5-input-focused')"));
         assertEquals("", js("document.getElementById('modal').getAttribute('aria-labelledby')||''"));
@@ -248,7 +248,7 @@ public class GalaxyDeviceClosureTest {
         assertTrue("Bad CSS/native viewport scale",baselineCssWidth>200 && displayWidthPx>300);
         final double deviceScale=(double)displayWidthPx/baselineCssWidth;
         JSONArray responsive=new JSONArray();
-        runJs("const m=document.createElement('div');m.id='v5-qa-paint-marker';"
+        runV5Js("const m=document.createElement('div');m.id='v5-qa-paint-marker';"
             + "m.setAttribute('aria-hidden','true');"
             + "m.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;"
             + "background:#07e1f7;z-index:2147483647;pointer-events:none';"
@@ -328,7 +328,7 @@ public class GalaxyDeviceClosureTest {
                 // Scroll the REAL Android WebView to the document end, verify its
                 // last interactive card sits fully above the fixed bottom nav,
                 // and archive a bottom-screen screenshot for human review.
-                runJs("window.scrollTo(0,document.documentElement.scrollHeight)");
+                runV5Js("window.scrollTo(0,document.documentElement.scrollHeight)");
                 awaitJs("window.scrollY>100");
                 String bottom=jsWithDeadline("JSON.stringify((()=>{"
                     + "const last=document.querySelector('.welcome-memories .living-moment'),"
@@ -345,11 +345,11 @@ public class GalaxyDeviceClosureTest {
                 responsive.put(row.put("requestedCssWidth",targetCss)
                     .put("bottomReached",true));
                 shell("screencap -p /sdcard/Download/V5-P2-bottom-"+targetCss+".png");
-                runJs("window.scrollTo(0,0)");
+                runV5Js("window.scrollTo(0,0)");
             }
         } finally {
             shell("wm size reset");
-            runJs("document.getElementById('v5-qa-paint-marker')?.remove()");
+            runV5Js("document.getElementById('v5-qa-paint-marker')?.remove()");
             awaitCondition(() -> Math.abs(Integer.parseInt(js(
                 "String(Math.round(innerWidth))"))-baselineCssWidth)<=5,UI_TIMEOUT_MS);
         }
@@ -1389,6 +1389,16 @@ public class GalaxyDeviceClosureTest {
             sum+=weights[i]*linear;
         }
         return sum;
+    }
+
+    /**
+     * Visual-only QA on software-rendered cold Android AVD: allow at most 20s
+     * per action, including navigation/scroll/paint, and ASSERT the callback
+     * executed. Ordinary Chat QA retains the strict 5s callback deadline.
+     */
+    private void runV5Js(String script) {
+        String result=jsWithDeadline("(function(){" + script + ";return 'ok';})()",20);
+        assertEquals("V5 Android WebView action did not complete: "+script,"ok",result);
     }
 
     private void runJs(String script) {
