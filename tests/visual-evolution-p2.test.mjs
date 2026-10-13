@@ -113,3 +113,11 @@ test('P2B paused GPS cannot masquerade as live and respects media privacy',()=>{
  assert.match(html,/Ubicación pausada/);
  assert.doesNotMatch(html,/Caminando|km\/h|77%|Privado|Ubicación sin actualizar/);
 });
+
+test('P2B mood options remain tappable and readable on narrow screens',()=>{
+ assert.match(css,/\.welcome-mood-section \.mood-grid \{[\s\S]*?grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+ assert.match(css,/\.welcome-mood-section \.mood \{[\s\S]*?min-height:56px/);
+ assert.match(css,/\.welcome-mood-section \.mood:focus-visible/);
+ assert.match(css,/@media\(min-width:540px\)/);
+ assert.match(home,/aria-pressed/);
+});
