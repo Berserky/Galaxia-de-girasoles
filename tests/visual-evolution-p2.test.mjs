@@ -171,3 +171,45 @@ test('P2B missing coordinates and future timestamps are never presented as live 
  assert.match(future,/Ubicación sin actualizar · hora del dispositivo por verificar/);
  assert.doesNotMatch(future,/Caminando|km\/h/);
 });
+
+
+const detailSource=extract('function personCard(','function transportLabel(');
+function renderLocationDetail(location){
+ const context={
+  l:{person:'1',...location},cloud:{person:'0'},
+  names:()=>['Ada','Sol'],transportLabel:()=> 'Caminando',
+  esc:v=>String(v),ico:()=>'',attr:v=>String(v)
+ };
+ return runInNewContext(freshnessSource+'\n'+detailSource+'\npersonCard(l)',context);
+}
+
+test('P2E detailed GPS card does not fabricate 0 km/h when speed is missing or invalid',()=>{
+ const fix={sharing:true,latitude:4.6,longitude:-74.1,updated_at:new Date().toISOString()};
+ for(const speed of [null,undefined,'unknown',-4]){
+  const markup=renderLocationDetail({...fix,speed});
+  assert.match(markup,/aria-label="Velocidad sin lectura">—<small>km\/h<\/small>/);
+  assert.doesNotMatch(markup,/>0(?:\.0)?<small>km\/h/);
+ }
+ const measured=renderLocationDetail({...fix,speed:2});
+ assert.match(measured,/>7\.2<small>km\/h<\/small>/);
+ assert.doesNotMatch(measured,/Velocidad sin lectura/);
+ const measuredZero=renderLocationDetail({...fix,speed:0});
+ assert.match(measuredZero,/>0\.0<small>km\/h<\/small>/);
+});
+
+test('P2E detailed GPS card refuses future/missing/stale/paused positions as live',()=>{
+ const time=new Date().toISOString();
+ const base={sharing:true,latitude:4.6,longitude:-74.1,speed:5,updated_at:time};
+ const missing=renderLocationDetail({...base,latitude:null,longitude:null});
+ assert.match(missing,/Sin lectura GPS reciente/);
+ assert.doesNotMatch(missing,/Caminando|>18<small>km\/h/);
+ const future=renderLocationDetail({...base,updated_at:new Date(Date.now()+24*3600_000).toISOString()});
+ assert.match(future,/Hora del dispositivo por verificar/);
+ assert.doesNotMatch(future,/Caminando|>18<small>km\/h/);
+ const stale=renderLocationDetail({...base,updated_at:new Date(Date.now()-30*60000).toISOString()});
+ assert.match(stale,/Sin actualizar/);
+ assert.doesNotMatch(stale,/Caminando|>18<small>km\/h/);
+ const paused=renderLocationDetail({...base,sharing:false});
+ assert.match(paused,/Ubicación pausada/);
+ assert.doesNotMatch(paused,/Caminando|>18<small>km\/h/);
+});
