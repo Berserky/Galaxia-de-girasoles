@@ -116,3 +116,20 @@
 **Criterio de salida obligatorio:** CI Node + 15 workflows del nuevo HEAD; recuperar 34 casos instrumentados QA Phase5, V5 Android, CameraX y Galaxy Chat11 sin FALLAS; mantener marker de píxeles para screenshots reales, no cerrar hallazgos VE antes de revisión visual y aceptación humana.
 
 **Protecciones:** la corrección está únicamente en instrumentación Android/tests/doc de la rama P2. Ninguna lógica de producto, Chat, GPS, FCM, IA, permisos, producción ni despliegue se alteró. PR #168 sigue DRAFT.
+
+## P2-F · Coherencia GPS en tarjeta detallada (VE-014) — 13-oct-2026
+
+**Auditoría adicional:** aunque el resumen de la conexión `nowPersonCard` ya había dejado de inventar 0 km/h, la tarjeta secundaria `personCard(l)`, visible al abrir `Ver estado detallado de ubicación`, seguía aplicando `Math.max(0,Number(l.speed||0)*3.6)`. En una lectura GPS reciente con `speed:null`, ello mostraba erróneamente `0.0 km/h` y una actividad aparente de marcha; el detalle contradice el resumen. El origen es local a la visualización, no al motor GPS ni a los permisos.
+
+**Cambio implementado en rama P2:**
+- Se reutiliza `locationFreshState`, pero se requiere también coordenadas NO nulas, timestamp legible y que la hora del registro no esté a más de 60 segundos en el futuro.
+- Sólo se calcula velocidad cuando `speed` no es nulo, es finito y no negativo **y** el fix es fresco; de otro modo el detalle usa `— km/h` con etiqueta accesible `Velocidad sin lectura`.
+- Diferencia el estado `Ubicación pausada`, `Sin lectura GPS reciente`, `Hora del dispositivo por verificar` y `Sin actualizar · hace ...`. El modo de transporte no se anuncia como dato actual en esas condiciones.
+- Se conserva la lectura **cero explícita** si el sistema realmente la envió: no se sustituye por otra velocidad ficticia.
+- No se alteran `GalaxyDistance`, `transportLabel`, `coupleDistanceCard`, `Map`, RLS, API, tracking, roles, controles de privacidad ni carga de datos.
+
+**Regresión añadida en `tests/visual-evolution-p2.test.mjs`:** casos VM herméticos para speed `null`, `undefined`, inválido, negativo, 0 explícito, número válido, sin coordenadas, timestamp futuro, ubicación obsoleta y compartir pausado. Se verifica la misma función productiva que usa el detalle.
+
+**Gobernanza CI:** el commit `3598fbd` tenía 13/15 SUCCESS y 2 en progreso cuando se comenzaron nuevos cambios; la política de concurrencia de GitHub finalmente canceló esos dos, por lo que **no equivale a 15/15**. Las pruebas y el producto P2-F requieren 15/15 sobre el nuevo HEAD estable; no transferir PASS de commits anteriores. Hallazgo VE-014 permanece abierto hasta pruebas instrumentadas y aprobación visual del propietario.
+
+**Sin autorización:** PR #168 DRAFT, ninguna fusión a `desarrollo`, `qa` ni `prod`.
