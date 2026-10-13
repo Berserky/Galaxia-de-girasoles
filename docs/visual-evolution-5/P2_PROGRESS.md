@@ -106,3 +106,13 @@
 - La instrumentación CameraX reemplaza sleeps fijos por `awaitCameraLensBound` (máximo 12s), validando con CameraX el sensor trasero/frontal realmente vinculado. Si el emulador reconoce el toque pero no lo entrega, se permite **una** segunda pulsación real mediante MotionEvent de ventana **solo si** `lensFacing` interno nunca cambió después de 3s. Si cambió, se espera el bind sin pulsar dos veces. Si no vincula, **FAIL**. Conserva foto, revisión, retoma, vídeo y borrado de temporales obligatorios.
 
 **Estado de salida:** revalidar CI de HEAD actual (este ledger no certifica PASS por adelantado), evidencia del runner Android V5 y CameraX, revisiones por temas/ancho/IME y aprobación estética humana. PR #168 DRAFT; **no merge a desarrollo ni promoción QA/prod**. IA excluida.
+
+## P2-E · QA Phase 5: retorno real desde selector de archivos (13-oct-2026)
+
+**Baseline `3650970`: 14/15 workflows GitHub PASS y uno FAIL**. En particular, V5 P0 baseline/synthetic visual preview, CameraX Phase 5 y Galaxy Chat Phase 11 Torture **PASS** en el mismo SHA. El único FAIL fue `QA Phase 5 Real Integration` ([run #38468053525](https://github.com/Berserky/Galaxia-de-girasoles/actions/runs/38468053525)), job `Android instrumentation + lifecycle`, JUnit `cameraMicrophoneAndFilePicker_launchWhenEnvironmentSupportsThem`, mensaje `Android did not handle Back while closing document picker`. La prueba posterior `visualEvolutionP1_realWebViewThemesFloatingRailAndModalFocus_areSafe` también encontró la pantalla Inicio oculta; no basta atribuirlo a la UI.
+
+**Corrección:** `cancelPickerAndVerifyForeground` conserva tres intentos acotados de cierre del selector mediante input Android real; si `UiDevice.pressBack()` devuelve falso (acknowledgement no fiable del emulador), envía un evento Android `input keyevent KEYCODE_BACK`. El test solo pasa con **`isResumedPackage(appPkg)` Y `document.visibilityState === 'visible'`**, nunca por el retorno booleano. La ruta del proveedor solo se fuerza a detener en emulador, nunca en teléfono físico. Contrato `tests/ng-phase4-android-harness.test.mjs` actualizado para exigir fallback Android real, evidencia de reanudación y prohibir el antiguo check superficial.
+
+**Criterio de salida obligatorio:** CI Node + 15 workflows del nuevo HEAD; recuperar 34 casos instrumentados QA Phase5, V5 Android, CameraX y Galaxy Chat11 sin FALLAS; mantener marker de píxeles para screenshots reales, no cerrar hallazgos VE antes de revisión visual y aceptación humana.
+
+**Protecciones:** la corrección está únicamente en instrumentación Android/tests/doc de la rama P2. Ninguna lógica de producto, Chat, GPS, FCM, IA, permisos, producción ni despliegue se alteró. PR #168 sigue DRAFT.
