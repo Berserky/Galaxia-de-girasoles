@@ -29,6 +29,31 @@ assert_onboarding_visible() {
       ok=1
       break
     fi
+    # Only the known emulator launcher ANR may be dismissed automatically.
+    # App ANRs, permission prompts or unexpected dialogs always fail closed.
+    if grep -Eqi 'Pixel Launcher isn.t responding' "$xml"; then
+      coords=$(python3 - "$xml" <<'PY'
+import re, sys, xml.etree.ElementTree as ET
+try:
+    root=ET.parse(sys.argv[1]).getroot()
+    for node in root.iter('node'):
+        if node.get('resource-id')=='android:id/aerr_wait':
+            m=re.fullmatch(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',node.get('bounds',''))
+            if m:
+                x1,y1,x2,y2=map(int,m.groups())
+                print((x1+x2)//2,(y1+y2)//2)
+                break
+except (OSError,ET.ParseError): pass
+PY
+)
+      if [[ -n "$coords" ]]; then
+        read -r tap_x tap_y <<< "$coords"
+        echo "Emulator launcher ANR acknowledged via system Wait; app still must pass visibility gate." >&2
+        adb shell input tap "$tap_x" "$tap_y" || true
+        sleep 1
+        adb shell am start -n "$ACT" >/dev/null || true
+      fi
+    fi
     echo "Visual QA: onboarding inaccessible on $label, attempt $attempt/4." >&2
     sleep 3
   done
@@ -75,6 +100,16 @@ for path in base.glob('*.png'):
     assert path.read_bytes().startswith(b'\x89PNG\r\n\x1a\n'),f'Invalid PNG: {path}'
 assert len(list(base.glob('*.png')))==3, 'Must capture 3 AVD screenshots'
 assert len(list(base.glob('ui-*.xml')))==3, 'Must verify onboarding accessibility for 3 screen captures'
+import struct
+dims={}
+for path in base.glob('*.png'):
+    raw=path.read_bytes()
+    w,h=struct.unpack('>II',raw[16:24])
+    dims[path.stem]=(w,h)
+assert dims['android-unpaired-portrait'][0]<dims['android-unpaired-portrait'][1],f'Portrait is not portrait: {dims}'
+assert dims['android-unpaired-largefont'][0]<dims['android-unpaired-largefont'][1],f'Large-font is not portrait: {dims}'
+assert dims['android-unpaired-landscape'][0]>dims['android-unpaired-landscape'][1],f'Landscape never rotated: {dims}'
+
 summary={'scope':'fresh isolated Android QA debug/unpaired onboarding ONLY',
  'coldStartProxy':'am force-stop then am start -W; not fully cold CPU/network',
  'launchIterations':starts,
