@@ -1,3 +1,5 @@
+> **Estado operativo 13-oct-2026:** V5-P0 (PR #166) y V5-P1 (PR #167) ya integrados a `desarrollo`; **P2 Inicio/Galaxy Welcome** está en [PR #168 DRAFT](https://github.com/Berserky/Galaxia-de-girasoles/pull/168). Estado, CI, hallazgos y bloqueos en [P2_PROGRESS.md](P2_PROGRESS.md). El texto de preparación histórica debajo NO describe el estado actual. `qa` y `prod` permanecen sin cambios por este upgrade. IA excluida.
+
 > **Actualización P0 (12-oct-2026):** Ya existe ejecución en rama aislada `feat/visual-evolution-5-p0-baseline`: [Contrato visual](P0_DESIGN_CONTRACT.md), [tokens](CELESTIAL_TOKENS.json), [QA ledger](P0_QA_LEDGER.md), [prototipo sintético](prototypes/celestial-shell.html), [P1 preparado](P1_EXECUTION.md). **P0 aún no certificada:** tests/actions, evidencia Android y aprobación visual deben verificarse en su PR; no hay cambio al APK, `qa` ni `prod`. Los estados anteriores describen la preparación pre-P0.
 
 # NUESTRA GALAXIA — VISUAL EVOLUTION 5.0
