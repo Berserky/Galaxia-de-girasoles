@@ -8,6 +8,14 @@ bash scripts/visual-evolution-p0-avd.sh
 # Instrumentation is separated from the unpaired baseline. Failures retain
 # any screenshots already produced for diagnosis; no production token is loaded.
 mkdir -p build/p0-avd/p1-synthetic-themes
+# Preserve partial theme captures even if instrumentation fails later.
+# This runs only against the isolated QA emulator; screenshots are synthetic.
+pull_theme_evidence() {
+  for theme in daylight cosmic halloween christmas valentine friendship easter; do
+    adb pull "/sdcard/Download/V5-P1-synthetic-${theme}.png" "build/p0-avd/p1-synthetic-themes/${theme}.png" >/dev/null 2>&1 || true
+  done
+}
+trap pull_theme_evidence EXIT
 gradle -p android --no-daemon :app:connectedDebugAndroidTest \
   -PQA_EDGE_URL=http://127.0.0.1:18765 \
   -PQA_SUPABASE_PUBLISHABLE_KEY=qa_v5p1 \
@@ -17,9 +25,8 @@ gradle -p android --no-daemon :app:connectedDebugAndroidTest \
 
 grep 'V5_P1_ANDROID_SHELL=' build/p0-avd/p1-device-instrumentation.log > build/p0-avd/p1-device-summary.txt || true
 
-for theme in daylight cosmic halloween christmas valentine friendship easter; do
-  adb pull "/sdcard/Download/V5-P1-synthetic-${theme}.png" "build/p0-avd/p1-synthetic-themes/${theme}.png" >/dev/null
-done
+pull_theme_evidence
+trap - EXIT
 
 python3 - <<'PY'
 from pathlib import Path
