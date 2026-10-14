@@ -383,6 +383,15 @@ function go(next){
  view=next;syncChatViewportHeight();render();window.scrollTo(0,0);
  if(view==='map'&&hadMap)refreshMap({quiet:true,detail:false});
 }
+// V5 P2L: the existing privacy controls render synchronously inside go('more').
+// No timeout or new permissions: focus the real destination on navigation.
+function openPresencePrivacySettings(){
+ go('more');
+ const panel=document.getElementById('presencePrivacySettings');
+ if(!panel)return;
+ panel.scrollIntoView({behavior:'auto',block:'center'});
+ panel.focus({preventScroll:true});
+}
 let nativeThemeSent='';
 function syncSystemTheme(themeState){
  const active=themeState?.active||'daylight';
@@ -2631,7 +2640,7 @@ function intelligenceHubView(){
 function moreView(){
  const settings=cloud.settings||{data:{},version:1},data=settings.data||{},presence=ownPresence();
  return '<section><div class="section-head"><div><p class="eyebrow">CONFIGURACIÓN</p><h2>Más</h2><p>Privacidad, permisos, respaldo, dispositivos, apariencia y mantenimiento de la app.</p></div></div>'+
- '<div class="card"><div class="row between"><div><h3>Privacidad de “Ahora”</h3><p>Tu ubicación sigue teniendo su propio interruptor. Aquí decides si compartes batería y la canción que estás escuchando.</p></div>'+ico('shield-check')+'</div><div class="privacy-grid"><button class="privacy-toggle '+(presence.shareBattery?'active':'')+'" data-action="presence-battery">'+ico('battery-charging')+'<span><b>Batería</b><small>'+(presence.shareBattery?'Compartida':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(presence.shareListening?'active':'')+'" data-action="presence-listening">'+ico('music')+'<span><b>Escuchando</b><small>'+(presence.shareListening?'Compartido':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(native.tracking?'active':'')+'" data-action="map">'+ico('map-pin')+'<span><b>Ubicación</b><small>'+(native.tracking?'Compartiendo':'Pausada')+'</small></span></button></div></div>'+gpsHistoryPrivacyCard()+
+ '<div id="presencePrivacySettings" class="card presence-privacy-settings" role="region" aria-labelledby="presencePrivacyHeading" tabindex="-1"><div class="row between"><div><h3 id="presencePrivacyHeading">Privacidad de “Ahora”</h3><p>Tu ubicación sigue teniendo su propio interruptor. Aquí decides si compartes batería y la canción que estás escuchando.</p></div>'+ico('shield-check')+'</div><div class="privacy-grid"><button class="privacy-toggle '+(presence.shareBattery?'active':'')+'" data-action="presence-battery">'+ico('battery-charging')+'<span><b>Batería</b><small>'+(presence.shareBattery?'Compartida':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(presence.shareListening?'active':'')+'" data-action="presence-listening">'+ico('music')+'<span><b>Escuchando</b><small>'+(presence.shareListening?'Compartido':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(native.tracking?'active':'')+'" data-action="map">'+ico('map-pin')+'<span><b>Ubicación</b><small>'+(native.tracking?'Compartiendo':'Pausada')+'</small></span></button></div></div>'+gpsHistoryPrivacyCard()+
  themeSettingsCard()+
  '<div class="card"><div class="row between"><div><p class="eyebrow">NOTIFICACIONES</p><h3>Mensajes y actividad</h3><p>Galaxy Chat, estados, mapa, objetivos, recuerdos y demás actividad usan notificaciones nativas de Android.</p></div><span class="badge '+(native.notificationsGranted&&native.notificationsEnabled?'good':'warn')+'">'+(native.notificationsGranted&&native.notificationsEnabled?'Activas':'Requieren ajuste')+'</span></div><div class="notification-health"><span class="'+(native.notificationsGranted?'good':'')+'">'+ico(native.notificationsGranted?'check':'circle-alert')+' Permiso '+(native.notificationsGranted?'concedido':'pendiente')+'</span><span class="'+(native.pushConfigured?'good':'')+'">'+ico(native.pushConfigured?'radio':'circle-alert')+' Push '+(native.pushConfigured?'configurado':'pendiente')+'</span></div><div class="row wrap" style="margin-top:14px">'+(!native.notificationsGranted?'<button class="btn small" data-action="galaxy-notifications-enable">'+ico('bell-ring')+' Activar notificaciones</button>':'')+'<button class="btn small ghost" data-action="app-settings">'+ico('settings')+' Ajustes de Android</button></div></div>'+
  '<div class="card"><div class="row between"><div><h3>Copia de nuestra galaxia</h3><p>Exporta los datos a un archivo JSON o restaura una copia. Fotos, música y audios permanecen en su almacenamiento privado y se conservan por referencia.</p></div>'+ico('archive')+'</div><div class="row wrap" style="margin-top:14px"><button class="btn small secondary" data-action="backup-export">'+ico('download')+' Exportar</button><button class="btn small ghost" data-action="backup-import">'+ico('upload')+' Restaurar</button></div></div>'+
@@ -3318,7 +3327,7 @@ document.addEventListener('click',async e=>{
   if(a==='place-new'){if(!mapData)await refreshMap({quiet:true,detail:true});openPlace();return;}
   if(a==='destination'){if(!mapData)await refreshMap({quiet:true,detail:true});openDestination();return;}
   if(a==='transport-set'){await api('transport-set',{preference:btn.dataset.value});await refreshState({quiet:true});await refreshMap({quiet:true});render();toast('Preferencia de transporte actualizada.');return;}
-  if(a==='now-settings'){go('more');setTimeout(()=>document.querySelector('.privacy-grid')?.scrollIntoView({behavior:'smooth',block:'center'}),80);return;}
+  if(a==='now-settings'){openPresencePrivacySettings();return;}
   if(a==='presence-battery'){await busy(()=>togglePresence('battery'),'Privacidad de batería actualizada.');return;}
   if(a==='presence-listening'){await busy(()=>togglePresence('listening'),'Privacidad de música actualizada.');return;}
   if(a==='pair-code-partner'){await openPairCode('1');return;}
