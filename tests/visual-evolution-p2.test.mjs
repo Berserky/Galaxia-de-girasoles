@@ -371,3 +371,33 @@ test('P2M favorite state has accessible pressed semantics and unchanged existing
   assert.match(normal,new RegExp('data-action="'+action+'"'));
  }
 });
+
+
+test('P2P middle question screenshots must prove actual Android display pixels at four widths',()=>{
+ const android=readFileSync(resolve(ROOT,'android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyDeviceClosureTest.java'),'utf8');
+ const avd=readFileSync(resolve(ROOT,'scripts/visual-evolution-p1-avd.sh'),'utf8');
+ assert.match(android,/scrollIntoView\(\{behavior:'instant',block:'center'\}\)/);
+ assert.match(android,/awaitV5QuestionFramePainted\(topFrame,targetCss\)/);
+ assert.match(android,/private double awaitV5QuestionFramePainted\(android\.graphics\.Bitmap top,int widthCss\)/);
+ const middle=android.slice(android.indexOf('private double awaitV5QuestionFramePainted('),
+   android.indexOf('private double awaitV5BottomFramePainted('));
+ assert.match(middle,/latest=v5DisplayChangeRatio\(top,frame\)/);
+ assert.match(middle,/latest>=0\.15d/);
+ assert.match(middle,/if\(\+\+consecutive>=2\)/);
+ assert.match(middle,/P2 middle question screenshot rejected: real Android display/);
+ assert.match(android,/questionState\.getBoolean\("visible"\)/);
+ assert.match(android,/questionState\.getInt\("badges"\)/);
+ assert.match(android,/questionState\.getBoolean\("favorite"\)/);
+ assert.match(android,/questionState\.getBoolean\("noOverflow"\)/);
+ assert.ok(android.indexOf('awaitV5QuestionFramePainted(topFrame,targetCss)') <
+  android.indexOf('shell("screencap -p /sdcard/Download/V5-P2-question-'),
+  'Never archive a middle screenshot until its real Android frame is painted');
+ assert.ok(android.indexOf('V5-P2-question-') <
+  android.indexOf('window.scrollTo(0,document.documentElement.scrollHeight)'),
+  'Middle screenshot must be taken before the bottom scroll');
+ assert.match(avd,/build\/p0-avd\/p2-question-viewports/);
+ assert.match(avd,/adb pull "\/sdcard\/Download\/V5-P2-question-\$\{css\}\.png"/);
+ assert.match(avd,/assert all\(p\.is_file\(\) for p in middle\)/);
+ assert.match(avd,/p2_middle_question_screenshots/);
+ assert.match(avd,/assert \(width,height\)==dimensions\[css\]/);
+});
