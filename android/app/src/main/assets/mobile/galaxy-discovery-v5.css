@@ -1,0 +1,132 @@
+/* Nuestra Galaxia Visual Evolution V5-P3 · WebView only.
+   Semantic theme variables, keyboard and safe-area support; chat untouched. */
+dialog.modal[data-form="v5-p3-search"],
+dialog.modal[data-form="v5-p3-notifications"]{
+ padding:max(12px,env(safe-area-inset-top)) 10px max(12px,env(safe-area-inset-bottom));
+ max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+ overscroll-behavior:contain;
+}
+dialog.modal[data-form="v5-p3-search"] .modal-inner,
+dialog.modal[data-form="v5-p3-notifications"] .modal-inner{
+ display:flex;flex-direction:column;min-height:0;
+ width:min(100%,600px);max-height:calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+ overflow:hidden;box-sizing:border-box;
+}
+dialog.modal[data-form="v5-p3-search"] .modal-inner>h2,
+dialog.modal[data-form="v5-p3-notifications"] .modal-inner>h2{
+ flex:none;margin:0 48px 12px 0;
+}
+dialog.modal[data-form="v5-p3-search"] .v5-p3-search,
+dialog.modal[data-form="v5-p3-notifications"] .v5-notification-mount{
+ flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;
+}
+dialog.modal[data-form="v5-p3-search"] .universal-search-box{
+ flex:none;min-height:48px;outline:none;
+}
+dialog.modal[data-form="v5-p3-search"] .universal-search-box:focus-within{
+ box-shadow:0 0 0 2px var(--v5-action,var(--accent));border-color:transparent;
+}
+dialog.modal[data-form="v5-p3-search"] .universal-search-box .input:focus{
+ box-shadow:none!important;outline:none!important;
+}
+dialog.modal[data-form="v5-p3-search"] .v5-search-help{
+ flex:none;margin:8px 3px 10px;font-size:12px;line-height:1.5;color:var(--muted);
+}
+dialog.modal[data-form="v5-p3-search"] .v5-search-results{
+ flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+ scroll-padding-block:12px max(20px,env(safe-area-inset-bottom));
+ padding:0 3px max(16px,env(safe-area-inset-bottom));
+ scrollbar-gutter:stable;
+}
+.v5-discovery-groups{display:grid;gap:14px}
+.v5-result-group{min-width:0}
+.v5-group-heading{
+ display:flex;justify-content:space-between;align-items:center;gap:10px;
+ font-size:12px;line-height:1.45;font-weight:800;color:var(--text);
+ letter-spacing:.025em;margin:10px 3px 8px;
+}
+.v5-group-heading span{font-weight:650;font-size:11px;color:var(--muted)}
+.v5-result-group .universal-search-list{margin-top:0}
+.v5-p3-search .universal-search-result,
+.v5-notification-panel .notification-row{
+ min-height:52px;transition:background .18s ease,border-color .18s ease;
+}
+.v5-p3-search .universal-search-result:focus-visible,
+.v5-notification-panel button:focus-visible{
+ outline:2px solid var(--v5-action,var(--accent));outline-offset:2px;
+}
+.v5-p3-search .search-result-copy b,
+.v5-p3-search .search-result-copy small{
+ overflow-wrap:anywhere;white-space:normal;text-overflow:clip;
+ line-height:1.45;
+}
+.v5-p3-search .search-result-copy b{font-size:13px}
+.v5-p3-search .search-result-copy small{font-size:12px}
+.v5-p3-search .universal-search-empty{padding:24px 12px}
+.v5-p3-search .intelligence-search-divider{flex-wrap:wrap}
+.v5-p3-search .intelligence-search-divider small{flex-basis:100%}
+.v5-p3-search .universal-search-result .badge{max-width:90px;white-space:normal}
+.v5-notification-panel{
+ display:flex;flex-direction:column;overflow:hidden;flex:1;min-height:0;
+}
+.v5-notification-panel .notification-center-head{
+ flex:none;gap:12px;align-items:center;flex-wrap:wrap;
+}
+.v5-notification-panel .notification-center-head .btn{min-height:44px}
+.v5-notification-filters{
+ flex:none;display:flex;gap:7px;overflow-x:auto;scrollbar-width:thin;
+ padding:3px 2px 12px;overscroll-behavior-x:contain;
+}
+.v5-notification-filter{
+ display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;
+ min-height:44px;padding:9px 12px;border-radius:14px;
+ background:var(--surface2);color:var(--text);border:1px solid var(--border);
+ font-weight:700;font-size:12px;
+}
+.v5-notification-filter[aria-selected="true"]{
+ border-color:var(--v5-action,var(--accent));background:var(--surface);
+ box-shadow:inset 0 0 0 1px var(--v5-action,var(--accent));
+}
+.v5-notification-filter span{font-size:11px;color:var(--muted)}
+.v5-notification-panel .notification-center-list{
+ flex:1;min-height:0;max-height:none;overflow-y:auto;overscroll-behavior:contain;
+ padding:0 3px max(18px,env(safe-area-inset-bottom));
+ scroll-padding-block:12px 22px;
+}
+.v5-notification-group{display:grid;gap:8px;min-width:0}
+.v5-notification-panel .notification-row{
+ width:100%;grid-template-columns:40px minmax(0,1fr);
+ align-items:start;
+}
+.v5-notification-panel .notification-row .v5-notification-body{
+ display:grid;gap:5px;min-width:0;
+}
+.v5-notification-panel .notification-row b,
+.v5-notification-panel .notification-row small{
+ font-size:13px;line-height:1.45;white-space:normal;
+ overflow-wrap:anywhere;text-overflow:clip;overflow:visible;
+}
+.v5-notification-panel .notification-row b{font-weight:750}
+.v5-notification-panel .notification-row small{font-size:12px;color:var(--muted)}
+.v5-notification-panel .notification-row em{
+ font-size:12px;line-height:1.35;color:var(--muted);
+}
+.v5-notification-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.v5-event-kind,.v5-unread-indicator{
+ border:1px solid var(--border);border-radius:8px;
+ font-size:10px;font-weight:750;line-height:1.4;
+ padding:3px 6px;color:var(--muted);
+}
+.v5-unread-indicator{
+ color:var(--v5-action,var(--accent));
+ border-color:var(--v5-action,var(--accent));
+}
+@media(max-width:360px){
+ dialog.modal[data-form^="v5-p3-"] .modal-inner{padding:14px 12px}
+ .v5-notification-filter{padding-inline:10px}
+ .v5-p3-search .universal-search-result{gap:8px;padding:10px}
+}
+@media(prefers-reduced-motion:reduce){
+ .v5-p3-search .universal-search-result,
+ .v5-notification-panel .notification-row{transition:none!important}
+}
