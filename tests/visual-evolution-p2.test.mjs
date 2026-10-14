@@ -290,3 +290,46 @@ test('P2K goals summary never invents unavailable or stale goals data',()=>{
  assert.doesNotMatch(renderWelcomeShortcut('goals-open',{goals,goalsAgeMs:200_000}),/welcome-action-meta/);
  assert.doesNotMatch(renderWelcomeShortcut('goals-open',{goals:{goals:[]}}),/welcome-action-meta/);
 });
+
+
+const privacyDeepLinkSource=extract('function openPresencePrivacySettings(){',"let nativeThemeSent='';");
+
+test('P2L privacy CTA synchronously navigates to the visible real settings panel and focuses it',()=>{
+ const calls=[],panel={
+  scrollIntoView:options=>calls.push(['scroll',options]),
+  focus:options=>calls.push(['focus',options])
+ };
+ const context={
+  go:view=>{calls.push(['go',view]);assert.equal(view,'more');},
+  document:{getElementById:id=>{
+   calls.push(['lookup',id]);assert.equal(id,'presencePrivacySettings');return panel;
+  }}
+ };
+ runInNewContext(privacyDeepLinkSource+'\nopenPresencePrivacySettings();',context);
+ assert.deepEqual(calls[0],['go','more']);
+ assert.deepEqual(calls[1],['lookup','presencePrivacySettings']);
+ assert.equal(calls[2][0],'scroll');
+ assert.equal(calls[2][1].block,'center');
+ assert.equal(calls[3][0],'focus');
+ assert.equal(calls[3][1].preventScroll,true);
+ assert.match(app,/if\(a==='now-settings'\)\{openPresencePrivacySettings\(\);return;\}/);
+});
+
+test('P2L privacy focus gracefully handles an unavailable panel without side effects or timeouts',()=>{
+ const calls=[];
+ runInNewContext(privacyDeepLinkSource+'\nopenPresencePrivacySettings();',{
+  go:view=>calls.push(view),
+  document:{getElementById:()=>null}
+ });
+ assert.deepEqual(calls,['more']);
+ assert.doesNotMatch(privacyDeepLinkSource,/setTimeout|setInterval|\bapi\s*\(|GalaxyNative\.call/);
+ assert.match(app,/id="presencePrivacySettings" class="card presence-privacy-settings"/);
+ assert.match(app,/aria-labelledby="presencePrivacyHeading" tabindex="-1"/);
+ assert.match(app,/id="presencePrivacyHeading">Privacidad de/);
+ assert.match(css,/\.presence-privacy-settings:focus \{/);
+ assert.match(css,/scroll-margin-block:88px/);
+ // The home control and the real privacy toggles retain their original actions.
+ assert.match(app,/data-action="now-settings"/);
+ for(const action of ['presence-battery','presence-listening','map'])
+  assert.ok(app.includes('data-action="'+action+'"'),'Privacy control unavailable '+action);
+});
