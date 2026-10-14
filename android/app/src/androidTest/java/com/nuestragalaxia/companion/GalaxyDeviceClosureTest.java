@@ -132,6 +132,41 @@ public class GalaxyDeviceClosureTest {
      * QaHttpServer account. No real couple account, GPS, media or backend is used.
      * These are interaction/layout assertions, not owner-approved screenshot QA.
      */
+    @Test public void visualEvolutionP2_privacyShortcut_opensFocusedControlsWithoutChangingSharing() throws Exception {
+        launch();
+        awaitJs("!!document.querySelector('.galaxy-welcome .now-section [data-action=\\\"now-settings\\\"]')");
+        String privacyBefore=js("JSON.stringify({battery:ownPresence().shareBattery===true,"
+            + "listening:ownPresence().shareListening===true,tracking:!!native.tracking})");
+
+        // Exercise the REAL Android WebView event delegation and full page
+        // navigation, not a static source substring or hand-built HTML.
+        runV5Js("document.querySelector('.now-section [data-action=\\\"now-settings\\\"]').click()");
+        awaitJs("view==='more' && !!document.getElementById('presencePrivacySettings')"
+            + " && document.activeElement?.id==='presencePrivacySettings'");
+        JSONObject result=new JSONObject(js("JSON.stringify((()=>{"
+            + "const panel=document.getElementById('presencePrivacySettings'),"
+            + "r=panel.getBoundingClientRect(),"
+            + "actions=Array.from(panel.querySelectorAll('.privacy-toggle')).map(x=>x.dataset.action);"
+            + "return {visible:r.bottom>0&&r.top<innerHeight&&getComputedStyle(panel).display!=='none',"
+            + "focused:document.activeElement===panel,"
+            + "region:panel.getAttribute('role'),"
+            + "label:panel.getAttribute('aria-labelledby'),actions};})())"));
+        assertTrue("Privacy settings panel is not visibly reachable in More",result.getBoolean("visible"));
+        assertTrue("Privacy deep link failed to focus the destination",result.getBoolean("focused"));
+        assertEquals("region",result.getString("region"));
+        assertEquals("presencePrivacyHeading",result.getString("label"));
+        JSONArray actions=result.getJSONArray("actions");
+        assertEquals("Privacy controls count must remain intact",3,actions.length());
+        assertEquals("presence-battery",actions.getString(0));
+        assertEquals("presence-listening",actions.getString(1));
+        assertEquals("map",actions.getString(2));
+        String privacyAfter=js("JSON.stringify({battery:ownPresence().shareBattery===true,"
+            + "listening:ownPresence().shareListening===true,tracking:!!native.tracking})");
+        assertEquals("Navigating to privacy must never modify sharing settings",
+            privacyBefore,privacyAfter);
+        System.out.println("V5_P2_PRIVACY_DEEP_LINK=verified;controls:3;sharingUnchanged:true");
+    }
+
     @Test public void visualEvolutionP1_realWebViewThemesFloatingRailAndModalFocus_areSafe() throws Exception {
         launch();
         awaitJs("!!document.querySelector('#bottomNav .nav-btn.active') && !!document.querySelector('#chatFab:not(.hidden)')");
