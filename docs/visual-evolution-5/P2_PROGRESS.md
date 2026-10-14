@@ -165,3 +165,17 @@
 - Android JUnit `GalaxyDeviceClosureTest.visualEvolutionP2_privacyShortcut_opensFocusedControlsWithoutChangingSharing`: abre Inicio con estado QA real, activa el botón existente en la WebView empaquetada, exige que navegue a Más, que el panel esté realmente dentro del viewport y enfocado con `role/aria-labelledby`, que conserve exactamente tres controles con sus acciones originales y que los flags batería/música/GPS sean **idénticos antes y después de navegar**. No se deshabilita por permisos ni excepciones.
 
 **Salida obligatoria P2-L:** validar nuevamente los **15/15 workflows sobre el nuevo SHA**; verificar Android onboarding, CameraX, Phase 5 real Integration, screenshots / scroll, rutas/teclado/lectores y aceptación estética. No cerrar formalmente VE-017 ni PR #168 hasta evidencia y aprobación del propietario. No fusionar ni desplegar.
+
+## P2-M · Pregunta diaria: progreso individual + favorito accesible (VE-022/024) — 14-oct-2026
+
+**Punto de partida confirmado:** `7604412d3cd046e7adc05b4ceb185a73a02704ea` completó **15/15 workflows SUCCESS** sobre ese mismo SHA, incluida instrumentación Android real de navegación Inicio → controles de privacidad en Más (P2-L). PR #168 permanece DRAFT; V5-P0/P1 ya integrados a `desarrollo`. No extrapolar el PASS de P2-L a los cambios de P2-M.
+
+**Hallazgo:** la tarjeta de pregunta del día indicaba `0/1/2` respuestas pero no si la propia persona o su pareja faltaba por responder. El botón favorito tenía clase `active` visual, pero carecía de `aria-pressed` para reflejar su selección. No es necesario obtener más datos ni cambiar el motor de preguntas.
+
+**Implementación de alcance solo visual (WebView Android):**
+- `dailyQuestionCard(own,partner)` calcula únicamente los booleanos `ownAnswered`/`partnerAnswered` del estado existente y añade dos cápsulas de estado (`Tú` y `Tu persona`, `Lista`/`Pendiente`) con etiquetas accesibles. **No incluye las respuestas privadas ni sus contenidos dentro de las cápsulas**; se conserva `dailyAnswerMarkup`, su conducta de privacidad y las reglas actuales de visibilidad.
+- Favorito conserva `data-action="date-question-favorite"`, etiqueta contextual y comportamiento real; añade `type=button` y `aria-pressed=true/false`. Se conservan sin cambios las acciones `galaxy-share`, `date-question-decks`, `date-question-memory` y bloqueo de creación de recuerdo hasta tener ambas respuestas.
+- CSS modular: dos columnas responsivas a 320 px, estados contrastados, objetivos de alto mínimo 44 px, sin animaciones o temporizadores y sin tocar Galaxy Chat/IA/DB/GPS/FCM.
+- Dos pruebas dinámicas en `tests/visual-evolution-p2.test.mjs`: combinaciones `0/1/2` incluyendo quién respondió, protección del texto confidencial en el indicador, favorito activo/inactivo, touch target, rutas intactas y cero llamadas nuevas.
+
+**Gates de salida para este SHA:** 15/15 workflows, pruebas Node 24, captura real de WebView Android con 320/360/393/412 px CSS y siete temas, inspección visual de progreso y favorito, legibilidad con fuente ampliada y aprobación visual humana de P2. Hasta entonces VE-022/024 se mantienen **EN CURSO** y P2-M no está certificado. Prohibido fusionar #168 o promover QA/prod sin autorización expresa.
