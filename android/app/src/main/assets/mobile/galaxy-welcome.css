@@ -205,3 +205,12 @@ body:not(.chat-mode) #app .date-question-card .icon-btn[aria-pressed="true"] {
 @media(max-width:360px) {
  body:not(.chat-mode) #app .date-question-person {padding:8px 7px;gap:5px;}
 }
+
+/* V5 P2Q (VE-030): Android middle-scroll evidence showed Chat FAB
+   overlapping the outer edge of question buttons at 320–412 CSS px.
+   Reserve the actual right-side floating-action exclusion zone while
+   preserving all three existing actions and their touch targets. */
+body:not(.chat-mode) #app .galaxy-welcome .date-question-actions {
+ box-sizing:border-box;
+ padding-inline-end:clamp(52px,13vw,68px);
+}
