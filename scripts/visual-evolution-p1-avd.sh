@@ -86,7 +86,7 @@ for kind in ('search','notifications'):
     assert all(p.is_file() for p in images), f'Missing real P3 {kind} PNGs: {[str(p) for p in images if not p.is_file()]}'
     for css,path in zip(viewports,images):
         blob=path.read_bytes()
-        assert blob.startswith(b'\\x89PNG\\r\\n\\x1a\\n'), f'Invalid P3 {kind} screenshot: {path}'
+        assert blob.startswith(b'\x89PNG\r\n\x1a\n'), f'Invalid P3 {kind} screenshot: {path}'
         width,height=struct.unpack('>II',blob[16:24])
         assert (width,height)==dimensions[css], f'P3 {kind} dimensions mismatch {css}: {width}x{height}'
         assert hashlib.sha256(blob).hexdigest()!=hashlib.sha256(responsive[viewports.index(css)].read_bytes()).hexdigest(), f'P3 {kind} screenshot stale/duplicated at {css}'
