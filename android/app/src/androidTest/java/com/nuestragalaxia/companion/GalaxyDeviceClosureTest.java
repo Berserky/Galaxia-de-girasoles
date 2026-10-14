@@ -472,6 +472,8 @@ public class GalaxyDeviceClosureTest {
                     assertEquals("P3 Android assets not loaded", "true",
                         js("!!window.GalaxyDiscoveryV5 && !!document.querySelector("
                           + "'link[href=\\\"./galaxy-discovery-v5.css\\\"]')"));
+                    android.graphics.Bitmap beforeP3=instrumentation.getUiAutomation().takeScreenshot();
+                    assertNotNull("P3 cannot capture Android baseline framebuffer",beforeP3);
                     runV5Js("openUniversalSearch();"
                         + "document.getElementById('universalSearchResults').innerHTML="
                         + "GalaxyDiscoveryV5.renderClassic(["
@@ -503,6 +505,13 @@ public class GalaxyDeviceClosureTest {
                     for (int i=0;i<searchEvidence.getJSONArray("targets").length();i++)
                         assertTrue("P3 search result too short for touch",
                             searchEvidence.getJSONArray("targets").getDouble(i)>=44d);
+                    runV5Js("const marker=document.createElement('span');"
+                        + "marker.id='v5-p3-qa-paint';"
+                        + "marker.style.cssText='position:absolute;top:12px;left:14px;'+"
+                        + "'width:72px;height:18px;background:#1bd7ab;z-index:2147483647;pointer-events:none';"
+                        + "modal.querySelector('.modal-inner').style.position='relative';"
+                        + "modal.querySelector('.modal-inner').append(marker)");
+                    awaitV5P3ModalPainted(beforeP3,targetCss,"search",27,215,171);
                     shell("screencap -p /sdcard/Download/V5-P3-search-"+targetCss+".png");
                     runV5Js("closeModal()");
 
@@ -542,7 +551,15 @@ public class GalaxyDeviceClosureTest {
                         notificationEvidence.getDouble("minTouch")>=44d);
                     assertTrue("P3 notifications horizontal overflow "+targetCss,
                         notificationEvidence.getBoolean("noOverflow"));
+                    runV5Js("const marker=document.createElement('span');"
+                        + "marker.id='v5-p3-qa-paint';"
+                        + "marker.style.cssText='position:absolute;top:12px;left:14px;'+"
+                        + "'width:72px;height:18px;background:#f39b42;z-index:2147483647;pointer-events:none';"
+                        + "modal.querySelector('.modal-inner').style.position='relative';"
+                        + "modal.querySelector('.modal-inner').append(marker)");
+                    awaitV5P3ModalPainted(beforeP3,targetCss,"notifications",243,155,66);
                     shell("screencap -p /sdcard/Download/V5-P3-notifications-"+targetCss+".png");
+                    beforeP3.recycle();
                     runV5Js("closeModal()");
                 } finally {
                     topFrame.recycle();
@@ -1656,6 +1673,53 @@ public class GalaxyDeviceClosureTest {
         throw new AssertionError("P2 middle question screenshot rejected: real Android display"
             +" did not paint distinct question frame at css "+widthCss
             +";changedPixelRatio:"+latest);
+    }
+
+    /**
+     * P3 display-pixel gate. DOM geometry and valid PNG headers are NOT evidence
+     * that the headless Android compositor painted the active dialog.
+     * Unique per-modal QA markers are shown only in isolated AVD fixture tests.
+     */
+    private void awaitV5P3ModalPainted(android.graphics.Bitmap previous,int widthCss,
+                                       String surface,int red,int green,int blue) {
+        long deadline=SystemClock.elapsedRealtime()+20_000;
+        int stable=0;
+        int matched=0;
+        double ratio=0d;
+        while(SystemClock.elapsedRealtime()<deadline) {
+            android.graphics.Bitmap shot=null;
+            try {
+                shot=instrumentation.getUiAutomation().takeScreenshot();
+                matched=0;
+                if(shot!=null) {
+                    ratio=v5DisplayChangeRatio(previous,shot);
+                    // Scan actual Android framebuffer for the modal-specific
+                    // high-chroma marker. It is invisible behind an unpainted
+                    // WebView, unlike its already-updated HTML DOM.
+                    for(int y=24;y<shot.getHeight()*3/4;y+=6) {
+                        for(int x=12;x<shot.getWidth()*3/4;x+=6) {
+                            int p=shot.getPixel(x,y);
+                            if(Math.abs(android.graphics.Color.red(p)-red)<=5
+                                && Math.abs(android.graphics.Color.green(p)-green)<=5
+                                && Math.abs(android.graphics.Color.blue(p)-blue)<=5)matched++;
+                        }
+                    }
+                }
+                if(matched>=18&&ratio>=0.01d) {
+                    if(++stable>=2) {
+                        System.out.println("V5_P3_MODAL_REAL_DISPLAY=css:"+widthCss
+                            +";surface:"+surface+";markerPixels:"+matched
+                            +";changedPixelRatio:"+ratio+";verified:true");
+                        return;
+                    }
+                } else stable=0;
+            }catch(RuntimeException ignored){stable=0;}
+            finally {if(shot!=null)shot.recycle();}
+            SystemClock.sleep(250);
+        }
+        throw new AssertionError("P3 "+surface+" modal did not visibly paint"
+            +" on real Android display at css "+widthCss
+            +";markerPixels:"+matched+";changedPixelRatio:"+ratio);
     }
 
     private double awaitV5BottomFramePainted(android.graphics.Bitmap top,int widthCss) {
