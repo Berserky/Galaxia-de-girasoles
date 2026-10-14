@@ -166,3 +166,12 @@ body:not(.chat-mode) #app .welcome-bento .action-card:focus-visible {
 @media(max-width:360px){
  body:not(.chat-mode) #app .welcome-bento .action-card {gap:7px;min-height:122px}
 }
+
+/* V5 P2L: keyboard/programmatic focus for Inicio → existing privacy panel. */
+body:not(.chat-mode) #app .presence-privacy-settings {
+ scroll-margin-block:88px;
+}
+body:not(.chat-mode) #app .presence-privacy-settings:focus {
+ outline:2px solid var(--v5-action);
+ outline-offset:3px;
+}
