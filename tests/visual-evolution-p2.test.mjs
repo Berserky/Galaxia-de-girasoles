@@ -125,9 +125,9 @@ test('P2B mood options remain tappable and readable on narrow screens',()=>{
 
 const dailyAnswerSource=extract('function dailyAnswerMarkup(', 'function dailyQuestionCard(');
 const dailyQuestionSource=extract('function dailyQuestionCard(', 'function personCard(');
-function renderDaily(own={},partner={}){
+function renderDaily(own={},partner={},favorite=false){
  const context={
-  dateContext:{question:{}},cloud:{today:'2026-10-13'},
+  dateContext:{question:{favorite}},cloud:{today:'2026-10-13'},
   dailyQuestion:()=> '¿Qué te hizo sonreír hoy?',ico:()=>'',esc:v=>String(v),attr:v=>String(v),
   myName:()=> 'Yo',partnerName:()=> 'Mi persona',own,partner
  };
@@ -332,4 +332,42 @@ test('P2L privacy focus gracefully handles an unavailable panel without side eff
  assert.match(app,/data-action="now-settings"/);
  for(const action of ['presence-battery','presence-listening','map'])
   assert.ok(app.includes('data-action="'+action+'"'),'Privacy control unavailable '+action);
+});
+
+
+test('P2M personal answer readiness is correct for 0/1/2 responses and never embeds their text',()=>{
+ const examples=[
+  {own:{},partner:{},count:0,me:'Pendiente',other:'Pendiente'},
+  {own:{answer:'ALPHA_CONFIDENTIAL'},partner:{},count:1,me:'Lista',other:'Pendiente'},
+  {own:{},partner:{answer:'BETA_CONFIDENTIAL'},count:1,me:'Pendiente',other:'Lista'},
+  {own:{answer:'ALPHA_CONFIDENTIAL'},partner:{answer:'BETA_CONFIDENTIAL'},count:2,me:'Lista',other:'Lista'},
+ ];
+ for(const x of examples){
+  const html=renderDaily(x.own,x.partner);
+  assert.match(html,new RegExp(x.count+' de 2 respuestas listas'));
+  const badges=html.split('<div class="date-question-person-status"')[1]?.split('</div>')[0]||'';
+  assert.match(badges,/role="group" aria-label="Quién ha respondido"/);
+  assert.match(badges,new RegExp('aria-label="Tu respuesta: '+x.me.toLowerCase()+'"'));
+  assert.match(badges,new RegExp('aria-label="La otra respuesta: '+x.other.toLowerCase()+'"'));
+  assert.equal((badges.match(/class="date-question-person /g)||[]).length,2);
+  assert.doesNotMatch(badges,/ALPHA_CONFIDENTIAL|BETA_CONFIDENTIAL/);
+  assert.match(html,/aria-pressed="false"/);
+  assert.equal(html.includes('data-action="date-question-memory" disabled'),x.count<2);
+ }
+ assert.doesNotMatch(dailyQuestionSource,/\b(?:api|fetch|saveDaily)\s*\(/);
+});
+
+test('P2M favorite state has accessible pressed semantics and unchanged existing actions',()=>{
+ const favorite=renderDaily({}, {}, true);
+ const normal=renderDaily({}, {}, false);
+ assert.match(favorite,/data-action="date-question-favorite" aria-pressed="true" aria-label="Quitar de favoritas"/);
+ assert.match(normal,/data-action="date-question-favorite" aria-pressed="false" aria-label="Marcar como favorita"/);
+ assert.match(css,/V5 P2M: explicit individual answer readiness/);
+ assert.match(css,/date-question-person-status \{[\s\S]*?grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+ assert.match(css,/date-question-person \{[\s\S]*?min-height:44px/);
+ assert.match(css,/\.date-question-card \.icon-btn\[aria-pressed="true"\]/);
+ for(const action of ['galaxy-share','date-question-decks','date-question-memory']){
+  assert.match(favorite,new RegExp('data-action="'+action+'"'));
+  assert.match(normal,new RegExp('data-action="'+action+'"'));
+ }
 });
