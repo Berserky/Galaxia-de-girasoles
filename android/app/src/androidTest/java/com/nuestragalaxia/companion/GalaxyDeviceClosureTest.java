@@ -416,9 +416,16 @@ public class GalaxyDeviceClosureTest {
                         + "fav=document.querySelector('.date-question-card [data-action=date-question-favorite]'),"
                         + "nav=document.getElementById('bottomNav'),r=badges?.getBoundingClientRect(),"
                         + "n=nav.getBoundingClientRect(),"
-                        + "chips=badges?.querySelectorAll('.date-question-person');"
+                        + "chips=badges?.querySelectorAll('.date-question-person'),"
+                        + "fab=document.getElementById('chatFab'),"
+                        + "actions=[...document.querySelectorAll('.date-question-actions > .btn')],"
+                        + "f=fab.getBoundingClientRect(),"
+                        + "touch=actions.map(b=>b.getBoundingClientRect()),"
+                        + "fabClear=actions.length===3&&touch.every(b=>"
+                        + "!(b.left<f.right-1&&b.right>f.left+1&&b.top<f.bottom-1&&b.bottom>f.top+1));"
                         + "return {scrollY:scrollY,visible:!!r&&r.top>=55&&r.bottom<n.top-8,"
                         + "badges:chips?.length||0,favorite:fav?.hasAttribute('aria-pressed'),"
+                        + "fabClear,minActionTouch:Math.min(...touch.map(b=>b.width)),"
                         + "noOverflow:document.documentElement.scrollWidth<=innerWidth+3}})())",20);
                     JSONObject questionState=new JSONObject(questionRect);
                     assertTrue("P2 middle question not visible above fixed nav at "+targetCss+": "+questionRect,
@@ -431,6 +438,10 @@ public class GalaxyDeviceClosureTest {
                         questionState.getBoolean("favorite"));
                     assertTrue("P2 question introduced horizontal overflow at "+targetCss,
                         questionState.getBoolean("noOverflow"));
+                    assertTrue("Chat FAB obscures daily question actions at "+targetCss+": "+questionRect,
+                        questionState.getBoolean("fabClear"));
+                    assertTrue("Question action too narrow after FAB clearance at "+targetCss+": "+questionRect,
+                        questionState.getDouble("minActionTouch")>=44d);
                     double middleDisplayChange=awaitV5QuestionFramePainted(topFrame,targetCss);
                     row.put("middleQuestionReached",true)
                         .put("middleRealDisplayChange",middleDisplayChange);
