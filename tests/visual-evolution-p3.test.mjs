@@ -85,7 +85,7 @@ test('P3: empty, unread and offline states are explicit',()=>{
 test('P3: preserve navigation and modal lifecycle with independent keyboard-safe result scroll',()=>{
  assert.match(app,/showModal\('Notificaciones',[\s\S]*?'v5-p3-notifications'\)/);
  assert.match(app,/showModal\('Buscar en nuestra galaxia',[\s\S]*?'v5-p3-search'\)/);
- assert.match(app,/data-action="notifications-filter"/);
+ assert.match(presenter,/data-action="notifications-filter"/);
  assert.match(app,/if\(a==='notifications-filter'\)/);
  assert.match(app,/if\(a==='notification-open'\)/);
  assert.match(app,/if\(a==='universal-search-result'\)/);
