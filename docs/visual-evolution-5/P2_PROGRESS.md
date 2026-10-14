@@ -135,3 +135,18 @@
 **Gobernanza CI:** el commit `3598fbd` tenía 13/15 SUCCESS y 2 en progreso cuando se comenzaron nuevos cambios; la política de concurrencia de GitHub finalmente canceló esos dos, por lo que **no equivale a 15/15**. Las pruebas y el producto P2-F requieren 15/15 sobre el nuevo HEAD estable; no transferir PASS de commits anteriores. Hallazgo VE-014 permanece abierto hasta pruebas instrumentadas y aprobación visual del propietario.
 
 **Sin autorización:** PR #168 DRAFT, ninguna fusión a `desarrollo`, `qa` ni `prod`.
+
+## P2-K · Accesos rápidos con contexto verificado (VE-027 / VE-029) — 14-oct-2026
+
+**Baseline antes de implementar:** PR #168, `d6809fd`, **15/15 workflows GitHub SUCCESS** sobre la misma revisión, incluyendo Android Phase5/Phase11, CameraX, las siete apariencias y capturas del **scroll real** en cuatro anchuras. La aprobación estética del propietario y el cierre integral de P2 siguen pendientes.
+
+**Hallazgo:** las cinco acciones bento de Inicio conservaban su funcionalidad, pero eran difíciles de distinguir visualmente por propósito y carecían de microcontexto útil. No se justifica un endpoint adicional ni insertar en el DOM respuestas íntimas, ubicaciones, canciones o nombres de registros solo para decorar accesos.
+
+**Implementación en rama aislada:**
+- Cada botón conserva su `data-action` original y sus textos/íconos; añade categoría semántica breve: **EXPLORAR, CONECTAR, CREAR, PLANEAR, AVANZAR**. CSS local, texto adaptable, foco visible, 320px y sin dependencias/migraciones.
+- Únicamente se añaden microresúmenes **si el estado ya cargado los demuestra**: cantidad no nula de planes sin marcar `done`, recuerdos existentes, días de jardín válidos y objetivos en marcha (solo desde `goalsState` si fue cargado hace menos de tres minutos). No se dispara `loadGoals` desde Inicio ni una llamada de red.
+- Si no existen datos, no están cargados o están obsoletos, el contador se **omite**, no se muestra un «0» inventado. No se insertan títulos, localizaciones, respuestas, nombres ni objetos privados como metadatos o atributos.
+- Nuevas regresiones herméticas `tests/visual-evolution-p2.test.mjs`: cinco rutas, categorías, datos ausentes/presentes, pluralización, ahorro de llamadas, cache caducada y protección de títulos privados. Mantiene tests históricos Android de scroll inferior / imagen física.
+
+**QA posterior obligatorio:** 15/15 workflows en el HEAD que reúna código/CSS/tests y este ledger. Comprobar capturas Android V5 a 320/360/393/412, seven themes, navegación, contacto con FAB y barra inferior, texto largo/fuente grande, teclado/estados vacíos y aprobación visual humana. Los IDs VE-027/029 están **EN CURSO**, no cerrados. No tocar IA, Galaxy Chat central, GPS/FCM, backend ni QA/prod; PR #168 permanece DRAFT sin permiso para fusionar.
+
