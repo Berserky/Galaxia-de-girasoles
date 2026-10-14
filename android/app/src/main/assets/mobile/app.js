@@ -907,10 +907,7 @@ function universalSearchResultsMarkup(query){
  if(!q)return '<div class="universal-search-empty">'+ico('search')+'<h3>Todo lo nuestro, en una búsqueda</h3><p>Busca recuerdos, planes, notas, canciones, cápsulas, deseos, viajes, fechas o lugares.</p></div>';
  const rows=universalSearchRows(q);
  if(!rows.length)return '<div class="universal-search-empty">'+ico('search-x')+'<h3>No encontramos nada</h3><p>Prueba con otra palabra, un lugar, una fecha o el nombre de un recuerdo.</p></div>';
- return '<div class="universal-search-list">'+rows.map(r=>{
-  const iconName=r.type==='place'?'map-pin':(kindMeta[r.kind]?.[0]||'file-text');
-  return '<button class="universal-search-result" data-action="universal-search-result" data-type="'+attr(r.type)+'" data-id="'+attr(r.id)+'" data-kind="'+attr(r.kind||'')+'"><span class="search-result-icon">'+ico(iconName)+'</span><span class="search-result-copy"><b>'+esc(r.title)+'</b><small>'+esc(r.subtitle||'')+'</small></span>'+ico('chevron-right')+'</button>';
- }).join('')+'</div><p class="universal-search-count">'+rows.length+' resultado'+(rows.length===1?'':'s')+'</p>';
+ return window.GalaxyDiscoveryV5.renderClassic(rows,{ico,esc,attr,kindMeta});
 }
 function intelligenceSearchExtraMarkup(result,classicRows=[]){
  const classicKeys=new Set((classicRows||[]).map(r=>(r.type==='place'?'place':r.kind)+':'+String(r.id)));
@@ -921,24 +918,25 @@ function intelligenceSearchExtraMarkup(result,classicRows=[]){
 }
 function renderUniversalSearchResults(query){
  const el=document.querySelector('#universalSearchResults');if(!el)return;
- const q=String(query||'').trim(),classic=universalSearchRows(q);
- el.innerHTML=universalSearchResultsMarkup(q);refreshIcons();
+ const nonce=++intelligenceSearchNonce, q=String(query||'').trim(),classic=universalSearchRows(q);
+ el.innerHTML=universalSearchResultsMarkup(q);el.setAttribute('aria-busy','false');refreshIcons();
  if(q.length<2||!native.paired)return;
- const nonce=++intelligenceSearchNonce;
+ el.setAttribute('aria-busy','true');
+ el.insertAdjacentHTML('beforeend','<p class="universal-search-count intelligence-search-status" role="status">Buscando coincidencias relacionadas…</p>');
  api('intelligence-search',{query:q,limit:24}).then(result=>{
-  if(nonce!==intelligenceSearchNonce||!document.querySelector('#universalSearchResults'))return;
+  if(nonce!==intelligenceSearchNonce||modal.dataset.form!=='v5-p3-search')return;
   const target=document.querySelector('#universalSearchResults');
-  if(target){target.innerHTML=universalSearchResultsMarkup(q)+intelligenceSearchExtraMarkup(result,classic);refreshIcons();}
+  if(target){target.innerHTML=universalSearchResultsMarkup(q)+intelligenceSearchExtraMarkup(result,classic);target.setAttribute('aria-busy','false');refreshIcons();}
  }).catch(()=>{
-  if(nonce!==intelligenceSearchNonce)return;
+  if(nonce!==intelligenceSearchNonce||modal.dataset.form!=='v5-p3-search')return;
   const target=document.querySelector('#universalSearchResults');
-  if(target&&!target.querySelector('.intelligence-search-status'))target.insertAdjacentHTML('beforeend','<p class="universal-search-count intelligence-search-status">Galaxy Intelligence no respondió · fallback clásico activo.</p>');
+  if(target){target.querySelector('.intelligence-search-status')?.remove();target.insertAdjacentHTML('beforeend','<p class="universal-search-count intelligence-search-status" role="status">La búsqueda relacionada no está disponible. Tus coincidencias directas siguen aquí.</p>');target.setAttribute('aria-busy','false');}
  });
 }
 function openUniversalSearch(){
- showModal('Buscar en nuestra galaxia','<div class="universal-search"><label class="universal-search-box">'+ico('search')+'<input id="universalSearchInput" class="input" autocomplete="off" autocapitalize="sentences" placeholder="Un recuerdo, lugar, canción, plan…" aria-label="Buscar en nuestra galaxia"></label><div id="universalSearchResults" aria-live="polite"></div></div>');
+ showModal('Buscar en nuestra galaxia','<div class="universal-search v5-p3-search"><label class="universal-search-box">'+ico('search')+'<input id="universalSearchInput" class="input" type="search" autocomplete="off" autocapitalize="sentences" placeholder="Un recuerdo, lugar, canción, plan…" aria-label="Buscar en nuestra galaxia" aria-controls="universalSearchResults"></label><p class="v5-search-help">Busca en su historia. Las coincidencias directas aparecen primero.</p><div id="universalSearchResults" aria-live="polite" aria-busy="false" class="v5-search-results"></div></div>','v5-p3-search');
  renderUniversalSearchResults('');
- setTimeout(()=>document.querySelector('#universalSearchInput')?.focus(),80);
+ setTimeout(()=>document.querySelector('#universalSearchInput')?.focus({preventScroll:true}),80);
 }
 async function openUniversalSearchResult(btn){
  const type=String(btn.dataset.type||''),id=String(btn.dataset.id||'');
@@ -2614,10 +2612,25 @@ async function beginChatHoldRecording(e,button){
 function notificationIcon(type){
  return type==='chat_message'?'message-circle':type==='status_changed'?'message-circle':type==='mood_changed'?'heart':type==='daily_answer'?'message-circle':type==='goal_update'?'target':type==='nearby'?'map-pin':type==='arrived_safe'?'house':type==='memory_shared'?'images':type==='plan_update'?'calendar':type==='gesture'?'hand-heart':'bell';
 }
+let v5NotificationFilter='all';
+function renderV5NotificationPanel(){
+ if(!notificationState)return;
+ const inner=modal.querySelector('.v5-notification-mount');if(!inner)return;
+ inner.innerHTML=window.GalaxyDiscoveryV5.renderNotifications(notificationState,v5NotificationFilter,{ico,esc,attr,fmtDateTime,notificationIcon});
+ refreshIcons();
+}
 async function openNotificationCenter(){
- const result=await api('notifications-list',{limit:80});notificationState=result;
- const rows=result.notifications||[];
- showModal('Notificaciones','<div class="notification-center-head"><p>'+Number(result.unread||0)+' sin leer</p>'+(result.unread?'<button class="btn small ghost" data-action="notifications-read-all">Marcar todas</button>':'')+'</div><div class="notification-center-list">'+(rows.length?rows.map(n=>'<button class="notification-row '+(!n.read_at?'unread':'')+'" data-action="notification-open" data-id="'+attr(n.id)+'" data-target="'+attr(n.action||'home')+'" data-entity-id="'+attr(n.entity_id||'')+'"><span class="notification-row-icon">'+ico(notificationIcon(n.event_type))+'</span><span><b>'+esc(n.title)+'</b><small>'+esc(n.body||'')+'</small><em>'+esc(fmtDateTime(n.created_at))+'</em></span></button>').join(''):'<div class="empty">Todavía no hay notificaciones.</div>')+'</div>','notifications');
+ showModal('Notificaciones','<div class="v5-notification-mount"><div class="universal-search-empty" role="status">'+ico('loader-circle')+'<h3>Cargando avisos…</h3></div></div>','v5-p3-notifications');
+ try{
+  const result=await api('notifications-list',{limit:80});
+  notificationState=result;
+  if(modal.open&&modal.dataset.form==='v5-p3-notifications')renderV5NotificationPanel();
+ }catch(error){
+  if(modal.open&&modal.dataset.form==='v5-p3-notifications'){
+   const root=modal.querySelector('.v5-notification-mount');
+   if(root){root.innerHTML='<div class="universal-search-empty" role="alert">'+ico('circle-alert')+'<h3>No pudimos cargar los avisos</h3><p>Comprueba tu conexión e inténtalo de nuevo.</p><button class="btn secondary" type="button" data-action="notifications-retry">Reintentar</button></div>';refreshIcons();}
+  }
+ }
 }
 async function routeGalaxyAction(action,entityId=''){
  const target=String(action||'home');
@@ -3188,8 +3201,10 @@ document.addEventListener('click',async e=>{
   if(a==='chat-voice-discard'){stopChatVoiceTicker();await GalaxyNative.call('discardVoiceRecording');ensureChatComposer().setRecordingIntent('idle');chatVoiceState={recording:false,paused:false,ready:false,durationMs:0};chatHoldRecord=null;chatVoiceEngine.reset();setChatPresence('ONLINE');chatRenderComposer();return;}
   if(a==='chat-voice-send'){const duration=chatVoiceState.durationMs;chatVoiceEngine.preparing();chatRenderComposer();try{const upload=await GalaxyNative.call('saveChatVoiceRecording');chatVoiceEngine.sending();chatRenderComposer();ensureChatComposer().setRecordingIntent('idle');setChatPresence('ONLINE');queueChatMessage({messageType:'audio',attachments:[normalizeChatUpload(upload,'audio',duration)]});chatVoiceState={recording:false,paused:false,ready:false,durationMs:0};chatVoiceEngine.reset();chatRenderComposer();}catch(err){chatVoiceEngine.fail(err.message);chatRenderComposer();throw err;}return;}
   if(a==='notifications-open'){await openNotificationCenter();return;}
+  if(a==='notifications-retry'){await openNotificationCenter();return;}
+  if(a==='notifications-filter'){v5NotificationFilter=btn.dataset.filter||'all';renderV5NotificationPanel();return;}
   if(a==='notifications-read-all'){await api('notifications-read');if(cloud?.notifications)cloud.notifications.unread=0;await openNotificationCenter();return;}
-  if(a==='notification-open'){await api('notifications-read',{id:btn.dataset.id});if(cloud?.notifications)cloud.notifications.unread=Math.max(0,Number(cloud.notifications.unread||0)-1);const target=btn.dataset.target||'home',entity=btn.dataset.entityId||'';closeModal();await routeGalaxyAction(target,entity);return;}
+  if(a==='notification-open'){const wasUnread=btn.classList.contains('unread');await api('notifications-read',{id:btn.dataset.id});if(wasUnread&&cloud?.notifications)cloud.notifications.unread=Math.max(0,Number(cloud.notifications.unread||0)-1);const target=btn.dataset.target||'home',entity=btn.dataset.entityId||'';closeModal();await routeGalaxyAction(target,entity);return;}
   if(a==='galaxy-notifications-enable'){await GalaxyNative.call('requestGalaxyNotifications');native=nativeState();render();toast('Notificaciones activadas.');return;}
   if(a==='goals-open'){go('goals');await loadGoals(true);return;}
   if(a==='goals-filter'){goalsFilter=btn.dataset.value||'active';render();return;}
