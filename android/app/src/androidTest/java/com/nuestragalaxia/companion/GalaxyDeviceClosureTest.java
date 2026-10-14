@@ -1185,25 +1185,36 @@ public class GalaxyDeviceClosureTest {
         // CI reproduced a false "app foreground / WebView hidden" assertion
         // during this launch gap, BEFORE the first Back was even pressed.
         // Verify a stable resolved picker before sending any cancellation.
-        // ActivityTaskManager can mark DocumentsUI RESUMED more than a second
-        // BEFORE its actual window is drawn. The old 3x RESUMED polls sent Back
-        // during that interval; the subsequent UI could still open behind our
-        // returned MainActivity. Require foreground window focus AND a real
-        // accessibility root, in addition to the OS resumed Activity.
+        // An Activity can be RESUMED before the OS renders DocumentsUI.
+        // Some headless API-35 runners never populate mCurrentFocus at all,
+        // even after the picker is Displayed. Instead require a real clickable
+        // accessibility node from the resolved picker plus a dwell time.
         long readyUntil=SystemClock.elapsedRealtime()+20_000;
         int stablePickerPolls=0;
-        while(SystemClock.elapsedRealtime()<readyUntil && stablePickerPolls<3) {
+        long firstInteractiveAt=0L;
+        while(SystemClock.elapsedRealtime()<readyUntil) {
             if(scenario.getState()==Lifecycle.State.DESTROYED)
                 throw new AssertionError("MainActivity destroyed before picker cancellation");
-            stablePickerPolls=isPickerFocusedAndAccessible(device,pickerPkg)?stablePickerPolls+1:0;
-            if(stablePickerPolls<3)SystemClock.sleep(300);
+            boolean interactive=isPickerInteractiveAndAccessible(device,pickerPkg);
+            if(interactive) {
+                if(stablePickerPolls==0)firstInteractiveAt=SystemClock.elapsedRealtime();
+                stablePickerPolls++;
+                if(stablePickerPolls>=4
+                    && SystemClock.elapsedRealtime()-firstInteractiveAt>=1800L) break;
+            } else {
+                stablePickerPolls=0;
+                firstInteractiveAt=0L;
+            }
+            SystemClock.sleep(300);
         }
-        assertTrue("OPEN_DOCUMENT picker was resumed but never stably focused AND accessible; "
-            +"refusing premature Back; pickerResumed="+isResumedPackage(pickerPkg)
-            +";pickerWindowFocused="+isFocusedPackage(pickerPkg)
-            +";a11yRootMatches="+pickerPkg.equals(device.getCurrentPackageName()),
-            stablePickerPolls>=3);
-        System.out.println("GALAXY_FILE_PICKER_STABLE=focusedAccessiblePicker;polls:"+stablePickerPolls);
+        boolean stablePicker=stablePickerPolls>=4 && firstInteractiveAt>0L
+            && SystemClock.elapsedRealtime()-firstInteractiveAt>=1800L;
+        assertTrue("OPEN_DOCUMENT picker never had stable interactive foreground UI; refusing premature Back; "
+            +"pickerResumed="+isResumedPackage(pickerPkg)
+            +";a11yRootMatches="+pickerPkg.equals(device.getCurrentPackageName())
+            +";hasClickablePickerNode="+device.hasObject(androidx.test.uiautomator.By.pkg(pickerPkg).clickable(true)),
+            stablePicker);
+        System.out.println("GALAXY_FILE_PICKER_STABLE=interactiveAccessiblePicker;polls:"+stablePickerPolls);
 
         for (int attempt = 1; attempt <= 3; attempt++) {
             // The boolean returned by UiAutomator is NOT evidence that Back
@@ -1274,18 +1285,11 @@ public class GalaxyDeviceClosureTest {
         return false;
     }
 
-    /** Resumed does NOT mean rendered: require the actual focused window. */
-    private boolean isFocusedPackage(String expectedPackage) throws Exception {
-        if(expectedPackage==null || expectedPackage.isBlank()) return false;
-        String focused=shell("dumpsys window | grep -m1 'mCurrentFocus='");
-        return focused.contains(expectedPackage+"/");
-    }
-
-    /** No Back until DocumentsUI owns the OS window and accessibility root. */
-    private boolean isPickerFocusedAndAccessible(UiDevice device,String pickerPkg) throws Exception {
+    /** The picker must be resumed and have a real interactive a11y node. */
+    private boolean isPickerInteractiveAndAccessible(UiDevice device,String pickerPkg) throws Exception {
         return isResumedPackage(pickerPkg)
-            && isFocusedPackage(pickerPkg)
-            && pickerPkg.equals(device.getCurrentPackageName());
+            && pickerPkg.equals(device.getCurrentPackageName())
+            && device.hasObject(androidx.test.uiautomator.By.pkg(pickerPkg).clickable(true));
     }
 
     /** Match the ACTUAL foreground activity; task history alone is insufficient. */
