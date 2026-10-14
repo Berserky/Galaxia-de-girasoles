@@ -150,3 +150,17 @@
 
 **QA posterior obligatorio:** 15/15 workflows en el HEAD que reúna código/CSS/tests y este ledger. Comprobar capturas Android V5 a 320/360/393/412, seven themes, navegación, contacto con FAB y barra inferior, texto largo/fuente grande, teclado/estados vacíos y aprobación visual humana. Los IDs VE-027/029 están **EN CURSO**, no cerrados. No tocar IA, Galaxy Chat central, GPS/FCM, backend ni QA/prod; PR #168 permanece DRAFT sin permiso para fusionar.
 
+
+## P2-L · Acceso directo y accesible a controles de privacidad (VE-017) — 14-oct-2026
+
+**Baseline verificado:** el corte P2-K `71401bc` pasó **15/15 workflows SUCCESS** en GitHub. La primera ejecución obtuvo 12/15 (fallos instrumentación Phase5, captura blanca onboarding y resolución transitoria de dependencias CameraX); se reejecutaron **solo los jobs fallidos**, y los tres quedaron finalmente `success` **sobre el mismo SHA**. Evidencia y enlaces a runs en comentarios del [PR #168](https://github.com/Berserky/Galaxia-de-girasoles/pull/168). Capturas reales P2-K en Android: scroll inferior correcto en 320/360/393/412 y siete temas; no extrapolar aprobación estética del propietario.
+
+**Hallazgo VE-017:** el control `Privacidad` de la tarjeta «Cómo estamos» usaba `go('more')` seguido de `setTimeout(...,80)` para hacer scroll a `.privacy-grid`. Ese retraso arbitrario no aporta garantía de foco, ni permite distinguir el destino al lector de pantalla; un render lento puede perder el salto aunque los permisos permanezcan intactos.
+
+**Solución limitada a interfaz Android:**
+- `openPresencePrivacySettings()` navega a Más con la función existente `go('more')` y accede inmediatamente al panel real por `#presencePrivacySettings` después del render síncrono. `scrollIntoView({behavior:'auto',block:'center'})` evita animaciones forzosas y `focus({preventScroll:true})` fija el foco en el bloque correcto sin scroll adicional.
+- El bloque de privacidad real conserva sus **tres acciones anteriores** (`presence-battery`, `presence-listening`, `map`), textos y reglas de permisos; incorpora `role="region"`, `aria-labelledby` y `tabindex="-1"` solo como destino de foco. El panel usa `scroll-margin-block` para barra fija y outline perceptible en los temas de V5.
+- Si el bloque no existe, no lanza excepciones, no intenta tocar interruptores y conserva navegación a «Más». **Ninguna llamada API, migración, permiso, estado GPS/FCM, ni modificación de privacy backend**.
+- `tests/visual-evolution-p2.test.mjs` ejecuta mediante VM la función real y comprueba orden navegar → localizar → desplazar → enfocar, caso panel ausente, ningún timeout/red, nombres y existencia de los tres handlers.
+
+**Salida obligatoria P2-L:** validar nuevamente los **15/15 workflows sobre el nuevo SHA**; verificar Android onboarding, CameraX, Phase 5 real Integration, screenshots / scroll, rutas/teclado/lectores y aceptación estética. No cerrar formalmente VE-017 ni PR #168 hasta evidencia y aprobación del propietario. No fusionar ni desplegar.
