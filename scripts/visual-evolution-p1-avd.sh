@@ -7,7 +7,7 @@ bash scripts/visual-evolution-p0-avd.sh
 
 # Instrumentation is separated from the unpaired baseline. Failures retain
 # any screenshots already produced for diagnosis; no production token is loaded.
-mkdir -p build/p0-avd/p1-synthetic-themes build/p0-avd/p1-responsive-viewports build/p0-avd/p2-bottom-viewports build/p0-avd/p2-question-viewports
+mkdir -p build/p0-avd/p1-synthetic-themes build/p0-avd/p1-responsive-viewports build/p0-avd/p2-bottom-viewports build/p0-avd/p2-question-viewports build/p0-avd/p3-search-viewports build/p0-avd/p3-notifications-viewports
 # Preserve partial theme captures even if instrumentation fails later.
 # This runs only against the isolated QA emulator; screenshots are synthetic.
 pull_theme_evidence() {
@@ -18,6 +18,8 @@ pull_theme_evidence() {
     adb pull "/sdcard/Download/V5-P1-viewport-${css}.png" "build/p0-avd/p1-responsive-viewports/${css}.png" >/dev/null 2>&1 || true
     adb pull "/sdcard/Download/V5-P2-bottom-${css}.png" "build/p0-avd/p2-bottom-viewports/${css}.png" >/dev/null 2>&1 || true
     adb pull "/sdcard/Download/V5-P2-question-${css}.png" "build/p0-avd/p2-question-viewports/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P3-search-${css}.png" "build/p0-avd/p3-search-viewports/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P3-notifications-${css}.png" "build/p0-avd/p3-notifications-viewports/${css}.png" >/dev/null 2>&1 || true
   done
 }
 trap pull_theme_evidence EXIT
@@ -75,6 +77,22 @@ for css,path in zip(viewports,middle):
     assert (width,height)==dimensions[css], f'P2 question screenshot dimension mismatch at {css}: {width}x{height}'
     assert hashlib.sha256(blob).hexdigest()!=hashlib.sha256(responsive[viewports.index(css)].read_bytes()).hexdigest(), f'P2 question screenshot repeats the header at {css}'
 print('P2 Welcome Android middle-question matrix PASS: 4/4 real rendered frames.')
+# P3 must render both modal surfaces in the physical Android WebView at all
+# four widths, not merely return CSS geometry or Chrome demo screenshots.
+p3surfaces={}
+for kind in ('search','notifications'):
+    directory=Path('build/p0-avd')/f'p3-{kind}-viewports'
+    images=[directory/f'{css}.png' for css in viewports]
+    assert all(p.is_file() for p in images), f'Missing real P3 {kind} PNGs: {[str(p) for p in images if not p.is_file()]}'
+    for css,path in zip(viewports,images):
+        blob=path.read_bytes()
+        assert blob.startswith(b'\\x89PNG\\r\\n\\x1a\\n'), f'Invalid P3 {kind} screenshot: {path}'
+        width,height=struct.unpack('>II',blob[16:24])
+        assert (width,height)==dimensions[css], f'P3 {kind} dimensions mismatch {css}: {width}x{height}'
+        assert hashlib.sha256(blob).hexdigest()!=hashlib.sha256(responsive[viewports.index(css)].read_bytes()).hexdigest(), f'P3 {kind} screenshot stale/duplicated at {css}'
+    p3surfaces[kind]=len(images)
+print(f'P3 real Android modal screenshots PASS: {p3surfaces}')
+
 
 # Keep a machine-readable success receipt based on the actual Android JUnit
 # report (System.out from instrumented tests is not forwarded by Gradle).
@@ -94,6 +112,7 @@ receipt={'status':'VERIFIED_SYNTHETIC_QA','android_junit_tests':tests,
          'responsive_css_widths':viewports,
          'p2_bottom_scroll_screenshots':len(bottom),
          'p2_middle_question_screenshots':len(middle),
+         'p3_real_modal_screenshots':p3surfaces,
          'responsive_png_dimensions':{str(k):list(v) for k,v in dimensions.items()},
          'verification':'display-pixel-marker-plus-instrumented-css-layout-focus'}
 Path('build/p0-avd/p1-device-summary.json').write_text(
