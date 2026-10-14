@@ -523,7 +523,35 @@ function homeView(){
  '<div class="welcome-memories">'+livingMomentCard()+nextCard+'</div>'+
  '</main>';
 }
-function actionCard(iconName,title,copy,action){return '<button class="action-card" data-action="'+action+'"><span class="icon">'+ico(iconName)+'</span><b>'+esc(title)+'</b><small>'+esc(copy)+'</small></button>';}
+// V5 P2K: contextual labels use only already-loaded couple state; no network,
+// location details or private answers are ever embedded in shortcut HTML.
+function welcomeActionContext(action){
+ const kinds={map:'EXPLORAR',moments:'CONECTAR','add-memory':'CREAR','add-plan':'PLANEAR','goals-open':'AVANZAR'};
+ const category=kinds[action]||'EXPLORAR';
+ if(action==='add-plan'){
+  const pending=items('plan').filter(i=>!i.data?.done).length;
+  return {category,meta:pending>0?pending+' '+(pending===1?'plan pendiente':'planes pendientes'):''};
+ }
+ if(action==='add-memory'){
+  const count=items('memory').length;
+  return {category,meta:count>0?count+' '+(count===1?'recuerdo guardado':'recuerdos guardados'):''};
+ }
+ if(action==='goals-open'){
+  // Goals load only on explicit visit. No false zero or stale counts in Home.
+  const recent=goalsState&&Date.now()-goalsLoadedAt>=0&&Date.now()-goalsLoadedAt<180000;
+  const active=recent?(goalsState.goals||[]).filter(g=>g.status==='active'||g.status==='paused').length:0;
+  return {category,meta:recent&&active>0?active+' '+(active===1?'objetivo en marcha':'objetivos en marcha'):''};
+ }
+ if(action==='moments'){
+  const days=Number(cloud?.bond?.garden?.days);
+  return {category,meta:Number.isSafeInteger(days)&&days>0?days+' '+(days===1?'día compartido':'días compartidos'):''};
+ }
+ return {category,meta:''};
+}
+function actionCard(iconName,title,copy,action){
+ const context=welcomeActionContext(action);
+ return '<button class="action-card" data-action="'+action+'"><span class="icon">'+ico(iconName)+'</span><span class="welcome-action-kicker">'+esc(context.category)+'</span><b>'+esc(title)+'</b><small>'+esc(copy)+'</small>'+(context.meta?'<span class="welcome-action-meta">'+esc(context.meta)+'</span>':'')+'</button>';
+}
 function insightsTeaser(){
  const today=String(cloud?.today||''),month=today.slice(0,7),year=today.slice(0,4);
  const card=(action,iconName,eyebrow,title,copy,key)=>'<button class="card insight-period-card" data-action="'+action+'" data-key="'+attr(key)+'"><span>'+ico(iconName)+'</span><span><p class="eyebrow">'+esc(eyebrow)+'</p><h3>'+esc(title)+'</h3><p>'+esc(copy)+'</p></span>'+ico('chevron-right')+'</button>';
