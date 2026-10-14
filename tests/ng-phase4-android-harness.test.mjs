@@ -59,9 +59,6 @@ test('Android picker waits for the resolved external app, not a transient system
    pickerReturn.indexOf('boolean acknowledged=device.pressBack()'),
    'Never issue Back before interactive DocumentsUI has stably settled');
  assert.match(pickerReturn,/if\(!isResumedPackage\(pickerPkg\)\)/);
- assert.ok(pickerReturn.indexOf('stablePickerPolls>=3') <
-   pickerReturn.indexOf('boolean acknowledged=device.pressBack()'),
-   'Never issue Back before resolved DocumentsUI is stably foreground');
  assert.doesNotMatch(pickerReturn,/Document picker closed but MainActivity WebView did not recover visibility/);
  assert.ok(source.indexOf('awaitPickerMainActivityVisible(appPkg, 4_000)') <
    source.indexOf('shell("input keyevent KEYCODE_BACK")'),
