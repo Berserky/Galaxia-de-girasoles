@@ -132,6 +132,46 @@ public class GalaxyDeviceClosureTest {
      * QaHttpServer account. No real couple account, GPS, media or backend is used.
      * These are interaction/layout assertions, not owner-approved screenshot QA.
      */
+    @Test public void visualEvolutionP2_dailyQuestionStatus_isAccessibleAndPrivateOnRealAndroid() throws Exception {
+        launch();
+        awaitJs("!!document.querySelector('.galaxy-welcome .date-question-card')"
+            + " && document.querySelectorAll('.date-question-person').length===2");
+        JSONObject evidence=new JSONObject(js("JSON.stringify((()=>{"
+            + "const card=document.querySelector('.date-question-card'),"
+            + "chips=[...card.querySelectorAll('.date-question-person')],"
+            + "favorite=card.querySelector('[data-action=date-question-favorite]'),"
+            + "memory=card.querySelector('[data-action=date-question-memory]'),"
+            + "own=ownDaily(),partner=partnerDaily(),"
+            + "finished=!!own.answer&&!!partner.answer,"
+            + "text=chips.map(c=>c.textContent).join(' '),"
+            + "leaks=[own.answer,partner.answer].some(a=>typeof a==='string'&&a.length>6&&text.includes(a));"
+            + "return {count:chips.length,"
+            + "myLabel:chips[0].getAttribute('aria-label'),"
+            + "partnerLabel:chips[1].getAttribute('aria-label'),"
+            + "heights:chips.map(c=>c.getBoundingClientRect().height),"
+            + "favoritePressed:favorite?.getAttribute('aria-pressed'),"
+            + "favoriteExpected:dateContext?.question?.favorite?'true':'false',"
+            + "memoryDisabled:!!memory?.disabled,finished,"
+            + "group:card.querySelector('.date-question-person-status')?.getAttribute('role'),"
+            + "leaksPrivateAnswer:leaks,"
+            + "noHorizontalOverflow:document.documentElement.scrollWidth<=innerWidth+3};})())"));
+        assertEquals("Expected exactly two individual daily answer indicators",2,evidence.getInt("count"));
+        assertTrue("Own answer status must be labeled",evidence.getString("myLabel").startsWith("Tu respuesta: "));
+        assertTrue("Partner answer status must be labeled",evidence.getString("partnerLabel").startsWith("La otra respuesta: "));
+        JSONArray heights=evidence.getJSONArray("heights");
+        for(int i=0;i<heights.length();i++)
+            assertTrue("Daily answer indicator is too small for touch accessibility",
+                heights.getDouble(i)>=44d);
+        assertEquals("group",evidence.getString("group"));
+        assertEquals("Favorite state not exposed correctly",evidence.getString("favoriteExpected"),
+            evidence.getString("favoritePressed"));
+        assertEquals("Memory CTA must be gated until both respond",
+            !evidence.getBoolean("finished"),evidence.getBoolean("memoryDisabled"));
+        assertFalse("Individual status revealed a private answer",evidence.getBoolean("leaksPrivateAnswer"));
+        assertTrue("Daily status introduced horizontal scroll",evidence.getBoolean("noHorizontalOverflow"));
+        System.out.println("V5_P2_DAILY_QUESTION_STATUS=verified;badges:2;private:true");
+    }
+
     @Test public void visualEvolutionP2_privacyShortcut_opensFocusedControlsWithoutChangingSharing() throws Exception {
         launch();
         awaitJs("!!document.querySelector('.galaxy-welcome .now-section [data-action=\\\"now-settings\\\"]')");
