@@ -406,6 +406,35 @@ public class GalaxyDeviceClosureTest {
                 android.graphics.Bitmap topFrame=instrumentation.getUiAutomation().takeScreenshot();
                 assertTrue("V5 P2 top Android screenshot unavailable at "+targetCss,topFrame!=null);
                 try {
+                    // VE-022/024: capture the middle, not merely the header and
+                    // bottom. Check real question status geometry and pixels on
+                    // the Android display after the WebView compositor settles.
+                    runV5Js("document.querySelector('.date-question-person-status')"
+                        + ".scrollIntoView({behavior:'instant',block:'center'})");
+                    String questionRect=jsWithDeadline("JSON.stringify((()=>{"
+                        + "const badges=document.querySelector('.date-question-person-status'),"
+                        + "fav=document.querySelector('.date-question-card [data-action=date-question-favorite]'),"
+                        + "nav=document.getElementById('bottomNav'),r=badges?.getBoundingClientRect(),"
+                        + "n=nav.getBoundingClientRect(),"
+                        + "chips=badges?.querySelectorAll('.date-question-person');"
+                        + "return {scrollY:scrollY,visible:!!r&&r.top>=55&&r.bottom<n.top-8,"
+                        + "badges:chips?.length||0,favorite:fav?.hasAttribute('aria-pressed'),"
+                        + "noOverflow:document.documentElement.scrollWidth<=innerWidth+3}})())",20);
+                    JSONObject questionState=new JSONObject(questionRect);
+                    assertTrue("P2 middle question not visible above fixed nav at "+targetCss+": "+questionRect,
+                        questionState.getBoolean("visible"));
+                    assertTrue("P2 question remained at page top at "+targetCss+": "+questionRect,
+                        questionState.getDouble("scrollY")>100d);
+                    assertEquals("P2 question must show two answer chips at "+targetCss,2,
+                        questionState.getInt("badges"));
+                    assertTrue("P2 favorite lost accessible toggle state at "+targetCss,
+                        questionState.getBoolean("favorite"));
+                    assertTrue("P2 question introduced horizontal overflow at "+targetCss,
+                        questionState.getBoolean("noOverflow"));
+                    double middleDisplayChange=awaitV5QuestionFramePainted(topFrame,targetCss);
+                    row.put("middleQuestionReached",true)
+                        .put("middleRealDisplayChange",middleDisplayChange);
+                    shell("screencap -p /sdcard/Download/V5-P2-question-"+targetCss+".png");
                     runV5Js("window.scrollTo(0,document.documentElement.scrollHeight)");
                     awaitJs("window.scrollY>100");
                     String bottom=jsWithDeadline("JSON.stringify((()=>{"
@@ -1513,6 +1542,32 @@ public class GalaxyDeviceClosureTest {
      * on two consecutive changed frames or FAIL instead of archiving a false
      * "bottom" screenshot. No screenshot bytes are sent outside CI artifacts.
      */
+    /** Distinct Android framebuffer at the actual middle question, not DOM alone. */
+    private double awaitV5QuestionFramePainted(android.graphics.Bitmap top,int widthCss) {
+        long until=SystemClock.elapsedRealtime()+15_000;
+        int consecutive=0;
+        double latest=0d;
+        while(SystemClock.elapsedRealtime()<until) {
+            android.graphics.Bitmap frame=null;
+            try {
+                frame=instrumentation.getUiAutomation().takeScreenshot();
+                latest=v5DisplayChangeRatio(top,frame);
+                if(latest>=0.15d) {
+                    if(++consecutive>=2) {
+                        System.out.println("V5_P2_QUESTION_REAL_DISPLAY=css:"+widthCss
+                            +";changedPixelRatio:"+latest+";verified:true");
+                        return latest;
+                    }
+                } else consecutive=0;
+            } catch(RuntimeException ignored){consecutive=0;}
+            finally {if(frame!=null)frame.recycle();}
+            SystemClock.sleep(250);
+        }
+        throw new AssertionError("P2 middle question screenshot rejected: real Android display"
+            +" did not paint distinct question frame at css "+widthCss
+            +";changedPixelRatio:"+latest);
+    }
+
     private double awaitV5BottomFramePainted(android.graphics.Bitmap top,int widthCss) {
         long until=SystemClock.elapsedRealtime()+15_000;
         int consecutive=0;
