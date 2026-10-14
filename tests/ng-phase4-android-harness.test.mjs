@@ -40,20 +40,24 @@ test('Android picker waits for the resolved external app, not a transient system
  assert.match(source,/"visible"\.equals\(js\("document\.visibilityState"\)\)/);
  const pickerReturn=source.slice(source.indexOf('private void cancelPickerAndVerifyForeground('),
    source.indexOf('/** Match the ACTUAL foreground activity'));
- assert.match(pickerReturn,/stablePickerPolls=isPickerFocusedAndAccessible\(device,pickerPkg\)\?stablePickerPolls\+1:0/);
- assert.match(source,/private boolean isPickerFocusedAndAccessible\(UiDevice device,String pickerPkg\)/);
- assert.match(source,/private boolean isFocusedPackage\(String expectedPackage\)/);
- assert.match(source,/dumpsys window.*mCurrentFocus=/);
- assert.match(source,/pickerPkg\.equals\(device\.getCurrentPackageName\(\)\)/);
- const strict=source.slice(source.indexOf('private boolean isPickerFocusedAndAccessible('),
+ assert.match(pickerReturn,/boolean interactive=isPickerInteractiveAndAccessible\(device,pickerPkg\)/);
+ assert.match(source,/private boolean isPickerInteractiveAndAccessible\(UiDevice device,String pickerPkg\)/);
+ assert.doesNotMatch(source,/private boolean isFocusedPackage\(String expectedPackage\)/);
+ assert.doesNotMatch(source,/mCurrentFocus=/);
+ assert.match(source,/device\.hasObject\(androidx\.test\.uiautomator\.By\.pkg\(pickerPkg\)\.clickable\(true\)\)/);
+ const strict=source.slice(source.indexOf('private boolean isPickerInteractiveAndAccessible('),
    source.indexOf('/** Match the ACTUAL foreground activity'));
- for(const required of ['isResumedPackage(pickerPkg)','isFocusedPackage(pickerPkg)',
-   'pickerPkg.equals(device.getCurrentPackageName())']){
+ for(const required of ['isResumedPackage(pickerPkg)',
+   'pickerPkg.equals(device.getCurrentPackageName())',
+   'By.pkg(pickerPkg).clickable(true)']){
   assert.ok(strict.includes(required),'Rendered picker gate must check '+required);
  }
- assert.match(pickerReturn,/pickerWindowFocused=/);
+ assert.match(pickerReturn,/SystemClock\.elapsedRealtime\(\)-firstInteractiveAt>=1800L/);
+ assert.match(pickerReturn,/stablePickerPolls>=4/);
  assert.match(pickerReturn,/refusing premature Back/);
- assert.match(pickerReturn,/stablePickerPolls>=3/);
+ assert.ok(pickerReturn.indexOf('stablePickerPolls>=4') <
+   pickerReturn.indexOf('boolean acknowledged=device.pressBack()'),
+   'Never issue Back before interactive DocumentsUI has stably settled');
  assert.match(pickerReturn,/if\(!isResumedPackage\(pickerPkg\)\)/);
  assert.ok(pickerReturn.indexOf('stablePickerPolls>=3') <
    pickerReturn.indexOf('boolean acknowledged=device.pressBack()'),
