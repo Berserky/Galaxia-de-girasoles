@@ -551,6 +551,28 @@ public class GalaxyDeviceClosureTest {
                         notificationEvidence.getDouble("minTouch")>=44d);
                     assertTrue("P3 notifications horizontal overflow "+targetCss,
                         notificationEvidence.getBoolean("noOverflow"));
+                    // V5-P3: exercise actual filter clicks and horizontal reachability
+                    // on all four real Android viewports, including clipped tabs at 320px.
+                    for (String filter : new String[]{"unread","chat","activity","all"}) {
+                        int expectedRows=("all".equals(filter)||"unread".equals(filter))?2:1;
+                        runV5Js("modal.querySelector('.v5-notification-filter[data-filter="
+                            +filter+"]').click()");
+                        awaitJs("modal.querySelector('.v5-notification-filter[aria-selected=true]')"
+                            +"?.dataset.filter==='"+filter+"' && "
+                            +"modal.querySelectorAll('.notification-row').length==="+expectedRows);
+                        runV5Js("modal.querySelector('.v5-notification-filter[aria-selected=true]')"
+                            +".scrollIntoView({block:'nearest',inline:'nearest'})");
+                        String filterJson=jsWithDeadline("JSON.stringify((()=>{"
+                            +"const strip=modal.querySelector('.v5-notification-filters').getBoundingClientRect(),"
+                            +"active=modal.querySelector('.v5-notification-filter[aria-selected=true]').getBoundingClientRect();"
+                            +"return {visible:active.left>=strip.left-2&&active.right<=strip.right+2,"
+                            +"minTouch:active.height>=44};})())",20);
+                        JSONObject filterEvidence=new JSONObject(filterJson);
+                        assertTrue("P3 filter not horizontally reachable at "+targetCss+" "+filter,
+                            filterEvidence.getBoolean("visible"));
+                        assertTrue("P3 filter touch target below 44px at "+targetCss+" "+filter,
+                            filterEvidence.getBoolean("minTouch"));
+                    }
                     runV5Js("const marker=document.createElement('span');"
                         + "marker.id='v5-p3-qa-paint';"
                         + "marker.style.cssText='position:absolute;top:12px;left:14px;'+"
