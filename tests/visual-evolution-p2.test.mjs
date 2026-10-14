@@ -401,3 +401,20 @@ test('P2P middle question screenshots must prove actual Android display pixels a
  assert.match(avd,/p2_middle_question_screenshots/);
  assert.match(avd,/assert \(width,height\)==dimensions\[css\]/);
 });
+
+
+test('P2Q Galaxy Chat FAB cannot overlap daily question action rectangles on real Android',()=>{
+ const android=readFileSync(resolve(ROOT,'android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyDeviceClosureTest.java'),'utf8');
+ const middle=android.slice(android.indexOf('// VE-022/024: capture the middle, not merely the header'),
+   android.indexOf('double middleDisplayChange=awaitV5QuestionFramePainted'));
+ assert.match(css,/V5 P2Q \(VE-030\): Android middle-scroll evidence showed Chat FAB/);
+ assert.match(css,/\.galaxy-welcome \.date-question-actions \{[\s\S]*?padding-inline-end:clamp\(52px,13vw,68px\)/);
+ assert.match(middle,/fab=document\.getElementById\('chatFab'\)/);
+ assert.match(middle,/actions=\[\.\.\.document\.querySelectorAll\('\.date-question-actions > \.btn'\)\]/);
+ assert.match(middle,/fabClear=actions\.length===3&&touch\.every/);
+ assert.match(middle,/questionState\.getBoolean\("fabClear"\)/);
+ assert.match(middle,/questionState\.getDouble\("minActionTouch"\)>=44d/);
+ for (const action of ['galaxy-share','date-question-decks','date-question-memory']){
+  assert.match(app,new RegExp('data-action="'+action+'"'));
+ }
+});
