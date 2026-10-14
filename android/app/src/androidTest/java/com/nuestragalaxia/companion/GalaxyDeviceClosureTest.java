@@ -465,6 +465,85 @@ public class GalaxyDeviceClosureTest {
                         .put("bottomReached",true)
                         .put("realDisplayChange",displayChange));
                     shell("screencap -p /sdcard/Download/V5-P2-bottom-"+targetCss+".png");
+
+                    // V5-P3: real Android search + notification screenshots at
+                    // each physical width. Fixtures are synthetic, UI-only;
+                    // no live notifications, AI queries or private data.
+                    assertEquals("P3 Android assets not loaded", "true",
+                        js("!!window.GalaxyDiscoveryV5 && !!document.querySelector("
+                          + "'link[href=\\\"./galaxy-discovery-v5.css\\\"]')"));
+                    runV5Js("openUniversalSearch();"
+                        + "document.getElementById('universalSearchResults').innerHTML="
+                        + "GalaxyDiscoveryV5.renderClassic(["
+                        + "{type:'item',kind:'memory',id:'qa-memory',title:'Recuerdo QA',"
+                        + "subtitle:'Ejemplo de texto largo para verificar legibilidad en pantalla pequeña'},"
+                        + "{type:'place',id:'qa-place',title:'Lugar de ejemplo',subtitle:'Sin GPS'}],"
+                        + "{ico,esc,attr,kindMeta})");
+                    awaitJs("modal.open && modal.dataset.form==='v5-p3-search'"
+                        + " && document.querySelectorAll('.v5-p3-search .universal-search-result').length===2");
+                    String searchJson=jsWithDeadline("JSON.stringify((()=>{"
+                        + "const m=modal.querySelector('.modal-inner'),"
+                        + "r=document.getElementById('universalSearchResults'),"
+                        + "items=[...r.querySelectorAll('.universal-search-result')],"
+                        + "box=m.getBoundingClientRect();"
+                        + "return {inside:box.left>=-2&&box.right<=innerWidth+2,"
+                        + "scroll:getComputedStyle(r).overflowY,"
+                        + "targets:items.map(x=>x.getBoundingClientRect().height),"
+                        + "order:items.map(x=>x.dataset.id),"
+                        + "noOverflow:document.documentElement.scrollWidth<=innerWidth+3};})())",20);
+                    JSONObject searchEvidence=new JSONObject(searchJson);
+                    assertTrue("P3 search exceeds Android viewport "+targetCss+": "+searchJson,
+                        searchEvidence.getBoolean("inside"));
+                    assertEquals("P3 search results must scroll independently","auto",
+                        searchEvidence.getString("scroll"));
+                    assertEquals("qa-memory",searchEvidence.getJSONArray("order").getString(0));
+                    assertEquals("qa-place",searchEvidence.getJSONArray("order").getString(1));
+                    assertTrue("P3 search scroll overflow "+targetCss,
+                        searchEvidence.getBoolean("noOverflow"));
+                    for (int i=0;i<searchEvidence.getJSONArray("targets").length();i++)
+                        assertTrue("P3 search result too short for touch",
+                            searchEvidence.getJSONArray("targets").getDouble(i)>=44d);
+                    shell("screencap -p /sdcard/Download/V5-P3-search-"+targetCss+".png");
+                    runV5Js("closeModal()");
+
+                    runV5Js("notificationState={unread:2,notifications:["
+                        + "{id:'qa1',event_type:'chat_message',action:'chat',"
+                        + "created_at:'2026-10-14T12:00:00Z',title:'Mensaje de prueba',"
+                        + "body:'Mensaje sintético de prueba del centro de avisos',read_at:null},"
+                        + "{id:'qa2',event_type:'goal_update',action:'goals',"
+                        + "created_at:'2026-10-14T11:00:00Z',title:'Objetivo de prueba',"
+                        + "body:'Actividad sintética de QA sin datos de usuario',read_at:null}"
+                        + "]};v5NotificationFilter='all';"
+                        + "showModal('Notificaciones',"
+                        + "'<div class=\\\"v5-notification-mount\\\"></div>',"
+                        + "'v5-p3-notifications');renderV5NotificationPanel()");
+                    awaitJs("modal.open && modal.dataset.form==='v5-p3-notifications'"
+                        + " && document.querySelectorAll('.v5-notification-panel .notification-row').length===2");
+                    String notificationsJson=jsWithDeadline("JSON.stringify((()=>{"
+                        + "const m=modal.querySelector('.modal-inner'),"
+                        + "filters=[...modal.querySelectorAll('.v5-notification-filter')],"
+                        + "rows=[...modal.querySelectorAll('.notification-row')],"
+                        + "list=modal.querySelector('.notification-center-list'),"
+                        + "box=m.getBoundingClientRect();"
+                        + "return {inside:box.left>=-2&&box.right<=innerWidth+2,"
+                        + "filters:filters.length,rows:rows.length,"
+                        + "scroll:getComputedStyle(list).overflowY,"
+                        + "minTouch:Math.min(...filters.map(f=>f.getBoundingClientRect().height)),"
+                        + "noOverflow:document.documentElement.scrollWidth<=innerWidth+3};})())",20);
+                    JSONObject notificationEvidence=new JSONObject(notificationsJson);
+                    assertTrue("P3 notifications modal exceeds width "+targetCss,
+                        notificationEvidence.getBoolean("inside"));
+                    assertEquals("P3 must retain four accessible filters",4,
+                        notificationEvidence.getInt("filters"));
+                    assertEquals("P3 should preserve both notification destinations",2,
+                        notificationEvidence.getInt("rows"));
+                    assertEquals("auto",notificationEvidence.getString("scroll"));
+                    assertTrue("P3 notification filter too small",
+                        notificationEvidence.getDouble("minTouch")>=44d);
+                    assertTrue("P3 notifications horizontal overflow "+targetCss,
+                        notificationEvidence.getBoolean("noOverflow"));
+                    shell("screencap -p /sdcard/Download/V5-P3-notifications-"+targetCss+".png");
+                    runV5Js("closeModal()");
                 } finally {
                     topFrame.recycle();
                     runV5Js("window.scrollTo(0,0)");
