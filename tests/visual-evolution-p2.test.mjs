@@ -228,3 +228,65 @@ test('P2G Android screenshot gate checks real bottom pixels, not only DOM scroll
    android.indexOf('shell("screencap -p /sdcard/Download/V5-P2-bottom-"'),
    'Screenshot must not be saved until real display evidence is visible');
 });
+
+
+const bentoSource=extract('function welcomeActionContext(','function insightsTeaser(');
+function renderWelcomeShortcut(action,{data=[],days=null,goals=null,goalsAgeMs=0}={}){
+ const context={
+  cloud:{items:data,bond:{garden:{days}}},goalsState:goals,
+  goalsLoadedAt:Date.now()-goalsAgeMs,
+  items:kind=>data.filter(i=>i.kind===kind),ico:()=>'',esc:v=>String(v)
+ };
+ return runInNewContext(
+  bentoSource+'\n'+'actionCard("target","Nuestros objetivos","Metas, pasos y ahorro manual",'+JSON.stringify(action)+')',
+  context
+ );
+}
+
+test('P2K real-data shortcut groups keep all five actions and touch/focus access',()=>{
+ const categories={
+  map:'EXPLORAR',moments:'CONECTAR','add-memory':'CREAR',
+  'add-plan':'PLANEAR','goals-open':'AVANZAR'
+ };
+ for(const [action,category] of Object.entries(categories)){
+  const markup=renderWelcomeShortcut(action);
+  assert.match(markup,new RegExp('data-action="'+action+'"'));
+  assert.match(markup,new RegExp('welcome-action-kicker">'+category+'<'));
+  assert.doesNotMatch(markup,/welcome-action-meta/);
+ }
+ assert.match(css,/welcome-action-kicker/);
+ assert.match(css,/welcome-action-meta/);
+ assert.match(css,/welcome-bento \.action-card:focus-visible/);
+ assert.doesNotMatch(bentoSource,/\b(?:fetch|api|GalaxyNative\.call)\s*\(/);
+});
+
+test('P2K only shows real nonzero plans/memories/relationship metrics already loaded',()=>{
+ const entries=[
+  {kind:'plan',data:{title:'Privado',done:false}},
+  {kind:'plan',data:{title:'Terminado',done:true}},
+  {kind:'memory',data:{title:'Mi recuerdo'}},
+ ];
+ const plan=renderWelcomeShortcut('add-plan',{data:entries});
+ assert.match(plan,/1 plan pendiente/);
+ assert.doesNotMatch(plan,/Privado|Terminado|Mi recuerdo/);
+ const memory=renderWelcomeShortcut('add-memory',{data:entries});
+ assert.match(memory,/1 recuerdo guardado/);
+ const moments=renderWelcomeShortcut('moments',{days:12});
+ assert.match(moments,/12 días compartidos/);
+ assert.doesNotMatch(renderWelcomeShortcut('moments',{days:0}),/welcome-action-meta/);
+ assert.doesNotMatch(renderWelcomeShortcut('moments',{days:-1}),/welcome-action-meta/);
+ const many=renderWelcomeShortcut('add-plan',{data:[
+  {kind:'plan',data:{}},{kind:'plan',data:{done:false}}
+ ]});
+ assert.match(many,/2 planes pendientes/);
+});
+
+test('P2K goals summary never invents unavailable or stale goals data',()=>{
+ const goals={goals:[{status:'active',title:'Privado'},{status:'paused'},{status:'completed'}]};
+ assert.doesNotMatch(renderWelcomeShortcut('goals-open'),/welcome-action-meta/);
+ const fresh=renderWelcomeShortcut('goals-open',{goals,goalsAgeMs:5_000});
+ assert.match(fresh,/2 objetivos en marcha/);
+ assert.doesNotMatch(fresh,/Privado|completed/);
+ assert.doesNotMatch(renderWelcomeShortcut('goals-open',{goals,goalsAgeMs:200_000}),/welcome-action-meta/);
+ assert.doesNotMatch(renderWelcomeShortcut('goals-open',{goals:{goals:[]}}),/welcome-action-meta/);
+});
