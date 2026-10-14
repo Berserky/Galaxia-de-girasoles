@@ -101,10 +101,10 @@ test('P3: preserve navigation and modal lifecycle with independent keyboard-safe
 
 test('P3: real Android test clicks every filter and proves horizontally clipped tabs are reachable',()=>{
  const android=readFileSync(resolve(ROOT,'android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyDeviceClosureTest.java'),'utf8');
- assert.match(android,/new String\\[\\]\\{"unread","chat","activity","all"\\}/);
- assert.match(android,/v5-notification-filter\\[data-filter=/);
- assert.match(android,/scrollIntoView\\(\\{block:'nearest',inline:'nearest'\\}\\)/);
- assert.match(android,/filterEvidence\\.getBoolean\\("visible"\\)/);
- assert.match(android,/filterEvidence\\.getBoolean\\("minTouch"\\)/);
- assert.match(css,/v5-notification-filters\\s*\\{[\\s\\S]*?overflow-x:auto/);
+ assert.match(android,/new String\[\]\{"unread","chat","activity","all"\}/);
+ assert.match(android,/v5-notification-filter\[data-filter=/);
+ assert.match(android,/scrollIntoView\(\{block:'nearest',inline:'nearest'\}\)/);
+ assert.match(android,/filterEvidence\.getBoolean\("visible"\)/);
+ assert.match(android,/filterEvidence\.getBoolean\("minTouch"\)/);
+ assert.match(css,/v5-notification-filters\s*\{[\s\S]*?overflow-x:auto/);
 });
