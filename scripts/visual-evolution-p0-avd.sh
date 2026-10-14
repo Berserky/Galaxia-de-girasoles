@@ -37,7 +37,7 @@ import re, sys, xml.etree.ElementTree as ET
 try:
     root=ET.parse(sys.argv[1]).getroot()
     for node in root.iter('node'):
-        if node.get('resource-id')=='android:id/aerr_wait':
+        if node.get('resource-id')=='android:id/aerr_close':
             m=re.fullmatch(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',node.get('bounds',''))
             if m:
                 x1,y1,x2,y2=map(int,m.groups())
@@ -48,7 +48,7 @@ PY
 )
       if [[ -n "$coords" ]]; then
         read -r tap_x tap_y <<< "$coords"
-        echo "Emulator launcher ANR acknowledged via system Wait; app still must pass visibility gate." >&2
+        echo "Emulator Pixel Launcher ANR dismissed via Close app; real onboarding remains mandatory." >&2
         adb shell input tap "$tap_x" "$tap_y" || true
         sleep 1
         adb shell am start -n "$ACT" >/dev/null || true
