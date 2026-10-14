@@ -175,3 +175,33 @@ body:not(.chat-mode) #app .presence-privacy-settings:focus {
  outline:2px solid var(--v5-action);
  outline-offset:3px;
 }
+
+/* V5 P2M: explicit individual answer readiness without exposing answer content. */
+body:not(.chat-mode) #app .date-question-person-status {
+ display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+ gap:8px;margin:8px 0 12px;
+}
+body:not(.chat-mode) #app .date-question-person {
+ display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;
+ min-height:44px;padding:9px 10px;border:1px solid var(--border);
+ border-radius:13px;background:var(--surface2);
+ font-size:12px;line-height:1.4;color:var(--muted);
+}
+body:not(.chat-mode) #app .date-question-person .ui-icon {
+ width:16px;height:16px;flex:0 0 16px;color:var(--muted);
+}
+body:not(.chat-mode) #app .date-question-person b {
+ font-size:12px;font-weight:750;color:var(--text);
+}
+body:not(.chat-mode) #app .date-question-person.is-ready {
+ border-color:color-mix(in srgb,var(--v5-action) 45%,var(--border));
+}
+body:not(.chat-mode) #app .date-question-person.is-ready .ui-icon {
+ color:var(--v5-action);
+}
+body:not(.chat-mode) #app .date-question-card .icon-btn[aria-pressed="true"] {
+ color:var(--v5-action);outline:2px solid var(--v5-action);outline-offset:2px;
+}
+@media(max-width:360px) {
+ body:not(.chat-mode) #app .date-question-person {padding:8px 7px;gap:5px;}
+}
