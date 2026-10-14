@@ -204,17 +204,21 @@ async function togglePresence(kind){
 }
 function nowPersonCard(person,isOwn){
  const loc=(cloud.locations||[]).find(l=>String(l.person)===String(person))||{},daily=todayRows().find(r=>String(r.person)===String(person))||{};
- const p=cloud?.settings?.data?.presence?.[String(person)]||{},name=names()[Number(person)]||(isOwn?'Yo':'Mi persona');
+ const p=normalizedPresence(String(person)),name=names()[Number(person)]||(isOwn?'Yo':'Mi persona');
  const mood=daily.mood?(moods[daily.mood]?.[1]||daily.mood):'Sin estado';
- const movement=loc.sharing?transportLabel(loc):'Ubicación pausada';
+ const locationTimestamp=Date.parse(loc.updated_at||'');
+ const fresh=loc.latitude!=null&&loc.longitude!=null&&Number.isFinite(locationTimestamp)&&locationTimestamp<=Date.now()+60_000&&locationFreshState(loc),age=locationAgeMs(loc);
+ const movement=!loc.sharing?'Ubicación pausada':fresh?transportLabel(loc):'Ubicación sin actualizar';
+ const ageLabel=!loc.sharing?'':fresh?' · '+distanceAgeLabel(loc.updated_at):locationTimestamp>Date.now()+60_000?' · hora del dispositivo por verificar':Number.isFinite(age)?' · hace '+ageDurationLabel(age):' · sin lectura reciente';
  const battery=isOwn?(native.battery==null?NaN:Number(native.battery)):(p.shareBattery===true&&p.battery!=null?Number(p.battery):NaN);
  const listening=isOwn?currentTrackTitle():(p.shareListening===true?String(p.listening||''):'');
- const kmh=loc.sharing?Math.max(0,Number(loc.speed||0)*3.6):null;
- return '<div class="now-person card"><div class="row between"><div><span class="badge">'+esc(isOwn?'Tú':'Ahora')+'</span><h3>'+esc(name)+'</h3></div><span class="now-mood">'+esc(mood)+'</span></div>'+
- '<div class="now-facts"><span>'+ico('navigation')+esc(movement)+(kmh!==null?' · '+kmh.toFixed(kmh<10?1:0)+' km/h':'')+'</span>'+
+ const speed=loc.speed==null?NaN:Number(loc.speed);
+ const kmh=fresh&&Number.isFinite(speed)&&speed>=0?speed*3.6:null;
+ return '<div class="now-person card"><div class="row between"><div><span class="badge">'+esc(isOwn?'Tú':'Tu persona')+'</span><h3>'+esc(name)+'</h3></div><span class="now-mood">'+esc(mood)+'</span></div>'+
+ '<div class="now-facts"><span>'+ico('navigation')+esc(movement)+esc(ageLabel)+(kmh!==null?' · '+kmh.toFixed(kmh<10?1:0)+' km/h':'')+'</span>'+
  (loc.status?'<span>'+ico('message-circle')+esc(loc.status)+'</span>':'')+
  (listening?'<span>'+ico('music')+esc(listening)+'</span>':'')+
- (Number.isFinite(battery)?'<span>'+ico('battery-charging')+Math.round(battery)+'%</span>':'')+'</div></div>';
+ (Number.isFinite(battery)&&battery>=0&&battery<=100?'<span>'+ico('battery-charging')+Math.round(battery)+'%</span>':'')+'</div></div>';
 }
 function nowCard(){
  const me=String(cloud.person),other=me==='0'?'1':'0';
@@ -256,7 +260,7 @@ function relationshipClockCard(){
  pieces.push(clock.days+' '+(clock.days===1?'día':'días'));
  return '<section class="section"><div class="card relationship-clock"><span class="relationship-clock-icon">'+ico('clock')+'</span><div><p class="eyebrow">NUESTRO RELOJ</p><h3>'+esc(pieces.join(' · '))+'</h3><p>'+Number(clock.totalDays).toLocaleString('es-CO')+' días · '+Number(clock.totalHours).toLocaleString('es-CO')+' horas desde que empezó esta historia.</p></div></div></section>';
 }
-function livingMomentCard(){const m=livingMoment();return '<section class="section"><button class="card living-moment" data-action="'+m.action+'" '+(m.id?'data-id="'+m.id+'"':'')+'><span class="item-icon">'+ico(m.icon)+'</span><div><p class="eyebrow">'+esc(m.label)+'</p><h3>'+esc(m.title)+'</h3><p>'+esc(m.body)+'</p></div></button></section>';}
+function livingMomentCard(){const m=livingMoment();return '<section class="section"><button class="card living-moment" data-action="'+m.action+'" '+(m.id?'data-id="'+m.id+'"':'')+'><span class="item-icon">'+ico(m.icon)+'</span><div><p class="eyebrow">'+esc(m.label==='SE ACERCA ALGO ESPECIAL'?'PRÓXIMA FECHA':m.label)+'</p><h3>'+esc(m.title)+'</h3><p>'+esc(m.body)+'</p></div></button></section>';}
 function surpriseNotes(){return items('note').filter(x=>x.data?.surprise);}
 function surpriseUnlocked(i){const d=i.data||{};if(d.unlockType==='date')return !d.unlockDate||d.unlockDate<=cloud.today;if(d.unlockType==='place'){const own=(cloud.locations||[]).find(l=>l.person===cloud.person&&l.sharing);if(!own)return false;const km=(a,b,c,e)=>{const R=6371,p=Math.PI/180,da=(c-a)*p,dl=(e-b)*p,q=Math.sin(da/2)**2+Math.cos(a*p)*Math.cos(c*p)*Math.sin(dl/2)**2;return 2*R*Math.asin(Math.sqrt(q));};return km(Number(own.latitude),Number(own.longitude),Number(d.latitude),Number(d.longitude))*1000<=Number(d.radius||150);}return true;}
 function surpriseNotesView(){const list=surpriseNotes();return '<section class="section"><div class="section-head"><div><h2>Notas sorpresa</h2><p>Mensajes que aparecen en el momento o lugar elegido.</p></div><button class="btn small" data-action="surprise-note-new">+ Sorpresa</button></div><div class="stack">'+(list.length?list.map(i=>{const open=surpriseUnlocked(i),d=i.data||{};return '<div class="card"><span class="badge">'+(open?'Desbloqueada':'Guardada')+'</span><h3 style="margin-top:9px">'+esc(open?d.title:'Hay algo esperando para ti')+'</h3><p>'+esc(open?(d.body||''):(d.unlockType==='date'?'Se abrirá '+fmtDate(d.unlockDate):'Se abrirá al llegar al lugar elegido.'))+'</p>'+(open&&linkedVoices(i.id).length?linkedVoices(i.id).map(voiceCard).join(''):'')+(i.author===cloud.person?'<div class="item-actions"><button class="btn small secondary" data-action="voice-for-item" data-id="'+i.id+'">'+ico('mic')+' Añadir voz</button><button class="btn small ghost" data-action="item-delete" data-id="'+i.id+'">Eliminar</button></div>':'')+'</div>';}).join(''):'<div class="empty">Dejen una nota para una fecha o un lugar especial.</div>')+'</div></section>';}
@@ -379,6 +383,15 @@ function go(next){
  view=next;syncChatViewportHeight();render();window.scrollTo(0,0);
  if(view==='map'&&hadMap)refreshMap({quiet:true,detail:false});
 }
+// V5 P2L: the existing privacy controls render synchronously inside go('more').
+// No timeout or new permissions: focus the real destination on navigation.
+function openPresencePrivacySettings(){
+ go('more');
+ const panel=document.getElementById('presencePrivacySettings');
+ if(!panel)return;
+ panel.scrollIntoView({behavior:'auto',block:'center'});
+ panel.focus({preventScroll:true});
+}
 let nativeThemeSent='';
 function syncSystemTheme(themeState){
  const active=themeState?.active||'daylight';
@@ -489,21 +502,65 @@ function renderTourOverlay(){
 
 function homeView(){
  const own=ownDaily(),partner=partnerDaily(),next=cloud.nextEvent,garden=cloud.bond?.garden||{days:0,stage:0};
- const locs=cloud.locations||[];
- return anniversaryInsightsBanner()+'<section class="hero"><p class="eyebrow">NUESTRO UNIVERSO</p><h1>'+esc(myName())+' & '+esc(partnerName())+'</h1><p>Un lugar para acompañarnos, guardar lo vivido y seguir construyendo lo que viene.</p><div class="hero-stats"><div class="hero-stat"><b>'+coupleDays()+'</b><small>días juntos</small></div><div class="hero-stat"><b>'+items('memory').length+'</b><small>recuerdos</small></div><div class="hero-stat"><b>'+garden.days+'</b><small>días del girasol</small></div></div></section>'+monthlySummaryTeaser()+todayHistoryTeaser()+coupleDistanceCard()+encounterStatsTeaser()+nowCard()+
- '<section class="section"><div class="section-head"><div><h2>¿Cómo estás hoy?</h2><p>Tu estado se comparte solo con tu persona.</p></div></div><div class="mood-grid">'+Object.entries(moods).map(([id,m])=>'<button class="mood '+(own.mood===id?'active':'')+'" data-action="mood" data-value="'+id+'"><span>'+ico(m[0])+'</span>'+m[1]+'</button>').join('')+'</div>'+(partner.mood?'<div class="card" style="margin-top:10px"><span class="badge">'+esc(partnerName())+'</span> <b>'+esc(moods[partner.mood]?.[1]||partner.mood)+'</b></div>':'')+'</section>'+
- dailyQuestionCard(own,partner)+
- '<section class="section"><div class="grid">'+
+ const locs=cloud.locations||[],started=!!cloud?.settings?.data?.startDate;
+ const daysUntil=next?.date?dateDistance(next.date):NaN;
+ const nextAlreadyFeatured=Number.isFinite(daysUntil)&&daysUntil>=0&&daysUntil<=14;
+ const nextCard=next&&!nextAlreadyFeatured?'<section class="section"><div class="card welcome-next-event"><p class="eyebrow">PRÓXIMA FECHA</p><h3>'+esc(next.title)+'</h3><p>'+esc(fmtDate(next.date))+'</p></div></section>':'';
+ return anniversaryInsightsBanner()+
+ '<main class="galaxy-welcome" aria-label="Inicio de Nuestra Galaxia">'+
+ '<section class="hero welcome-hero" aria-labelledby="welcomeTitle"><div class="welcome-hero-copy"><p class="eyebrow">NUESTRO UNIVERSO</p><h1 id="welcomeTitle">'+esc(myName())+' & '+esc(partnerName())+'</h1><p>Lo que vivimos, lo que sentimos y todo lo que todavía nos espera.</p></div>'+
+ '<div class="welcome-hero-stats" aria-label="Nuestra historia en cifras">'+
+ '<div class="welcome-hero-stat"><b>'+(started?coupleDays():'—')+'</b><small>'+(started?'días juntos':'Historia por comenzar')+'</small></div>'+
+ '<button type="button" class="welcome-hero-stat welcome-stat-link" data-view="memories" aria-label="Abrir nuestros recuerdos"><b>'+items('memory').length+'</b><small>recuerdos '+ico('arrow-up-right')+'</small></button>'+
+ '<button type="button" class="welcome-hero-stat welcome-stat-link" data-view="moments" aria-label="Abrir nuestros momentos"><b>'+Number(garden.days||0)+'</b><small>días del girasol '+ico('arrow-up-right')+'</small></button>'+
+ '</div></section>'+
+ '<div class="welcome-feature-grid" aria-label="Momentos destacados">'+monthlySummaryTeaser()+todayHistoryTeaser()+encounterStatsTeaser()+'</div>'+
+ '<section class="welcome-connection" aria-label="Conexión compartida"><div class="welcome-block-head"><p class="eyebrow">CERCA, ESTEMOS DONDE ESTEMOS</p><h2>Nuestra conexión</h2><p>Solo datos compartidos y el momento de su última actualización.</p></div>'+
+ coupleDistanceCard()+nowCard()+
+ (locs.length?'<details class="welcome-presence-details"><summary>'+ico('map-pin')+' Ver estado detallado de ubicación <span>'+ico('chevron-down')+'</span></summary><div class="stack">'+locs.map(personCard).join('')+'</div></details>':'')+
+ '</section>'+
+ '<div class="welcome-rituals">'+
+ '<section class="section welcome-mood-section"><div class="section-head"><div><h2>¿Cómo estás hoy?</h2><p>Tu estado se comparte solo con tu persona.</p></div></div><div class="mood-grid">'+Object.entries(moods).map(([id,m])=>'<button class="mood '+(own.mood===id?'active':'')+'" data-action="mood" data-value="'+id+'" aria-pressed="'+(own.mood===id?'true':'false')+'"><span>'+ico(m[0])+'</span>'+m[1]+'</button>').join('')+'</div>'+(partner.mood?'<div class="card welcome-partner-mood"><span class="badge">'+esc(partnerName())+'</span> <b>'+esc(moods[partner.mood]?.[1]||partner.mood)+'</b></div>':'')+'</section>'+
+ dailyQuestionCard(own,partner)+'</div>'+
+ '<section class="section welcome-shortcuts"><div class="section-head"><div><p class="eyebrow">HAGAMOS ALGO JUNTOS</p><h2>Explorar y crear</h2><p>Un acceso directo a lo que importa hoy.</p></div></div><div class="welcome-bento">'+
  actionCard('map-pin','Nuestro mapa','Ver dónde estamos y nuestros recorridos','map')+
  actionCard('heart','Enviar un gesto','Abrazo, beso o “te extraño”','moments')+
  actionCard('images','Guardar recuerdo','Algo que no queremos olvidar','add-memory')+
  actionCard('circle-check-big','Nuevo plan','Algo para hacer juntos','add-plan')+
  actionCard('target','Nuestros objetivos','Metas, pasos y ahorro manual','goals-open')+
- '</div></section>'+livingMomentCard()+
- (next?'<section class="section"><div class="card"><p class="eyebrow">PRÓXIMA FECHA</p><h3>'+esc(next.title)+'</h3><p>'+esc(fmtDate(next.date))+'</p></div></section>':'')+
- '<section class="section"><div class="section-head"><div><h2>Cerca, aunque estemos lejos</h2><p>Estado actual del mapa compartido.</p></div></div><div class="stack">'+locs.map(personCard).join('')+'</div></section>';
+ '</div></section>'+
+ '<div class="welcome-memories">'+livingMomentCard()+nextCard+'</div>'+
+ '</main>';
 }
-function actionCard(iconName,title,copy,action){return '<button class="action-card" data-action="'+action+'"><span class="icon">'+ico(iconName)+'</span><b>'+esc(title)+'</b><small>'+esc(copy)+'</small></button>';}
+// V5 P2K: contextual labels use only already-loaded couple state; no network,
+// location details or private answers are ever embedded in shortcut HTML.
+function welcomeActionContext(action){
+ const kinds={map:'EXPLORAR',moments:'CONECTAR','add-memory':'CREAR','add-plan':'PLANEAR','goals-open':'AVANZAR'};
+ const category=kinds[action]||'EXPLORAR';
+ if(action==='add-plan'){
+  const pending=items('plan').filter(i=>!i.data?.done).length;
+  return {category,meta:pending>0?pending+' '+(pending===1?'plan pendiente':'planes pendientes'):''};
+ }
+ if(action==='add-memory'){
+  const count=items('memory').length;
+  return {category,meta:count>0?count+' '+(count===1?'recuerdo guardado':'recuerdos guardados'):''};
+ }
+ if(action==='goals-open'){
+  // Goals load only on explicit visit. No false zero or stale counts in Home.
+  const recent=goalsState&&Date.now()-goalsLoadedAt>=0&&Date.now()-goalsLoadedAt<180000;
+  const active=recent?(goalsState.goals||[]).filter(g=>g.status==='active'||g.status==='paused').length:0;
+  return {category,meta:recent&&active>0?active+' '+(active===1?'objetivo en marcha':'objetivos en marcha'):''};
+ }
+ if(action==='moments'){
+  const days=Number(cloud?.bond?.garden?.days);
+  return {category,meta:Number.isSafeInteger(days)&&days>0?days+' '+(days===1?'día compartido':'días compartidos'):''};
+ }
+ return {category,meta:''};
+}
+function actionCard(iconName,title,copy,action){
+ const context=welcomeActionContext(action);
+ return '<button class="action-card" data-action="'+action+'"><span class="icon">'+ico(iconName)+'</span><span class="welcome-action-kicker">'+esc(context.category)+'</span><b>'+esc(title)+'</b><small>'+esc(copy)+'</small>'+(context.meta?'<span class="welcome-action-meta">'+esc(context.meta)+'</span>':'')+'</button>';
+}
 function insightsTeaser(){
  const today=String(cloud?.today||''),month=today.slice(0,7),year=today.slice(0,4);
  const card=(action,iconName,eyebrow,title,copy,key)=>'<button class="card insight-period-card" data-action="'+action+'" data-key="'+attr(key)+'"><span>'+ico(iconName)+'</span><span><p class="eyebrow">'+esc(eyebrow)+'</p><h3>'+esc(title)+'</h3><p>'+esc(copy)+'</p></span>'+ico('chevron-right')+'</button>';
@@ -903,23 +960,34 @@ async function openUniversalSearchResult(btn){
 
 function dailyAnswerMarkup(own,partner){
  let html='';
- if(!own.answer)html='<form id="dailyForm" class="stack" style="margin-top:14px"><textarea name="answer" placeholder="Tu respuesta…" required></textarea><button class="btn" type="submit">Guardar respuesta</button></form>';
+ if(!own.answer)html='<form id="dailyForm" class="stack" style="margin-top:14px"><textarea name="answer" rows="2" placeholder="Tu respuesta…" required></textarea><button class="btn" type="submit">Guardar respuesta</button></form>';
  else html='<div class="card" style="margin-top:12px;background:var(--surface2)"><span class="badge">'+esc(myName())+'</span><p style="margin-top:7px">'+esc(own.answer)+'</p></div>';
  if(partner.answer)html+='<div class="card partner-answer" style="margin-top:10px"><span class="badge">'+esc(partnerName())+'</span><p style="margin-top:7px">'+esc(partner.answer)+'</p></div>';
  else if(own.answer)html+='<p class="muted" style="font-size:12px;margin-top:10px">La respuesta de '+esc(partnerName())+' aparecerá cuando ambos hayan respondido.</p>';
  return html;
 }
 function dailyQuestionCard(own,partner){
- const q=dateContext?.question||{},both=!!own?.answer&&!!partner?.answer;
+ const q=dateContext?.question||{},ownAnswered=!!own?.answer,partnerAnswered=!!partner?.answer;
+ const both=ownAnswered&&partnerAnswered,answeredCount=Number(ownAnswered)+Number(partnerAnswered);
  const deckLabels={funny:'Divertidas',memories:'Recuerdos',future:'Futuro',intimate:'Íntimas y emocionales',absurd:'Absurdas',travel:'Viajes','would-you-rather':'¿Qué prefieres?'};
- return '<section class="section"><div class="card date-question-card"><div class="row between"><div><p class="eyebrow">PREGUNTA DEL DÍA 2.0</p><small class="muted">'+esc(deckLabels[q.deck]||'Una pregunta para hoy')+'</small></div><button class="icon-btn '+(q.favorite?'active':'')+'" data-action="date-question-favorite" aria-label="'+(q.favorite?'Quitar de favoritas':'Marcar como favorita')+'">'+ico('star')+'</button></div><h3>'+esc(dailyQuestion())+'</h3>'+dailyAnswerMarkup(own,partner)+'<div class="row wrap date-question-actions"><button class="btn small secondary" data-action="galaxy-share" data-card-type="DAILY_QUESTION" data-kind="daily_question" data-id="'+attr(cloud.today)+'" data-title="'+attr(dailyQuestion())+'">'+ico('send')+' Galaxy Chat</button><button class="btn small secondary" data-action="date-question-decks">'+ico('layers-3')+' Barajas</button><button class="btn small ghost" data-action="date-question-memory" '+(both?'':'disabled')+'>'+ico('bookmark-plus')+' '+(q.memoryId?'Ver recuerdo':'Guardar como recuerdo')+'</button></div>'+(both?'':'<p class="muted date-question-privacy">'+ico('lock')+' Las dos respuestas se unen a un recuerdo solo cuando ambos hayan contestado.</p>')+'</div></section>';
+ // Status uses booleans only: never expose answer text, partner notes or names in the indicators.
+ const responseState=(mine,answered)=>{
+  const label=mine?'Tu respuesta':'La otra respuesta',status=answered?'Lista':'Pendiente';
+  return '<span class="date-question-person '+(answered?'is-ready':'is-pending')+'" aria-label="'+label+': '+status.toLowerCase()+'">'+ico(answered?'check-circle-2':'clock-3')+'<span>'+(mine?'Tú':'Tu persona')+'</span><b>'+status+'</b></span>';
+ };
+ return '<section class="section"><div class="card date-question-card"><div class="row between"><div><p class="eyebrow">PREGUNTA DE HOY</p><small class="muted">'+esc(deckLabels[q.deck]||'Una pregunta para hoy')+'</small></div><button type="button" class="icon-btn '+(q.favorite?'active':'')+'" data-action="date-question-favorite" aria-pressed="'+(q.favorite?'true':'false')+'" aria-label="'+(q.favorite?'Quitar de favoritas':'Marcar como favorita')+'">'+ico('star')+'</button></div><h3>'+esc(dailyQuestion())+'</h3><p class="date-question-progress" role="status" aria-label="'+answeredCount+' de 2 respuestas registradas">'+ico(both?'check-circle-2':'message-circle')+' '+answeredCount+' de 2 respuestas listas</p><div class="date-question-person-status" role="group" aria-label="Quién ha respondido">'+responseState(true,ownAnswered)+responseState(false,partnerAnswered)+'</div>'+dailyAnswerMarkup(own,partner)+'<div class="row wrap date-question-actions"><button class="btn small secondary" data-action="galaxy-share" data-card-type="DAILY_QUESTION" data-kind="daily_question" data-id="'+attr(cloud.today)+'" data-title="'+attr(dailyQuestion())+'">'+ico('send')+' Galaxy Chat</button><button class="btn small secondary" data-action="date-question-decks">'+ico('layers-3')+' Barajas</button><button class="btn small ghost" data-action="date-question-memory" '+(both?'':'disabled')+'>'+ico('bookmark-plus')+' '+(q.memoryId?'Ver recuerdo':'Guardar como recuerdo')+'</button></div>'+(both?'':'<p class="muted date-question-privacy">'+ico('lock')+' Las dos respuestas se unen a un recuerdo solo cuando ambos hayan contestado.</p>')+'</div></section>';
 }
 
 function personCard(l){
- const name=names()[Number(l.person)]||'Nosotros',sharing=!!l.sharing,fresh=locationFreshState(l),motion=transportLabel(l),kmh=Math.max(0,Number(l.speed||0)*3.6),mine=String(l.person)===String(cloud.person);
- const state=!sharing?'Ubicación pausada':fresh?(esc(motion)+(l.status?' · '+esc(l.status):'')):'Sin actualizar · hace '+ageDurationLabel(locationAgeMs(l));
+ const name=names()[Number(l.person)]||'Nosotros',sharing=!!l.sharing,mine=String(l.person)===String(cloud.person);
+ const timestamp=Date.parse(l.updated_at||'');
+ const hasFix=l.latitude!=null&&l.longitude!=null&&Number.isFinite(timestamp)&&timestamp<=Date.now()+60_000;
+ const fresh=hasFix&&locationFreshState(l);
+ const speed=l.speed==null?NaN:Number(l.speed);
+ const kmh=fresh&&Number.isFinite(speed)&&speed>=0?speed*3.6:null;
+ const state=!sharing?'Ubicación pausada':!hasFix?(timestamp>Date.now()+60_000?'Hora del dispositivo por verificar':'Sin lectura GPS reciente'):fresh?(esc(transportLabel(l))+(l.status?' · '+esc(l.status):'')):'Sin actualizar · hace '+ageDurationLabel(locationAgeMs(l));
  const statusAction=l.status?'<button class="btn small secondary" data-action="'+(mine?'galaxy-share':'status-chat-reply')+'" '+(mine?'data-card-type="STATUS" data-kind="status" ':'')+'data-id="'+attr(l.person)+'" data-title="'+attr(l.status)+'">'+ico(mine?'send':'message-circle-reply')+' '+(mine?'Compartir estado':'Responder en Galaxy Chat')+'</button>':'';
- return '<div class="card person-card '+(sharing&&!fresh?'stale':'')+'"><div class="bubble">'+esc(name.slice(0,1))+'</div><div><b><span class="status-dot '+(fresh?'live':sharing?'stale':'')+'"></span>'+esc(name)+'</b><p>'+state+'</p>'+statusAction+'</div><div class="speed">'+(fresh?kmh.toFixed(kmh<10?1:0):'—')+'<small>km/h</small></div></div>';
+ return '<div class="card person-card '+(sharing&&!fresh?'stale':'')+'"><div class="bubble">'+esc(name.slice(0,1))+'</div><div><b><span class="status-dot '+(fresh?'live':sharing?'stale':'')+'"></span>'+esc(name)+'</b><p>'+state+'</p>'+statusAction+'</div><div class="speed"'+(kmh===null?' aria-label="Velocidad sin lectura"':'')+'>'+(kmh===null?'—':kmh.toFixed(kmh<10?1:0))+'<small>km/h</small></div></div>';
 }
 function transportLabel(l){
  if(!l.sharing)return'Ubicación pausada';
@@ -2577,7 +2645,7 @@ function intelligenceHubView(){
 function moreView(){
  const settings=cloud.settings||{data:{},version:1},data=settings.data||{},presence=ownPresence();
  return '<section><div class="section-head"><div><p class="eyebrow">CONFIGURACIÓN</p><h2>Más</h2><p>Privacidad, permisos, respaldo, dispositivos, apariencia y mantenimiento de la app.</p></div></div>'+
- '<div class="card"><div class="row between"><div><h3>Privacidad de “Ahora”</h3><p>Tu ubicación sigue teniendo su propio interruptor. Aquí decides si compartes batería y la canción que estás escuchando.</p></div>'+ico('shield-check')+'</div><div class="privacy-grid"><button class="privacy-toggle '+(presence.shareBattery?'active':'')+'" data-action="presence-battery">'+ico('battery-charging')+'<span><b>Batería</b><small>'+(presence.shareBattery?'Compartida':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(presence.shareListening?'active':'')+'" data-action="presence-listening">'+ico('music')+'<span><b>Escuchando</b><small>'+(presence.shareListening?'Compartido':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(native.tracking?'active':'')+'" data-action="map">'+ico('map-pin')+'<span><b>Ubicación</b><small>'+(native.tracking?'Compartiendo':'Pausada')+'</small></span></button></div></div>'+gpsHistoryPrivacyCard()+
+ '<div id="presencePrivacySettings" class="card presence-privacy-settings" role="region" aria-labelledby="presencePrivacyHeading" tabindex="-1"><div class="row between"><div><h3 id="presencePrivacyHeading">Privacidad de “Ahora”</h3><p>Tu ubicación sigue teniendo su propio interruptor. Aquí decides si compartes batería y la canción que estás escuchando.</p></div>'+ico('shield-check')+'</div><div class="privacy-grid"><button class="privacy-toggle '+(presence.shareBattery?'active':'')+'" data-action="presence-battery">'+ico('battery-charging')+'<span><b>Batería</b><small>'+(presence.shareBattery?'Compartida':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(presence.shareListening?'active':'')+'" data-action="presence-listening">'+ico('music')+'<span><b>Escuchando</b><small>'+(presence.shareListening?'Compartido':'Solo para ti')+'</small></span></button><button class="privacy-toggle '+(native.tracking?'active':'')+'" data-action="map">'+ico('map-pin')+'<span><b>Ubicación</b><small>'+(native.tracking?'Compartiendo':'Pausada')+'</small></span></button></div></div>'+gpsHistoryPrivacyCard()+
  themeSettingsCard()+
  '<div class="card"><div class="row between"><div><p class="eyebrow">NOTIFICACIONES</p><h3>Mensajes y actividad</h3><p>Galaxy Chat, estados, mapa, objetivos, recuerdos y demás actividad usan notificaciones nativas de Android.</p></div><span class="badge '+(native.notificationsGranted&&native.notificationsEnabled?'good':'warn')+'">'+(native.notificationsGranted&&native.notificationsEnabled?'Activas':'Requieren ajuste')+'</span></div><div class="notification-health"><span class="'+(native.notificationsGranted?'good':'')+'">'+ico(native.notificationsGranted?'check':'circle-alert')+' Permiso '+(native.notificationsGranted?'concedido':'pendiente')+'</span><span class="'+(native.pushConfigured?'good':'')+'">'+ico(native.pushConfigured?'radio':'circle-alert')+' Push '+(native.pushConfigured?'configurado':'pendiente')+'</span></div><div class="row wrap" style="margin-top:14px">'+(!native.notificationsGranted?'<button class="btn small" data-action="galaxy-notifications-enable">'+ico('bell-ring')+' Activar notificaciones</button>':'')+'<button class="btn small ghost" data-action="app-settings">'+ico('settings')+' Ajustes de Android</button></div></div>'+
  '<div class="card"><div class="row between"><div><h3>Copia de nuestra galaxia</h3><p>Exporta los datos a un archivo JSON o restaura una copia. Fotos, música y audios permanecen en su almacenamiento privado y se conservan por referencia.</p></div>'+ico('archive')+'</div><div class="row wrap" style="margin-top:14px"><button class="btn small secondary" data-action="backup-export">'+ico('download')+' Exportar</button><button class="btn small ghost" data-action="backup-import">'+ico('upload')+' Restaurar</button></div></div>'+
@@ -3264,7 +3332,7 @@ document.addEventListener('click',async e=>{
   if(a==='place-new'){if(!mapData)await refreshMap({quiet:true,detail:true});openPlace();return;}
   if(a==='destination'){if(!mapData)await refreshMap({quiet:true,detail:true});openDestination();return;}
   if(a==='transport-set'){await api('transport-set',{preference:btn.dataset.value});await refreshState({quiet:true});await refreshMap({quiet:true});render();toast('Preferencia de transporte actualizada.');return;}
-  if(a==='now-settings'){go('more');setTimeout(()=>document.querySelector('.privacy-grid')?.scrollIntoView({behavior:'smooth',block:'center'}),80);return;}
+  if(a==='now-settings'){openPresencePrivacySettings();return;}
   if(a==='presence-battery'){await busy(()=>togglePresence('battery'),'Privacidad de batería actualizada.');return;}
   if(a==='presence-listening'){await busy(()=>togglePresence('listening'),'Privacidad de música actualizada.');return;}
   if(a==='pair-code-partner'){await openPairCode('1');return;}

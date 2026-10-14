@@ -26,6 +26,44 @@ test('Android picker waits for the resolved external app, not a transient system
  assert.doesNotMatch(helper,/!pkg\.equals\(foreground\)/);
  assert.match(helper,/device\.pressBack\(\)/);
  assert.match(helper,/finally\s*\{[\s\S]*GALAXY_FILE_PICKER_QA_CLEANUP/);
- assert.match(helper,/!isPhysicalDevice\(\)\s*&&\s*!pkg\.equals\(device\.getCurrentPackageName\(\)\)/);
+ assert.match(helper,/!isPhysicalDevice\(\)\s*&&\s*!isResumedPackage\(pkg\)/);
+ assert.match(helper,/cancelPickerAndVerifyForeground\(device, pkg, documentsPackage\)/);
+ assert.match(source,/private void cancelPickerAndVerifyForeground\(UiDevice device, String appPkg, String pickerPkg\)/);
+ assert.match(source,/isResumedPackage\(appPkg\)/);
+ assert.match(source,/document\.visibilityState/);
+ assert.match(source,/boolean acknowledged=device\.pressBack\(\)/);
+ assert.match(source,/if \(!acknowledged && pickerStillResumed && !isResumedPackage\(appPkg\)\)/);
+ assert.match(source,/shell\("input keyevent KEYCODE_BACK"\)/);
+ assert.match(source,/awaitPickerMainActivityVisible\(appPkg, 4_000\)/);
+ assert.match(source,/scenario\.getState\(\)==Lifecycle\.State\.DESTROYED/);
+ assert.match(source,/scenario\.getState\(\)==Lifecycle\.State\.RESUMED/);
+ assert.match(source,/"visible"\.equals\(js\("document\.visibilityState"\)\)/);
+ const pickerReturn=source.slice(source.indexOf('private void cancelPickerAndVerifyForeground('),
+   source.indexOf('/** Match the ACTUAL foreground activity'));
+ assert.match(pickerReturn,/boolean interactive=isPickerInteractiveAndAccessible\(device,pickerPkg\)/);
+ assert.match(source,/private boolean isPickerInteractiveAndAccessible\(UiDevice device,String pickerPkg\)/);
+ assert.doesNotMatch(source,/private boolean isFocusedPackage\(String expectedPackage\)/);
+ assert.doesNotMatch(source,/mCurrentFocus=/);
+ assert.match(source,/device\.hasObject\(androidx\.test\.uiautomator\.By\.pkg\(pickerPkg\)\.clickable\(true\)\)/);
+ const strict=source.slice(source.indexOf('private boolean isPickerInteractiveAndAccessible('),
+   source.indexOf('/** Match the ACTUAL foreground activity'));
+ for(const required of ['isResumedPackage(pickerPkg)',
+   'pickerPkg.equals(device.getCurrentPackageName())',
+   'By.pkg(pickerPkg).clickable(true)']){
+  assert.ok(strict.includes(required),'Rendered picker gate must check '+required);
+ }
+ assert.match(pickerReturn,/SystemClock\.elapsedRealtime\(\)-firstInteractiveAt>=1800L/);
+ assert.match(pickerReturn,/stablePickerPolls>=4/);
+ assert.match(pickerReturn,/refusing premature Back/);
+ assert.ok(pickerReturn.indexOf('stablePickerPolls>=4') <
+   pickerReturn.indexOf('boolean acknowledged=device.pressBack()'),
+   'Never issue Back before interactive DocumentsUI has stably settled');
+ assert.match(pickerReturn,/if\(!isResumedPackage\(pickerPkg\)\)/);
+ assert.doesNotMatch(pickerReturn,/Document picker closed but MainActivity WebView did not recover visibility/);
+ assert.ok(source.indexOf('awaitPickerMainActivityVisible(appPkg, 4_000)') <
+   source.indexOf('shell("input keyevent KEYCODE_BACK")'),
+   'Wait for actual MainActivity return BEFORE fallback to avoid double Back');
+ assert.doesNotMatch(source,/if \(!uiBackAcknowledged\)\s*\{\s*shell\("input keyevent KEYCODE_BACK"\)/);
+ assert.doesNotMatch(source,/assertTrue\("Android did not handle Back while closing document picker"/);
  assert.doesNotMatch(helper,/com\.google\.android\.documentsui\s*\)/);
 });

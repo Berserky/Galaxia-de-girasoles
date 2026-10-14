@@ -1,3 +1,5 @@
+> **Reconciliación de estado 13-oct-2026:** V5-P0 y V5-P1 ejecutados, aprobados y fusionados con autorización; V5-P2 en implementación y QA visual bajo [PR #168 DRAFT](https://github.com/Berserky/Galaxia-de-girasoles/pull/168) y [P2_PROGRESS.md](P2_PROGRESS.md). P3–P9 aún no iniciados. La tabla de fases y Definition of Done se mantienen vigentes; la etiqueta histórica «no iniciado» más abajo no corresponde al estado actual. No hay promoción QA/prod.
+
 > **Estado actualizado:** V5-P0 en ejecución con artefactos verificables en rama aislada; P1 únicamente preparado, **no implementado**. Seguir el ledger [P0_QA_LEDGER.md](P0_QA_LEDGER.md) antes de marcar DoD. La frase “no iniciado” más abajo pertenece al roadmap previo a este arranque y no equivale al estado Git actual.
 
 # Nuestra Galaxia — Visual Evolution 5.0 / Plan maestro de implementación

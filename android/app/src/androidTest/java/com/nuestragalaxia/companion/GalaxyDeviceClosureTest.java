@@ -132,20 +132,103 @@ public class GalaxyDeviceClosureTest {
      * QaHttpServer account. No real couple account, GPS, media or backend is used.
      * These are interaction/layout assertions, not owner-approved screenshot QA.
      */
+    @Test public void visualEvolutionP2_dailyQuestionStatus_isAccessibleAndPrivateOnRealAndroid() throws Exception {
+        launch();
+        awaitJs("!!document.querySelector('.galaxy-welcome .date-question-card')"
+            + " && document.querySelectorAll('.date-question-person').length===2");
+        JSONObject evidence=new JSONObject(js("JSON.stringify((()=>{"
+            + "const card=document.querySelector('.date-question-card'),"
+            + "chips=[...card.querySelectorAll('.date-question-person')],"
+            + "favorite=card.querySelector('[data-action=date-question-favorite]'),"
+            + "memory=card.querySelector('[data-action=date-question-memory]'),"
+            + "own=ownDaily(),partner=partnerDaily(),"
+            + "finished=!!own.answer&&!!partner.answer,"
+            + "text=chips.map(c=>c.textContent).join(' '),"
+            + "leaks=[own.answer,partner.answer].some(a=>typeof a==='string'&&a.length>6&&text.includes(a));"
+            + "return {count:chips.length,"
+            + "myLabel:chips[0].getAttribute('aria-label'),"
+            + "partnerLabel:chips[1].getAttribute('aria-label'),"
+            + "heights:chips.map(c=>c.getBoundingClientRect().height),"
+            + "favoritePressed:favorite?.getAttribute('aria-pressed'),"
+            + "favoriteExpected:dateContext?.question?.favorite?'true':'false',"
+            + "memoryDisabled:!!memory?.disabled,finished,"
+            + "group:card.querySelector('.date-question-person-status')?.getAttribute('role'),"
+            + "leaksPrivateAnswer:leaks,"
+            + "noHorizontalOverflow:document.documentElement.scrollWidth<=innerWidth+3};})())"));
+        assertEquals("Expected exactly two individual daily answer indicators",2,evidence.getInt("count"));
+        assertTrue("Own answer status must be labeled",evidence.getString("myLabel").startsWith("Tu respuesta: "));
+        assertTrue("Partner answer status must be labeled",evidence.getString("partnerLabel").startsWith("La otra respuesta: "));
+        JSONArray heights=evidence.getJSONArray("heights");
+        for(int i=0;i<heights.length();i++)
+            assertTrue("Daily answer indicator is too small for touch accessibility",
+                heights.getDouble(i)>=44d);
+        assertEquals("group",evidence.getString("group"));
+        assertEquals("Favorite state not exposed correctly",evidence.getString("favoriteExpected"),
+            evidence.getString("favoritePressed"));
+        assertEquals("Memory CTA must be gated until both respond",
+            !evidence.getBoolean("finished"),evidence.getBoolean("memoryDisabled"));
+        assertFalse("Individual status revealed a private answer",evidence.getBoolean("leaksPrivateAnswer"));
+        assertTrue("Daily status introduced horizontal scroll",evidence.getBoolean("noHorizontalOverflow"));
+        System.out.println("V5_P2_DAILY_QUESTION_STATUS=verified;badges:2;private:true");
+    }
+
+    @Test public void visualEvolutionP2_privacyShortcut_opensFocusedControlsWithoutChangingSharing() throws Exception {
+        launch();
+        awaitJs("!!document.querySelector('.galaxy-welcome .now-section [data-action=\\\"now-settings\\\"]')");
+        String privacyBefore=js("JSON.stringify({battery:ownPresence().shareBattery===true,"
+            + "listening:ownPresence().shareListening===true,tracking:!!native.tracking})");
+
+        // Exercise the REAL Android WebView event delegation and full page
+        // navigation, not a static source substring or hand-built HTML.
+        runV5Js("document.querySelector('.now-section [data-action=\\\"now-settings\\\"]').click()");
+        awaitJs("view==='more' && !!document.getElementById('presencePrivacySettings')"
+            + " && document.activeElement?.id==='presencePrivacySettings'");
+        JSONObject result=new JSONObject(js("JSON.stringify((()=>{"
+            + "const panel=document.getElementById('presencePrivacySettings'),"
+            + "r=panel.getBoundingClientRect(),"
+            + "actions=Array.from(panel.querySelectorAll('.privacy-toggle')).map(x=>x.dataset.action);"
+            + "return {visible:r.bottom>0&&r.top<innerHeight&&getComputedStyle(panel).display!=='none',"
+            + "focused:document.activeElement===panel,"
+            + "region:panel.getAttribute('role'),"
+            + "label:panel.getAttribute('aria-labelledby'),actions};})())"));
+        assertTrue("Privacy settings panel is not visibly reachable in More",result.getBoolean("visible"));
+        assertTrue("Privacy deep link failed to focus the destination",result.getBoolean("focused"));
+        assertEquals("region",result.getString("region"));
+        assertEquals("presencePrivacyHeading",result.getString("label"));
+        JSONArray actions=result.getJSONArray("actions");
+        assertEquals("Privacy controls count must remain intact",3,actions.length());
+        assertEquals("presence-battery",actions.getString(0));
+        assertEquals("presence-listening",actions.getString(1));
+        assertEquals("map",actions.getString(2));
+        String privacyAfter=js("JSON.stringify({battery:ownPresence().shareBattery===true,"
+            + "listening:ownPresence().shareListening===true,tracking:!!native.tracking})");
+        assertEquals("Navigating to privacy must never modify sharing settings",
+            privacyBefore,privacyAfter);
+        System.out.println("V5_P2_PRIVACY_DEEP_LINK=verified;controls:3;sharingUnchanged:true");
+    }
+
     @Test public void visualEvolutionP1_realWebViewThemesFloatingRailAndModalFocus_areSafe() throws Exception {
         launch();
         awaitJs("!!document.querySelector('#bottomNav .nav-btn.active') && !!document.querySelector('#chatFab:not(.hidden)')");
         assertEquals("true", js("!!document.querySelector('link[href=\"./celestial-shell.css\"]')"
             + " && !!window.GalaxyCelestialShell && document.querySelectorAll('#bottomNav .nav-btn').length===6"));
 
+        // P2 Welcome must be backed by REAL paired QA state and keep all entry points.
+        assertEquals("P2 Welcome not loaded from Android APK", "true",
+            js("!!document.querySelector('link[href=\"./galaxy-welcome.css\"]')"
+              + " && !!document.querySelector('.galaxy-welcome .welcome-hero')"
+              + " && document.querySelectorAll('.welcome-bento .action-card').length===5"
+              + " && !!document.querySelector('.welcome-rituals')"
+              + " && !!document.querySelector('.welcome-connection')"));
+
         // QA-only proof-of-paint marker, not a product UI element. A previous
         // Android run showed a stale pairing screen although the in-process
         // WebView navigation had finished loading. Verify actual display pixels
         // before accepting any of the seven theme screenshots.
-        runJs("document.querySelector('[data-view=\\\"home\\\"]')?.click()");
+        runV5Js("document.querySelector('[data-view=\\\"home\\\"]')?.click()");
         awaitJs("document.querySelector('#bottomNav .nav-btn.active')?.dataset.view==='home'"
             + " && getComputedStyle(document.getElementById('bottomNav')).display!=='none'");
-        runJs("const marker=document.createElement('div');marker.id='v5-qa-paint-marker';"
+        runV5Js("const marker=document.createElement('div');marker.id='v5-qa-paint-marker';"
             + "marker.setAttribute('aria-hidden','true');"
             + "marker.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;'+"
             + "'background:#07e1f7;z-index:2147483647;pointer-events:none';"
@@ -160,7 +243,7 @@ public class GalaxyDeviceClosureTest {
         org.json.JSONArray samples = new org.json.JSONArray();
         for (String theme : new String[]{"daylight","cosmic","halloween","christmas",
                 "valentine","friendship","easter"}) {
-            runJs("GalaxyTheme.applyTheme('" + theme + "')");
+            runV5Js("GalaxyTheme.applyTheme('" + theme + "')");
             long themeStarted = SystemClock.elapsedRealtime();
             String raw = jsWithDeadline("JSON.stringify((()=>{const e=document.createElement('button');"
                 + "e.className='btn';document.body.appendChild(e);"
@@ -185,7 +268,7 @@ public class GalaxyDeviceClosureTest {
             awaitV5QaPainted(theme);
             shell("screencap -p /sdcard/Download/V5-P1-synthetic-" + theme + ".png");
         }
-        runJs("document.getElementById('v5-qa-paint-marker')?.remove();GalaxyTheme.applyTheme('auto')");
+        runV5Js("document.getElementById('v5-qa-paint-marker')?.remove();GalaxyTheme.applyTheme('auto')");
         assertEquals("true", js("document.documentElement.dataset.themeChoice==='auto'"));
         JSONObject themes = new JSONObject().put("palettes",samples).put("auto",true);
 
@@ -211,7 +294,7 @@ public class GalaxyDeviceClosureTest {
         assertTrue("FAB/add/player collide on real WebView: " + rail, rail.getBoolean("withPlayer"));
 
         for (String id : new String[]{"map","moments","ai","memories","more","home"}) {
-            runJs("document.querySelector('[data-view=\"" + id + "\"]').click()");
+            runV5Js("document.querySelector('[data-view=\"" + id + "\"]').click()");
             awaitJs("document.querySelectorAll('#bottomNav [aria-current=\"page\"]').length===1");
             assertEquals("Active route was not announced to accessibility for " + id, id,
                 js("document.querySelector('#bottomNav [aria-current=\"page\"]')?.dataset.view||''"));
@@ -219,12 +302,12 @@ public class GalaxyDeviceClosureTest {
 
         // Real global dialog (not Galaxy Chat) must focus search, then restore its
         // launcher after Escape/cancel using the preexisting closeModal cleanup.
-        runJs("document.querySelector('[data-action=\"universal-search-open\"]').click()");
+        runV5Js("document.querySelector('[data-action=\"universal-search-open\"]').click()");
         awaitJs("document.getElementById('modal').open");
         awaitJs("document.activeElement?.id==='universalSearchInput'");
         assertEquals("v5-modal-title", js("document.getElementById('modal').getAttribute('aria-labelledby')"));
         assertEquals("true", js("document.body.classList.contains('v5-input-focused')"));
-        runJs("document.getElementById('modal').dispatchEvent(new Event('cancel',{cancelable:true}))");
+        runV5Js("document.getElementById('modal').dispatchEvent(new Event('cancel',{cancelable:true}))");
         awaitJs("!document.getElementById('modal').open && document.activeElement?.dataset.action==='universal-search-open'");
         assertEquals("false", js("document.body.classList.contains('v5-input-focused')"));
         assertEquals("", js("document.getElementById('modal').getAttribute('aria-labelledby')||''"));
@@ -240,7 +323,7 @@ public class GalaxyDeviceClosureTest {
         assertTrue("Bad CSS/native viewport scale",baselineCssWidth>200 && displayWidthPx>300);
         final double deviceScale=(double)displayWidthPx/baselineCssWidth;
         JSONArray responsive=new JSONArray();
-        runJs("const m=document.createElement('div');m.id='v5-qa-paint-marker';"
+        runV5Js("const m=document.createElement('div');m.id='v5-qa-paint-marker';"
             + "m.setAttribute('aria-hidden','true');"
             + "m.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;"
             + "background:#07e1f7;z-index:2147483647;pointer-events:none';"
@@ -280,9 +363,18 @@ public class GalaxyDeviceClosureTest {
                     + ".every(el=>{const r=el.getBoundingClientRect();return r.left>=-1&&r.right<=innerWidth+1});"
                     + "const headerTouch=hButtons.every(el=>el.getBoundingClientRect().width>=44);"
                     + "const avatarHidden=getComputedStyle(avatar).display==='none';"
+                    + "const welcome=document.querySelector('.galaxy-welcome'),"
+                    + "hero=welcome?.querySelector('.welcome-hero'),"
+                    + "cards=[...document.querySelectorAll('.welcome-bento .action-card')];"
+                    + "const heroRect=hero?.getBoundingClientRect();"
+                    + "const heroFits=!!heroRect&&heroRect.left>=-1&&heroRect.right<=innerWidth+1;"
+                    + "const bentoFits=cards.length===5&&cards.every(el=>{"
+                    + "const r=el.getBoundingClientRect();return r.left>=-1&&r.right<=innerWidth+1});"
+                    + "const noHorizontalOverflow=document.documentElement.scrollWidth<=innerWidth+2;"
                     + "add.remove();player.className=original;"
                     + "return {cssWidth:innerWidth,navCount:heights.length,minTouch:Math.min(...heights),"
-                    + "noOverlap,withinScreen,headerFits,headerTouch,avatarHidden}})())",20);
+                    + "noOverlap,withinScreen,headerFits,headerTouch,avatarHidden,"
+                    + "heroFits,bentoFits,noHorizontalOverflow}})())",20);
                 assertTrue("Responsive metrics are not JSON at CSS "+targetCss+": "+measured,
                     measured.startsWith("{"));
                 JSONObject row=new JSONObject(measured);
@@ -300,12 +392,87 @@ public class GalaxyDeviceClosureTest {
                     row.getBoolean("headerTouch"));
                 assertTrue("Decorative avatar must not crowd narrow header at "+targetCss+": "+row,
                     row.getBoolean("avatarHidden"));
-                responsive.put(row.put("requestedCssWidth",targetCss));
+                assertTrue("P2 hero clipped horizontally at "+targetCss+": "+row,
+                    row.getBoolean("heroFits"));
+                assertTrue("P2 5-action bento clipped or missing at "+targetCss+": "+row,
+                    row.getBoolean("bentoFits"));
+                assertTrue("P2 page has horizontal overflow at "+targetCss+": "+row,
+                    row.getBoolean("noHorizontalOverflow"));
                 shell("screencap -p /sdcard/Download/V5-P1-viewport-"+targetCss+".png");
+                // JS scrollY can update before the Android compositor paints the
+                // frame. CI previously archived byte-identical TOP and BOTTOM
+                // images for all four widths despite passing DOM geometry tests.
+                // Require observable real display changes before saving evidence.
+                android.graphics.Bitmap topFrame=instrumentation.getUiAutomation().takeScreenshot();
+                assertTrue("V5 P2 top Android screenshot unavailable at "+targetCss,topFrame!=null);
+                try {
+                    // VE-022/024: capture the middle, not merely the header and
+                    // bottom. Check real question status geometry and pixels on
+                    // the Android display after the WebView compositor settles.
+                    runV5Js("document.querySelector('.date-question-person-status')"
+                        + ".scrollIntoView({behavior:'instant',block:'center'})");
+                    String questionRect=jsWithDeadline("JSON.stringify((()=>{"
+                        + "const badges=document.querySelector('.date-question-person-status'),"
+                        + "fav=document.querySelector('.date-question-card [data-action=date-question-favorite]'),"
+                        + "nav=document.getElementById('bottomNav'),r=badges?.getBoundingClientRect(),"
+                        + "n=nav.getBoundingClientRect(),"
+                        + "chips=badges?.querySelectorAll('.date-question-person'),"
+                        + "fab=document.getElementById('chatFab'),"
+                        + "actions=[...document.querySelectorAll('.date-question-actions > .btn')],"
+                        + "f=fab.getBoundingClientRect(),"
+                        + "touch=actions.map(b=>b.getBoundingClientRect()),"
+                        + "fabClear=actions.length===3&&touch.every(b=>"
+                        + "!(b.left<f.right-1&&b.right>f.left+1&&b.top<f.bottom-1&&b.bottom>f.top+1));"
+                        + "return {scrollY:scrollY,visible:!!r&&r.top>=55&&r.bottom<n.top-8,"
+                        + "badges:chips?.length||0,favorite:fav?.hasAttribute('aria-pressed'),"
+                        + "fabClear,minActionTouch:Math.min(...touch.map(b=>b.width)),"
+                        + "noOverflow:document.documentElement.scrollWidth<=innerWidth+3}})())",20);
+                    JSONObject questionState=new JSONObject(questionRect);
+                    assertTrue("P2 middle question not visible above fixed nav at "+targetCss+": "+questionRect,
+                        questionState.getBoolean("visible"));
+                    assertTrue("P2 question remained at page top at "+targetCss+": "+questionRect,
+                        questionState.getDouble("scrollY")>100d);
+                    assertEquals("P2 question must show two answer chips at "+targetCss,2,
+                        questionState.getInt("badges"));
+                    assertTrue("P2 favorite lost accessible toggle state at "+targetCss,
+                        questionState.getBoolean("favorite"));
+                    assertTrue("P2 question introduced horizontal overflow at "+targetCss,
+                        questionState.getBoolean("noOverflow"));
+                    assertTrue("Chat FAB obscures daily question actions at "+targetCss+": "+questionRect,
+                        questionState.getBoolean("fabClear"));
+                    assertTrue("Question action too narrow after FAB clearance at "+targetCss+": "+questionRect,
+                        questionState.getDouble("minActionTouch")>=44d);
+                    double middleDisplayChange=awaitV5QuestionFramePainted(topFrame,targetCss);
+                    row.put("middleQuestionReached",true)
+                        .put("middleRealDisplayChange",middleDisplayChange);
+                    shell("screencap -p /sdcard/Download/V5-P2-question-"+targetCss+".png");
+                    runV5Js("window.scrollTo(0,document.documentElement.scrollHeight)");
+                    awaitJs("window.scrollY>100");
+                    String bottom=jsWithDeadline("JSON.stringify((()=>{"
+                        + "const last=document.querySelector('.welcome-memories .living-moment'),"
+                        + "nav=document.getElementById('bottomNav'),r=last?.getBoundingClientRect(),"
+                        + "n=nav.getBoundingClientRect();"
+                        + "return {atEnd:window.scrollY>=document.documentElement.scrollHeight-innerHeight-3,"
+                        + "lastVisible:!!r&&r.bottom<=n.top-4&&r.top>=-innerHeight,"
+                        + "scrollY:window.scrollY}})())",20);
+                    JSONObject bottomState=new JSONObject(bottom);
+                    assertTrue("P2 did not scroll to document end at "+targetCss+": "+bottom,
+                        bottomState.getBoolean("atEnd"));
+                    assertTrue("P2 final card hidden by fixed navbar at "+targetCss+": "+bottom,
+                        bottomState.getBoolean("lastVisible"));
+                    double displayChange=awaitV5BottomFramePainted(topFrame,targetCss);
+                    responsive.put(row.put("requestedCssWidth",targetCss)
+                        .put("bottomReached",true)
+                        .put("realDisplayChange",displayChange));
+                    shell("screencap -p /sdcard/Download/V5-P2-bottom-"+targetCss+".png");
+                } finally {
+                    topFrame.recycle();
+                    runV5Js("window.scrollTo(0,0)");
+                }
             }
         } finally {
             shell("wm size reset");
-            runJs("document.getElementById('v5-qa-paint-marker')?.remove()");
+            runV5Js("document.getElementById('v5-qa-paint-marker')?.remove()");
             awaitCondition(() -> Math.abs(Integer.parseInt(js(
                 "String(Math.round(innerWidth))"))-baselineCssWidth)<=5,UI_TIMEOUT_MS);
         }
@@ -1046,19 +1213,22 @@ public class GalaxyDeviceClosureTest {
                 .put("resolvedComponent", documentsComponent)
                 .put("foregroundPackage", pickerForeground)
                 .put("resumedHandler", actualPickerResumed));
-            // Closing a ready picker is the actual cancel behavior under test.
-            device.pressBack();
-            awaitCondition(() -> pkg.equals(device.getCurrentPackageName()), UI_TIMEOUT_MS);
+            // Cancel the REAL Android picker and prove that MainActivity resumes.
+            // DocumentsUI may consume a Back inside its own navigation before closing.
+            // Do not accept an accessibility package alone: the underlying WebView
+            // must return to the foreground; this gate is never skipped.
+            cancelPickerAndVerifyForeground(device, pkg, documentsPackage);
         } finally {
             // Keep the whole instrumented suite hermetic even when a picker
             // assertion fails. Do not mask the failure or bypass its checks.
             for (int cleanup = 0; cleanup < 3; cleanup++) {
-                if (pkg.equals(device.getCurrentPackageName())) break;
+                if (scenario.getState()==Lifecycle.State.DESTROYED || isResumedPackage(pkg)) break;
                 device.pressBack();
                 SystemClock.sleep(450);
             }
             // Never force-stop another provider on a physical owner's phone.
-            if (!isPhysicalDevice() && !pkg.equals(device.getCurrentPackageName())) {
+            // A transient accessibility-root package is NOT proof of resumed UI.
+            if (!isPhysicalDevice() && !isResumedPackage(pkg)) {
                 shell("am force-stop " + documentsPackage);
                 System.out.println("GALAXY_FILE_PICKER_QA_CLEANUP=emulator_picker_stopped");
             }
@@ -1081,6 +1251,125 @@ public class GalaxyDeviceClosureTest {
         SystemClock.sleep(700);
         scenario.onActivity(a -> a.stopVoiceRecording("qa-mic-stop"));
         awaitJs("!!document.querySelector('#app')");
+    }
+
+    /**
+     * Android's document picker can contain its own internal back-stack; the
+     * first Back does not always finish its Activity on an emulator. Test real
+     * cancellation and actual return to the app rather than an a11y-root label.
+     * A broken return still fails after the bounded attempts.
+     */
+    private void cancelPickerAndVerifyForeground(UiDevice device, String appPkg, String pickerPkg) throws Exception {
+        // DocumentsUI may be reported RESUMED while Android is still
+        // transitioning the foreground from MainActivity to the picker.
+        // CI reproduced a false "app foreground / WebView hidden" assertion
+        // during this launch gap, BEFORE the first Back was even pressed.
+        // Verify a stable resolved picker before sending any cancellation.
+        // An Activity can be RESUMED before the OS renders DocumentsUI.
+        // Some headless API-35 runners never populate mCurrentFocus at all,
+        // even after the picker is Displayed. Instead require a real clickable
+        // accessibility node from the resolved picker plus a dwell time.
+        long readyUntil=SystemClock.elapsedRealtime()+20_000;
+        int stablePickerPolls=0;
+        long firstInteractiveAt=0L;
+        while(SystemClock.elapsedRealtime()<readyUntil) {
+            if(scenario.getState()==Lifecycle.State.DESTROYED)
+                throw new AssertionError("MainActivity destroyed before picker cancellation");
+            boolean interactive=isPickerInteractiveAndAccessible(device,pickerPkg);
+            if(interactive) {
+                if(stablePickerPolls==0)firstInteractiveAt=SystemClock.elapsedRealtime();
+                stablePickerPolls++;
+                if(stablePickerPolls>=4
+                    && SystemClock.elapsedRealtime()-firstInteractiveAt>=1800L) break;
+            } else {
+                stablePickerPolls=0;
+                firstInteractiveAt=0L;
+            }
+            SystemClock.sleep(300);
+        }
+        boolean stablePicker=stablePickerPolls>=4 && firstInteractiveAt>0L
+            && SystemClock.elapsedRealtime()-firstInteractiveAt>=1800L;
+        assertTrue("OPEN_DOCUMENT picker never had stable interactive foreground UI; refusing premature Back; "
+            +"pickerResumed="+isResumedPackage(pickerPkg)
+            +";a11yRootMatches="+pickerPkg.equals(device.getCurrentPackageName())
+            +";hasClickablePickerNode="+device.hasObject(androidx.test.uiautomator.By.pkg(pickerPkg).clickable(true)),
+            stablePicker);
+        System.out.println("GALAXY_FILE_PICKER_STABLE=interactiveAccessiblePicker;polls:"+stablePickerPolls);
+
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            // The boolean returned by UiAutomator is NOT evidence that Back
+            // did/didn't dispatch. Only send Back when the picker is still the
+            // foreground Activity. Never cancel while MainActivity is resuming.
+            if(!isResumedPackage(pickerPkg)) {
+                if(awaitPickerMainActivityVisible(appPkg, 8_000)) {
+                    System.out.println("GALAXY_FILE_PICKER_RETURN=verified;alreadyReturned:true");
+                    return;
+                }
+                throw new AssertionError("Picker no longer foreground, but resumed visible MainActivity did not return; refusing another Back");
+            }
+
+            boolean acknowledged=device.pressBack();
+            if (awaitPickerMainActivityVisible(appPkg, 4_000)) {
+                System.out.println("GALAXY_FILE_PICKER_RETURN=verified;backPresses:"+attempt+";uiAck:"+acknowledged);
+                return;
+            }
+            if (isResumedPackage(appPkg)) {
+                if(awaitPickerMainActivityVisible(appPkg, 8_000)) {
+                    System.out.println("GALAXY_FILE_PICKER_RETURN=verified;lateResume:"+attempt);
+                    return;
+                }
+                throw new AssertionError("MainActivity resumed after picker cancellation but WebView remained hidden; no second Back");
+            }
+
+            // Fallback only after the OS has had time to finish the first Back,
+            // and only while DocumentsUI is STILL the actually resumed Activity.
+            // A late picker close must not result in a second Back to our app.
+            boolean pickerStillResumed=isResumedPackage(pickerPkg);
+            if (!acknowledged && pickerStillResumed && !isResumedPackage(appPkg)) {
+                shell("input keyevent KEYCODE_BACK");
+                System.out.println("GALAXY_FILE_PICKER_BACK_FALLBACK=pickerStillResumed;attempt:"+attempt);
+                if (awaitPickerMainActivityVisible(appPkg, 4_000)) {
+                    System.out.println("GALAXY_FILE_PICKER_RETURN=verified;fallback:"+attempt);
+                    return;
+                }
+                if (isResumedPackage(appPkg)) {
+                    throw new AssertionError("Picker fallback returned MainActivity but its WebView stayed hidden");
+                }
+            }
+            System.out.println("GALAXY_FILE_PICKER_RETURN_PENDING=attempt:"+attempt
+                +";pickerResumed:"+isResumedPackage(pickerPkg)
+                +";appResumed:"+isResumedPackage(appPkg)
+                +";rootApp:"+appPkg.equals(device.getCurrentPackageName()));
+        }
+        throw new AssertionError("OPEN_DOCUMENT cancellation did not restore resumed visible MainActivity;picker="
+            +pickerPkg+";appResumed="+isResumedPackage(appPkg)
+            +";rootApp="+appPkg.equals(device.getCurrentPackageName()));
+    }
+
+    /**
+     * ActivityScenario.getState() can be checked even when the Activity has
+     * been destroyed. Never call onActivity/evaluateJavascript on a dead
+     * scenario: fail with an actionable lifecycle assertion instead.
+     */
+    private boolean awaitPickerMainActivityVisible(String appPkg,long timeoutMs) throws Exception {
+        long until=SystemClock.elapsedRealtime()+timeoutMs;
+        while (SystemClock.elapsedRealtime()<until) {
+            if (scenario.getState()==Lifecycle.State.DESTROYED) {
+                throw new AssertionError("MainActivity destroyed during document-picker return; unexpected extra Android Back");
+            }
+            if (isResumedPackage(appPkg)
+                && scenario.getState()==Lifecycle.State.RESUMED
+                && "visible".equals(js("document.visibilityState"))) return true;
+            SystemClock.sleep(250);
+        }
+        return false;
+    }
+
+    /** The picker must be resumed and have a real interactive a11y node. */
+    private boolean isPickerInteractiveAndAccessible(UiDevice device,String pickerPkg) throws Exception {
+        return isResumedPackage(pickerPkg)
+            && pickerPkg.equals(device.getCurrentPackageName())
+            && device.hasObject(androidx.test.uiautomator.By.pkg(pickerPkg).clickable(true));
     }
 
     /** Match the ACTUAL foreground activity; task history alone is insufficient. */
@@ -1257,6 +1546,83 @@ public class GalaxyDeviceClosureTest {
      * dialog or stale activity has no visible mark, and must NOT produce a PASS.
      * No visual OCR or user data is required. The mark is removed after capture.
      */
+    /**
+     * Verifies pixels on the actual Android display, not just WebView scrollY.
+     * Crop out the fixed header, status/nav bars and paint QA marker. UI and
+     * compositor can diverge briefly on software-rendered emulators. Insist
+     * on two consecutive changed frames or FAIL instead of archiving a false
+     * "bottom" screenshot. No screenshot bytes are sent outside CI artifacts.
+     */
+    /** Distinct Android framebuffer at the actual middle question, not DOM alone. */
+    private double awaitV5QuestionFramePainted(android.graphics.Bitmap top,int widthCss) {
+        long until=SystemClock.elapsedRealtime()+15_000;
+        int consecutive=0;
+        double latest=0d;
+        while(SystemClock.elapsedRealtime()<until) {
+            android.graphics.Bitmap frame=null;
+            try {
+                frame=instrumentation.getUiAutomation().takeScreenshot();
+                latest=v5DisplayChangeRatio(top,frame);
+                if(latest>=0.15d) {
+                    if(++consecutive>=2) {
+                        System.out.println("V5_P2_QUESTION_REAL_DISPLAY=css:"+widthCss
+                            +";changedPixelRatio:"+latest+";verified:true");
+                        return latest;
+                    }
+                } else consecutive=0;
+            } catch(RuntimeException ignored){consecutive=0;}
+            finally {if(frame!=null)frame.recycle();}
+            SystemClock.sleep(250);
+        }
+        throw new AssertionError("P2 middle question screenshot rejected: real Android display"
+            +" did not paint distinct question frame at css "+widthCss
+            +";changedPixelRatio:"+latest);
+    }
+
+    private double awaitV5BottomFramePainted(android.graphics.Bitmap top,int widthCss) {
+        long until=SystemClock.elapsedRealtime()+15_000;
+        int consecutive=0;
+        double latest=0;
+        while(SystemClock.elapsedRealtime()<until) {
+            android.graphics.Bitmap candidate=null;
+            try {
+                candidate=instrumentation.getUiAutomation().takeScreenshot();
+                latest=v5DisplayChangeRatio(top,candidate);
+                if(latest>=0.15d) {
+                    if(++consecutive>=2) {
+                        System.out.println("V5_P2_BOTTOM_REAL_DISPLAY=css:"+widthCss
+                            + ";changedPixelRatio:"+latest+";verified:true");
+                        return latest;
+                    }
+                } else consecutive=0;
+            } catch(RuntimeException ignored){consecutive=0;}
+            finally {if(candidate!=null)candidate.recycle();}
+            SystemClock.sleep(250);
+        }
+        throw new AssertionError("P2 bottom screenshot rejected: Android display never painted"
+            +" a visibly different lower scroll frame at css "+widthCss
+            +";changedPixelRatio:"+latest
+            +";JS scroll geometry alone is not screenshot evidence");
+    }
+
+    private static double v5DisplayChangeRatio(android.graphics.Bitmap top,android.graphics.Bitmap bottom) {
+        if(top==null||bottom==null||top.getWidth()!=bottom.getWidth()
+            ||top.getHeight()!=bottom.getHeight())return 0;
+        int width=top.getWidth(),height=top.getHeight(),total=0,changed=0;
+        // Text/content zone, avoiding fixed rails, wallpaper and QA marker.
+        for(int y=height/4;y<height*7/10;y+=16) {
+            for(int x=width/6;x<width*5/6;x+=16) {
+                int a=top.getPixel(x,y),b=bottom.getPixel(x,y);
+                int delta=Math.max(Math.abs(android.graphics.Color.red(a)-android.graphics.Color.red(b)),
+                    Math.max(Math.abs(android.graphics.Color.green(a)-android.graphics.Color.green(b)),
+                        Math.abs(android.graphics.Color.blue(a)-android.graphics.Color.blue(b))));
+                total++;
+                if(delta>36)changed++;
+            }
+        }
+        return total>0?(double)changed/total:0d;
+    }
+
     private void awaitV5QaPainted(String theme) {
         long deadline=SystemClock.elapsedRealtime()+15_000;
         int consecutive=0;
@@ -1313,6 +1679,16 @@ public class GalaxyDeviceClosureTest {
             sum+=weights[i]*linear;
         }
         return sum;
+    }
+
+    /**
+     * Visual-only QA on software-rendered cold Android AVD: allow at most 20s
+     * per action, including navigation/scroll/paint, and ASSERT the callback
+     * executed. Ordinary Chat QA retains the strict 5s callback deadline.
+     */
+    private void runV5Js(String script) {
+        String result=jsWithDeadline("(function(){" + script + ";return 'ok';})()",20);
+        assertEquals("V5 Android WebView action did not complete: "+script,"ok",result);
     }
 
     private void runJs(String script) {
