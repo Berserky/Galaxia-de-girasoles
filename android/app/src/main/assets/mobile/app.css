@@ -1622,3 +1622,13 @@ body.chat-mode .chat-compose-row{min-width:0;max-width:100%;overflow-x:hidden}
 .gmap-controls button:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 .gmap-controls button:active{transform:scale(.96)}
 @media(prefers-reduced-motion:reduce){.gmap-controls button{transition:none}}
+
+/* V5-P4 / VE-063, VE-069: distinguish marker types and stale position without relying on color alone. */
+.gmap-marker button{display:grid;place-items:center;min-width:40px;min-height:40px;transition:box-shadow .16s ease,transform .16s ease}
+.gmap-marker button:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.gmap-marker button:active{transform:scale(.96)}
+.gmap-marker.partner button{border-radius:50%}
+.gmap-marker.place button{border-radius:12px;border-style:solid}
+.gmap-marker.stale button{border-style:dashed}
+.gmap-marker.open button{box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 35%,transparent),0 6px 20px rgba(0,0,0,.22)}
+@media(prefers-reduced-motion:reduce){.gmap-marker button{transition:none}}
