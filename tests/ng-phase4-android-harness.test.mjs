@@ -27,8 +27,11 @@ test('Android picker waits for the resolved external app, not a transient system
  assert.match(helper,/device\.pressBack\(\)/);
  assert.match(helper,/finally\s*\{[\s\S]*GALAXY_FILE_PICKER_QA_CLEANUP/);
  assert.match(helper,/!isPhysicalDevice\(\)\s*&&\s*!isResumedPackage\(pkg\)/);
- assert.match(helper,/cancelPickerAndVerifyForeground\(device, pkg, documentsPackage\)/);
- assert.match(source,/private void cancelPickerAndVerifyForeground\(UiDevice device, String appPkg, String pickerPkg\)/);
+ assert.match(helper,/cancelPickerAndVerifyForeground\(device, pkg, documentsPackage, beforePicker\)/);
+ assert.match(helper,/beforePicker=instrumentation\.getUiAutomation\(\)\.takeScreenshot\(\)/);
+ assert.match(helper,/assertNotNull\("File-picker QA requires a real app baseline frame",beforePicker\)/);
+ assert.match(helper,/beforePicker\.recycle\(\)/);
+ assert.match(source,/private void cancelPickerAndVerifyForeground\(UiDevice device, String appPkg, String pickerPkg,\s*android\.graphics\.Bitmap beforePicker\)/);
  assert.match(source,/isResumedPackage\(appPkg\)/);
  assert.match(source,/document\.visibilityState/);
  assert.match(source,/boolean acknowledged=device\.pressBack\(\)/);
@@ -40,7 +43,12 @@ test('Android picker waits for the resolved external app, not a transient system
  assert.match(source,/"visible"\.equals\(js\("document\.visibilityState"\)\)/);
  const pickerReturn=source.slice(source.indexOf('private void cancelPickerAndVerifyForeground('),
    source.indexOf('/** Match the ACTUAL foreground activity'));
- assert.match(pickerReturn,/boolean interactive=isPickerInteractiveAndAccessible\(device,pickerPkg\)/);
+ assert.match(pickerReturn,/lastAccessible=resumed && isPickerInteractiveAndAccessible\(device,pickerPkg\)/);
+ assert.match(pickerReturn,/lastPaintDelta=v5DisplayChangeRatio\(beforePicker,pickerFrame\)/);
+ assert.match(pickerReturn,/boolean rendered=resumed && lastPaintDelta>=0\.15d/);
+ assert.match(pickerReturn,/boolean interactive=lastAccessible \|\| rendered/);
+ assert.match(pickerReturn,/if\(pickerFrame!=null\)pickerFrame\.recycle\(\)/);
+ assert.match(pickerReturn,/refusing premature Back/);
  assert.match(source,/private boolean isPickerInteractiveAndAccessible\(UiDevice device,String pickerPkg\)/);
  assert.doesNotMatch(source,/private boolean isFocusedPackage\(String expectedPackage\)/);
  assert.doesNotMatch(source,/mCurrentFocus=/);
