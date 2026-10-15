@@ -267,6 +267,86 @@ public class GalaxyDeviceClosureTest {
                 + " && document.querySelector('#bottomNav .nav-btn.active')?.dataset.view==='home'");
             awaitV5QaPainted(theme);
             shell("screencap -p /sdcard/Download/V5-P1-synthetic-" + theme + ".png");
+
+            // P3 seven-theme evidence MUST render the actual Android modal
+            // above the home surface; P1 theme screenshots alone do not prove
+            // the search and notification color/viewport contracts.
+            int themedCssWidth=Integer.parseInt(js("String(Math.round(innerWidth))"));
+            android.graphics.Bitmap themedHome=instrumentation.getUiAutomation().takeScreenshot();
+            assertNotNull("P3 themed home baseline framebuffer missing",themedHome);
+            try {
+                runV5Js("openUniversalSearch();"
+                    + "document.getElementById('universalSearchResults').innerHTML="
+                    + "GalaxyDiscoveryV5.renderClassic([{type:'item',kind:'memory',"
+                    + "id:'p3-theme-memory',title:'Recuerdo de QA',"
+                    + "subtitle:'Texto de verificacion del tema actual'}],"
+                    + "{ico,esc,attr,kindMeta})");
+                awaitJs("modal.open && modal.dataset.form==='v5-p3-search'"
+                    + " && document.querySelectorAll('.v5-p3-search .universal-search-result').length===1");
+                String searchColors=jsWithDeadline("JSON.stringify((()=>{"
+                    + "const panel=modal.querySelector('.modal-inner'),title=panel.querySelector('h2');"
+                    + "return {bg:getComputedStyle(modal).backgroundColor,"
+                    + "fg:getComputedStyle(title).color,"
+                    + "theme:document.documentElement.dataset.theme,"
+                    + "inside:panel.getBoundingClientRect().left>=-2"
+                    + "&&panel.getBoundingClientRect().right<=innerWidth+2};})())",20);
+                JSONObject searchPalette=new JSONObject(searchColors);
+                assertEquals("P3 search theme mismatch",theme,searchPalette.getString("theme"));
+                assertTrue("P3 search modal width outside viewport in "+theme,
+                    searchPalette.getBoolean("inside"));
+                assertTrue("P3 search title contrast below WCAG AA in "+theme+": "+searchColors,
+                    v5ColorContrast(searchPalette.getString("bg"),
+                        searchPalette.getString("fg"))>=4.5d);
+                runV5Js("const box=modal.querySelector('.modal-inner');"
+                    + "box.style.position='relative';const marker=document.createElement('span');"
+                    + "marker.id='v5-p3-qa-paint';"
+                    + "marker.style.cssText='position:absolute;top:12px;left:14px;'+"
+                    + "'width:72px;height:18px;background:#1bd7ab;z-index:2147483647;pointer-events:none';"
+                    + "box.append(marker)");
+                awaitV5P3ModalPainted(themedHome,themedCssWidth,"search-theme-"+theme,27,215,171);
+                shell("screencap -p /sdcard/Download/V5-P3-theme-search-"+theme+".png");
+                runV5Js("closeModal()");
+
+                runV5Js("notificationState={unread:1,notifications:["
+                    + "{id:'theme-qa',event_type:'chat_message',action:'chat',"
+                    + "created_at:'2026-10-14T12:00:00Z',title:'Aviso QA',"
+                    + "body:'Notificacion sintetica para revisar apariencia',read_at:null}"
+                    + "]};v5NotificationFilter='all';"
+                    + "showModal('Notificaciones',"
+                    + "'<div class=\"v5-notification-mount\"></div>',"
+                    + "'v5-p3-notifications');renderV5NotificationPanel()");
+                awaitJs("modal.open && modal.dataset.form==='v5-p3-notifications'"
+                    + " && document.querySelectorAll('.notification-row').length===1");
+                String notificationsColors=jsWithDeadline("JSON.stringify((()=>{"
+                    + "const panel=modal.querySelector('.modal-inner'),title=panel.querySelector('h2');"
+                    + "return {bg:getComputedStyle(modal).backgroundColor,"
+                    + "fg:getComputedStyle(title).color,"
+                    + "theme:document.documentElement.dataset.theme,"
+                    + "inside:panel.getBoundingClientRect().left>=-2"
+                    + "&&panel.getBoundingClientRect().right<=innerWidth+2};})())",20);
+                JSONObject notificationPalette=new JSONObject(notificationsColors);
+                assertEquals("P3 notifications theme mismatch",theme,notificationPalette.getString("theme"));
+                assertTrue("P3 notification modal width outside viewport in "+theme,
+                    notificationPalette.getBoolean("inside"));
+                assertTrue("P3 notification title contrast below WCAG AA in "+theme+": "+notificationsColors,
+                    v5ColorContrast(notificationPalette.getString("bg"),
+                        notificationPalette.getString("fg"))>=4.5d);
+                runV5Js("const box=modal.querySelector('.modal-inner');"
+                    + "box.style.position='relative';const marker=document.createElement('span');"
+                    + "marker.id='v5-p3-qa-paint';"
+                    + "marker.style.cssText='position:absolute;top:12px;left:14px;'+"
+                    + "'width:72px;height:18px;background:#f39b42;z-index:2147483647;pointer-events:none';"
+                    + "box.append(marker)");
+                awaitV5P3ModalPainted(themedHome,themedCssWidth,
+                    "notifications-theme-"+theme,243,155,66);
+                shell("screencap -p /sdcard/Download/V5-P3-theme-notifications-"+theme+".png");
+                runV5Js("closeModal()");
+                System.out.println("V5_P3_THEMED_SURFACES=theme:"+theme+";search:true;notifications:true");
+            } finally {
+                themedHome.recycle();
+                if("true".equals(js("!!document.querySelector('#modal')?.open")))
+                    runV5Js("closeModal()");
+            }
         }
         runV5Js("document.getElementById('v5-qa-paint-marker')?.remove();GalaxyTheme.applyTheme('auto')");
         assertEquals("true", js("document.documentElement.dataset.themeChoice==='auto'"));
@@ -465,6 +545,144 @@ public class GalaxyDeviceClosureTest {
                         .put("bottomReached",true)
                         .put("realDisplayChange",displayChange));
                     shell("screencap -p /sdcard/Download/V5-P2-bottom-"+targetCss+".png");
+
+                    // V5-P3: real Android search + notification screenshots at
+                    // each physical width. Fixtures are synthetic, UI-only;
+                    // no live notifications, AI queries or private data.
+                    assertEquals("P3 Android assets not loaded", "true",
+                        js("!!window.GalaxyDiscoveryV5 && !!document.querySelector("
+                          + "'link[href=\\\"./galaxy-discovery-v5.css\\\"]')"));
+                    android.graphics.Bitmap beforeP3=instrumentation.getUiAutomation().takeScreenshot();
+                    assertNotNull("P3 cannot capture Android baseline framebuffer",beforeP3);
+                    runV5Js("openUniversalSearch();"
+                        + "document.getElementById('universalSearchResults').innerHTML="
+                        + "GalaxyDiscoveryV5.renderClassic(["
+                        + "{type:'item',kind:'memory',id:'qa-memory',title:'Recuerdo QA',"
+                        + "subtitle:'Ejemplo de texto largo para verificar legibilidad en pantalla pequeña'},"
+                        + "{type:'place',id:'qa-place',title:'Lugar de ejemplo',subtitle:'Sin GPS'}],"
+                        + "{ico,esc,attr,kindMeta})");
+                    awaitJs("modal.open && modal.dataset.form==='v5-p3-search'"
+                        + " && document.querySelectorAll('.v5-p3-search .universal-search-result').length===2");
+                    String searchJson=jsWithDeadline("JSON.stringify((()=>{"
+                        + "const m=modal.querySelector('.modal-inner'),"
+                        + "r=document.getElementById('universalSearchResults'),"
+                        + "items=[...r.querySelectorAll('.universal-search-result')],"
+                        + "box=m.getBoundingClientRect();"
+                        + "return {inside:box.left>=-2&&box.right<=innerWidth+2,"
+                        + "scroll:getComputedStyle(r).overflowY,"
+                        + "targets:items.map(x=>x.getBoundingClientRect().height),"
+                        + "order:items.map(x=>x.dataset.id),"
+                        + "noOverflow:document.documentElement.scrollWidth<=innerWidth+3};})())",20);
+                    JSONObject searchEvidence=new JSONObject(searchJson);
+                    assertTrue("P3 search exceeds Android viewport "+targetCss+": "+searchJson,
+                        searchEvidence.getBoolean("inside"));
+                    assertEquals("P3 search results must scroll independently","auto",
+                        searchEvidence.getString("scroll"));
+                    assertEquals("qa-memory",searchEvidence.getJSONArray("order").getString(0));
+                    assertEquals("qa-place",searchEvidence.getJSONArray("order").getString(1));
+                    assertTrue("P3 search scroll overflow "+targetCss,
+                        searchEvidence.getBoolean("noOverflow"));
+                    for (int i=0;i<searchEvidence.getJSONArray("targets").length();i++)
+                        assertTrue("P3 search result too short for touch",
+                            searchEvidence.getJSONArray("targets").getDouble(i)>=44d);
+                    runV5Js("const marker=document.createElement('span');"
+                        + "marker.id='v5-p3-qa-paint';"
+                        + "marker.style.cssText='position:absolute;top:12px;left:14px;'+"
+                        + "'width:72px;height:18px;background:#1bd7ab;z-index:2147483647;pointer-events:none';"
+                        + "modal.querySelector('.modal-inner').style.position='relative';"
+                        + "modal.querySelector('.modal-inner').append(marker)");
+                    awaitV5P3ModalPainted(beforeP3,targetCss,"search",27,215,171);
+                    shell("screencap -p /sdcard/Download/V5-P3-search-"+targetCss+".png");
+                    // Native Android touch and IME input, not JS assignment or DOM-dispatched input.
+                    tapWebElement("#universalSearchInput");
+                    awaitJs("document.activeElement===document.querySelector('#universalSearchInput')");
+                    typeAndroidWebInputFor("#universalSearchInput","P3Native");
+                    assertEquals("P3 search did not receive native keyboard input at "+targetCss,
+                        "true",js("document.querySelector('#universalSearchInput')?.value.includes('P3Native')"));
+                    assertTrue("P3 search IME is not visible at "+targetCss,imeVisible());
+                    String searchIme=jsWithDeadline("JSON.stringify((()=>{"
+                        +"const i=document.querySelector('#universalSearchInput').getBoundingClientRect(),"
+                        +"m=modal.querySelector('.modal-inner').getBoundingClientRect(),"
+                        +"v=window.visualViewport;"
+                        +"return {inputVisible:i.top>=0&&i.bottom<=v.height+v.offsetTop+2,"
+                        +"modalInViewport:m.left>=-2&&m.right<=innerWidth+2,"
+                        +"noOverflow:document.documentElement.scrollWidth<=innerWidth+3};})())",20);
+                    JSONObject imeEvidence=new JSONObject(searchIme);
+                    assertTrue("P3 search input hidden behind IME at "+targetCss+": "+searchIme,
+                        imeEvidence.getBoolean("inputVisible"));
+                    assertTrue("P3 search modal overflows with IME at "+targetCss+": "+searchIme,
+                        imeEvidence.getBoolean("modalInViewport")&&imeEvidence.getBoolean("noOverflow"));
+                    shell("input keyevent 4");
+                    runV5Js("closeModal()");
+
+                    runV5Js("notificationState={unread:2,notifications:["
+                        + "{id:'qa1',event_type:'chat_message',action:'chat',"
+                        + "created_at:'2026-10-14T12:00:00Z',title:'Mensaje de prueba',"
+                        + "body:'Mensaje sintético de prueba del centro de avisos',read_at:null},"
+                        + "{id:'qa2',event_type:'goal_update',action:'goals',"
+                        + "created_at:'2026-10-14T11:00:00Z',title:'Objetivo de prueba',"
+                        + "body:'Actividad sintética de QA sin datos de usuario',read_at:null}"
+                        + "]};v5NotificationFilter='all';"
+                        + "showModal('Notificaciones',"
+                        + "'<div class=\\\"v5-notification-mount\\\"></div>',"
+                        + "'v5-p3-notifications');renderV5NotificationPanel()");
+                    awaitJs("modal.open && modal.dataset.form==='v5-p3-notifications'"
+                        + " && document.querySelectorAll('.v5-notification-panel .notification-row').length===2");
+                    String notificationsJson=jsWithDeadline("JSON.stringify((()=>{"
+                        + "const m=modal.querySelector('.modal-inner'),"
+                        + "filters=[...modal.querySelectorAll('.v5-notification-filter')],"
+                        + "rows=[...modal.querySelectorAll('.notification-row')],"
+                        + "list=modal.querySelector('.notification-center-list'),"
+                        + "box=m.getBoundingClientRect();"
+                        + "return {inside:box.left>=-2&&box.right<=innerWidth+2,"
+                        + "filters:filters.length,rows:rows.length,"
+                        + "scroll:getComputedStyle(list).overflowY,"
+                        + "minTouch:Math.min(...filters.map(f=>f.getBoundingClientRect().height)),"
+                        + "noOverflow:document.documentElement.scrollWidth<=innerWidth+3};})())",20);
+                    JSONObject notificationEvidence=new JSONObject(notificationsJson);
+                    assertTrue("P3 notifications modal exceeds width "+targetCss,
+                        notificationEvidence.getBoolean("inside"));
+                    assertEquals("P3 must retain four accessible filters",4,
+                        notificationEvidence.getInt("filters"));
+                    assertEquals("P3 should preserve both notification destinations",2,
+                        notificationEvidence.getInt("rows"));
+                    assertEquals("auto",notificationEvidence.getString("scroll"));
+                    assertTrue("P3 notification filter too small",
+                        notificationEvidence.getDouble("minTouch")>=44d);
+                    assertTrue("P3 notifications horizontal overflow "+targetCss,
+                        notificationEvidence.getBoolean("noOverflow"));
+                    // V5-P3: exercise actual filter clicks and horizontal reachability
+                    // on all four real Android viewports, including clipped tabs at 320px.
+                    for (String filter : new String[]{"unread","chat","activity","all"}) {
+                        int expectedRows=("all".equals(filter)||"unread".equals(filter))?2:1;
+                        runV5Js("modal.querySelector('.v5-notification-filter[data-filter="
+                            +filter+"]').click()");
+                        awaitJs("modal.querySelector('.v5-notification-filter[aria-selected=true]')"
+                            +"?.dataset.filter==='"+filter+"' && "
+                            +"modal.querySelectorAll('.notification-row').length==="+expectedRows);
+                        runV5Js("modal.querySelector('.v5-notification-filter[aria-selected=true]')"
+                            +".scrollIntoView({block:'nearest',inline:'nearest'})");
+                        String filterJson=jsWithDeadline("JSON.stringify((()=>{"
+                            +"const strip=modal.querySelector('.v5-notification-filters').getBoundingClientRect(),"
+                            +"active=modal.querySelector('.v5-notification-filter[aria-selected=true]').getBoundingClientRect();"
+                            +"return {visible:active.left>=strip.left-2&&active.right<=strip.right+2,"
+                            +"minTouch:active.height>=44};})())",20);
+                        JSONObject filterEvidence=new JSONObject(filterJson);
+                        assertTrue("P3 filter not horizontally reachable at "+targetCss+" "+filter,
+                            filterEvidence.getBoolean("visible"));
+                        assertTrue("P3 filter touch target below 44px at "+targetCss+" "+filter,
+                            filterEvidence.getBoolean("minTouch"));
+                    }
+                    runV5Js("const marker=document.createElement('span');"
+                        + "marker.id='v5-p3-qa-paint';"
+                        + "marker.style.cssText='position:absolute;top:12px;left:14px;'+"
+                        + "'width:72px;height:18px;background:#f39b42;z-index:2147483647;pointer-events:none';"
+                        + "modal.querySelector('.modal-inner').style.position='relative';"
+                        + "modal.querySelector('.modal-inner').append(marker)");
+                    awaitV5P3ModalPainted(beforeP3,targetCss,"notifications",243,155,66);
+                    shell("screencap -p /sdcard/Download/V5-P3-notifications-"+targetCss+".png");
+                    beforeP3.recycle();
+                    runV5Js("closeModal()");
                 } finally {
                     topFrame.recycle();
                     runV5Js("window.scrollTo(0,0)");
@@ -1191,6 +1409,12 @@ public class GalaxyDeviceClosureTest {
 
         String documentsComponent = documentsHandler.substring(documentsHandler.lastIndexOf('\n') + 1).trim();
         String documentsPackage = documentsComponent.substring(0, documentsComponent.indexOf('/'));
+        // Capture the real app framebuffer BEFORE launching Android DocumentsUI.
+        // Headless API-35 sometimes keeps an android-owned accessibility root
+        // even after PickActivity is actually RESUMED and rendered. Use pixel
+        // evidence in addition to the strict resumed-activity requirement.
+        android.graphics.Bitmap beforePicker=instrumentation.getUiAutomation().takeScreenshot();
+        assertNotNull("File-picker QA requires a real app baseline frame",beforePicker);
         scenario.onActivity(a -> a.pickMedia("qa-file-picker", "chat-file"));
         UiDevice device = UiDevice.getInstance(instrumentation);
         // A transient android-owned ResolverActivity can appear BEFORE the
@@ -1217,8 +1441,9 @@ public class GalaxyDeviceClosureTest {
             // DocumentsUI may consume a Back inside its own navigation before closing.
             // Do not accept an accessibility package alone: the underlying WebView
             // must return to the foreground; this gate is never skipped.
-            cancelPickerAndVerifyForeground(device, pkg, documentsPackage);
+            cancelPickerAndVerifyForeground(device, pkg, documentsPackage, beforePicker);
         } finally {
+            beforePicker.recycle();
             // Keep the whole instrumented suite hermetic even when a picker
             // assertion fails. Do not mask the failure or bypass its checks.
             for (int cleanup = 0; cleanup < 3; cleanup++) {
@@ -1259,7 +1484,8 @@ public class GalaxyDeviceClosureTest {
      * cancellation and actual return to the app rather than an a11y-root label.
      * A broken return still fails after the bounded attempts.
      */
-    private void cancelPickerAndVerifyForeground(UiDevice device, String appPkg, String pickerPkg) throws Exception {
+    private void cancelPickerAndVerifyForeground(UiDevice device, String appPkg, String pickerPkg,
+                                               android.graphics.Bitmap beforePicker) throws Exception {
         // DocumentsUI may be reported RESUMED while Android is still
         // transitioning the foreground from MainActivity to the picker.
         // CI reproduced a false "app foreground / WebView hidden" assertion
@@ -1269,13 +1495,31 @@ public class GalaxyDeviceClosureTest {
         // Some headless API-35 runners never populate mCurrentFocus at all,
         // even after the picker is Displayed. Instead require a real clickable
         // accessibility node from the resolved picker plus a dwell time.
-        long readyUntil=SystemClock.elapsedRealtime()+20_000;
+        long readyUntil=SystemClock.elapsedRealtime()+25_000;
         int stablePickerPolls=0;
         long firstInteractiveAt=0L;
+        double lastPaintDelta=0d;
+        boolean lastAccessible=false;
         while(SystemClock.elapsedRealtime()<readyUntil) {
             if(scenario.getState()==Lifecycle.State.DESTROYED)
                 throw new AssertionError("MainActivity destroyed before picker cancellation");
-            boolean interactive=isPickerInteractiveAndAccessible(device,pickerPkg);
+            // Keep the Android activity state requirement: a system resolver,
+            // launcher or merely different accessibility package is NOT a picker.
+            boolean resumed=isResumedPackage(pickerPkg);
+            lastAccessible=resumed && isPickerInteractiveAndAccessible(device,pickerPkg);
+            android.graphics.Bitmap pickerFrame=null;
+            try {
+                pickerFrame=instrumentation.getUiAutomation().takeScreenshot();
+                lastPaintDelta=v5DisplayChangeRatio(beforePicker,pickerFrame);
+            } finally {
+                if(pickerFrame!=null)pickerFrame.recycle();
+            }
+            // A11y APIs can report package 'android' forever on CI. Accept
+            // only REAL display-pixel transition away from the original app
+            // while the resolved DocumentsUI activity is still resumed.
+            // This is a second independently testable proof, not a skip.
+            boolean rendered=resumed && lastPaintDelta>=0.15d;
+            boolean interactive=lastAccessible || rendered;
             if(interactive) {
                 if(stablePickerPolls==0)firstInteractiveAt=SystemClock.elapsedRealtime();
                 stablePickerPolls++;
@@ -1289,12 +1533,14 @@ public class GalaxyDeviceClosureTest {
         }
         boolean stablePicker=stablePickerPolls>=4 && firstInteractiveAt>0L
             && SystemClock.elapsedRealtime()-firstInteractiveAt>=1800L;
-        assertTrue("OPEN_DOCUMENT picker never had stable interactive foreground UI; refusing premature Back; "
+        assertTrue("OPEN_DOCUMENT picker never had stable interactive or painted foreground UI; refusing premature Back; "
             +"pickerResumed="+isResumedPackage(pickerPkg)
             +";a11yRootMatches="+pickerPkg.equals(device.getCurrentPackageName())
-            +";hasClickablePickerNode="+device.hasObject(androidx.test.uiautomator.By.pkg(pickerPkg).clickable(true)),
+            +";hasClickablePickerNode="+device.hasObject(androidx.test.uiautomator.By.pkg(pickerPkg).clickable(true))
+            +";realPixelDelta="+lastPaintDelta,
             stablePicker);
-        System.out.println("GALAXY_FILE_PICKER_STABLE=interactiveAccessiblePicker;polls:"+stablePickerPolls);
+        System.out.println("GALAXY_FILE_PICKER_STABLE=resumedAndRendered;polls:"+stablePickerPolls
+            +";accessible:"+lastAccessible+";pixelDelta:"+lastPaintDelta);
 
         for (int attempt = 1; attempt <= 3; attempt++) {
             // The boolean returned by UiAutomator is NOT evidence that Back
@@ -1475,6 +1721,29 @@ public class GalaxyDeviceClosureTest {
         System.out.println("GALAXY_WEBVIEW_BEFORE_TOUCH=" + js(
             "JSON.stringify({visible:document.visibilityState,selector:" + quoted
             + ",found:!!document.querySelector(" + quoted + ")})"));
+        // V5-P3: opening Search can asynchronously focus the input and raise
+        // the IME while the physical display is being resized through wm size.
+        // Coordinates measured BEFORE WebView.requestFocus() can then tap the
+        // dialog backdrop instead of the field, closing the modal at 412 CSS px.
+        // Recompute from live Android WebView DOM AFTER the focus/layout settles.
+        // This is still a real UiAutomator touch, never JS .focus() or input.
+        if ("#universalSearchInput".equals(selector)) {
+            SystemClock.sleep(200);
+            String latest=js("JSON.stringify((()=>{const e=document.querySelector(" + quoted + "),"
+                + "r=e?.getBoundingClientRect(),x=r?(r.left+r.right)/2:0,"
+                + "y=r?(r.top+r.bottom)/2:0,hit=document.elementFromPoint(x,y);"
+                + "return {x,y,vw:innerWidth,vh:innerHeight,"
+                + "open:!!document.querySelector('#modal')?.open,"
+                + "width:r?.width||0,height:r?.height||0,"
+                + "hit:hit?.tagName||'',hitId:hit?.id||'',"
+                + "targetHit:!!e&&(hit===e||hit?.contains(e)||e.contains(hit))};})())");
+            JSONObject live=new JSONObject(latest);
+            assertTrue("P3 native search touch requires a visible, unobscured input: "+latest,
+                live.optBoolean("open") && live.optBoolean("targetHit")
+                && live.optDouble("width")>=30d && live.optDouble("height")>=30d);
+            g=live;
+            System.out.println("V5_P3_ANDROID_NATIVE_TAP_GEOMETRY="+latest);
+        }
         int x = v[0] + (int)Math.round(g.getDouble("x") * v[2] / Math.max(1d, g.getDouble("vw")));
         // CSS pixels use one scale on both axes, including while IME insets settle.
         int y = v[1] + (int)Math.round(g.getDouble("y") * v[2] / Math.max(1d, g.getDouble("vw")));
@@ -1513,7 +1782,11 @@ public class GalaxyDeviceClosureTest {
     // Fall back ONLY to Android's InputConnection / hardware KeyEvent pathways.
     // Never alter the DOM value from JavaScript; every caller still verifies it.
     private void typeAndroidWebInput(String value) throws Exception {
-        String expected="(document.querySelector('#chatForm textarea')?.value||'').includes("+
+        typeAndroidWebInputFor("#chatForm textarea",value);
+    }
+
+    private void typeAndroidWebInputFor(String selector,String value) throws Exception {
+        String expected="(document.querySelector("+JSONObject.quote(selector)+")?.value||'').includes("+
             JSONObject.quote(value)+")";
         shell("input text "+value);
         if("true".equals(js(expected)))return;
@@ -1577,6 +1850,53 @@ public class GalaxyDeviceClosureTest {
         throw new AssertionError("P2 middle question screenshot rejected: real Android display"
             +" did not paint distinct question frame at css "+widthCss
             +";changedPixelRatio:"+latest);
+    }
+
+    /**
+     * P3 display-pixel gate. DOM geometry and valid PNG headers are NOT evidence
+     * that the headless Android compositor painted the active dialog.
+     * Unique per-modal QA markers are shown only in isolated AVD fixture tests.
+     */
+    private void awaitV5P3ModalPainted(android.graphics.Bitmap previous,int widthCss,
+                                       String surface,int red,int green,int blue) {
+        long deadline=SystemClock.elapsedRealtime()+20_000;
+        int stable=0;
+        int matched=0;
+        double ratio=0d;
+        while(SystemClock.elapsedRealtime()<deadline) {
+            android.graphics.Bitmap shot=null;
+            try {
+                shot=instrumentation.getUiAutomation().takeScreenshot();
+                matched=0;
+                if(shot!=null) {
+                    ratio=v5DisplayChangeRatio(previous,shot);
+                    // Scan actual Android framebuffer for the modal-specific
+                    // high-chroma marker. It is invisible behind an unpainted
+                    // WebView, unlike its already-updated HTML DOM.
+                    for(int y=24;y<shot.getHeight()*3/4;y+=6) {
+                        for(int x=12;x<shot.getWidth()*3/4;x+=6) {
+                            int p=shot.getPixel(x,y);
+                            if(Math.abs(android.graphics.Color.red(p)-red)<=5
+                                && Math.abs(android.graphics.Color.green(p)-green)<=5
+                                && Math.abs(android.graphics.Color.blue(p)-blue)<=5)matched++;
+                        }
+                    }
+                }
+                if(matched>=18&&ratio>=0.01d) {
+                    if(++stable>=2) {
+                        System.out.println("V5_P3_MODAL_REAL_DISPLAY=css:"+widthCss
+                            +";surface:"+surface+";markerPixels:"+matched
+                            +";changedPixelRatio:"+ratio+";verified:true");
+                        return;
+                    }
+                } else stable=0;
+            }catch(RuntimeException ignored){stable=0;}
+            finally {if(shot!=null)shot.recycle();}
+            SystemClock.sleep(250);
+        }
+        throw new AssertionError("P3 "+surface+" modal did not visibly paint"
+            +" on real Android display at css "+widthCss
+            +";markerPixels:"+matched+";changedPixelRatio:"+ratio);
     }
 
     private double awaitV5BottomFramePainted(android.graphics.Bitmap top,int widthCss) {

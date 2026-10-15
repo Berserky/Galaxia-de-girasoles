@@ -7,17 +7,21 @@ bash scripts/visual-evolution-p0-avd.sh
 
 # Instrumentation is separated from the unpaired baseline. Failures retain
 # any screenshots already produced for diagnosis; no production token is loaded.
-mkdir -p build/p0-avd/p1-synthetic-themes build/p0-avd/p1-responsive-viewports build/p0-avd/p2-bottom-viewports build/p0-avd/p2-question-viewports
+mkdir -p build/p0-avd/p1-synthetic-themes build/p0-avd/p1-responsive-viewports build/p0-avd/p2-bottom-viewports build/p0-avd/p2-question-viewports build/p0-avd/p3-search-viewports build/p0-avd/p3-notifications-viewports build/p0-avd/p3-themed-search build/p0-avd/p3-themed-notifications
 # Preserve partial theme captures even if instrumentation fails later.
 # This runs only against the isolated QA emulator; screenshots are synthetic.
 pull_theme_evidence() {
   for theme in daylight cosmic halloween christmas valentine friendship easter; do
     adb pull "/sdcard/Download/V5-P1-synthetic-${theme}.png" "build/p0-avd/p1-synthetic-themes/${theme}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P3-theme-search-${theme}.png" "build/p0-avd/p3-themed-search/${theme}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P3-theme-notifications-${theme}.png" "build/p0-avd/p3-themed-notifications/${theme}.png" >/dev/null 2>&1 || true
   done
   for css in 320 360 393 412; do
     adb pull "/sdcard/Download/V5-P1-viewport-${css}.png" "build/p0-avd/p1-responsive-viewports/${css}.png" >/dev/null 2>&1 || true
     adb pull "/sdcard/Download/V5-P2-bottom-${css}.png" "build/p0-avd/p2-bottom-viewports/${css}.png" >/dev/null 2>&1 || true
     adb pull "/sdcard/Download/V5-P2-question-${css}.png" "build/p0-avd/p2-question-viewports/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P3-search-${css}.png" "build/p0-avd/p3-search-viewports/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P3-notifications-${css}.png" "build/p0-avd/p3-notifications-viewports/${css}.png" >/dev/null 2>&1 || true
   done
 }
 trap pull_theme_evidence EXIT
@@ -75,6 +79,49 @@ for css,path in zip(viewports,middle):
     assert (width,height)==dimensions[css], f'P2 question screenshot dimension mismatch at {css}: {width}x{height}'
     assert hashlib.sha256(blob).hexdigest()!=hashlib.sha256(responsive[viewports.index(css)].read_bytes()).hexdigest(), f'P2 question screenshot repeats the header at {css}'
 print('P2 Welcome Android middle-question matrix PASS: 4/4 real rendered frames.')
+# P3 must render both modal surfaces in the physical Android WebView at all
+# four widths, not merely return CSS geometry or Chrome demo screenshots.
+p3surfaces={}
+for kind in ('search','notifications'):
+    directory=Path('build/p0-avd')/f'p3-{kind}-viewports'
+    images=[directory/f'{css}.png' for css in viewports]
+    assert all(p.is_file() for p in images), f'Missing real P3 {kind} PNGs: {[str(p) for p in images if not p.is_file()]}'
+    for css,path in zip(viewports,images):
+        blob=path.read_bytes()
+        assert blob.startswith(b'\x89PNG\r\n\x1a\n'), f'Invalid P3 {kind} screenshot: {path}'
+        width,height=struct.unpack('>II',blob[16:24])
+        assert (width,height)==dimensions[css], f'P3 {kind} dimensions mismatch {css}: {width}x{height}'
+        assert hashlib.sha256(blob).hexdigest()!=hashlib.sha256(responsive[viewports.index(css)].read_bytes()).hexdigest(), f'P3 {kind} screenshot stale/duplicated at {css}'
+    p3surfaces[kind]=len(images)
+print(f'P3 real Android modal screenshots PASS: {p3surfaces}')
+
+# P3 theme review is NOT satisfied by home/P1 palette screenshots alone.
+# The Android JUnit requires modal-specific painted markers and WCAG AA
+# title/background contrast in both search and notifications for all 7 themes.
+themed={}
+for kind in ('search','notifications'):
+    directory=Path('build/p0-avd')/f'p3-themed-{kind}'
+    images=[directory/f'{theme}.png' for theme in ('daylight','cosmic','halloween','christmas','valentine','friendship','easter')]
+    assert all(p.is_file() for p in images), f'Missing P3 theme-{kind} screenshot(s): {[str(p) for p in images if not p.is_file()]}'
+    hashes=set()
+    for theme,path in zip(('daylight','cosmic','halloween','christmas','valentine','friendship','easter'),images):
+        blob=path.read_bytes()
+        assert blob.startswith(b'\x89PNG\r\n\x1a\n'), f'Invalid P3 theme screenshot: {path}'
+        w,h=struct.unpack('>II',blob[16:24])
+        assert w<h and w>=320, f'P3 theme screenshot is not Android portrait: {path}: {w}x{h}'
+        sha=hashlib.sha256(blob).hexdigest()
+        assert sha != hashlib.sha256((Path('build/p0-avd/p1-synthetic-themes')/f'{theme}.png').read_bytes()).hexdigest(), f'P3 {kind} {theme} reproduced home framebuffer'
+        hashes.add(sha)
+    assert len(hashes)>=5, f'P3 {kind} theme screenshots unexpectedly identical: {len(hashes)}/7'
+    themed[kind]=len(images)
+for theme in ('daylight','cosmic','halloween','christmas','valentine','friendship','easter'):
+    search_sha=hashlib.sha256((Path('build/p0-avd/p3-themed-search')/f'{theme}.png').read_bytes()).hexdigest()
+    notice_sha=hashlib.sha256((Path('build/p0-avd/p3-themed-notifications')/f'{theme}.png').read_bytes()).hexdigest()
+    assert search_sha!=notice_sha, f'P3 theme {theme}: search/notifications are visually identical'
+print(f'P3 real Android seven-theme search+notifications screenshots PASS: {themed}')
+
+
+
 
 # Keep a machine-readable success receipt based on the actual Android JUnit
 # report (System.out from instrumented tests is not forwarded by Gradle).
@@ -94,6 +141,8 @@ receipt={'status':'VERIFIED_SYNTHETIC_QA','android_junit_tests':tests,
          'responsive_css_widths':viewports,
          'p2_bottom_scroll_screenshots':len(bottom),
          'p2_middle_question_screenshots':len(middle),
+         'p3_real_modal_screenshots':p3surfaces,
+         'p3_themed_modal_screenshots':themed,
          'responsive_png_dimensions':{str(k):list(v) for k,v in dimensions.items()},
          'verification':'display-pixel-marker-plus-instrumented-css-layout-focus'}
 Path('build/p0-avd/p1-device-summary.json').write_text(
