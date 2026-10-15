@@ -267,6 +267,86 @@ public class GalaxyDeviceClosureTest {
                 + " && document.querySelector('#bottomNav .nav-btn.active')?.dataset.view==='home'");
             awaitV5QaPainted(theme);
             shell("screencap -p /sdcard/Download/V5-P1-synthetic-" + theme + ".png");
+
+            // P3 seven-theme evidence MUST render the actual Android modal
+            // above the home surface; P1 theme screenshots alone do not prove
+            // the search and notification color/viewport contracts.
+            int themedCssWidth=Integer.parseInt(js("String(Math.round(innerWidth))"));
+            android.graphics.Bitmap themedHome=instrumentation.getUiAutomation().takeScreenshot();
+            assertNotNull("P3 themed home baseline framebuffer missing",themedHome);
+            try {
+                runV5Js("openUniversalSearch();"
+                    + "document.getElementById('universalSearchResults').innerHTML="
+                    + "GalaxyDiscoveryV5.renderClassic([{type:'item',kind:'memory',"
+                    + "id:'p3-theme-memory',title:'Recuerdo de QA',"
+                    + "subtitle:'Texto de verificacion del tema actual'}],"
+                    + "{ico,esc,attr,kindMeta})");
+                awaitJs("modal.open && modal.dataset.form==='v5-p3-search'"
+                    + " && document.querySelectorAll('.v5-p3-search .universal-search-result').length===1");
+                String searchColors=jsWithDeadline("JSON.stringify((()=>{"
+                    + "const panel=modal.querySelector('.modal-inner'),title=panel.querySelector('h2');"
+                    + "return {bg:getComputedStyle(panel).backgroundColor,"
+                    + "fg:getComputedStyle(title).color,"
+                    + "theme:document.documentElement.dataset.theme,"
+                    + "inside:panel.getBoundingClientRect().left>=-2"
+                    + "&&panel.getBoundingClientRect().right<=innerWidth+2};})())",20);
+                JSONObject searchPalette=new JSONObject(searchColors);
+                assertEquals("P3 search theme mismatch",theme,searchPalette.getString("theme"));
+                assertTrue("P3 search modal width outside viewport in "+theme,
+                    searchPalette.getBoolean("inside"));
+                assertTrue("P3 search title contrast below WCAG AA in "+theme+": "+searchColors,
+                    v5ColorContrast(searchPalette.getString("bg"),
+                        searchPalette.getString("fg"))>=4.5d);
+                runV5Js("const box=modal.querySelector('.modal-inner');"
+                    + "box.style.position='relative';const marker=document.createElement('span');"
+                    + "marker.id='v5-p3-qa-paint';"
+                    + "marker.style.cssText='position:absolute;top:12px;left:14px;'+"
+                    + "'width:72px;height:18px;background:#1bd7ab;z-index:2147483647;pointer-events:none';"
+                    + "box.append(marker)");
+                awaitV5P3ModalPainted(themedHome,themedCssWidth,"search-theme-"+theme,27,215,171);
+                shell("screencap -p /sdcard/Download/V5-P3-theme-search-"+theme+".png");
+                runV5Js("closeModal()");
+
+                runV5Js("notificationState={unread:1,notifications:["
+                    + "{id:'theme-qa',event_type:'chat_message',action:'chat',"
+                    + "created_at:'2026-10-14T12:00:00Z',title:'Aviso QA',"
+                    + "body:'Notificacion sintetica para revisar apariencia',read_at:null}"
+                    + "]};v5NotificationFilter='all';"
+                    + "showModal('Notificaciones',"
+                    + "'<div class=\"v5-notification-mount\"></div>',"
+                    + "'v5-p3-notifications');renderV5NotificationPanel()");
+                awaitJs("modal.open && modal.dataset.form==='v5-p3-notifications'"
+                    + " && document.querySelectorAll('.notification-row').length===1");
+                String notificationsColors=jsWithDeadline("JSON.stringify((()=>{"
+                    + "const panel=modal.querySelector('.modal-inner'),title=panel.querySelector('h2');"
+                    + "return {bg:getComputedStyle(panel).backgroundColor,"
+                    + "fg:getComputedStyle(title).color,"
+                    + "theme:document.documentElement.dataset.theme,"
+                    + "inside:panel.getBoundingClientRect().left>=-2"
+                    + "&&panel.getBoundingClientRect().right<=innerWidth+2};})())",20);
+                JSONObject notificationPalette=new JSONObject(notificationsColors);
+                assertEquals("P3 notifications theme mismatch",theme,notificationPalette.getString("theme"));
+                assertTrue("P3 notification modal width outside viewport in "+theme,
+                    notificationPalette.getBoolean("inside"));
+                assertTrue("P3 notification title contrast below WCAG AA in "+theme+": "+notificationsColors,
+                    v5ColorContrast(notificationPalette.getString("bg"),
+                        notificationPalette.getString("fg"))>=4.5d);
+                runV5Js("const box=modal.querySelector('.modal-inner');"
+                    + "box.style.position='relative';const marker=document.createElement('span');"
+                    + "marker.id='v5-p3-qa-paint';"
+                    + "marker.style.cssText='position:absolute;top:12px;left:14px;'+"
+                    + "'width:72px;height:18px;background:#f39b42;z-index:2147483647;pointer-events:none';"
+                    + "box.append(marker)");
+                awaitV5P3ModalPainted(themedHome,themedCssWidth,
+                    "notifications-theme-"+theme,243,155,66);
+                shell("screencap -p /sdcard/Download/V5-P3-theme-notifications-"+theme+".png");
+                runV5Js("closeModal()");
+                System.out.println("V5_P3_THEMED_SURFACES=theme:"+theme+";search:true;notifications:true");
+            } finally {
+                themedHome.recycle();
+                if("true".equals(js("!!document.querySelector('#modal')?.open")))
+                    runV5Js("closeModal()");
+            }
         }
         runV5Js("document.getElementById('v5-qa-paint-marker')?.remove();GalaxyTheme.applyTheme('auto')");
         assertEquals("true", js("document.documentElement.dataset.themeChoice==='auto'"));
