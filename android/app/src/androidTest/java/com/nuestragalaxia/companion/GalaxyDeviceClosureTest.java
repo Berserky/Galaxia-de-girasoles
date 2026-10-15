@@ -285,7 +285,7 @@ public class GalaxyDeviceClosureTest {
                     + " && document.querySelectorAll('.v5-p3-search .universal-search-result').length===1");
                 String searchColors=jsWithDeadline("JSON.stringify((()=>{"
                     + "const panel=modal.querySelector('.modal-inner'),title=panel.querySelector('h2');"
-                    + "return {bg:getComputedStyle(panel).backgroundColor,"
+                    + "return {bg:getComputedStyle(modal).backgroundColor,"
                     + "fg:getComputedStyle(title).color,"
                     + "theme:document.documentElement.dataset.theme,"
                     + "inside:panel.getBoundingClientRect().left>=-2"
@@ -319,7 +319,7 @@ public class GalaxyDeviceClosureTest {
                     + " && document.querySelectorAll('.notification-row').length===1");
                 String notificationsColors=jsWithDeadline("JSON.stringify((()=>{"
                     + "const panel=modal.querySelector('.modal-inner'),title=panel.querySelector('h2');"
-                    + "return {bg:getComputedStyle(panel).backgroundColor,"
+                    + "return {bg:getComputedStyle(modal).backgroundColor,"
                     + "fg:getComputedStyle(title).color,"
                     + "theme:document.documentElement.dataset.theme,"
                     + "inside:panel.getBoundingClientRect().left>=-2"
