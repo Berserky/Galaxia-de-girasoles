@@ -1613,6 +1613,29 @@ public class GalaxyDeviceClosureTest {
         System.out.println("GALAXY_WEBVIEW_BEFORE_TOUCH=" + js(
             "JSON.stringify({visible:document.visibilityState,selector:" + quoted
             + ",found:!!document.querySelector(" + quoted + ")})"));
+        // V5-P3: opening Search can asynchronously focus the input and raise
+        // the IME while the physical display is being resized through wm size.
+        // Coordinates measured BEFORE WebView.requestFocus() can then tap the
+        // dialog backdrop instead of the field, closing the modal at 412 CSS px.
+        // Recompute from live Android WebView DOM AFTER the focus/layout settles.
+        // This is still a real UiAutomator touch, never JS .focus() or input.
+        if ("#universalSearchInput".equals(selector)) {
+            SystemClock.sleep(200);
+            String latest=js("JSON.stringify((()=>{const e=document.querySelector(" + quoted + "),"
+                + "r=e?.getBoundingClientRect(),x=r?(r.left+r.right)/2:0,"
+                + "y=r?(r.top+r.bottom)/2:0,hit=document.elementFromPoint(x,y);"
+                + "return {x,y,vw:innerWidth,vh:innerHeight,"
+                + "open:!!document.querySelector('#modal')?.open,"
+                + "width:r?.width||0,height:r?.height||0,"
+                + "hit:hit?.tagName||'',hitId:hit?.id||'',"
+                + "targetHit:!!e&&(hit===e||hit?.contains(e)||e.contains(hit))};})())");
+            JSONObject live=new JSONObject(latest);
+            assertTrue("P3 native search touch requires a visible, unobscured input: "+latest,
+                live.optBoolean("open") && live.optBoolean("targetHit")
+                && live.optDouble("width")>=30d && live.optDouble("height")>=30d);
+            g=live;
+            System.out.println("V5_P3_ANDROID_NATIVE_TAP_GEOMETRY="+latest);
+        }
         int x = v[0] + (int)Math.round(g.getDouble("x") * v[2] / Math.max(1d, g.getDouble("vw")));
         // CSS pixels use one scale on both axes, including while IME insets settle.
         int y = v[1] + (int)Math.round(g.getDouble("y") * v[2] / Math.max(1d, g.getDouble("vw")));
