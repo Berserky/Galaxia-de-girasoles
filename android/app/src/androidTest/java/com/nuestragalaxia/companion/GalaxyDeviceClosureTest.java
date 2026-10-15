@@ -513,6 +513,26 @@ public class GalaxyDeviceClosureTest {
                         + "modal.querySelector('.modal-inner').append(marker)");
                     awaitV5P3ModalPainted(beforeP3,targetCss,"search",27,215,171);
                     shell("screencap -p /sdcard/Download/V5-P3-search-"+targetCss+".png");
+                    // Native Android touch and IME input, not JS assignment or DOM-dispatched input.
+                    tapWebElement("#universalSearchInput");
+                    awaitJs("document.activeElement===document.querySelector('#universalSearchInput')");
+                    typeAndroidWebInputFor("#universalSearchInput","P3Native");
+                    assertEquals("P3 search did not receive native keyboard input at "+targetCss,
+                        "true",js("document.querySelector('#universalSearchInput')?.value.includes('P3Native')"));
+                    assertTrue("P3 search IME is not visible at "+targetCss,imeVisible());
+                    String searchIme=jsWithDeadline("JSON.stringify((()=>{"
+                        +"const i=document.querySelector('#universalSearchInput').getBoundingClientRect(),"
+                        +"m=modal.querySelector('.modal-inner').getBoundingClientRect(),"
+                        +"v=window.visualViewport;"
+                        +"return {inputVisible:i.top>=0&&i.bottom<=v.height+v.offsetTop+2,"
+                        +"modalInViewport:m.left>=-2&&m.right<=innerWidth+2,"
+                        +"noOverflow:document.documentElement.scrollWidth<=innerWidth+3};})())",20);
+                    JSONObject imeEvidence=new JSONObject(searchIme);
+                    assertTrue("P3 search input hidden behind IME at "+targetCss+": "+searchIme,
+                        imeEvidence.getBoolean("inputVisible"));
+                    assertTrue("P3 search modal overflows with IME at "+targetCss+": "+searchIme,
+                        imeEvidence.getBoolean("modalInViewport")&&imeEvidence.getBoolean("noOverflow"));
+                    shell("input keyevent 4");
                     runV5Js("closeModal()");
 
                     runV5Js("notificationState={unread:2,notifications:["
@@ -1631,7 +1651,11 @@ public class GalaxyDeviceClosureTest {
     // Fall back ONLY to Android's InputConnection / hardware KeyEvent pathways.
     // Never alter the DOM value from JavaScript; every caller still verifies it.
     private void typeAndroidWebInput(String value) throws Exception {
-        String expected="(document.querySelector('#chatForm textarea')?.value||'').includes("+
+        typeAndroidWebInputFor("#chatForm textarea",value);
+    }
+
+    private void typeAndroidWebInputFor(String selector,String value) throws Exception {
+        String expected="(document.querySelector("+JSONObject.quote(selector)+")?.value||'').includes("+
             JSONObject.quote(value)+")";
         shell("input text "+value);
         if("true".equals(js(expected)))return;
