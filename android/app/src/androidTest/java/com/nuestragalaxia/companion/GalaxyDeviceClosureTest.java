@@ -1409,6 +1409,12 @@ public class GalaxyDeviceClosureTest {
 
         String documentsComponent = documentsHandler.substring(documentsHandler.lastIndexOf('\n') + 1).trim();
         String documentsPackage = documentsComponent.substring(0, documentsComponent.indexOf('/'));
+        // Capture the real app framebuffer BEFORE launching Android DocumentsUI.
+        // Headless API-35 sometimes keeps an android-owned accessibility root
+        // even after PickActivity is actually RESUMED and rendered. Use pixel
+        // evidence in addition to the strict resumed-activity requirement.
+        android.graphics.Bitmap beforePicker=instrumentation.getUiAutomation().takeScreenshot();
+        assertNotNull("File-picker QA requires a real app baseline frame",beforePicker);
         scenario.onActivity(a -> a.pickMedia("qa-file-picker", "chat-file"));
         UiDevice device = UiDevice.getInstance(instrumentation);
         // A transient android-owned ResolverActivity can appear BEFORE the
@@ -1435,8 +1441,9 @@ public class GalaxyDeviceClosureTest {
             // DocumentsUI may consume a Back inside its own navigation before closing.
             // Do not accept an accessibility package alone: the underlying WebView
             // must return to the foreground; this gate is never skipped.
-            cancelPickerAndVerifyForeground(device, pkg, documentsPackage);
+            cancelPickerAndVerifyForeground(device, pkg, documentsPackage, beforePicker);
         } finally {
+            beforePicker.recycle();
             // Keep the whole instrumented suite hermetic even when a picker
             // assertion fails. Do not mask the failure or bypass its checks.
             for (int cleanup = 0; cleanup < 3; cleanup++) {
@@ -1477,7 +1484,8 @@ public class GalaxyDeviceClosureTest {
      * cancellation and actual return to the app rather than an a11y-root label.
      * A broken return still fails after the bounded attempts.
      */
-    private void cancelPickerAndVerifyForeground(UiDevice device, String appPkg, String pickerPkg) throws Exception {
+    private void cancelPickerAndVerifyForeground(UiDevice device, String appPkg, String pickerPkg,
+                                               android.graphics.Bitmap beforePicker) throws Exception {
         // DocumentsUI may be reported RESUMED while Android is still
         // transitioning the foreground from MainActivity to the picker.
         // CI reproduced a false "app foreground / WebView hidden" assertion
@@ -1487,13 +1495,31 @@ public class GalaxyDeviceClosureTest {
         // Some headless API-35 runners never populate mCurrentFocus at all,
         // even after the picker is Displayed. Instead require a real clickable
         // accessibility node from the resolved picker plus a dwell time.
-        long readyUntil=SystemClock.elapsedRealtime()+20_000;
+        long readyUntil=SystemClock.elapsedRealtime()+25_000;
         int stablePickerPolls=0;
         long firstInteractiveAt=0L;
+        double lastPaintDelta=0d;
+        boolean lastAccessible=false;
         while(SystemClock.elapsedRealtime()<readyUntil) {
             if(scenario.getState()==Lifecycle.State.DESTROYED)
                 throw new AssertionError("MainActivity destroyed before picker cancellation");
-            boolean interactive=isPickerInteractiveAndAccessible(device,pickerPkg);
+            // Keep the Android activity state requirement: a system resolver,
+            // launcher or merely different accessibility package is NOT a picker.
+            boolean resumed=isResumedPackage(pickerPkg);
+            lastAccessible=resumed && isPickerInteractiveAndAccessible(device,pickerPkg);
+            android.graphics.Bitmap pickerFrame=null;
+            try {
+                pickerFrame=instrumentation.getUiAutomation().takeScreenshot();
+                lastPaintDelta=v5DisplayChangeRatio(beforePicker,pickerFrame);
+            } finally {
+                if(pickerFrame!=null)pickerFrame.recycle();
+            }
+            // A11y APIs can report package 'android' forever on CI. Accept
+            // only REAL display-pixel transition away from the original app
+            // while the resolved DocumentsUI activity is still resumed.
+            // This is a second independently testable proof, not a skip.
+            boolean rendered=resumed && lastPaintDelta>=0.15d;
+            boolean interactive=lastAccessible || rendered;
             if(interactive) {
                 if(stablePickerPolls==0)firstInteractiveAt=SystemClock.elapsedRealtime();
                 stablePickerPolls++;
@@ -1507,12 +1533,14 @@ public class GalaxyDeviceClosureTest {
         }
         boolean stablePicker=stablePickerPolls>=4 && firstInteractiveAt>0L
             && SystemClock.elapsedRealtime()-firstInteractiveAt>=1800L;
-        assertTrue("OPEN_DOCUMENT picker never had stable interactive foreground UI; refusing premature Back; "
+        assertTrue("OPEN_DOCUMENT picker never had stable interactive or painted foreground UI; refusing premature Back; "
             +"pickerResumed="+isResumedPackage(pickerPkg)
             +";a11yRootMatches="+pickerPkg.equals(device.getCurrentPackageName())
-            +";hasClickablePickerNode="+device.hasObject(androidx.test.uiautomator.By.pkg(pickerPkg).clickable(true)),
+            +";hasClickablePickerNode="+device.hasObject(androidx.test.uiautomator.By.pkg(pickerPkg).clickable(true))
+            +";realPixelDelta="+lastPaintDelta,
             stablePicker);
-        System.out.println("GALAXY_FILE_PICKER_STABLE=interactiveAccessiblePicker;polls:"+stablePickerPolls);
+        System.out.println("GALAXY_FILE_PICKER_STABLE=resumedAndRendered;polls:"+stablePickerPolls
+            +";accessible:"+lastAccessible+";pixelDelta:"+lastPaintDelta);
 
         for (int attempt = 1; attempt <= 3; attempt++) {
             // The boolean returned by UiAutomator is NOT evidence that Back
