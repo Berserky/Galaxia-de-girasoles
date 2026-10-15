@@ -1615,3 +1615,10 @@ body.chat-mode .chat-compose-row{min-width:0;max-width:100%;overflow-x:hidden}
 .chat-sticker-art .chat-sticker-giphy-frame{display:block;width:100%;height:100%;aspect-ratio:1/1;border:0;pointer-events:none;border-radius:11px}
 @media(max-width:360px){.chat-studio-footer{align-items:stretch;flex-direction:column}.chat-studio-submit{width:100%}.chat-studio-row{grid-template-columns:22px minmax(0,1fr)}.chat-studio-row-actions{grid-column:2;justify-content:flex-end}.chat-sticker-grid,.chat-gif-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(orientation:landscape) and (max-height:520px){.chat-galaxy-picker,.chat-sticker-results,.chat-interactive-composer{max-height:54dvh}}
+
+/* V5-P4 / VE-065: accessible map controls; visual-only, no GPS or map engine changes. */
+.gmap-controls{gap:8px;left:12px;bottom:12px}
+.gmap-controls button{min-width:44px;min-height:44px;border-radius:14px;display:grid;place-items:center;touch-action:manipulation;transition:transform .16s ease,background-color .16s ease,border-color .16s ease}
+.gmap-controls button:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.gmap-controls button:active{transform:scale(.96)}
+@media(prefers-reduced-motion:reduce){.gmap-controls button{transition:none}}
