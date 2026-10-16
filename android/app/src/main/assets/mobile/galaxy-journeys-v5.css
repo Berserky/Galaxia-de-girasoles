@@ -53,3 +53,22 @@
 @media(prefers-reduced-motion:reduce){
  .map-immersive-toggle,.journey-presence,.journey-companion{animation:none!important;transition:none!important}
 }
+
+/* V5-P4 / VE-065: accessible native map controls, no map engine changes. */
+.gmap-controls{gap:8px;left:12px;bottom:12px}
+.gmap-controls button{min-width:44px;min-height:44px;border-radius:14px;display:grid;
+ place-items:center;touch-action:manipulation;transition:transform .16s ease,background-color .16s ease,border-color .16s ease}
+.gmap-controls button:focus-visible{outline:3px solid var(--v5-action,var(--accent));outline-offset:3px}
+.gmap-controls button:active{transform:scale(.96)}
+/* VE-063/069: distinct marker shape and explicit historical position. */
+.gmap-marker button{display:grid;place-items:center;min-width:44px;min-height:44px;
+ transition:box-shadow .16s ease,transform .16s ease}
+.gmap-marker button:focus-visible{outline:3px solid var(--v5-action,var(--accent));outline-offset:3px}
+.gmap-marker button:active{transform:scale(.96)}
+.gmap-marker.partner button{border-radius:50%}
+.gmap-marker.place button{width:44px;height:44px;border-radius:12px;border-style:solid}
+.gmap-marker.stale button{border-style:dashed}
+.gmap-marker.open button{box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 35%,transparent),0 6px 20px rgba(0,0,0,.22)}
+@media(prefers-reduced-motion:reduce){
+ .gmap-controls button,.gmap-marker button{transition:none;transform:none}
+}
