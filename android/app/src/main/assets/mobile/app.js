@@ -43,7 +43,7 @@ const legacySurpriseIdeas=[
 ];
 
 let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',memoriesTabsScroll=0,media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),insightsCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
-let mapImmersive=false;
+let mapImmersive=false,mapHistoryVisible=6,mapPlacesVisible=6;
 let toastTimer,refreshing=false,updateState={text:'La app está al día.',progress:0,busy:false},pendingVoiceDraft=null,voiceReady=false,voiceRecording=false,voiceResumeMusic=false,lastSurprise=null;
 let dateContext=null,dateContextLoadedAt=0,dateQuestionNonce=0,dateMode=null,dateModeTimer=null,dateLastExperience=null;
 let goalsState=null,goalsLoadedAt=0,goalsFilter='active';
@@ -1341,18 +1341,40 @@ function openFrequentPlaceSuggestion(s){
 
 function historyPlacesView(){
  const places=mapData?.places||[];
- if(!places.length)return '<section class="section"><div class="section-head"><div><h2>Mapa de nuestra historia</h2><p>Guarden lugares y relaciónenlos con recuerdos para construirlo.</p></div></div><div class="empty">Aún no hay lugares guardados.</div></section>';
- return '<section class="section"><div class="section-head"><div><h2>Mapa de nuestra historia</h2><p>Lugares importantes conectados con lo que vivieron allí.</p></div></div><div class="history-places">'+places.map(p=>{const linked=(cloud.items||[]).filter(i=>Number(i.data?.placeId)===Number(p.id));return '<article class="card history-place"><button class="history-place-head" data-action="history-place" data-lat="'+attr(p.latitude)+'" data-lon="'+attr(p.longitude)+'"><span class="item-icon">'+ico(p.kind==='home'?'house':p.kind==='work'?'briefcase':p.kind==='adventure'?'compass':'heart')+'</span><span><b>'+esc(p.name)+'</b><small>'+esc(p.note||'Lugar guardado')+'</small></span></button><button class="btn small secondary" data-action="galaxy-share" data-card-type="PLACE" data-kind="place" data-id="'+attr(p.id)+'" data-title="'+attr(p.name)+'">'+ico('send')+' Compartir en Galaxy Chat</button><div class="history-links">'+(linked.length?linked.slice(0,5).map(i=>'<button class="history-memory" data-action="constellation-item" data-id="'+i.id+'">'+ico(kindMeta[i.kind]?.[0]||'sparkles')+' '+esc(i.data?.title||'Historia')+'</button>').join(''):'<button class="history-memory add" data-action="memory-at-place" data-id="'+p.id+'">'+ico('plus')+' Añadir recuerdo aquí</button>')+'</div></article>';}).join('')+'</div></section>';
+ if(!places.length)return '<section class="section journey-history-places"><div class="section-head"><div><h2>Nuestros lugares</h2><p>Guarden lugares y relaciónenlos con recuerdos.</p></div></div><div class="empty">Aún no hay lugares guardados.</div></section>';
+ const visible=places.slice(0,mapPlacesVisible);
+ const cards=visible.map(p=>{
+  const linked=(cloud?.items||[]).filter(i=>Number(i.data?.placeId)===Number(p.id));
+  const valid=mapLocationValid(p);
+  const icon=p.kind==='home'?'house':p.kind==='work'?'briefcase':p.kind==='adventure'?'compass':'heart';
+  return '<article class="card history-place journey-place-card"><button class="history-place-head" data-action="history-place" data-lat="'+attr(p.latitude)+'" data-lon="'+attr(p.longitude)+'" '+(valid?'':'disabled aria-disabled="true"')+'><span class="item-icon">'+ico(icon)+'</span><span><b>'+esc(p.name||'Lugar guardado')+'</b><small>'+esc(p.note||'Un lugar de nuestra historia')+'</small><small>'+esc(valid?'Toca para verlo en el mapa':'No hay coordenadas válidas para centrar el mapa')+'</small></span>'+ico('map-pin')+'</button>'+
+   '<div class="journey-place-actions"><button class="btn small secondary" data-action="galaxy-share" data-card-type="PLACE" data-kind="place" data-id="'+attr(p.id)+'" data-title="'+attr(p.name||'Lugar')+'">'+ico('send')+' Chat</button>'+
+   (linked.length?'<span class="journey-place-count">'+linked.length+' '+(linked.length===1?'recuerdo asociado':'recuerdos asociados')+'</span>':'<button class="btn small ghost" data-action="memory-at-place" data-id="'+attr(p.id)+'">'+ico('plus')+' Añadir recuerdo</button>')+'</div>'+
+   (linked.length?'<div class="history-links">'+linked.slice(0,3).map(i=>'<button class="history-memory" data-action="constellation-item" data-id="'+attr(i.id)+'">'+ico(kindMeta[i.kind]?.[0]||'sparkles')+' '+esc(i.data?.title||'Recuerdo')+'</button>').join('')+'</div>':'')+'</article>';
+ }).join('');
+ return '<section class="section journey-history-places"><div class="section-head"><div><p class="eyebrow">LUGARES</p><h2>Nuestros lugares</h2><p>Las historias siguen vinculadas a sus ubicaciones originales.</p></div></div>'+
+  '<div class="journey-place-list">'+cards+'</div>'+
+  (places.length>mapPlacesVisible?'<button class="btn small secondary journey-show-more" data-action="map-places-more" aria-label="Mostrar más lugares">'+ico('chevrons-down')+' Ver más lugares ('+(places.length-mapPlacesVisible)+' restantes)</button>':'')+'</section>';
+}
+function mapTimelineRow(entry){
+ const item=entry.item||{},date=entry.occurredAt==null?'Sin fecha registrada':esc(fmtDateTime(new Date(entry.occurredAt).toISOString()));
+ if(entry.kind==='trip'){
+  const who=names()[Number(item.person)]||'Nosotros';
+  return '<article class="journey-timeline-item"><span class="journey-timeline-icon">'+ico('route')+'</span><div><span class="badge">Recorrido · '+esc(who)+'</span><h3>'+esc(item.distance_m==null?'Distancia no registrada':fmtDistance(item.distance_m))+' · '+esc(item.duration_s==null?'Duración no registrada':fmtDuration(item.duration_s))+'</h3><p>'+date+'</p><button class="btn small secondary" data-action="context-trip-recap" data-id="'+attr(item.id)+'">'+ico('map')+' Ver resumen</button></div></article>';
+ }
+ if(entry.kind==='event'){
+  const arrived=item.event==='arrived',left=item.event==='departed'||item.event==='left';
+  return '<article class="journey-timeline-item"><span class="journey-timeline-icon">'+ico(arrived?'map-pin-check':left?'footprints':'map-pin')+'</span><div><span class="badge">'+esc(arrived?'Llegada':left?'Salida':'Evento de lugar')+'</span><h3>'+esc(arrived?'Llegada registrada':left?'Salida registrada':'Actividad registrada')+'</h3><p>'+date+'</p></div></article>';
+ }
+ return '<article class="journey-timeline-item"><span class="journey-timeline-icon">'+ico('heart-handshake')+'</span><div><span class="badge">Encuentro</span><h3>Nos encontramos</h3><p>'+date+'</p></div></article>';
 }
 function mapHistoryView(){
  if(!mapData)return '<div class="section">'+loading('Cargando recorridos')+'</div>';
- const trips=mapData.trips||[],events=mapData.events||[],encounters=mapData.encounters||[];
- return historyPlacesView()+'<section class="section" id="encounter-history"><div class="section-head"><div><h2>Actividad reciente</h2><p>Recorridos, llegadas y encuentros.</p></div></div><div class="stack">'+
- (trips.slice(0,4).map(t=>'<div class="card"><span class="badge">'+(names()[Number(t.person)]||'Nosotros')+'</span><h3 style="margin-top:8px">'+fmtDistance(t.distance_m)+' · '+fmtDuration(t.duration_s)+'</h3><p>'+esc(fmtDateTime(t.started_at))+(t.max_speed?' · máx. '+(Number(t.max_speed)*3.6).toFixed(0)+' km/h':'')+'</p><button class="btn small secondary" data-action="context-trip-recap" data-id="'+attr(t.id)+'">'+ico('map')+' Recap de recorrido</button></div>').join('')||
- events.slice(0,4).map(e=>'<div class="card"><h3>'+(e.event==='arrived'?'Llegada':'Salida')+'</h3><p>'+esc(fmtDateTime(e.happened_at))+'</p></div>').join('')||
- encounters.slice(0,3).map(e=>'<div class="card"><h3 class="icon-title">'+ico('heart')+'Nos encontramos</h3><p>'+esc(fmtDateTime(e.started_at))+'</p></div>').join('')||
- '<div class="empty">Aquí aparecerán los recorridos y encuentros que vayamos guardando.</div>')+
- '</div></section>';
+ const timeline=window.GalaxyJourneysV5?.timeline(mapData.trips,mapData.events,mapData.encounters)||[];
+ return historyPlacesView()+'<section class="section journey-timeline" id="encounter-history"><div class="section-head"><div><p class="eyebrow">NUESTRA HISTORIA</p><h2>Actividad reciente</h2><p>Recorridos, llegadas y encuentros en orden temporal, cuando hay fechas disponibles.</p></div></div>'+
+  (timeline.length?'<div class="journey-timeline-list">'+timeline.slice(0,mapHistoryVisible).map(mapTimelineRow).join('')+'</div>':
+  '<div class="empty">Aquí aparecerán los recorridos y encuentros que vayamos guardando.</div>')+
+  (timeline.length>mapHistoryVisible?'<button class="btn small secondary journey-show-more" data-action="map-history-more" aria-label="Mostrar más actividad">'+ico('chevrons-down')+' Ver más actividad ('+(timeline.length-mapHistoryVisible)+' restantes)</button>':'')+'</section>';
 }
 
 async function openPairCode(target){
@@ -3362,7 +3384,9 @@ document.addEventListener('click',async e=>{
   if(a==='player-expand'){memoryTab='music';go('memories');return;}
   if(a==='media-add'){await GalaxyNative.call('pickMedia',btn.dataset.kind);media[btn.dataset.kind]=null;mediaLoadedAt[btn.dataset.kind]=0;await loadMedia(btn.dataset.kind,true);toast('Archivo añadido.');return;}
   if(a==='media-delete'){if(confirm('¿Eliminar este archivo?')){await api('media-delete',{kind:btn.dataset.kind,path:btn.dataset.path});media[btn.dataset.kind]=null;mediaLoadedAt[btn.dataset.kind]=0;await loadMedia(btn.dataset.kind,true);toast('Archivo eliminado.');}return;}
-  if(a==='history-place'){if(map)map.setView([Number(btn.dataset.lat),Number(btn.dataset.lon)],16);document.querySelector('#map')?.scrollIntoView({behavior:'smooth',block:'center'});return;}
+  if(a==='map-places-more'){mapPlacesVisible+=6;render();document.querySelector('.journey-history-places')?.scrollIntoView({behavior:'auto',block:'start'});return;}
+  if(a==='map-history-more'){mapHistoryVisible+=6;render();document.querySelector('#encounter-history')?.scrollIntoView({behavior:'auto',block:'start'});return;}
+  if(a==='history-place'){const point={latitude:btn.dataset.lat,longitude:btn.dataset.lon};if(!mapLocationValid(point))return;if(map)map.setView([Number(point.latitude),Number(point.longitude)],16);document.querySelector('#map')?.scrollIntoView({behavior:'smooth',block:'center'});return;}
   if(a==='memory-at-place'){openItemForm('memory',{data:{placeId:Number(btn.dataset.id)}});return;}
   if(a==='our-ai'){if(!mapData)await refreshMap({quiet:true,detail:true});openOurAI();return;}
   if(a==='ai-question'){const q=btn.dataset.question||'';const input=modal.querySelector('#ourAiForm [name="question"]');if(input)input.value=q;await showAiAnswer(q);return;}
