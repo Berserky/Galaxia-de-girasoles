@@ -90,6 +90,11 @@ class GalaxyMap{
       poly.setAttribute('points',line.points.map(p=>{const s=this.screen(p[0],p[1]);return s.x+','+s.y;}).join(' '));
       poly.setAttribute('class','gmap-line '+line.className+(line.dashed?' dashed':''));poly.setAttribute('fill','none');this.svg.appendChild(poly);
     }
+    // Painting tiles/zoom must not silently close the selected place or
+    // discard keyboard focus: marker DOM nodes are recreated on each frame.
+    const activeButton=document.activeElement;
+    const focusedIndex=this.markerLayer.contains(activeButton)?
+      [...this.markerLayer.children].findIndex(node=>node.contains(activeButton)):-1;
     const markers=document.createDocumentFragment();
     for(const m of this.markers){
       const p=this.screen(m.lat,m.lon),wrap=document.createElement('div');wrap.className='gmap-marker '+m.className;wrap.style.left=p.x+'px';wrap.style.top=p.y+'px';
@@ -97,10 +102,22 @@ class GalaxyMap{
       if(m.icon)button.appendChild(lucideNode(m.icon,18));else button.textContent=m.label;
       button.setAttribute('aria-label',m.popup||m.label||'Marcador');
       wrap.appendChild(button);
-      if(m.popup){const pop=document.createElement('div');pop.className='gmap-popup';pop.textContent=m.popup;wrap.appendChild(pop);button.addEventListener('click',ev=>{ev.stopPropagation();wrap.classList.toggle('open');});}
+      if(m.popup){
+        const pop=document.createElement('div');pop.className='gmap-popup';pop.textContent=m.popup;wrap.appendChild(pop);
+        // Persist open state in the transient map presenter, never on server.
+        if(m.open)wrap.classList.add('open');
+        button.setAttribute('aria-expanded',String(!!m.open));
+        button.addEventListener('click',ev=>{
+          ev.stopPropagation();m.open=!m.open;
+          wrap.classList.toggle('open',m.open);
+          button.setAttribute('aria-expanded',String(m.open));
+        });
+      }
       markers.appendChild(wrap);
     }
     this.markerLayer.replaceChildren(markers);
+    if(focusedIndex>=0)
+      this.markerLayer.children[focusedIndex]?.querySelector('button')?.focus({preventScroll:true});
   }
   remove(){
     this.destroyed=true;if(this.renderFrame)cancelAnimationFrame(this.renderFrame);
