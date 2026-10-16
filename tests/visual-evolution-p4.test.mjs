@@ -460,3 +460,20 @@ test('P4 VE-072: distance summary is short, age-qualified and cannot fake a curr
  assert.match(styles,/\.journey-distance-details summary:focus-visible/);
  assert.match(styles,/@media\(max-width:390px\)/);
 });
+
+
+test('P4D: the actual APK must validate four focused saved places and archive nonduplicate frames',()=>{
+ const java=readFileSync(resolve(root,'android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyDeviceClosureTest.java'),'utf8');
+ const shell=readFileSync(resolve(root,'scripts/visual-evolution-p1-avd.sh'),'utf8');
+ assert.match(java,/V5_P4_PLACE_FOCUS=css:/);
+ assert.match(java,/document\.querySelector\('\.journey-place-more summary'\)\.click\(\)/);
+ assert.match(java,/document\.querySelector\('\.history-place-head'\)\.click\(\)/);
+ assert.match(java,/Math\.abs\(map\.center\.lat-4\.712\)/);
+ assert.match(java,/gmap-marker\.place\.destination\.open button/);
+ assert.match(java,/placeLayout\.getBoolean\("focused"\)/);
+ assert.match(java,/placeLayout\.getBoolean\("noOverflow"\)/);
+ assert.match(java,/V5-P4-map-place-/);
+ assert.match(shell,/build\/p0-avd\/p4-map-place-focus/);
+ assert.match(shell,/p4_saved_place_focus_screenshots/);
+ assert.match(shell,/P4 saved-place.*duplicated earlier map screenshot/);
+});
