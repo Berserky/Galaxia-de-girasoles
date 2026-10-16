@@ -870,11 +870,36 @@ public class GalaxyDeviceClosureTest {
                                 + " && !!document.querySelector('.journey-place-more-content'"
                                 + " + ' [data-action=\\\"memory-at-place\\\"]')");
                             runV5Js("document.querySelector('.history-place-head').click()");
-                            awaitJs("view==='map' && !!map && "
-                                + "Math.abs(map.center.lat-4.712)<0.000001 && "
-                                + "Math.abs(map.center.lon-(-74.073))<0.000001 && "
-                                + "!!document.querySelector('#map .gmap-marker.place.destination.open button') && "
-                                + "document.activeElement?.closest('#map .gmap-marker.place.open')!==null");
+                            try {
+                                // Each assertion still must pass; this snapshot only
+                                // identifies which requirement failed in the emulator.
+                                awaitJs("view==='map' && !!map && "
+                                    + "Math.abs(map.center.lat-4.712)<0.000001 && "
+                                    + "Math.abs(map.center.lon-(-74.073))<0.000001 && "
+                                    + "!!document.querySelector('#map .gmap-marker.place.destination.open button') && "
+                                    + "!!document.activeElement?.closest('#map .gmap-marker.place.open')");
+                            } catch (AssertionError focusFailure) {
+                                String diagnostic=jsWithDeadline("JSON.stringify((()=>{"
+                                    + "const selected=(mapData?.destinations||[]).find(d=>String(d.person)===String(cloud?.person));"
+                                    + "const buttons=[...document.querySelectorAll('#map .gmap-marker.place button')];"
+                                    + "const opened=document.querySelector('#map .gmap-marker.place.open button');"
+                                    + "return {view,paired:native.paired,ownPerson:String(cloud?.person),"
+                                    + "activeDestinationKind:selected?.kind||null,"
+                                    + "activeDestinationMatchesFixture:String(selected?.place_id)==='601',"
+                                    + "placesInData:(mapData?.places||[]).length,"
+                                    + "savedHead:!!document.querySelector('.history-place-head'),"
+                                    + "savedHeadDisabled:!!document.querySelector('.history-place-head')?.disabled,"
+                                    + "mapExists:!!map,centerMatches:!!map&&"
+                                    + "Math.abs(map.center.lat-4.712)<0.000001&&Math.abs(map.center.lon+74.073)<0.000001,"
+                                    + "markerCount:buttons.length,"
+                                    + "destinationMarkerCount:document.querySelectorAll('#map .gmap-marker.place.destination').length,"
+                                    + "popupOpen:!!opened,"
+                                    + "expanded:opened?.getAttribute('aria-expanded')||null,"
+                                    + "focusMatches:!!document.activeElement?.closest('#map .gmap-marker.place.open'),"
+                                    + "focusTag:document.activeElement?.tagName||null};})())",20);
+                                throw new AssertionError("V5_P4_PLACE_FOCUS_GATE=" + diagnostic,
+                                    focusFailure);
+                            }
                             String placeProof=jsWithDeadline("JSON.stringify((()=>{"
                                 + "const b=document.querySelector('#map .gmap-marker.place.open button')"
                                 + ".getBoundingClientRect(),mapRect=document.querySelector('#map')"
