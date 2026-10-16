@@ -2815,7 +2815,9 @@ function visibleTrailSegments(){
  }).map(segment=>{
   const location=locations.find(l=>String(l.person)===String(segment.person));
   const started=Date.parse(location?.trip_started_at||'');
+  const lastFix=Date.parse(location?.updated_at||'');
   const active=!!location?.trip_active&&locationFreshState(location)&&
+   Number.isFinite(lastFix)&&lastFix<=Date.now()+60000&&
    Number.isFinite(started)&&segment.startedAt>=started;
   return {...segment,active};
  });
