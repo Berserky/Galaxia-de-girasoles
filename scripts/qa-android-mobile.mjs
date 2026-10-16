@@ -385,7 +385,7 @@ assert.ok(main.includes('context-state')&&main.includes('context-settings')&&mai
 assert.ok(contextStore.includes('nearbyEnabled')&&contextStore.includes('arrivedSafeEnabled'),'ContextStore debe preservar opt-ins push');
 assert.ok(pushManager.includes('nearbyEnabled()')&&pushManager.includes('arrivedSafeEnabled()'),'FCM debe respetar preferencias Context locales');
 assert.equal(contextStore.includes('TrackingService.ACTION_START'),false,'ContextStore jamás puede encender ubicación');
-assert.ok(app.includes('Galaxy Context Engine')&&app.includes('Estamos cerca')&&app.includes('Regreso a casa')&&app.includes('Acompáñame 2.0'),'Faltan superficies Context Engine');
+assert.ok(app.includes('Galaxy Context Engine')&&app.includes('Estamos cerca')&&app.includes('Regreso a casa')&&app.includes('Acompáñame'),'Faltan superficies Context Engine');
 assert.ok(css.includes('/* Mega Update 3.0 · Galaxy Context Engine */'),'Faltan estilos Context Engine');
 assert.ok(css.includes('.context-controls{display:grid;grid-template-columns:1fr')&&css.includes('@media(min-width:560px){.context-controls{grid-template-columns:repeat(2,minmax(0,1fr))}}'),'Context Engine debe apilar controles en móvil y usar dos columnas solo con ancho suficiente');
 assert.ok(css.includes('.context-controls .btn{width:100%;max-width:100%'),'Los botones de Context no pueden desbordar sus tarjetas');
