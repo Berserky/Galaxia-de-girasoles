@@ -863,6 +863,21 @@ function updateEtaDom(){
  const next=wrapper.querySelector('#etaCard');if(next)current.replaceWith(next);
  refreshIcons();
 }
+function focusSavedPlaceOnMap(point){
+ if(!map||!mapLocationValid(point))return false;
+ const lat=Number(point.latitude),lon=Number(point.longitude);
+ map.setView([lat,lon],16);
+ // GalaxyMap re-creates marker buttons on its next animation frame.
+ // Select only the matching saved-place marker and open its existing popup.
+ requestAnimationFrame(()=>{
+  const places=(map?.markers||[]).filter(marker=>(marker.className||'').split(' ').includes('place'));
+  const index=places.findIndex(marker=>Math.abs(marker.lat-lat)<1e-6&&Math.abs(marker.lon-lon)<1e-6);
+  const buttons=[...document.querySelectorAll('#map .gmap-marker.place button')];
+  const button=index>=0?buttons[index]:null;
+  if(button){button.click();button.focus({preventScroll:true});}
+ });
+ return true;
+}
 function focusEtaOnMap(){
  const e=etaState();if(!e.available||!map)return;
  const own=e.own;
@@ -2965,7 +2980,7 @@ function openPlace(){
 function openDestination(){
  const partner=cloud.person==='0'?'1':'0',places=mapData?.places||[],active=(mapData?.destinations||[]).find(d=>String(d.person)===String(cloud.person)&&d.active!==false);
  const current=active?(active.kind==='person'?'person:'+active.target_person:'place:'+active.place_id):'none';
- showModal('Acompáñame 2.0','<form id="destinationForm" class="stack" style="margin-top:16px"><div class="field"><label>Voy hacia</label><select name="destination"><option value="person:'+partner+'" '+(current==='person:'+partner?'selected':'')+'>'+esc(partnerName())+'</option>'+places.map(p=>'<option value="place:'+p.id+'" '+(current==='place:'+p.id?'selected':'')+'>'+esc(p.name)+'</option>').join('')+'<option value="none" '+(current==='none'?'selected':'')+'>Ningún destino</option></select></div><p class="muted">La sesión muestra distancia restante, progreso, ETA e histórico. No activará tu ubicación por sí sola.</p><button class="btn" type="submit">Iniciar Acompáñame</button></form>','destination');
+ showModal('Acompáñame','<form id="destinationForm" class="stack" style="margin-top:16px"><div class="field"><label>Voy hacia</label><select name="destination"><option value="person:'+partner+'" '+(current==='person:'+partner?'selected':'')+'>'+esc(partnerName())+'</option>'+places.map(p=>'<option value="place:'+p.id+'" '+(current==='place:'+p.id?'selected':'')+'>'+esc(p.name)+'</option>').join('')+'<option value="none" '+(current==='none'?'selected':'')+'>Ningún destino</option></select></div><p class="muted">La sesión muestra distancia restante, progreso, ETA e histórico. No activará tu ubicación por sí sola.</p><button class="btn" type="submit">Iniciar Acompáñame</button></form>','destination');
 }
 
 function storyDocuments(){
@@ -3392,7 +3407,7 @@ document.addEventListener('click',async e=>{
   if(a==='media-delete'){if(confirm('¿Eliminar este archivo?')){await api('media-delete',{kind:btn.dataset.kind,path:btn.dataset.path});media[btn.dataset.kind]=null;mediaLoadedAt[btn.dataset.kind]=0;await loadMedia(btn.dataset.kind,true);toast('Archivo eliminado.');}return;}
   if(a==='map-places-more'){mapPlacesVisible+=6;render();document.querySelector('.journey-history-places')?.scrollIntoView({behavior:'auto',block:'start'});return;}
   if(a==='map-history-more'){mapHistoryVisible+=6;render();document.querySelector('#encounter-history')?.scrollIntoView({behavior:'auto',block:'start'});return;}
-  if(a==='history-place'){const point={latitude:btn.dataset.lat,longitude:btn.dataset.lon};if(!mapLocationValid(point))return;if(map)map.setView([Number(point.latitude),Number(point.longitude)],16);document.querySelector('#map')?.scrollIntoView({behavior:'smooth',block:'center'});return;}
+  if(a==='history-place'){const point={latitude:btn.dataset.lat,longitude:btn.dataset.lon};if(!focusSavedPlaceOnMap(point))return;document.querySelector('#map')?.scrollIntoView({behavior:'smooth',block:'center'});return;}
   if(a==='memory-at-place'){openItemForm('memory',{data:{placeId:Number(btn.dataset.id)}});return;}
   if(a==='our-ai'){if(!mapData)await refreshMap({quiet:true,detail:true});openOurAI();return;}
   if(a==='ai-question'){const q=btn.dataset.question||'';const input=modal.querySelector('#ourAiForm [name="question"]');if(input)input.value=q;await showAiAnswer(q);return;}
@@ -3422,7 +3437,7 @@ document.addEventListener('click',async e=>{
   if(a==='status-menu'){const menu=$('#statusMenu');const expanded=menu?.classList.toggle('open')||false;btn.setAttribute('aria-expanded',String(expanded));return;}
   if(a==='status-set'){await api('status-set',{status:btn.dataset.status});$('#statusMenu')?.classList.remove('open');await refreshMap();toast('Estado actualizado.');return;}
   if(a==='status-custom'){const value=prompt('¿Qué estado quieres mostrar?','');if(value){await api('status-set',{status:value});await refreshMap();}return;}
-  if(a==='location-start'){await GalaxyNative.call('startLocation');native=nativeState();try{await GalaxyNative.call('refreshLocation');}catch{}await refreshMap({quiet:true,detail:false});render();toast('Ubicación activa y GPS actualizado.');return;}
+  if(a==='location-start'){await GalaxyNative.call('startLocation');native=nativeState();let requested=false;try{await GalaxyNative.call('refreshLocation');requested=true;}catch{}await refreshMap({quiet:true,detail:false});render();toast(requested?'Ubicación compartida activada. Se solicitó una lectura GPS local.':'Ubicación compartida activada. La lectura GPS local sigue pendiente.');return;}
   if(a==='location-stop'){await GalaxyNative.call('stopLocation');native=nativeState();render();toast('Ubicación detenida.');return;}
   if(a==='trip-toggle'){const own=(cloud.locations||[]).find(l=>l.person===cloud.person)||{};await api('trip',{operation:own.trip_active?'stop':'start'});await refreshState();await refreshMap({detail:true});toast(own.trip_active?'Recorrido guardado.':'Recorrido iniciado.');return;}
   if(a==='place-new'){if(!mapData)await refreshMap({quiet:true,detail:true});openPlace();return;}
