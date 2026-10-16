@@ -1,21 +1,21 @@
 # Visual Evolution 5.0 — Mapa y acompañamiento
 
-> **Seguimiento operativo P4 (16/oct/2026):** este catálogo mantiene las casillas sin marcar hasta que cada VE alcance su DoD, el PR #170 apruebe los 15 workflows del mismo HEAD y exista aprobación visual humana. Las etiquetas «Implementado» significan código en la rama `feat/visual-evolution-5-p4-connected-journeys`, **no merge ni release**. Véanse [P4_PROGRESS.md](P4_PROGRESS.md) y [PR #170](https://github.com/Berserky/Galaxia-de-girasoles/pull/170). Hay exactamente 40 IDs; 22 implementados en rama, 13 parciales y 5 pendientes.
+> **Seguimiento operativo P4 (16/oct/2026):** este catálogo mantiene las casillas sin marcar hasta que cada VE alcance su DoD, el PR #170 apruebe los 15 workflows del mismo HEAD y exista aprobación visual humana. Las etiquetas «Implementado» significan código en la rama `feat/visual-evolution-5-p4-connected-journeys`, **no merge ni release**. Véanse [P4_PROGRESS.md](P4_PROGRESS.md) y [PR #170](https://github.com/Berserky/Galaxia-de-girasoles/pull/170). Hay exactamente 40 IDs; 26 implementados en rama, 14 parciales y 0 sin trabajo iniciado.
 
 > Catálogo originado en capturas Android del 12/10/2026; prioridad UX provisional, no fallo de código confirmado. Referencia `prod@fde141d4c8e7622ac1d6f10f1abbfbda8e8e7d0c`. Fase: V5-P4 — Mapas e historial.
 
 ## Hallazgos VE-61–VE-100
 
 - [ ] **VE-061** · **Alta** · Mapa encerrado: modo resumen e inmersivo de pantalla completa. **Estado:** Implementado en rama P4, sin aceptación visual final.
-- [ ] **VE-062** · **Media** · Cartografía grisácea: explorar estilo dark/light y atribución OpenStreetMap. **Estado:** Pendiente de implementación.
+- [ ] **VE-062** · **Media** · Cartografía grisácea: explorar estilo dark/light y atribución OpenStreetMap. **Estado:** Implementado en rama P4, sin aceptación visual final.
 - [ ] **VE-063** · **Alta** · Marcadores homogéneos: diferenciar personas, hogar, destinos y lugares. **Estado:** Implementación parcial; comprobar DoD.
-- [ ] **VE-064** · **Alta** · Trazo violeta sin significado claro: distinguir ruta histórica/activa/planificada. **Estado:** Pendiente de implementación.
+- [ ] **VE-064** · **Alta** · Trazo violeta sin significado claro: distinguir ruta histórica/activa/planificada. **Estado:** Implementación parcial; comprobar DoD.
 - [ ] **VE-065** · **Media** · Zoom, IA y actualizar dispersos: controles flotantes jerarquizados. **Estado:** Implementación parcial; comprobar DoD.
 - [ ] **VE-066** · **Alta** · Mapa sin contexto temporal visible: mostrar antigüedad de información. **Estado:** Implementado en rama P4, sin aceptación visual final.
-- [ ] **VE-067** · **Alta** · Perfiles comprimidos en dos columnas: tarjetas desplegables. **Estado:** Pendiente de implementación.
-- [ ] **VE-068** · **Alta** · Actividad, velocidad, mensaje y ubicación mezclados: categorías por dato. **Estado:** Pendiente de implementación.
+- [ ] **VE-067** · **Alta** · Perfiles comprimidos en dos columnas: tarjetas desplegables. **Estado:** Implementado en rama P4, sin aceptación visual final.
+- [ ] **VE-068** · **Alta** · Actividad, velocidad, mensaje y ubicación mezclados: categorías por dato. **Estado:** Implementado en rama P4, sin aceptación visual final.
 - [ ] **VE-069** · **Alta** · Puntos de presencia ambiguos: distinguir disponibilidad y GPS reciente. **Estado:** Implementación parcial; comprobar DoD.
-- [ ] **VE-070** · **Media** · Velocidad demasiado protagonista: jerarquía según contexto. **Estado:** Pendiente de implementación.
+- [ ] **VE-070** · **Media** · Velocidad demasiado protagonista: jerarquía según contexto. **Estado:** Implementado en rama P4, sin aceptación visual final.
 - [ ] **VE-071** · **Alta** · Ubicación antigua de Adriana: última lectura claramente histórica. **Estado:** Implementado en rama P4, sin aceptación visual final.
 - [ ] **VE-072** · **Alta** · Tarjeta de distancia extensa: distancia, antigüedad y estado. **Estado:** Implementación parcial; comprobar DoD.
 - [ ] **VE-073** · **Media** · ETA tratado como jerga técnica: lenguaje natural. **Estado:** Implementación parcial; comprobar DoD.
