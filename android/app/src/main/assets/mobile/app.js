@@ -785,6 +785,8 @@ function coupleDistanceLocations(){
 function locationAgeMs(location){const t=Date.parse(location?.updated_at||'');return Number.isFinite(t)?Math.max(0,Date.now()-t):Infinity;}
 function mapLocationValid(location){
  if(location?.latitude==null||location?.longitude==null)return false;
+ if(typeof location.latitude==='string'&&!location.latitude.trim())return false;
+ if(typeof location.longitude==='string'&&!location.longitude.trim())return false;
  const lat=Number(location.latitude),lon=Number(location.longitude);
  return Number.isFinite(lat)&&Number.isFinite(lon)&&Math.abs(lat)<=90&&Math.abs(lon)<=180;
 }
@@ -1341,7 +1343,10 @@ function mapView(){
  ['','motorcycle','transit'].map(value=>'<button class="chip '+((own.transport_preference||'')===value?'active':'')+'" data-action="transport-set" data-value="'+value+'" aria-pressed="'+String((own.transport_preference||'')===value)+'">'+ico(value==='motorcycle'?'bike':value==='transit'?'bus-front':'navigation')+(value==='motorcycle'?'Moto':value==='transit'?'Transporte público':'Automático')+'</button>').join('')+
  '</div></div></div>'+
  contextEnginePanel()+
- '<div class="section"><div class="grid">'+actionCard('route',own.trip_active?'Terminar recorrido':'Iniciar recorrido',own.trip_active?'Guardaremos el resumen al finalizar':'Registra distancia, duración y movimiento','trip-toggle')+actionCard('map-pin','Guardar este lugar','Casa, trabajo, recuerdo o aventura','place-new')+'</div></div>'+
+ '<div class="section journey-actions" role="group" aria-label="Acciones de recorridos y lugares">'+
+ '<div class="journey-actions-heading"><b>Acciones del mapa</b><small>Los recorridos se registran solo cuando tú los inicias.</small></div>'+
+ '<div class="journey-actions-row"><button class="btn small '+(own.trip_active?'secondary':'ghost')+'" data-action="trip-toggle" aria-label="'+(own.trip_active?'Terminar mi recorrido':'Iniciar mi recorrido')+'">'+ico(own.trip_active?'square':'route')+' '+(own.trip_active?'Terminar recorrido':'Iniciar recorrido')+'</button>'+
+ '<button class="btn small ghost" data-action="place-new">'+ico('map-pin-plus')+' Guardar este lugar</button></div></div>'+
  contextSuggestionsView()+frequentPlacesView()+mapHistoryView()+'</section>';
 }
 function frequentPlacesFresh(){return !!frequentPlacesData&&Date.now()-frequentPlacesLoadedAt<15*60*1000;}
@@ -1387,8 +1392,10 @@ function historyPlacesView(){
   const valid=mapLocationValid(p);
   const icon=p.kind==='home'?'house':p.kind==='work'?'briefcase':p.kind==='adventure'?'compass':'heart';
   return '<article class="card history-place journey-place-card"><button class="history-place-head" data-action="history-place" data-lat="'+attr(p.latitude)+'" data-lon="'+attr(p.longitude)+'" '+(valid?'':'disabled aria-disabled="true"')+'><span class="item-icon">'+ico(icon)+'</span><span><b>'+esc(p.name||'Lugar guardado')+'</b><small>'+esc(p.note||'Un lugar de nuestra historia')+'</small><small>'+esc(valid?'Toca para verlo en el mapa':'No hay coordenadas válidas para centrar el mapa')+'</small></span>'+ico('map-pin')+'</button>'+
-   '<div class="journey-place-actions"><button class="btn small secondary" data-action="galaxy-share" data-card-type="PLACE" data-kind="place" data-id="'+attr(p.id)+'" data-title="'+attr(p.name||'Lugar')+'">'+ico('send')+' Chat</button>'+
-   (linked.length?'<span class="journey-place-count">'+linked.length+' '+(linked.length===1?'recuerdo asociado':'recuerdos asociados')+'</span>':'<button class="btn small ghost" data-action="memory-at-place" data-id="'+attr(p.id)+'">'+ico('plus')+' Añadir recuerdo</button>')+'</div>'+
+   '<div class="journey-place-actions">'+(linked.length?'<span class="journey-place-count">'+linked.length+' '+(linked.length===1?'recuerdo asociado':'recuerdos asociados')+'</span>':'<span class="journey-place-count">Sin recuerdos asociados</span>')+
+   '<details class="journey-place-more"><summary aria-label="Opciones del lugar '+attr(p.name||'guardado')+'">'+ico('ellipsis')+' Opciones</summary><div class="journey-place-more-content">'+
+   '<button class="btn small secondary" data-action="galaxy-share" data-card-type="PLACE" data-kind="place" data-id="'+attr(p.id)+'" data-title="'+attr(p.name||'Lugar')+'">'+ico('send')+' Compartir en chat</button>'+
+   '<button class="btn small ghost" data-action="memory-at-place" data-id="'+attr(p.id)+'">'+ico('plus')+' Añadir recuerdo</button></div></details></div>'+
    (linked.length?'<div class="history-links">'+linked.slice(0,3).map(i=>'<button class="history-memory" data-action="constellation-item" data-id="'+attr(i.id)+'">'+ico(kindMeta[i.kind]?.[0]||'sparkles')+' '+esc(i.data?.title||'Recuerdo')+'</button>').join('')+'</div>':'')+'</article>';
  }).join('');
  return '<section class="section journey-history-places"><div class="section-head"><div><p class="eyebrow">LUGARES</p><h2>Nuestros lugares</h2><p>Las historias siguen vinculadas a sus ubicaciones originales.</p></div></div>'+
@@ -1397,15 +1404,26 @@ function historyPlacesView(){
 }
 function mapTimelineRow(entry){
  const item=entry.item||{},date=entry.occurredAt==null?'Sin fecha registrada':esc(fmtDateTime(new Date(entry.occurredAt).toISOString()));
+ const duration=(a,b)=>{const start=Date.parse(a||''),end=Date.parse(b||'');
+  return Number.isFinite(start)&&Number.isFinite(end)&&end>=start?fmtDuration(Math.round((end-start)/1000)):null;};
  if(entry.kind==='trip'){
   const who=names()[Number(item.person)]||'Nosotros';
-  return '<article class="journey-timeline-item"><span class="journey-timeline-icon">'+ico('route')+'</span><div><span class="badge">Recorrido · '+esc(who)+'</span><h3>'+esc(item.distance_m==null?'Distancia no registrada':fmtDistance(item.distance_m))+' · '+esc(item.duration_s==null?'Duración no registrada':fmtDuration(item.duration_s))+'</h3><p>'+date+'</p><button class="btn small secondary" data-action="context-trip-recap" data-id="'+attr(item.id)+'">'+ico('map')+' Ver resumen</button></div></article>';
+  const motion=item.dominant_motion==='walking'?'Caminando':item.dominant_motion==='vehicle'?'En vehículo':item.dominant_motion==='still'?'Sin movimiento registrado':null;
+  const metrics=[item.distance_m==null?'Distancia no registrada':fmtDistance(item.distance_m),
+   item.duration_s==null?'Duración no registrada':fmtDuration(item.duration_s)];
+  return '<article class="journey-timeline-item"><span class="journey-timeline-icon">'+ico('route')+'</span><div><span class="badge">Recorrido · '+esc(who)+'</span><h3>'+esc(metrics.join(' · '))+'</h3><p>'+date+
+   (motion?' · '+esc(motion):'')+'</p><button class="btn small secondary" data-action="context-trip-recap" data-id="'+attr(item.id)+'">'+ico('map')+' Ver resumen</button></div></article>';
  }
  if(entry.kind==='event'){
   const arrived=item.event==='arrived',left=item.event==='departed'||item.event==='left';
-  return '<article class="journey-timeline-item"><span class="journey-timeline-icon">'+ico(arrived?'map-pin-check':left?'footprints':'map-pin')+'</span><div><span class="badge">'+esc(arrived?'Llegada':left?'Salida':'Evento de lugar')+'</span><h3>'+esc(arrived?'Llegada registrada':left?'Salida registrada':'Actividad registrada')+'</h3><p>'+date+'</p></div></article>';
+  const place=item.place_id!=null?(mapData?.places||[]).find(p=>String(p.id)===String(item.place_id)):null;
+  const placeText=place?.name?esc(place.name):'Lugar no disponible';
+  return '<article class="journey-timeline-item"><span class="journey-timeline-icon">'+ico(arrived?'map-pin-check':left?'footprints':'map-pin')+'</span><div><span class="badge">'+esc(arrived?'Llegada':left?'Salida':'Evento de lugar')+'</span><h3>'+esc(arrived?'Llegada registrada':left?'Salida registrada':'Actividad registrada')+'</h3><p>'+date+' · '+placeText+'</p></div></article>';
  }
- return '<article class="journey-timeline-item"><span class="journey-timeline-icon">'+ico('heart-handshake')+'</span><div><span class="badge">Encuentro</span><h3>Nos encontramos</h3><p>'+date+'</p></div></article>';
+ const elapsed=duration(item.started_at,item.ended_at);
+ const encounterDistance=item.distance_m==null?null:fmtDistance(item.distance_m);
+ return '<article class="journey-timeline-item"><span class="journey-timeline-icon">'+ico('heart-handshake')+'</span><div><span class="badge">Encuentro</span><h3>Nos encontramos</h3><p>'+date+
+  (elapsed?' · Duró '+esc(elapsed):'')+(encounterDistance?' · '+esc(encounterDistance):'')+'</p></div></article>';
 }
 function mapHistoryView(){
  if(!mapData)return '<div class="section">'+loading('Cargando recorridos')+'</div>';
