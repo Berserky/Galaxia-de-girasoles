@@ -887,7 +887,10 @@ public class GalaxyDeviceClosureTest {
                             awaitJs("document.querySelector('.journey-place-more[open]')"
                                 + " && !!document.querySelector('.journey-place-more-content'"
                                 + " + ' [data-action=\\\"memory-at-place\\\"]')");
-                            runV5Js("document.querySelector('.history-place-head').click()");
+                            runV5Js("mapData={...(mapData||{}),"+
+                                "places:[{id:601,kind:'home',name:'Lugar sintetico',latitude:4.712,longitude:-74.073}],"+
+                                "destinations:[{person:String(cloud.person),kind:'place',place_id:601,active:true}]};"+
+                                "render();document.querySelector('.history-place-head').click()");
                             try {
                                 // Each assertion still must pass; this snapshot only
                                 // identifies which requirement failed in the emulator.
