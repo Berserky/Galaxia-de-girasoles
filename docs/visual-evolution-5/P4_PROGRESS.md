@@ -6,14 +6,16 @@
 
 | Fase | Alcance implementado en rama | Certificación pendiente |
 |---|---|---|
-| **P4A** | Mapa compacto + inmersivo reversible, Escape/aria-pressed/foco, controles 44px, estado de frescura/ausencia/pausa y Journey Companion que reutiliza distancia/ETA existentes | Repasar VE-062/064/067/068/070; datos offline, mapa visible en los siete temas y éxito de todos los workflows del HEAD |
+| **P4A** | Mapa compacto + inmersivo reversible, Escape/aria-pressed/foco, controles 44px, estado de frescura/ausencia/pausa y Journey Companion que reutiliza distancia/ETA existentes | Repasar la cartografía temática y la leyenda de rutas registradas, perfiles desplegables y velocidad subordinada; datos offline, mapa visible en los siete temas y éxito de todos los workflows del HEAD |
 | **P4B** | Sesión contextual de progreso acotado o indeterminado, avisos desplegables «Configurado» ≠ «Entregado», transporte accesible, botón de consultar mapa y compartición/permiso distinguidos | Estado de última emisión real no disponible: no mostrar falso «entregado». Probar situaciones sin permisos, sin destino y cancelación |
 | **P4C** | Lugares compactos con navegación y popup de marcador, recuerdos relacionados; cronología que combina trips/events/encounters con paginación y fechas reales | Revisión de metadatos parciales, accesibilidad y navegación al marcador cuando un dato carece de coordenadas |
 | **P4D** | Tests Node en `tests/visual-evolution-p4.test.mjs` y tests reales Android en `GalaxyDeviceClosureTest.java`; verificador `scripts/visual-evolution-p1-avd.sh` | Todas las pruebas 15/15 en SHA actual, 19 screenshots reales, prueba de tortura + integración Android y aprobación visual explícita |
 
 ### Catálogo de cuarenta hallazgos
 
-Estado uno por uno en [03-mapa.md](03-mapa.md): **22 implementados en rama**, **13 parciales**, **5 pendientes** (VE-062, 064, 067, 068 y 070). **Ningún checkbox se da por cerrado** hasta QA final y validación visual. La implementación parcial comprende VE-063, 065, 069, 072, 073, 077, 079, 085, 090, 093, 094, 095 y 099. Los demás IDs identificados como «implementados» requieren validación de comportamiento físico y que la app se vea bien.
+Estado uno por uno en [03-mapa.md](03-mapa.md): **26 implementados en rama**, **14 parciales**, **0 sin trabajo iniciado** (los cinco hallazgos inicialmente pendientes ya cuentan con al menos un primer tratamiento en rama). **Ningún checkbox se da por cerrado** hasta QA final y validación visual. La implementación parcial comprende VE-064, 063, 065, 069, 072, 073, 077, 079, 085, 090, 093, 094, 095 y 099. Los demás IDs identificados como «implementados» requieren validación de comportamiento físico y que la app se vea bien.
+
+**Ampliaciones incorporadas:** VE-062 incorpora filtros suaves de capas raster por tema preservando la atribución OSM; VE-064 añade una leyenda honesta de recorridos registrados (no existe ruta planificada en estos datos: **parcial**); VE-067/068/070 convierten las tarjetas de persona en paneles `details/summary` con estado GPS arriba y velocidad aproximada dentro del detalle, sin ocultar funciones del chat. Las 40 entradas siguen con checkbox sin cerrar por falta de aceptación final.
 
 ### Archivos y contratos
 
