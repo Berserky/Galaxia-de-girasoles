@@ -140,3 +140,44 @@ test('P4B: alert controls live in semantic collapsible details; unrelated APIs r
  assert.match(styles,/@media\(prefers-reduced-motion:reduce\)/);
  assert.doesNotMatch(moduleCode,/fetch\s*\(|GalaxyNative\.call|localStorage/);
 });
+
+
+test('P4C: chronological map timeline merges all three real sources without suppressing categories',()=>{
+ const trips=[{id:'trip',started_at:'2026-10-10T10:00:00Z'}];
+ const events=[{id:'arrival',happened_at:'2026-10-12T10:00:00Z'},{id:'old',happened_at:'bad-date'}];
+ const encounters=[{id:'meeting',started_at:'2026-10-11T10:00:00Z'}];
+ const rows=journeys.timeline(trips,events,encounters);
+ assert.deepEqual(Array.from(rows.map(r=>r.kind)),['event','encounter','trip','event']);
+ assert.deepEqual(Array.from(rows.map(r=>r.item.id)),['arrival','meeting','trip','old']);
+ assert.equal(rows.at(-1).occurredAt,null);
+ assert.equal(journeys.timeline([],[],[]).length,0);
+ assert.equal(journeys.timeline(null,undefined,{}).length,0);
+ assert.deepEqual(trips,[{id:'trip',started_at:'2026-10-10T10:00:00Z'}]);
+ assert.doesNotMatch(moduleCode,/fetch\s*\(|GalaxyNative\.call/);
+});
+
+test('P4C: places with invalid coordinates remain readable but cannot focus the map',()=>{
+ assert.match(app,/function historyPlacesView\(\)/);
+ assert.match(app,/const valid=mapLocationValid\(p\)/);
+ assert.match(app,/disabled aria-disabled="true"/);
+ assert.match(app,/if\(!mapLocationValid\(point\)\)return/);
+ assert.match(app,/data-action="history-place"/);
+ assert.match(app,/data-action="memory-at-place"/);
+ assert.match(app,/data-action="galaxy-share"/);
+ assert.match(app,/data-action="map-places-more"/);
+ assert.match(app,/data-action="map-history-more"/);
+ assert.match(app,/timeline\.slice\(0,mapHistoryVisible\)\.map\(mapTimelineRow\)/);
+ assert.match(app,/timeline=window\.GalaxyJourneysV5\?\.timeline\(mapData\.trips,mapData\.events,mapData\.encounters\)/);
+ assert.match(styles,/\.journey-timeline-item/);
+ assert.match(styles,/@media\(max-width:620px\)/);
+});
+
+test('P4C: no invented arrival dates or forced map data operations',()=>{
+ assert.match(app,/entry\.occurredAt==null\?'Sin fecha registrada'/);
+ assert.match(app,/if\(entry\.kind==='trip'\)/);
+ assert.match(app,/if\(entry\.kind==='event'\)/);
+ assert.match(app,/data-action="context-trip-recap"/);
+ assert.match(app,/function mapHistoryView\(\)/);
+ assert.match(app,/mapHistoryVisible\+=6/);
+ assert.match(app,/mapPlacesVisible\+=6/);
+});
