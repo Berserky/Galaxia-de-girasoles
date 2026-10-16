@@ -855,9 +855,9 @@ function etaCard(){
  }
  const modeIcon=e.mode==='walking'?'person-standing':e.mode==='motorcycle'?'bike':e.mode==='transit'?'bus-front':'navigation';
  const distance=window.GalaxyDistance?.formatDistance(e.meters)||fmtDistance(e.meters),eta=window.GalaxyEta.etaLabel(e.seconds);
- const source=e.speed_source==='live'?'con tu velocidad actual':'con ritmo estimado';
+ const source=e.speed_source==='live'?'tu velocidad actual':'un ritmo estimado';
  const targetNote=e.target_moving?' · el destino también está en movimiento':'';
- return '<section class="section"><div class="card eta-card '+(e.arrived?'arrived':'')+'" id="etaCard"><span class="eta-icon">'+ico(e.arrived?'map-pin-check':modeIcon)+'</span><div class="eta-main"><p class="eyebrow">ETA HACIA '+esc(String(e.label||'DESTINO').toUpperCase())+'</p><div class="eta-value"><strong>'+esc(eta)+'</strong><span>'+esc(distance)+'</span></div><p>'+esc(e.arrived?'Ya estás en el destino.':'Llegarías aproximadamente '+e.mode_label+', '+source+'.')+'</p><small>ETA = tiempo estimado de llegada. Se calcula con distancia geográfica, tu modo de movimiento y velocidad'+esc(targetNote)+'. No reemplaza navegación vial.</small></div><div class="eta-actions">'+(contextSession()?.id?'<button class="btn small secondary" data-action="galaxy-share" data-card-type="ETA" data-kind="context_session" data-id="'+attr(contextSession().id)+'" data-title="'+attr(contextSession().label||'Acompáñame')+'">'+ico('send')+' Chat</button>':'')+'<button class="btn small secondary" data-action="eta-focus">'+ico('crosshair')+' Ver ambos</button><button class="btn small ghost" data-action="destination">'+ico('shuffle')+' Cambiar destino</button></div></div></section>';
+ return '<section class="section"><div class="card eta-card '+(e.arrived?'arrived':'')+'" id="etaCard"><span class="eta-icon">'+ico(e.arrived?'map-pin-check':modeIcon)+'</span><div class="eta-main"><p class="eyebrow">ETA HACIA '+esc(String(e.label||'DESTINO').toUpperCase())+'</p><div class="eta-value"><strong>'+esc(eta)+'</strong><span>'+esc(distance)+'</span></div><p>'+esc(e.arrived?'Ya estás en el destino.':'Si sigues '+e.mode_label+', el trayecto podría tardar '+eta.replace('≈ ','')+' según '+source+'.')+'</p><small>ETA = tiempo estimado de llegada. Se calcula con distancia geográfica, tu modo de movimiento y velocidad'+esc(targetNote)+'. No reemplaza navegación vial.</small></div><div class="eta-actions">'+(contextSession()?.id?'<button class="btn small secondary" data-action="galaxy-share" data-card-type="ETA" data-kind="context_session" data-id="'+attr(contextSession().id)+'" data-title="'+attr(contextSession().label||'Acompáñame')+'">'+ico('send')+' Chat</button>':'')+'<button class="btn small secondary" data-action="eta-focus">'+ico('crosshair')+' Ver ambos</button><button class="btn small ghost" data-action="destination">'+ico('shuffle')+' Cambiar destino</button></div></div></section>';
 }
 function updateEtaDom(){
  const current=document.querySelector('#etaCard');if(!current)return;
@@ -1338,7 +1338,7 @@ function mapView(){
  journeyPresenceSummary()+
  '<div class="grid" style="margin-top:12px">'+personCard(own)+personCard(partner)+'</div>'+
  '<section class="journey-companion" aria-label="Distancia y llegada"><div class="journey-companion-head"><h2>Journey Companion</h2><p>Distancia y tiempo estimado de llegada, solo con ubicaciones compartidas válidas y recientes.</p></div>'+coupleDistanceCard({mapMode:true})+etaCard()+'</section>'+
- '<section class="section journey-sharing"><div class="card journey-sharing-card"><div class="row between"><div><h3>Compartir mi ubicación</h3><p>'+(native.tracking?'Activada únicamente en este teléfono; Android puede mantenerla en segundo plano.':'Pausada en este teléfono. No cambia la ubicación de tu pareja.')+'</p></div><span class="badge '+(native.tracking?'good':'')+'">'+(native.tracking?'Activa':'Pausada')+'</span></div><div class="journey-sharing-actions"><button class="btn small '+(native.tracking?'danger':'secondary')+'" data-action="'+(native.tracking?'location-stop':'location-start')+'">'+ico(native.tracking?'map-pin-off':'map-pin')+' '+(native.tracking?'Detener mi ubicación':'Comenzar a compartir')+'</button></div><div class="journey-permissions-row"><span>'+ico('shield-check')+' Los permisos se gestionan por separado.</span><button class="btn small ghost" data-action="app-settings">Permisos Android</button></div></div></section>'+
+ '<section class="section journey-sharing"><div class="card journey-sharing-card"><div class="row between"><div><h3>Compartir mi ubicación</h3><p>'+(native.tracking?'Activada únicamente en este teléfono; Android puede mantenerla en segundo plano.':'Pausada en este teléfono. No cambia la ubicación de tu pareja.')+'</p></div><span class="badge '+(native.tracking?'good':'')+'">'+(native.tracking?'Activa':'Pausada')+'</span></div><div class="journey-sharing-actions"><button class="btn small '+(native.tracking?'danger':'secondary')+'" data-action="'+(native.tracking?'location-stop':'location-start')+'">'+ico(native.tracking?'map-pin-off':'map-pin')+' '+(native.tracking?'Detener mi ubicación':'Comenzar a compartir')+'</button></div><details class="journey-permissions-row"><summary aria-label="Ver opciones de privacidad y permisos">'+ico('settings-2')+' Permisos y privacidad</summary><div class="journey-permissions-content"><span>'+ico('shield-check')+' Los permisos se gestionan por separado.</span><button class="btn small ghost" data-action="app-settings">Permisos Android</button></div></details></div></section>'+
  '<div class="section"><div class="card"><h3>Cómo me muevo normalmente</h3><p>Ayuda a interpretar cuando Android detecta que vas en vehículo.</p><div class="chips journey-mobility" role="group" aria-label="Modo de transporte habitual" style="margin-top:12px">'+
  ['','motorcycle','transit'].map(value=>'<button class="chip '+((own.transport_preference||'')===value?'active':'')+'" data-action="transport-set" data-value="'+value+'" aria-pressed="'+String((own.transport_preference||'')===value)+'">'+ico(value==='motorcycle'?'bike':value==='transit'?'bus-front':'navigation')+(value==='motorcycle'?'Moto':value==='transit'?'Transporte público':'Automático')+'</button>').join('')+
  '</div></div></div>'+
@@ -2811,20 +2811,30 @@ function drawMap({fit=true}={}){
  if(map){map.remove();map=null;}
  map=new GalaxyMap($('#map'),{center:[4.711,-74.0721],zoom:12});
  const locs=(mapData.locations||[]).filter(x=>x.sharing&&mapLocationValid(x));
+ // Selected destination of this paired profile only; no new GPS or sharing.
+ const selectedDestination=(mapData.destinations||[]).find(d=>
+  String(d.person)===String(cloud.person)&&d.active!==false);
  const bounds=[];
  locs.forEach(l=>{
    const mine=l.person===cloud.person,name=names()[Number(l.person)]||'Nosotros',fresh=locationFreshState(l);
+   const chosen=selectedDestination?.kind==='person'&&String(selectedDestination.target_person)===String(l.person);
+   const speed=Number(l.speed),speedCopy=l.speed==null||String(l.speed).trim()===''||!Number.isFinite(speed)||speed<0?
+    'Velocidad sin lectura':(speed*3.6).toFixed(0)+' km/h';
    map.addMarker({
      lat:l.latitude,lon:l.longitude,label:esc(name.slice(0,1)),
-     className:(mine?'mine':'partner')+(fresh?'':' stale'),
-     popup:fresh?(name+' · '+transportLabel(l)+' · '+(Number(l.speed||0)*3.6).toFixed(0)+' km/h'):(name+' · última ubicación hace '+ageDurationLabel(locationAgeMs(l)))
+     className:(mine?'mine':'partner')+(fresh?'':' stale')+(chosen?' destination':''),
+     popup:(chosen?'Destino elegido · ':'')+(fresh?(name+' · '+transportLabel(l)+' · '+speedCopy):
+      (name+' · última ubicación hace '+ageDurationLabel(locationAgeMs(l))))
    });
    bounds.push([Number(l.latitude),Number(l.longitude)]);
  });
  (mapData.places||[]).filter(mapLocationValid).forEach(p=>{
    const markerIcon=p.kind==='home'?'house':p.kind==='work'?'briefcase':p.kind==='adventure'?'compass':'heart';
    const linked=(cloud?.items||[]).filter(i=>Number(i.data?.placeId)===Number(p.id));
-   map.addMarker({lat:p.latitude,lon:p.longitude,icon:markerIcon,className:'place',popup:p.name+(linked.length?' · '+linked.length+' '+(linked.length===1?'historia':'historias'):'')+(p.note?' · '+p.note:'')});
+   const chosen=selectedDestination?.kind==='place'&&String(selectedDestination.place_id)===String(p.id);
+   map.addMarker({lat:p.latitude,lon:p.longitude,icon:markerIcon,
+    className:'place'+(chosen?' destination':''),
+    popup:(chosen?'Destino elegido · ':'')+p.name+(linked.length?' · '+linked.length+' '+(linked.length===1?'historia':'historias'):'')+(p.note?' · '+p.note:'')});
  });
  visibleFrequentSuggestions().filter(mapLocationValid).slice(0,3).forEach(s=>map.addMarker({lat:s.latitude,lon:s.longitude,icon:'map-pin',className:'suggestion',popup:'Lugar frecuente · '+Number(s.days||0)+' días · '+Number(s.visits||0)+' visitas'}));
  const grouped={};
