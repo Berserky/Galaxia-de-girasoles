@@ -72,3 +72,38 @@
 @media(prefers-reduced-motion:reduce){
  .gmap-controls button,.gmap-marker button{transition:none;transform:none}
 }
+
+/* P4B / VE-081–090: sessions and optional alerts form one quiet journey surface. */
+.journey-context{display:grid;gap:13px}
+.journey-context .section-head{margin-bottom:0}
+.journey-context .context-session{margin:0;min-width:0}
+.journey-active-session{border-radius:19px;padding:14px;background:var(--surface);border:1px solid var(--border)}
+.journey-session-hint{color:var(--muted);font-size:12px;line-height:1.5;margin:8px 0 12px}
+.journey-session-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.journey-context .context-actions{display:flex;gap:8px;flex-wrap:wrap;margin:0}
+.journey-context .context-actions .btn{min-height:44px;flex:1 1 140px;justify-content:center}
+.journey-alerts{border:1px solid var(--border);border-radius:18px;background:var(--surface);min-width:0;overflow:hidden}
+.journey-alerts-summary{display:flex;align-items:center;gap:10px;padding:13px;min-height:58px;
+ list-style:none;cursor:pointer;touch-action:manipulation;color:var(--text)}
+.journey-alerts-summary::-webkit-details-marker{display:none}
+.journey-alerts-summary >span:nth-child(2){display:grid;gap:3px;flex:1;min-width:0}
+.journey-alerts-summary b{font-size:13px}
+.journey-alerts-summary small{font-size:11px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
+.journey-alerts-summary>.ui-icon{flex-shrink:0;transition:transform .16s ease}
+.journey-alerts[open] .journey-alerts-summary>.ui-icon{transform:rotate(180deg)}
+.journey-alerts-summary:focus-visible{outline:3px solid var(--v5-action,var(--accent));outline-offset:-3px;border-radius:18px}
+.journey-alerts-icon{flex:0 0 36px;width:36px;height:36px;border-radius:12px;background:var(--surface2);
+ display:grid;place-items:center;color:var(--accent)}
+.journey-alerts-content{padding:0 13px 13px;display:grid;gap:12px}
+.journey-alert-explainer{font-size:12px;line-height:1.5;color:var(--muted);margin:0}
+.journey-context .context-controls{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.journey-context .context-controls .card{padding:14px;margin:0;min-width:0}
+.journey-context .context-controls .row{align-items:flex-start;gap:8px;flex-wrap:wrap}
+.journey-context .context-controls p{font-size:12px;line-height:1.45}
+.journey-context .context-controls .badge{font-size:10px}
+.journey-context .context-controls .btn{min-height:44px}
+.journey-context .context-progress[aria-valuetext]{opacity:.65}
+@media(max-width:540px){.journey-context .context-controls{grid-template-columns:minmax(0,1fr)}}
+@media(prefers-reduced-motion:reduce){
+ .journey-alerts-summary>.ui-icon{transition:none}
+}
