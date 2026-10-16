@@ -1,0 +1,55 @@
+/* Visual Evolution 5.0 · P4 — Connected Journeys visual shell.
+   Only map presentation and navigation: GPS, consent and backend unchanged. */
+.journey-map-region{position:relative}
+.map-immersive-toggle{
+ position:absolute;z-index:560;top:12px;right:12px;
+ display:inline-flex;align-items:center;justify-content:center;gap:8px;
+ min-width:44px;min-height:44px;padding:10px 13px;border:1px solid var(--border);
+ border-radius:14px;color:var(--text);background:var(--control-glass);
+ font-size:12px;font-weight:750;box-shadow:var(--shadow);touch-action:manipulation;
+}
+.map-immersive-toggle:focus-visible,.map-fab:focus-visible,
+.journey-mobility .chip:focus-visible{outline:3px solid var(--v5-action,var(--accent));outline-offset:3px}
+.map-fab{min-width:50px;min-height:50px}
+.map-immersive-open{overflow:hidden}
+.journey-map-region.immersive{
+ position:fixed;inset:0;width:100vw;height:100dvh;max-height:100dvh;
+ z-index:1800;margin:0;padding:0;background:var(--map-bg);
+ border-radius:0;overscroll-behavior:contain;
+}
+.journey-map-region.immersive #map{width:100%;height:100%;min-height:0;max-height:none;border:0;border-radius:0}
+.journey-map-region.immersive .map-immersive-toggle{top:max(14px,env(safe-area-inset-top));right:max(14px,env(safe-area-inset-right))}
+.journey-map-region.immersive .map-fab{right:max(14px,env(safe-area-inset-right));bottom:max(22px,env(safe-area-inset-bottom))}
+.journey-map-region.immersive .map-status-menu{right:max(14px,env(safe-area-inset-right));bottom:max(82px,calc(env(safe-area-inset-bottom) + 72px))}
+.journey-map-region.immersive .gmap-controls{left:max(14px,env(safe-area-inset-left));bottom:max(22px,env(safe-area-inset-bottom))}
+.journey-map-region.immersive .gmap-attrib{bottom:max(0px,env(safe-area-inset-bottom))}
+.journey-freshness{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:12px}
+.journey-presence{
+ min-width:0;display:flex;align-items:flex-start;gap:10px;
+ border:1px solid var(--border);border-radius:16px;padding:12px;
+ background:var(--surface);color:var(--text);
+}
+.journey-presence-icon{flex:0 0 34px;width:34px;height:34px;display:grid;place-items:center;
+ border-radius:11px;background:var(--surface2);color:var(--accent)}
+.journey-presence-copy{display:grid;gap:4px;min-width:0}
+.journey-presence-copy b{font-size:13px;line-height:1.35;overflow-wrap:anywhere}
+.journey-presence-copy small{font-size:11px;line-height:1.5;color:var(--muted);overflow-wrap:anywhere}
+.journey-presence.fresh .journey-presence-icon{background:var(--good-surface);color:var(--good)}
+.journey-presence.stale .journey-presence-icon{border:1px dashed var(--border)}
+.journey-companion{border:1px solid var(--border);background:var(--surface2);border-radius:22px;
+ padding:14px;display:grid;gap:10px;margin-top:14px}
+.journey-companion .section{margin:0}
+.journey-companion .card{box-shadow:none}
+.journey-companion-head h2{margin:0;font-size:18px;line-height:1.3}
+.journey-companion-head p{margin:5px 0 0;font-size:12px;color:var(--muted);line-height:1.5}
+.journey-mobility .chip{min-height:44px;display:inline-flex;align-items:center;gap:6px}
+.journey-mobility .chip[aria-pressed="true"]{background:var(--v5-action,var(--accent));
+ color:var(--v5-on-action,#fff);border-color:transparent}
+@media(max-width:390px){
+ .journey-freshness{grid-template-columns:minmax(0,1fr)}
+ .journey-companion{padding:10px}
+ .map-immersive-toggle{right:8px;top:8px}
+}
+@media(prefers-reduced-motion:reduce){
+ .map-immersive-toggle,.journey-presence,.journey-companion{animation:none!important;transition:none!important}
+}
