@@ -45,7 +45,21 @@
    (m/60)+' '+(m===60?'hora':'horas'):
    m+' '+(m===1?'minuto':'minutos'));
  }
- const api={FRESH_MS,freshness,renderPresence,sessionProgress,alertPreference,cooldownCopy};
+ function timeline(trips,events,encounters){
+  const result=[];
+  const append=(kind,items,dateField)=>{
+   for(const item of Array.isArray(items)?items:[]){
+    if(!item||typeof item!=='object')continue;
+    const time=Date.parse(item[dateField]||'');
+    result.push({kind,item,occurredAt:Number.isFinite(time)?time:null});
+   }
+  };
+  append('trip',trips,'started_at');
+  append('event',events,'happened_at');
+  append('encounter',encounters,'started_at');
+  return result.sort((a,b)=>(b.occurredAt??-Infinity)-(a.occurredAt??-Infinity));
+ }
+ const api={FRESH_MS,freshness,renderPresence,sessionProgress,alertPreference,cooldownCopy,timeline};
  if(typeof module!=='undefined'&&module.exports)module.exports=api;
  root.GalaxyJourneysV5=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
