@@ -410,6 +410,7 @@ function render(){
  if(currentMemoriesTabs)memoriesTabsScroll=currentMemoriesTabs.scrollLeft;
  const themeState=window.GalaxyTheme?.applyTheme(window.GalaxyTheme.getChoice());
  syncSystemTheme(themeState);
+ if(view!=='map')mapImmersive=false;
  document.body.classList.toggle('chat-mode',native.paired&&view==='chat'&&!shouldShowAdriWelcome());
  document.body.classList.toggle('map-immersive-open',native.paired&&view==='map'&&mapImmersive);
  renderNav();
@@ -776,8 +777,13 @@ function coupleDistanceLocations(){
  return rows;
 }
 function locationAgeMs(location){const t=Date.parse(location?.updated_at||'');return Number.isFinite(t)?Math.max(0,Date.now()-t):Infinity;}
+function mapLocationValid(location){
+ if(location?.latitude==null||location?.longitude==null)return false;
+ const lat=Number(location.latitude),lon=Number(location.longitude);
+ return Number.isFinite(lat)&&Number.isFinite(lon)&&Math.abs(lat)<=90&&Math.abs(lon)<=180;
+}
 function locationFreshState(location,freshMs=10*60*1000){
- return !!location?.sharing&&Number.isFinite(Number(location?.latitude))&&Number.isFinite(Number(location?.longitude))&&locationAgeMs(location)<=freshMs;
+ return !!location?.sharing&&mapLocationValid(location)&&locationAgeMs(location)<=freshMs;
 }
 function ageDurationLabel(age){
  const ms=Math.max(0,Number(age)||0),min=Math.floor(ms/60000);
@@ -815,7 +821,7 @@ function updateCoupleDistanceDom(){
  refreshIcons();
 }
 function focusCoupleOnMap(){
- const rows=coupleDistanceLocations().filter(l=>l.sharing&&Number.isFinite(Number(l.latitude))&&Number.isFinite(Number(l.longitude)));
+ const rows=coupleDistanceLocations().filter(l=>l.sharing&&mapLocationValid(l));
  if(!map||rows.length<2)return;
  map.fitBounds(rows.map(l=>[Number(l.latitude),Number(l.longitude)]),{maxZoom:16});
 }
@@ -2710,7 +2716,7 @@ function drawMap({fit=true}={}){
  const previous=map?{center:{...map.center},zoom:map.zoom}:null;
  if(map){map.remove();map=null;}
  map=new GalaxyMap($('#map'),{center:[4.711,-74.0721],zoom:12});
- const locs=(mapData.locations||[]).filter(x=>x.sharing&&Number.isFinite(Number(x.latitude))&&Number.isFinite(Number(x.longitude)));
+ const locs=(mapData.locations||[]).filter(x=>x.sharing&&mapLocationValid(x));
  const bounds=[];
  locs.forEach(l=>{
    const mine=l.person===cloud.person,name=names()[Number(l.person)]||'Nosotros',fresh=locationFreshState(l);
