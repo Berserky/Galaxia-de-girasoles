@@ -882,16 +882,24 @@ function updateEtaDom(){
 }
 function focusSavedPlaceOnMap(point){
  if(!map||!mapLocationValid(point))return false;
- const lat=Number(point.latitude),lon=Number(point.longitude);
- map.setView([lat,lon],16);
- // GalaxyMap re-creates marker buttons on its next animation frame.
- // Select only the matching saved-place marker and open its existing popup.
+ const lat=Number(point.latitude),lon=Number(point.longitude),targetMap=map;
+ // Only focus an actual saved place. Do not open a marker for an arbitrary
+ // coordinate or accidentally act on a newly replaced map instance.
+ const places=targetMap.markers.filter(marker=>(marker.className||'').split(' ').includes('place'));
+ const index=places.findIndex(marker=>Math.abs(marker.lat-lat)<1e-6&&Math.abs(marker.lon-lon)<1e-6);
+ if(index<0)return false;
+ targetMap.setView([lat,lon],16);
  requestAnimationFrame(()=>{
-  const places=(map?.markers||[]).filter(marker=>(marker.className||'').split(' ').includes('place'));
-  const index=places.findIndex(marker=>Math.abs(marker.lat-lat)<1e-6&&Math.abs(marker.lon-lon)<1e-6);
+  if(map!==targetMap||view!=='map')return;
+  // A ResizeObserver or deferred frame may have replaced the marker DOM.
+  // Rebuild synchronously at the requested center; GalaxyMap now preserves
+  // popup/focus state through subsequent render frames.
+  targetMap.render();
   const buttons=[...document.querySelectorAll('#map .gmap-marker.place button')];
-  const button=index>=0?buttons[index]:null;
-  if(button){button.click();button.focus({preventScroll:true});}
+  const button=buttons[index],marker=places[index];
+  if(!button)return;
+  if(!marker.open)button.click();
+  button.focus({preventScroll:true});
  });
  return true;
 }
