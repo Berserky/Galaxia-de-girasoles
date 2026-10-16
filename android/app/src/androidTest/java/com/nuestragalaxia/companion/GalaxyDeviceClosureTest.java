@@ -760,7 +760,7 @@ public class GalaxyDeviceClosureTest {
                             + "{person:'1',sharing:false,latitude:null,longitude:null,updated_at:null}],"
                             + "places:[{id:601,kind:'home',name:'Lugar sintetico',"
                             + "latitude:4.712,longitude:-74.073}],"
-                            + "destinations:[{person:'0',kind:'place',place_id:601,active:true}],"
+                            + "destinations:[{person:String(cloud.person),kind:'place',place_id:601,active:true}],"
                             + "trips:[],events:[],encounters:[],"
                             + "context:{settings:{near_enabled:false,arrived_safe_enabled:false},session:null}};"
                             + "render();})()");
@@ -863,8 +863,24 @@ public class GalaxyDeviceClosureTest {
                                 });
                             }
 
-                            // VE-094/095 — exercise the actual packaged WebView
-                            // disclosure and saved-place focus, across all 4 widths.
+                            // VE-094/095 — exercise the actual packaged WebView.
+                            // go('map') performs an asynchronous map-state read.
+                            // Earlier P4 QA used a temporary destination fixture
+                            // before that read completed, so its synthetic route
+                            // could be overwritten during the 135% text screenshots.
+                            // Reapply ONLY synthetic QA presentation data after the
+                            // read and prior to the place action, without backend writes.
+                            runV5Js("mapData={...(mapData||{}),"
+                                + "places:[{id:601,kind:'home',name:'Lugar sintetico',"
+                                + "latitude:4.712,longitude:-74.073}],"
+                                + "destinations:[{person:String(cloud.person),"
+                                + "kind:'place',place_id:601,active:true}]};render()");
+                            awaitJs("view==='map' && "
+                                + "(mapData?.destinations||[]).some(d=>"
+                                + "String(d.person)===String(cloud.person)"
+                                + " && d.kind==='place' && String(d.place_id)==='601')"
+                                + " && !!document.querySelector('#map .gmap-marker.place.destination button')"
+                                + " && !!document.querySelector('.history-place-head:not(:disabled)')");
                             runV5Js("document.querySelector('.journey-place-more summary').click()");
                             awaitJs("document.querySelector('.journey-place-more[open]')"
                                 + " && !!document.querySelector('.journey-place-more-content'"
