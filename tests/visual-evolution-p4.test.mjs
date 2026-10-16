@@ -199,7 +199,7 @@ test('P4: every map layer validates latitude/longitude before creating graphics'
  assert.match(app,/GalaxyJourneysV5\?\.trailSegments\(mapData\?\.tripPoints\|\|\[\]\)/);
  assert.match(app,/if\(map&&mapLocationValid\(point\)\)\{map\.setView/);
  assert.match(app,/function focusSavedPlaceOnMap\(point\)/);
- assert.match(app,/const places=\(map\?\.markers\|\|\[\]\)\.filter/);
+ assert.match(app,/const places=targetMap\.markers\.filter/);
  assert.match(app,/document\.querySelectorAll\('#map \.gmap-marker\.place button'\)/);
  assert.match(app,/if\(!focusSavedPlaceOnMap\(point\)\)return/);
 });
@@ -476,4 +476,24 @@ test('P4D: the actual APK must validate four focused saved places and archive no
  assert.match(shell,/build\/p0-avd\/p4-map-place-focus/);
  assert.match(shell,/p4_saved_place_focus_screenshots/);
  assert.match(shell,/P4 saved-place.*duplicated earlier map screenshot/);
+});
+
+
+test('P4: marker popup and keyboard focus persist across a map redraw',()=>{
+ const engine=file('map.js');
+ assert.match(engine,/const focusedIndex=this\.markerLayer\.contains\(activeButton\)/);
+ assert.match(engine,/if\(m\.open\)wrap\.classList\.add\('open'\)/);
+ assert.match(engine,/button\.setAttribute\('aria-expanded',String\(!!m\.open\)\)/);
+ assert.match(engine,/m\.open=!m\.open/);
+ assert.match(engine,/this\.markerLayer\.children\[focusedIndex\]\?\.querySelector\('button'\)\?\.focus\(\{preventScroll:true\}\)/);
+ const from=app.indexOf('function focusSavedPlaceOnMap(point){');
+ const to=app.indexOf('function focusEtaOnMap(){',from);
+ assert.ok(from>0&&to>from);
+ const selection=app.slice(from,to);
+ assert.match(selection,/const lat=Number\(point\.latitude\),lon=Number\(point\.longitude\),targetMap=map/);
+ assert.match(selection,/if\(index<0\)return false/);
+ assert.match(selection,/if\(map!==targetMap\|\|view!=='map'\)return/);
+ assert.match(selection,/targetMap\.render\(\)/);
+ assert.match(selection,/if\(!marker\.open\)button\.click\(\)/);
+ assert.match(selection,/button\.focus\(\{preventScroll:true\}\)/);
 });
