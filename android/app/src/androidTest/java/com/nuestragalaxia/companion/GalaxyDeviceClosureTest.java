@@ -341,6 +341,50 @@ public class GalaxyDeviceClosureTest {
                     "notifications-theme-"+theme,243,155,66);
                 shell("screencap -p /sdcard/Download/V5-P3-theme-notifications-"+theme+".png");
                 runV5Js("closeModal()");
+
+                // P4 themed Android MAP evidence. Themes must actually apply to
+                // the map surface, not only P1 Home and P3 modals.
+                runV5Js("go('map');mapData={...(mapData||{}),locations:["
+                    + "{person:'0',sharing:true,latitude:4.711,longitude:-74.072,updated_at:new Date().toISOString()},"
+                    + "{person:'1',sharing:false,latitude:null,longitude:null,updated_at:null}],"
+                    + "places:[],trips:[],events:[],encounters:[],"
+                    + "context:{settings:{near_enabled:false,arrived_safe_enabled:false},session:null}};"
+                    + "render();GalaxyTheme.applyTheme('"+theme+"');");
+                awaitJs("view==='map'&&document.documentElement.dataset.theme==='"+theme+"'"
+                    + "&&!!document.querySelector('.journey-presence.paused')"
+                    + "&&!!document.querySelector('.journey-alerts')"
+                    + "&&!!document.querySelector('.journey-companion')");
+                String mapColors=jsWithDeadline("JSON.stringify((()=>{"
+                    + "const region=document.querySelector('#journeyMapWrap'),"
+                    + "card=document.querySelector('.journey-presence'),"
+                    + "copy=card.querySelector('b'),"
+                    + "toggle=region.querySelector('.map-immersive-toggle'),"
+                    + "r=region.getBoundingClientRect(),b=toggle.getBoundingClientRect();"
+                    + "return {bg:getComputedStyle(card).backgroundColor,"
+                    + "fg:getComputedStyle(copy).color,theme:document.documentElement.dataset.theme,"
+                    + "inside:r.left>=-2&&r.right<=innerWidth+2,"
+                    + "touch:b.width>=44&&b.height>=44,"
+                    + "noOverflow:document.documentElement.scrollWidth<=innerWidth+3};})())",20);
+                JSONObject p4Palette=new JSONObject(mapColors);
+                assertEquals("P4 themed map did not retain theme",theme,p4Palette.getString("theme"));
+                assertTrue("P4 map overflows Android screen in "+theme+": "+mapColors,
+                    p4Palette.getBoolean("inside")&&p4Palette.getBoolean("noOverflow"));
+                assertTrue("P4 map expand button not touchable in "+theme,p4Palette.getBoolean("touch"));
+                assertTrue("P4 location text contrast below WCAG AA in "+theme+": "+mapColors,
+                    v5ColorContrast(p4Palette.getString("bg"),p4Palette.getString("fg"))>=4.5d);
+                runV5Js("const el=document.createElement('div');"
+                    + "el.id='p4-theme-paint-marker';el.setAttribute('aria-hidden','true');"
+                    + "el.style.cssText='position:fixed;top:42px;left:22px;width:74px;height:22px;'+"
+                    + "'background:#5ce3aa;z-index:2147483647;pointer-events:none';"
+                    + "document.getElementById('journeyMapWrap').append(el)");
+                awaitV5P3ModalPainted(themedHome,themedCssWidth,"p4-theme-"+theme,92,227,170);
+                shell("screencap -p /sdcard/Download/V5-P4-theme-map-"+theme+".png");
+                runV5Js("go('home')");
+                awaitJs("view==='home' && document.querySelector('#bottomNav .nav-btn.active')"
+                    + "?.dataset.view==='home'");
+                awaitV5QaPainted("p4-theme-return-"+theme);
+                System.out.println("V5_P4_THEME_MAP=theme:"+theme
+                    +";paint:true;contrastAA:true;safeViewport:true");
                 System.out.println("V5_P3_THEMED_SURFACES=theme:"+theme+";search:true;notifications:true");
             } finally {
                 themedHome.recycle();
