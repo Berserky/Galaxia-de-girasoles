@@ -428,3 +428,35 @@ test('P4 VE-064: partner paused trail is not painted from stale cached history',
  assert.match(styles,/#map \.gmap-line\.recorded\.historical/);
  assert.match(styles,/#map \.gmap-line\.recorded\.active/);
 });
+
+
+test('P4 VE-072: distance summary is short, age-qualified and cannot fake a current fix',()=>{
+ const start=app.indexOf('function coupleDistanceCard({mapMode=false}={}){');
+ const end=app.indexOf('function updateCoupleDistanceDom(',start);
+ assert.ok(start>0&&end>start);
+ const fn=app.slice(start,end);
+ const render=state=>runInNewContext(fn+'\ncoupleDistanceCard({mapMode:true})',{
+  coupleDistanceState:()=>state,myName:()=> 'Sol',partnerName:()=> 'Luna',
+  names:()=>['Sol','Luna'],ico:name=>name,esc,
+  window:{GalaxyDistance:{formatDistance:m=>m+' m'}},
+  distanceAgeLabel:()=> 'Actualizado hace 2 min',
+  staleLocationCopy:()=> 'La ubicación de Luna es histórica'
+ },{timeout:1000});
+ const recent=render({available:true,meters:213,updated_at:'2026-10-16T11:00:00Z',mood:{copy:'Cerca de tu persona'}});
+ assert.match(recent,/class="card journey-distance /);
+ assert.match(recent,/213 m/);
+ assert.match(recent,/Actualizado hace 2 min/);
+ assert.match(recent,/distancia en línea recta/);
+ assert.match(recent,/data-action="couple-distance-focus"/);
+ assert.match(recent,/<details class="journey-distance-details">/);
+ assert.match(recent,/Cerca de tu persona/);
+ const old=render({available:false,reason:'stale'});
+ assert.match(old,/Ubicación histórica/);
+ assert.match(old,/La ubicación de Luna es histórica/);
+ assert.doesNotMatch(old,/data-action="couple-distance-focus"/);
+ const missing=render({available:false,reason:'missing'});
+ assert.match(missing,/Distancia no disponible/);
+ assert.doesNotMatch(missing,/213 m|Ubicaciones actualizadas/);
+ assert.match(styles,/\.journey-distance-details summary:focus-visible/);
+ assert.match(styles,/@media\(max-width:390px\)/);
+});
