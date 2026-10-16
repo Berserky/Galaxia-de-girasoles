@@ -289,3 +289,63 @@ test('P4 VE-079: selected transport chip has readable contrast in every theme',(
   assert.ok((lighter+0.05)/(darker+0.05)>=7,'AAA chip contrast '+theme);
  }
 });
+
+
+test('P4: coordinate validation rejects blank strings without losing legitimate zero',()=>{
+ const from=app.indexOf('function mapLocationValid(location){');
+ const to=app.indexOf('function locationFreshState(',from);
+ assert.ok(from>=0&&to>from);
+ const validity=runInNewContext(app.slice(from,to)+'\nmapLocationValid',{}, {timeout:1000});
+ for(const point of [
+  {latitude:'',longitude:'-74'},{latitude:'4.7',longitude:' '},
+  {latitude:null,longitude:-74},{latitude:'4.7',longitude:'undefined'},
+  {latitude:91,longitude:15}
+ ])assert.equal(validity(point),false);
+ assert.equal(validity({latitude:0,longitude:0}),true);
+ assert.equal(validity({latitude:'0',longitude:'0'}),true);
+});
+
+test('P4 VE-090/093/094: quick actions and saved-place secondary actions are compact and keyboard accessible',()=>{
+ assert.match(app,/class="section journey-actions" role="group"/);
+ assert.match(app,/class="journey-actions-row"/);
+ assert.match(app,/data-action="trip-toggle"/);
+ assert.match(app,/data-action="place-new"/);
+ assert.match(app,/class="journey-place-more"/);
+ assert.match(app,/<summary aria-label="Opciones del lugar /);
+ assert.match(app,/journey-place-more-content/);
+ assert.match(app,/data-action="galaxy-share" data-card-type="PLACE"/);
+ assert.match(app,/data-action="memory-at-place"/);
+ assert.match(app,/Sin recuerdos asociados/);
+ assert.match(styles,/\.journey-actions-row \.btn\{min-height:44px/);
+ assert.match(styles,/\.journey-place-more summary:focus-visible/);
+ assert.match(styles,/@media\(max-width:390px\)\{\.journey-actions-row \.btn/);
+ assert.doesNotMatch(app,/actionCard\('route',own\.trip_active/);
+});
+
+test('P4 VE-099: historical activity uses only existing place, motion, and timed encounter data',()=>{
+ const a=app.indexOf('function mapTimelineRow(entry){');
+ const b=app.indexOf('function mapHistoryView(){',a);
+ assert.ok(a>0&&b>a);
+ const script=app.slice(a,b);
+ const render=entry=>runInNewContext(script+'\nmapTimelineRow(entry)',{
+  entry,mapData:{places:[{id:91,name:'Plaza <Seguro>'}]},
+  names:()=>['Sol','Luna'],esc,attr:x=>String(x),
+  fmtDateTime:()=> '12 oct 2026',fmtDistance:m=>m+' m',
+  fmtDuration:s=>s+' s',ico:name=>name
+ },{timeout:1000});
+ const arrival=render({kind:'event',item:{place_id:91,event:'arrived',happened_at:'2026-10-13T10:00:00Z'},occurredAt:Date.parse('2026-10-13T10:00:00Z')});
+ assert.match(arrival,/Plaza &lt;Seguro&gt;/);
+ assert.match(arrival,/Llegada registrada/);
+ const missing=render({kind:'event',item:{place_id:999,event:'left'},occurredAt:null});
+ assert.match(missing,/Lugar no disponible/);
+ assert.match(missing,/Sin fecha registrada/);
+ const encounter=render({kind:'encounter',item:{started_at:'2026-10-13T10:00:00Z',ended_at:'2026-10-13T10:30:00Z',distance_m:24},occurredAt:Date.parse('2026-10-13T10:00:00Z')});
+ assert.match(encounter,/Duró 1800 s/);
+ assert.match(encounter,/24 m/);
+ const unfinished=render({kind:'encounter',item:{started_at:'2026-10-13T10:00:00Z',ended_at:null},occurredAt:Date.parse('2026-10-13T10:00:00Z')});
+ assert.doesNotMatch(unfinished,/Duró|0 s|24 m/);
+ const trip=render({kind:'trip',item:{person:'1',distance_m:120,duration_s:80,dominant_motion:'walking'},occurredAt:null});
+ assert.match(trip,/Caminando/);
+ assert.match(trip,/120 m/);
+ assert.match(trip,/80 s/);
+});
