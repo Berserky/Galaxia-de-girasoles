@@ -7,7 +7,7 @@ bash scripts/visual-evolution-p0-avd.sh
 
 # Instrumentation is separated from the unpaired baseline. Failures retain
 # any screenshots already produced for diagnosis; no production token is loaded.
-mkdir -p build/p0-avd/p1-synthetic-themes build/p0-avd/p1-responsive-viewports build/p0-avd/p2-bottom-viewports build/p0-avd/p2-question-viewports build/p0-avd/p3-search-viewports build/p0-avd/p3-notifications-viewports build/p0-avd/p3-themed-search build/p0-avd/p3-themed-notifications
+mkdir -p build/p0-avd/p1-synthetic-themes build/p0-avd/p1-responsive-viewports build/p0-avd/p2-bottom-viewports build/p0-avd/p2-question-viewports build/p0-avd/p3-search-viewports build/p0-avd/p3-notifications-viewports build/p0-avd/p3-themed-search build/p0-avd/p3-themed-notifications build/p0-avd/p4-map-compact build/p0-avd/p4-map-immersive
 # Preserve partial theme captures even if instrumentation fails later.
 # This runs only against the isolated QA emulator; screenshots are synthetic.
 pull_theme_evidence() {
@@ -22,6 +22,8 @@ pull_theme_evidence() {
     adb pull "/sdcard/Download/V5-P2-question-${css}.png" "build/p0-avd/p2-question-viewports/${css}.png" >/dev/null 2>&1 || true
     adb pull "/sdcard/Download/V5-P3-search-${css}.png" "build/p0-avd/p3-search-viewports/${css}.png" >/dev/null 2>&1 || true
     adb pull "/sdcard/Download/V5-P3-notifications-${css}.png" "build/p0-avd/p3-notifications-viewports/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P4-map-compact-${css}.png" "build/p0-avd/p4-map-compact/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P4-map-immersive-${css}.png" "build/p0-avd/p4-map-immersive/${css}.png" >/dev/null 2>&1 || true
   done
 }
 trap pull_theme_evidence EXIT
@@ -121,6 +123,33 @@ for theme in ('daylight','cosmic','halloween','christmas','valentine','friendshi
 print(f'P3 real Android seven-theme search+notifications screenshots PASS: {themed}')
 
 
+# P4 Connected Journeys must render both compact and immersive MAPS on a
+# real Android framebuffer. No screenshot is accepted solely from DOM state.
+p4maps={}
+for kind in ('compact','immersive'):
+    directory=Path('build/p0-avd')/f'p4-map-{kind}'
+    images=[directory/f'{css}.png' for css in viewports]
+    assert all(p.is_file() for p in images), f'Missing real P4 map {kind} screenshots: {[str(p) for p in images if not p.is_file()]}'
+    hashes=set()
+    for css,path in zip(viewports,images):
+        blob=path.read_bytes()
+        assert blob.startswith(b'\x89PNG\r\n\x1a\n'), f'Invalid P4 map {kind} PNG: {path}'
+        w,h=struct.unpack('>II',blob[16:24])
+        assert (w,h)==dimensions[css], f'P4 map {kind} wrong native dimensions for {css}: {w}x{h}'
+        sha=hashlib.sha256(blob).hexdigest()
+        assert sha!=hashlib.sha256(responsive[viewports.index(css)].read_bytes()).hexdigest(), f'P4 map {kind} stale Home frame: {css}'
+        hashes.add(sha)
+    assert len(hashes)==len(images), f'P4 map {kind} contains repeated Android frames'
+    p4maps[kind]=len(images)
+for css in viewports:
+    compact=Path('build/p0-avd/p4-map-compact')/f'{css}.png'
+    immersive=Path('build/p0-avd/p4-map-immersive')/f'{css}.png'
+    assert hashlib.sha256(compact.read_bytes()).hexdigest()!=hashlib.sha256(immersive.read_bytes()).hexdigest(), f'P4 map mode frames equal at {css}'
+print(f'P4 real Android map compact+immersive screenshots PASS: {p4maps}')
+
+
+
+
 
 
 # Keep a machine-readable success receipt based on the actual Android JUnit
@@ -143,6 +172,7 @@ receipt={'status':'VERIFIED_SYNTHETIC_QA','android_junit_tests':tests,
          'p2_middle_question_screenshots':len(middle),
          'p3_real_modal_screenshots':p3surfaces,
          'p3_themed_modal_screenshots':themed,
+         'p4_real_map_screenshots':p4maps,
          'responsive_png_dimensions':{str(k):list(v) for k,v in dimensions.items()},
          'verification':'display-pixel-marker-plus-instrumented-css-layout-focus'}
 Path('build/p0-avd/p1-device-summary.json').write_text(
