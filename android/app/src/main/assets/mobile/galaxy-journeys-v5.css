@@ -137,3 +137,18 @@
 .journey-timeline-item .btn{min-height:44px}
 .journey-show-more{width:100%;min-height:44px}
 @media(max-width:620px){.journey-place-list{grid-template-columns:minmax(0,1fr)}}
+
+/* P4 UX completion · VE-076–078: own sharing separate from system permissions. */
+.journey-sharing-card{display:grid;gap:12px;padding:14px}
+.journey-sharing-card .row{gap:12px;flex-wrap:wrap}
+.journey-sharing-card .row>div{min-width:0;flex:1 1 160px}
+.journey-sharing-card h3{margin:0 0 4px;font-size:15px}
+.journey-sharing-card p{font-size:12px;line-height:1.55;color:var(--muted)}
+.journey-sharing-actions{display:flex;flex-wrap:wrap;gap:10px}
+.journey-sharing-actions .btn{min-height:44px}
+.journey-permissions-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
+ gap:10px;padding-top:12px;border-top:1px solid var(--border)}
+.journey-permissions-row span{display:inline-flex;align-items:center;gap:6px;
+ min-width:0;color:var(--muted);font-size:11px;line-height:1.5}
+.journey-permissions-row .btn{min-height:44px}
+@media(max-width:390px){.journey-sharing-actions .btn{width:100%}.journey-permissions-row .btn{width:100%}}
