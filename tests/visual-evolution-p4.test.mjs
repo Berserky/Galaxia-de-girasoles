@@ -181,3 +181,53 @@ test('P4C: no invented arrival dates or forced map data operations',()=>{
  assert.match(app,/mapHistoryVisible\+=6/);
  assert.match(app,/mapPlacesVisible\+=6/);
 });
+
+
+test('P4: missing, paused, future-dated and valid GPS are disjoint presentation states',()=>{
+ assert.equal(journeys.freshness(undefined,now).kind,'missing');
+ assert.equal(journeys.freshness({sharing:false,latitude:4,longitude:-74},now).kind,'paused');
+ assert.equal(journeys.freshness({...where(true,1000),updated_at:observedAt(-120000)},now).kind,'missing');
+ assert.match(journeys.freshness({...where(true,1000),updated_at:observedAt(-120000)},now).label,/Hora del dispositivo/);
+ assert.equal(journeys.freshness(where(true,1000),now).kind,'fresh');
+ assert.match(app,/const hasFix=mapLocationValid\(l\)/);
+});
+
+test('P4: every map layer validates latitude/longitude before creating graphics',()=>{
+ assert.match(app,/\(mapData\.places\|\|\[\]\)\.filter\(mapLocationValid\)\.forEach/);
+ assert.match(app,/visibleFrequentSuggestions\(\)\.filter\(mapLocationValid\)\.slice\(0,3\)/);
+ assert.match(app,/\(mapData\.tripPoints\|\|\[\]\)\.filter\(mapLocationValid\)\.slice\(\)\.reverse\(\)/);
+ assert.match(app,/if\(map&&mapLocationValid\(point\)\)\{map\.setView/);
+ assert.match(app,/function focusSavedPlaceOnMap\(point\)/);
+ assert.match(app,/const places=\(map\?\.markers\|\|\[\]\)\.filter/);
+ assert.match(app,/document\.querySelectorAll\('#map \.gmap-marker\.place button'\)/);
+ assert.match(app,/if\(!focusSavedPlaceOnMap\(point\)\)return/);
+});
+
+test('P4: querying map never asserts the partner GPS was remotely refreshed',()=>{
+ const next=app.slice(app.indexOf('async function refreshMapNow()'),app.indexOf('const mediaFresh='));
+ assert.match(next,/Solicitando una nueva lectura GPS solo en este teléfono/);
+ assert.match(next,/const mapLoaded=await refreshMap\(\{quiet:true,detail:true\}\)/);
+ assert.match(next,/if\(!mapLoaded\)/);
+ assert.match(next,/GPS de tu pareja solo se actualiza desde su propio teléfono/);
+ assert.doesNotMatch(next,/Ubicaciones actualizadas|Mapa actualizado/);
+ assert.match(app,/data-action="map-refresh">Consultar mapa/);
+ assert.match(app,/class="section journey-sharing"/);
+ assert.match(app,/data-action="app-settings">Permisos Android/);
+ assert.match(app,/Detener mi ubicación/);
+ assert.match(styles,/\.journey-permissions-row/);
+ assert.match(styles,/\.journey-sharing-actions/);
+ assert.doesNotMatch(app,/Acompáñame 2\.0/);
+});
+
+test('P4: Android themed map paint proof survives asynchronous inner map rendering',()=>{
+ const java=readFileSync(resolve(root,'android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyDeviceClosureTest.java'),'utf8');
+ const start=java.indexOf('// The map subtree can be replaced by asynchronous QA state');
+ assert.ok(start>0,'native real-map paint guard present');
+ const section=java.slice(start,start+2200);
+ assert.match(section,/document\.body\.append\(el\)/);
+ assert.match(section,/scrollIntoView/);
+ assert.match(section,/r\.top<innerHeight-48/);
+ assert.match(section,/awaitV5P3ModalPainted\(themedHome,themedCssWidth,"p4-theme-"\+theme/);
+ assert.match(section,/screencap -p \/sdcard\/Download\/V5-P4-theme-map-/);
+ assert.match(java,/document\.getElementById\('p4-theme-paint-marker'\)\?\.remove\(\)/);
+});
