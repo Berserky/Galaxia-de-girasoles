@@ -177,3 +177,23 @@
 .journey-person-actions .btn{min-height:44px}
 @media(max-width:390px){.journey-person-summary{min-height:58px;padding:9px}.journey-person-summary .bubble{width:36px;height:36px;flex-basis:36px}}
 @media(prefers-reduced-motion:reduce){.journey-person-chevron{transition:none}}
+
+/* VE-062: theme-adaptive raster styling, retaining the original OSM URL
+   and attribution overlay outside the filtered tile layer. */
+#map .gmap-tiles{transition:filter .2s ease}
+html[data-theme="daylight"] #map .gmap-tiles{filter:none}
+html[data-theme="cosmic"] #map .gmap-tiles{filter:brightness(.8) saturate(.82) contrast(1.08)}
+html[data-theme="halloween"] #map .gmap-tiles{filter:brightness(.79) saturate(.8) contrast(1.12)}
+html[data-theme="christmas"] #map .gmap-tiles{filter:brightness(.91) saturate(.88)}
+html[data-theme="valentine"] #map .gmap-tiles{filter:brightness(.94) saturate(.94)}
+html[data-theme="friendship"] #map .gmap-tiles{filter:brightness(.96) saturate(.9)}
+html[data-theme="easter"] #map .gmap-tiles{filter:brightness(1.01) saturate(.86)}
+/* VE-064: lines shown here are saved routes only; no false planned route. */
+.journey-map-legend{display:flex;gap:8px 14px;align-items:center;flex-wrap:wrap;
+ color:var(--muted);font-size:11px;line-height:1.45;padding:9px 2px 2px}
+.journey-map-legend span{display:inline-flex;align-items:center;gap:6px}
+.journey-map-legend small{flex-basis:100%;color:var(--muted);font-size:10px}
+.journey-route-line{width:29px;height:0;border-top:4px solid var(--accent);border-radius:4px}
+.journey-route-line.partner{border-color:var(--accent2);border-top-style:dashed}
+#map .gmap-line.recorded{opacity:.84}
+@media(prefers-reduced-motion:reduce){#map .gmap-tiles{transition:none}}
