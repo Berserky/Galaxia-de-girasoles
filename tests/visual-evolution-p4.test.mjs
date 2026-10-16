@@ -85,3 +85,14 @@ test('P4: journey panel retains distance, ETA, transport, GPS and destinations r
  assert.match(app,/aria-controls="statusMenu"/);
  assert.doesNotMatch(moduleCode,/latitude\s*:\s*4\.711|longitude\s*:\s*-74\.072/);
 });
+
+test('P4: invalid or absent GPS coordinates never become a recent map marker',()=>{
+ const valid=app.slice(app.indexOf('function mapLocationValid('),
+   app.indexOf('function ageDurationLabel('));
+ assert.match(valid,/location\?\.latitude==null\|\|location\?\.longitude==null/);
+ assert.match(valid,/Number\.isFinite\(lat\)&&Number\.isFinite\(lon\)/);
+ assert.match(valid,/Math\.abs\(lat\)<=90&&Math\.abs\(lon\)<=180/);
+ assert.match(valid,/locationAgeMs\(location\)<=freshMs/);
+ assert.match(app,/const locs=\(mapData\.locations\|\|\[\]\)\.filter\(x=>x\.sharing&&mapLocationValid\(x\)\)/);
+ assert.match(app,/coupleDistanceLocations\(\)\.filter\(l=>l\.sharing&&mapLocationValid\(l\)\)/);
+});
