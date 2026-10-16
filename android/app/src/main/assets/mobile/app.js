@@ -43,6 +43,7 @@ const legacySurpriseIdeas=[
 ];
 
 let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',memoriesTabsScroll=0,media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),insightsCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
+let mapImmersive=false;
 let toastTimer,refreshing=false,updateState={text:'La app está al día.',progress:0,busy:false},pendingVoiceDraft=null,voiceReady=false,voiceRecording=false,voiceResumeMusic=false,lastSurprise=null;
 let dateContext=null,dateContextLoadedAt=0,dateQuestionNonce=0,dateMode=null,dateModeTimer=null,dateLastExperience=null;
 let goalsState=null,goalsLoadedAt=0,goalsFilter='active';
@@ -380,6 +381,7 @@ function go(next){
  const hadMap=!!mapData,previous=view;
  if(previous==='chat'&&next!=='chat'){chatRememberPosition(document.querySelector('#chatMessages'),'chat');chatMediaEngine.detach({release:true});}
  if(next==='chat'&&previous!=='chat'&&!chatInitialScroll)chatRestoreOnRender=true;
+ if(next!=='map'){mapImmersive=false;document.body.classList.remove('map-immersive-open');}
  view=next;syncChatViewportHeight();render();window.scrollTo(0,0);
  if(view==='map'&&hadMap)refreshMap({quiet:true,detail:false});
 }
@@ -409,6 +411,7 @@ function render(){
  const themeState=window.GalaxyTheme?.applyTheme(window.GalaxyTheme.getChoice());
  syncSystemTheme(themeState);
  document.body.classList.toggle('chat-mode',native.paired&&view==='chat'&&!shouldShowAdriWelcome());
+ document.body.classList.toggle('map-immersive-open',native.paired&&view==='map'&&mapImmersive);
  renderNav();
  renderChatFab();
  if(!native.paired){renderOnboarding();refreshIcons();return;}
@@ -1242,14 +1245,40 @@ function renderContextRecapMap(recap){
  const last=coords[coords.length-1];mini.addMarker({lat:last[0],lon:last[1],icon:'flag',popup:'Final'});
  mini.fitBounds(coords,{maxZoom:16});
 }
+function journeyPresenceSummary(){
+ const rows=mapData?.locations?.length?mapData.locations:(cloud?.locations||[]);
+ return window.GalaxyJourneysV5?.renderPresence(rows,cloud?.person,names(),{esc,ico})||'';
+}
+function toggleImmersiveMap(open=!mapImmersive){
+ const panel=document.getElementById('journeyMapWrap');
+ if(!panel||view!=='map')return;
+ mapImmersive=!!open;
+ panel.classList.toggle('immersive',mapImmersive);
+ document.body.classList.toggle('map-immersive-open',mapImmersive);
+ const control=panel.querySelector('[data-action="map-immersive-toggle"]');
+ if(control){
+  control.setAttribute('aria-pressed',String(mapImmersive));
+  control.setAttribute('aria-label',mapImmersive?'Cerrar mapa ampliado':'Ampliar mapa');
+  control.innerHTML=ico(mapImmersive?'minimize':'maximize')+
+   (mapImmersive?' Cerrar mapa':' Ver mapa completo');
+  refreshIcons();
+  control.focus({preventScroll:true});
+ }
+ map?.scheduleRender?.();
+}
+document.addEventListener('keydown',e=>{
+ if(e.key==='Escape'&&mapImmersive&&!modal.open)toggleImmersiveMap(false);
+});
 function mapView(){
  const own=(cloud.locations||[]).find(l=>l.person===cloud.person)||{},partner=(cloud.locations||[]).find(l=>l.person!==cloud.person)||{};
  return '<section><div class="section-head"><div><p class="eyebrow">NUESTRO MAPA</p><h2>Acompañarnos</h2><p>Ubicación voluntaria, recorridos y lugares importantes.</p></div><button class="btn small secondary" data-action="map-refresh">Actualizar</button></div>'+
- '<div class="map-wrap"><div id="map"></div><button class="map-fab" data-action="status-menu" aria-label="Estado rápido">'+ico('sparkles')+'</button><div id="statusMenu" class="map-status-menu">'+['Ya voy','Voy bien','Llegué','En camino','Necesito una pausa'].map(s=>'<button data-action="status-set" data-status="'+attr(s)+'">'+esc(s)+'</button>').join('')+'<button data-action="status-custom">Otro…</button></div></div>'+
- '<div class="grid" style="margin-top:12px">'+personCard(own)+personCard(partner)+'</div>'+coupleDistanceCard({mapMode:true})+etaCard()+
+ '<div class="map-wrap journey-map-region'+(mapImmersive?' immersive':'')+'" id="journeyMapWrap" role="region" aria-label="Mapa interactivo de nuestra galaxia"><div id="map"></div><button type="button" class="map-immersive-toggle" data-action="map-immersive-toggle" aria-pressed="'+String(mapImmersive)+'" aria-label="'+(mapImmersive?'Cerrar mapa ampliado':'Ampliar mapa')+'">'+ico(mapImmersive?'minimize':'maximize')+(mapImmersive?' Cerrar mapa':' Ver mapa completo')+'</button><button class="map-fab" data-action="status-menu" aria-label="Estado rápido" aria-expanded="false" aria-controls="statusMenu">'+ico('sparkles')+'</button><div id="statusMenu" class="map-status-menu">'+['Ya voy','Voy bien','Llegué','En camino','Necesito una pausa'].map(s=>'<button data-action="status-set" data-status="'+attr(s)+'">'+esc(s)+'</button>').join('')+'<button data-action="status-custom">Otro…</button></div></div>'+
+ journeyPresenceSummary()+
+ '<div class="grid" style="margin-top:12px">'+personCard(own)+personCard(partner)+'</div>'+
+ '<section class="journey-companion" aria-label="Distancia y llegada"><div class="journey-companion-head"><h2>Journey Companion</h2><p>Distancia y tiempo estimado de llegada, solo con ubicaciones compartidas válidas y recientes.</p></div>'+coupleDistanceCard({mapMode:true})+etaCard()+'</section>'+
  '<div class="section"><div class="card"><div class="row between"><div><h3>Compartir ubicación</h3><p>'+(native.tracking?'Android la mantiene activa en segundo plano.':'Está detenida en este teléfono.')+'</p></div><span class="badge '+(native.tracking?'good':'')+'">'+(native.tracking?'Activa':'Pausada')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small" data-action="'+(native.tracking?'location-stop':'location-start')+'">'+(native.tracking?'Detener':'Comenzar')+'</button><button class="btn small secondary" data-action="app-settings">Permisos</button></div></div></div>'+
- '<div class="section"><div class="card"><h3>Cómo me muevo normalmente</h3><p>Ayuda a interpretar cuando Android detecta que vas en vehículo.</p><div class="chips" style="margin-top:12px">'+
- ['','motorcycle','transit'].map(value=>'<button class="chip '+((own.transport_preference||'')===value?'active':'')+'" data-action="transport-set" data-value="'+value+'">'+ico(value==='motorcycle'?'bike':value==='transit'?'bus-front':'navigation')+(value==='motorcycle'?'Moto':value==='transit'?'Transporte público':'Automático')+'</button>').join('')+
+ '<div class="section"><div class="card"><h3>Cómo me muevo normalmente</h3><p>Ayuda a interpretar cuando Android detecta que vas en vehículo.</p><div class="chips journey-mobility" role="group" aria-label="Modo de transporte habitual" style="margin-top:12px">'+
+ ['','motorcycle','transit'].map(value=>'<button class="chip '+((own.transport_preference||'')===value?'active':'')+'" data-action="transport-set" data-value="'+value+'" aria-pressed="'+String((own.transport_preference||'')===value)+'">'+ico(value==='motorcycle'?'bike':value==='transit'?'bus-front':'navigation')+(value==='motorcycle'?'Moto':value==='transit'?'Transporte público':'Automático')+'</button>').join('')+
  '</div></div></div>'+
  contextEnginePanel()+
  '<div class="section"><div class="grid">'+actionCard('route',own.trip_active?'Terminar recorrido':'Iniciar recorrido',own.trip_active?'Guardaremos el resumen al finalizar':'Registra distancia, duración y movimiento','trip-toggle')+actionCard('map-pin','Guardar este lugar','Casa, trabajo, recuerdo o aventura','place-new')+actionCard('navigation','Acompáñame 2.0','Destino, progreso, ETA y llegada','destination')+'</div></div>'+
@@ -3338,7 +3367,8 @@ document.addEventListener('click',async e=>{
   if(a==='context-suggestion-accept'){const suggestion=(mapData?.context?.suggestions||[]).find(s=>String(s.id)===String(btn.dataset.id));const result=await api('context-suggestion',{operation:'accept',id:btn.dataset.id});if(suggestion?.kind==='date'){const recap=await api('context-recap',{kind:'date',sourceEventId:suggestion.source_event_id});showModal('Recap de cita',contextRecapMarkup('Recap de cita',recap.recap));setTimeout(()=>renderContextRecapMap(recap.recap),30);}else{await refreshState({quiet:true});toast(result.item?'Recuerdo guardado.':'Sugerencia aceptada.');}await refreshMap({quiet:true,detail:true});return;}
   if(a==='context-trip-recap'){const recap=await api('context-recap',{kind:'trip',tripId:Number(btn.dataset.id)});showModal('Recap de recorrido',contextRecapMarkup('Recap de recorrido',recap.recap));setTimeout(()=>renderContextRecapMap(recap.recap),30);return;}
   if(a==='map-refresh'){await refreshMapNow();return;}
-  if(a==='status-menu'){$('#statusMenu')?.classList.toggle('open');return;}
+  if(a==='map-immersive-toggle'){toggleImmersiveMap();return;}
+  if(a==='status-menu'){const menu=$('#statusMenu');const expanded=menu?.classList.toggle('open')||false;btn.setAttribute('aria-expanded',String(expanded));return;}
   if(a==='status-set'){await api('status-set',{status:btn.dataset.status});$('#statusMenu')?.classList.remove('open');await refreshMap();toast('Estado actualizado.');return;}
   if(a==='status-custom'){const value=prompt('¿Qué estado quieres mostrar?','');if(value){await api('status-set',{status:value});await refreshMap();}return;}
   if(a==='location-start'){await GalaxyNative.call('startLocation');native=nativeState();try{await GalaxyNative.call('refreshLocation');}catch{}await refreshMap({quiet:true,detail:false});render();toast('Ubicación activa y GPS actualizado.');return;}
