@@ -804,6 +804,45 @@ public class GalaxyDeviceClosureTest {
                             shell("screencap -p /sdcard/Download/V5-P4-map-immersive-"+targetCss+".png");
                             runV5Js("document.querySelector('[data-action=\\\"map-immersive-toggle\\\"]').click()");
                             awaitJs("!mapImmersive&&!document.body.classList.contains('map-immersive-open')");
+
+                            // A real Android WebSettings text-zoom setting (135%),
+                            // not a browser-simulated CSS viewport/font substitution.
+                            // Always restore 100% before testing the next width.
+                            try {
+                                final java.util.concurrent.atomic.AtomicInteger appliedZoom=
+                                    new java.util.concurrent.atomic.AtomicInteger();
+                                scenario.onActivity(activity -> {
+                                    WebView realWeb=activity.findViewById(R.id.webView);
+                                    assertNotNull("P4 font zoom needs a real WebView",realWeb);
+                                    realWeb.getSettings().setTextZoom(135);
+                                    appliedZoom.set(realWeb.getSettings().getTextZoom());
+                                });
+                                assertEquals("Android native WebView text zoom did not apply",135,appliedZoom.get());
+                                runV5Js("document.querySelector('#p4-real-frame-marker')"
+                                    + ".style.background='#e9bf4a'");
+                                awaitJs("!mapImmersive && document.querySelector('.journey-presence.paused')"
+                                    + " && !!document.querySelector('.journey-alerts')");
+                                String largeEvidence=jsWithDeadline("JSON.stringify((()=>{"
+                                    + "const r=document.querySelector('#journeyMapWrap')"
+                                    + ".getBoundingClientRect(),toggle=document.querySelector("
+                                    + "'.map-immersive-toggle').getBoundingClientRect();"
+                                    + "return {mapInside:r.left>=-2&&r.right<=innerWidth+2,"
+                                    + "touch:toggle.width>=44&&toggle.height>=44,"
+                                    + "noOverflow:document.documentElement.scrollWidth<=innerWidth+3};})())",20);
+                                JSONObject largeLayout=new JSONObject(largeEvidence);
+                                assertTrue("P4 native 135% font layout overflow at "+targetCss+": "+largeEvidence,
+                                    largeLayout.getBoolean("mapInside")&&largeLayout.getBoolean("noOverflow"));
+                                assertTrue("P4 135% map control too small",largeLayout.getBoolean("touch"));
+                                awaitV5P3ModalPainted(beforeP4,targetCss,"p4-large-font",233,191,74);
+                                shell("screencap -p /sdcard/Download/V5-P4-map-large-font-"+targetCss+".png");
+                                System.out.println("V5_P4_ANDROID_TEXT_ZOOM=css:"+targetCss
+                                    +";nativeWebSettings:135;paint:true;noHorizontalOverflow:true");
+                            } finally {
+                                scenario.onActivity(activity -> {
+                                    WebView realWeb=activity.findViewById(R.id.webView);
+                                    if(realWeb!=null)realWeb.getSettings().setTextZoom(100);
+                                });
+                            }
                             System.out.println("V5_P4_ANDROID_MAP=css:"+targetCss
                                 +";compact:true;immersive:true;privacy:true;realDisplay:true");
                         } finally {compactFrame.recycle();}
