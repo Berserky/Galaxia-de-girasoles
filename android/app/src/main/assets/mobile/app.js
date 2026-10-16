@@ -1328,6 +1328,11 @@ function mapView(){
  const own=(cloud.locations||[]).find(l=>l.person===cloud.person)||{},partner=(cloud.locations||[]).find(l=>l.person!==cloud.person)||{};
  return '<section><div class="section-head"><div><p class="eyebrow">NUESTRO MAPA</p><h2>Acompañarnos</h2><p>Ubicación voluntaria y recorridos. Consultar el mapa solo solicita GPS de este teléfono si ya compartes ubicación; el otro teléfono envía sus propias lecturas.</p></div><button class="btn small secondary" data-action="map-refresh">Consultar mapa</button></div>'+
  '<div class="map-wrap journey-map-region'+(mapImmersive?' immersive':'')+'" id="journeyMapWrap" role="region" aria-label="Mapa interactivo de nuestra galaxia"><div id="map"></div><button type="button" class="map-immersive-toggle" data-action="map-immersive-toggle" aria-pressed="'+String(mapImmersive)+'" aria-label="'+(mapImmersive?'Cerrar mapa ampliado':'Ampliar mapa')+'">'+ico(mapImmersive?'minimize':'maximize')+(mapImmersive?' Cerrar mapa':' Ver mapa completo')+'</button><button class="map-fab" data-action="status-menu" aria-label="Estado rápido" aria-expanded="false" aria-controls="statusMenu">'+ico('sparkles')+'</button><div id="statusMenu" class="map-status-menu">'+['Ya voy','Voy bien','Llegué','En camino','Necesito una pausa'].map(s=>'<button data-action="status-set" data-status="'+attr(s)+'">'+esc(s)+'</button>').join('')+'<button data-action="status-custom">Otro…</button></div></div>'+
+ ((mapData?.tripPoints||[]).some(mapLocationValid)?
+  '<div class="journey-map-legend" role="note" aria-label="Significado de líneas del mapa">'+
+  '<span><i class="journey-route-line mine"></i> Recorrido registrado propio</span>'+
+  '<span><i class="journey-route-line partner"></i> Recorrido registrado de pareja</span>'+
+  '<small>Los trazos son recorridos registrados, no rutas planificadas ni estimaciones en vivo.</small></div>':'')+
  journeyPresenceSummary()+
  '<div class="grid" style="margin-top:12px">'+personCard(own)+personCard(partner)+'</div>'+
  '<section class="journey-companion" aria-label="Distancia y llegada"><div class="journey-companion-head"><h2>Journey Companion</h2><p>Distancia y tiempo estimado de llegada, solo con ubicaciones compartidas válidas y recientes.</p></div>'+coupleDistanceCard({mapMode:true})+etaCard()+'</section>'+
@@ -2806,7 +2811,7 @@ function drawMap({fit=true}={}){
  visibleFrequentSuggestions().filter(mapLocationValid).slice(0,3).forEach(s=>map.addMarker({lat:s.latitude,lon:s.longitude,icon:'map-pin',className:'suggestion',popup:'Lugar frecuente · '+Number(s.days||0)+' días · '+Number(s.visits||0)+' visitas'}));
  const grouped={};
  (mapData.tripPoints||[]).filter(mapLocationValid).slice().reverse().forEach(p=>(grouped[p.person]??=[]).push([Number(p.latitude),Number(p.longitude)]));
- Object.entries(grouped).forEach(([person,points])=>{if(points.length>1)map.addPolyline(points,{className:person===cloud.person?'mine':'partner',dashed:person!==cloud.person});});
+ Object.entries(grouped).forEach(([person,points])=>{if(points.length>1)map.addPolyline(points,{className:'recorded '+(String(person)===String(cloud.person)?'mine':'partner'),dashed:String(person)!==String(cloud.person)});});
  if(fit||!previous){if(bounds.length)map.fitBounds(bounds,{maxZoom:16});}
  else map.setView([previous.center.lat,previous.center.lon],previous.zoom);
 }
