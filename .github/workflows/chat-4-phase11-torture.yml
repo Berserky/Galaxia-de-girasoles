@@ -74,9 +74,15 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          # Compare against Phase5's proven APK package identity on the SAME
+          # isolated API-35 emulator. Phase11's .phase11qa suffix intermittently
+          # left Android DocumentsUI resumed but its renderer/a11y root stuck
+          # on the system package, with zero framebuffer transition.
+          # The debug build still points strictly to localhost QA Edge and QA
+          # Supabase; no stable app/data exists on this disposable emulator.
           script: |
-            gradle -p android --no-daemon connectedDebugAndroidTest -PQA_EDGE_URL=http://127.0.0.1:18765 -PQA_SUPABASE_PUBLISHABLE_KEY=qa_phase11 -PQA_APPLICATION_SUFFIX=.phase11qa '-Pandroid.testInstrumentationRunnerArguments.phase10SoakMs=120000' '-Pandroid.testInstrumentationRunnerArguments.class=com.nuestragalaxia.companion.GalaxyDeviceClosureTest'
-            gradle -p android --no-daemon connectedDebugAndroidTest -PQA_EDGE_URL=http://127.0.0.1:18765 -PQA_SUPABASE_PUBLISHABLE_KEY=qa_phase11 -PQA_APPLICATION_SUFFIX=.phase11qa '-Pandroid.testInstrumentationRunnerArguments.class=com.nuestragalaxia.companion.GalaxyMediaExperienceTest,com.nuestragalaxia.companion.GalaxyVoiceMessagesDeviceTest'
+            gradle -p android --no-daemon connectedDebugAndroidTest -PQA_EDGE_URL=http://127.0.0.1:18765 -PQA_SUPABASE_PUBLISHABLE_KEY=qa_phase11 '-Pandroid.testInstrumentationRunnerArguments.phase10SoakMs=120000' '-Pandroid.testInstrumentationRunnerArguments.class=com.nuestragalaxia.companion.GalaxyDeviceClosureTest'
+            gradle -p android --no-daemon connectedDebugAndroidTest -PQA_EDGE_URL=http://127.0.0.1:18765 -PQA_SUPABASE_PUBLISHABLE_KEY=qa_phase11 '-Pandroid.testInstrumentationRunnerArguments.class=com.nuestragalaxia.companion.GalaxyMediaExperienceTest,com.nuestragalaxia.companion.GalaxyVoiceMessagesDeviceTest'
       - uses: actions/upload-artifact@v7
         if: always()
         with:
