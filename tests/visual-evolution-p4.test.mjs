@@ -20,7 +20,7 @@ const where=(sharing,ageMs)=>({person:'0',sharing,latitude:4.711,longitude:-74.0
 
 test('P4: location freshness is honest for paused, missing, stale and fresh signals',()=>{
  assert.equal(journeys.freshness(where(false,1000),now).kind,'paused');
- assert.equal(journeys.freshness(null,now).kind,'paused');
+ assert.equal(journeys.freshness(null,now).kind,'missing');
  assert.equal(journeys.freshness({sharing:true,latitude:null,longitude:-74.1,updated_at:observedAt(1000)},now).kind,'missing');
  assert.equal(journeys.freshness({sharing:true,latitude:92,longitude:-74.1,updated_at:observedAt(1000)},now).kind,'missing');
  assert.equal(journeys.freshness(where(true,60*1000),now).kind,'fresh');
