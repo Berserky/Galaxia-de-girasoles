@@ -195,7 +195,8 @@ test('P4: missing, paused, future-dated and valid GPS are disjoint presentation 
 test('P4: every map layer validates latitude/longitude before creating graphics',()=>{
  assert.match(app,/\(mapData\.places\|\|\[\]\)\.filter\(mapLocationValid\)\.forEach/);
  assert.match(app,/visibleFrequentSuggestions\(\)\.filter\(mapLocationValid\)\.slice\(0,3\)/);
- assert.match(app,/\(mapData\.tripPoints\|\|\[\]\)\.filter\(mapLocationValid\)\.slice\(\)\.reverse\(\)/);
+ assert.match(app,/function visibleTrailSegments\(\)/);
+ assert.match(app,/GalaxyJourneysV5\?\.trailSegments\(mapData\?\.tripPoints\|\|\[\]\)/);
  assert.match(app,/if\(map&&mapLocationValid\(point\)\)\{map\.setView/);
  assert.match(app,/function focusSavedPlaceOnMap\(point\)/);
  assert.match(app,/const places=\(map\?\.markers\|\|\[\]\)\.filter/);
@@ -261,7 +262,8 @@ test('P4 VE-062/064: cartographic themes preserve OSM attribution and trail trut
  assert.match(app,/class="journey-map-legend" role="note"/);
  assert.match(app,/Recorrido registrado propio/);
  assert.match(app,/Recorrido registrado de pareja/);
- assert.match(app,/no rutas planificadas ni estimaciones en vivo/);
+ assert.match(app,/Los tramos separados no se conectan/);
+ assert.match(app,/un destino elegido no representa una ruta vial calculada/);
  assert.match(app,/map\.addPolyline\(points,\{className:'recorded '/);
  assert.match(styles,/\.journey-route-line\.partner\{border-color:var\(--accent2\)/);
  assert.doesNotMatch(moduleCode,/openstreetmap|tile\.openstreetmap/);
@@ -381,4 +383,48 @@ test('P4 VE-073/077: ETA is phrased naturally and privacy is a separate disclosu
  assert.match(app,/data-action="'\+\(native\.tracking\?'location-stop':'location-start'\)/);
  assert.match(styles,/\.journey-permissions-row>summary:focus-visible/);
  assert.match(styles,/\.journey-permissions-content \.btn\{min-height:44px\}/);
+});
+
+
+test('P4 VE-064: timestamped route segments never connect different people or unrelated journeys',()=>{
+ const now=Date.parse('2026-10-16T14:00:00Z');
+ const at=m=>new Date(now+m*60000).toISOString();
+ const p=(person,minute,latitude=4.70,longitude=-74.06)=>({person,created_at:at(minute),latitude,longitude});
+ const source=[p('0',-60),p('0',-55),p('0',-10),p('0',-9),p('1',-6),p('1',-5),
+  p('1',2),p('1',-4,'',''),p('0',-3,110,-74.05)];
+ const got=journeys.trailSegments(source,{now});
+ assert.equal(got.length,3);
+ assert.deepEqual(Array.from(got.map(x=>x.person)),['0','0','1']);
+ assert.deepEqual(Array.from(got.map(x=>x.points.length)),[2,2,2]);
+ assert.ok(got.every(x=>x.startedAt<=x.endedAt));
+ assert.ok(got.every(x=>x.points.every(([lat,lon])=>Math.abs(lat)<=90&&Math.abs(lon)<=180)));
+ assert.doesNotMatch(moduleCode,/fetch\s*\(|GalaxyNative\.call|localStorage/);
+});
+
+test('P4 VE-064: partner paused trail is not painted from stale cached history',()=>{
+ const begin=app.indexOf('function visibleTrailSegments(){');
+ const end=app.indexOf('function drawMap({fit=true}',begin);
+ assert.ok(begin>0&&end>begin);
+ const code=app.slice(begin,end);
+ const now=Date.now(),at=m=>new Date(now+m*60000).toISOString();
+ const p=(person,minute,latitude)=>({person,created_at:at(minute),latitude,longitude:-74.1});
+ const points=[p('0',-5,4.6),p('0',-4,4.7),p('1',-5,4.8),p('1',-4,4.9)];
+ const context={window:{GalaxyJourneysV5:journeys},cloud:{person:'0'},
+  mapData:{tripPoints:points,locations:[
+    {person:'0',sharing:true,trip_active:true,trip_started_at:at(-10),updated_at:at(-1),latitude:4.7,longitude:-74.1},
+    {person:'1',sharing:false,trip_active:true,trip_started_at:at(-10),updated_at:at(-1),latitude:4.9,longitude:-74.1}
+  ]},
+  locationFreshState:loc=>loc.sharing===true,
+ };
+ const visible=runInNewContext(code+'\nvisibleTrailSegments()',context,{timeout:1000});
+ assert.equal(visible.length,1);
+ assert.equal(visible[0].person,'0');
+ assert.equal(visible[0].active,true);
+ context.mapData.locations[0].updated_at=at(120);
+ const invalidFuture=runInNewContext(code+'\nvisibleTrailSegments()',context,{timeout:1000});
+ assert.equal(invalidFuture[0].active,false);
+ assert.match(app,/map\.addPolyline\(points,\{className:'recorded '/);
+ assert.match(app,/visibleTrailSegments\(\)\.forEach/);
+ assert.match(styles,/#map \.gmap-line\.recorded\.historical/);
+ assert.match(styles,/#map \.gmap-line\.recorded\.active/);
 });
