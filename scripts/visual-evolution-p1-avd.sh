@@ -7,7 +7,7 @@ bash scripts/visual-evolution-p0-avd.sh
 
 # Instrumentation is separated from the unpaired baseline. Failures retain
 # any screenshots already produced for diagnosis; no production token is loaded.
-mkdir -p build/p0-avd/p1-synthetic-themes build/p0-avd/p1-responsive-viewports build/p0-avd/p2-bottom-viewports build/p0-avd/p2-question-viewports build/p0-avd/p3-search-viewports build/p0-avd/p3-notifications-viewports build/p0-avd/p3-themed-search build/p0-avd/p3-themed-notifications build/p0-avd/p4-map-compact build/p0-avd/p4-map-immersive build/p0-avd/p4-themed-maps build/p0-avd/p4-large-font
+mkdir -p build/p0-avd/p1-synthetic-themes build/p0-avd/p1-responsive-viewports build/p0-avd/p2-bottom-viewports build/p0-avd/p2-question-viewports build/p0-avd/p3-search-viewports build/p0-avd/p3-notifications-viewports build/p0-avd/p3-themed-search build/p0-avd/p3-themed-notifications build/p0-avd/p4-map-compact build/p0-avd/p4-map-immersive build/p0-avd/p4-themed-maps build/p0-avd/p4-large-font build/p0-avd/p4-map-place-focus
 # Preserve partial theme captures even if instrumentation fails later.
 # This runs only against the isolated QA emulator; screenshots are synthetic.
 pull_theme_evidence() {
@@ -26,6 +26,7 @@ pull_theme_evidence() {
     adb pull "/sdcard/Download/V5-P4-map-compact-${css}.png" "build/p0-avd/p4-map-compact/${css}.png" >/dev/null 2>&1 || true
     adb pull "/sdcard/Download/V5-P4-map-immersive-${css}.png" "build/p0-avd/p4-map-immersive/${css}.png" >/dev/null 2>&1 || true
     adb pull "/sdcard/Download/V5-P4-map-large-font-${css}.png" "build/p0-avd/p4-large-font/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P4-map-place-${css}.png" "build/p0-avd/p4-map-place-focus/${css}.png" >/dev/null 2>&1 || true
   done
 }
 trap pull_theme_evidence EXIT
@@ -179,6 +180,20 @@ for css,path in zip(viewports,font_frames):
     assert hashlib.sha256(blob).hexdigest()!=hashlib.sha256(original).hexdigest(), f'P4 native 135% screenshot reused normal font image at {css}'
 print(f'P4 real Android WebSettings 135% text-zoom map screenshots: {len(font_frames)}/4')
 
+# Real saved-place navigation after P4C's secondary-actions disclosure.
+# Device-side JUnit verifies map center, popup, keyboard focus and 44px targets.
+place_frames=[Path('build/p0-avd/p4-map-place-focus')/f'{css}.png' for css in viewports]
+assert all(p.is_file() for p in place_frames), f'Missing P4 saved-place focus Android captures: {[str(p) for p in place_frames if not p.is_file()]}'
+for css,path in zip(viewports,place_frames):
+    blob=path.read_bytes()
+    assert blob.startswith(b'\x89PNG\r\n\x1a\n'), f'Invalid P4 saved-place screenshot: {path}'
+    w,h=struct.unpack('>II',blob[16:24])
+    assert (w,h)==dimensions[css], f'P4 place-focus native resolution mismatch for {css}: {w}x{h}'
+    normal=(Path('build/p0-avd/p4-map-compact')/f'{css}.png').read_bytes()
+    assert hashlib.sha256(blob).hexdigest()!=hashlib.sha256(normal).hexdigest(), f'P4 saved-place {css} duplicated earlier map screenshot'
+print(f'P4 real Android saved-place center+open popup+keyboard screenshots PASS: {len(place_frames)}/4')
+
+
 
 
 
@@ -210,6 +225,7 @@ receipt={'status':'VERIFIED_SYNTHETIC_QA','android_junit_tests':tests,
          'p4_real_map_screenshots':p4maps,
          'p4_theme_map_screenshots':len(p4_themed),
          'p4_native_135_text_zoom_screenshots':len(font_frames),
+         'p4_saved_place_focus_screenshots':len(place_frames),
          'responsive_png_dimensions':{str(k):list(v) for k,v in dimensions.items()},
          'verification':'display-pixel-marker-plus-instrumented-css-layout-focus'}
 Path('build/p0-avd/p1-device-summary.json').write_text(
