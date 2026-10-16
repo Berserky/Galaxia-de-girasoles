@@ -96,3 +96,47 @@ test('P4: invalid or absent GPS coordinates never become a recent map marker',()
  assert.match(app,/const locs=\(mapData\.locations\|\|\[\]\)\.filter\(x=>x\.sharing&&mapLocationValid\(x\)\)/);
  assert.match(app,/coupleDistanceLocations\(\)\.filter\(l=>l\.sharing&&mapLocationValid\(l\)\)/);
 });
+
+
+test('P4B: a saved alert preference is not claimed as successful delivery',()=>{
+ assert.equal(journeys.alertPreference(true),'Configurado');
+ assert.equal(journeys.alertPreference(false),'No configurado');
+ assert.equal(journeys.alertPreference(undefined),'No configurado');
+ assert.equal(journeys.cooldownCopy(60),'Intervalo mínimo de 1 hora');
+ assert.equal(journeys.cooldownCopy(120),'Intervalo mínimo de 2 horas');
+ assert.equal(journeys.cooldownCopy(15),'Intervalo mínimo de 15 minutos');
+ assert.equal(journeys.cooldownCopy(0),'Intervalo sin definir');
+ assert.match(app,/Configurado no significa entregado/);
+ assert.match(app,/Los avisos dependen del GPS compartido/);
+ assert.match(app,/data-action="context-near-toggle"/);
+ assert.match(app,/data-action="context-arrived-toggle"/);
+ assert.match(app,/data-action="context-settings-open"/);
+ assert.match(styles,/\.journey-alerts-summary:focus-visible/);
+});
+
+test('P4B: a session is not invented from absent or malformed progress',()=>{
+ assert.equal(journeys.sessionProgress(null),null);
+ assert.equal(journeys.sessionProgress(''),null);
+ assert.equal(journeys.sessionProgress('invalid'),null);
+ assert.equal(journeys.sessionProgress(undefined),null);
+ assert.equal(journeys.sessionProgress(110),100);
+ assert.equal(journeys.sessionProgress(-12),0);
+ assert.equal(journeys.sessionProgress('36.7'),37);
+ assert.match(app,/role="progressbar" aria-label="Progreso aproximado del recorrido"/);
+ assert.match(app,/aria-valuetext="Progreso no disponible"/);
+ assert.match(app,/data-action="context-session-stop"/);
+ assert.match(app,/data-action="context-return-home"/);
+ assert.match(app,/if\(a==='context-session-stop'\)\{await api\('context-session',\{operation:'stop'\}\)/);
+ assert.match(app,/if\(a==='context-return-home'\)\{if\(!native.tracking\)/);
+});
+
+test('P4B: alert controls live in semantic collapsible details; unrelated APIs remain unchanged',()=>{
+ assert.match(app,/<details class="journey-alerts" id="journeyAlerts">/);
+ assert.match(app,/<summary class="journey-alerts-summary">/);
+ assert.match(app,/data-action="destination"/);
+ assert.match(app,/data-action="context-return-home"/);
+ assert.match(styles,/\.journey-context \.context-controls/);
+ assert.match(styles,/@media\(max-width:540px\)/);
+ assert.match(styles,/@media\(prefers-reduced-motion:reduce\)/);
+ assert.doesNotMatch(moduleCode,/fetch\s*\(|GalaxyNative\.call|localStorage/);
+});
