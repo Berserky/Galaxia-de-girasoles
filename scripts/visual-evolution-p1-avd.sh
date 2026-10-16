@@ -7,7 +7,7 @@ bash scripts/visual-evolution-p0-avd.sh
 
 # Instrumentation is separated from the unpaired baseline. Failures retain
 # any screenshots already produced for diagnosis; no production token is loaded.
-mkdir -p build/p0-avd/p1-synthetic-themes build/p0-avd/p1-responsive-viewports build/p0-avd/p2-bottom-viewports build/p0-avd/p2-question-viewports build/p0-avd/p3-search-viewports build/p0-avd/p3-notifications-viewports build/p0-avd/p3-themed-search build/p0-avd/p3-themed-notifications build/p0-avd/p4-map-compact build/p0-avd/p4-map-immersive build/p0-avd/p4-themed-maps
+mkdir -p build/p0-avd/p1-synthetic-themes build/p0-avd/p1-responsive-viewports build/p0-avd/p2-bottom-viewports build/p0-avd/p2-question-viewports build/p0-avd/p3-search-viewports build/p0-avd/p3-notifications-viewports build/p0-avd/p3-themed-search build/p0-avd/p3-themed-notifications build/p0-avd/p4-map-compact build/p0-avd/p4-map-immersive build/p0-avd/p4-themed-maps build/p0-avd/p4-large-font
 # Preserve partial theme captures even if instrumentation fails later.
 # This runs only against the isolated QA emulator; screenshots are synthetic.
 pull_theme_evidence() {
@@ -25,6 +25,7 @@ pull_theme_evidence() {
     adb pull "/sdcard/Download/V5-P3-notifications-${css}.png" "build/p0-avd/p3-notifications-viewports/${css}.png" >/dev/null 2>&1 || true
     adb pull "/sdcard/Download/V5-P4-map-compact-${css}.png" "build/p0-avd/p4-map-compact/${css}.png" >/dev/null 2>&1 || true
     adb pull "/sdcard/Download/V5-P4-map-immersive-${css}.png" "build/p0-avd/p4-map-immersive/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P4-map-large-font-${css}.png" "build/p0-avd/p4-large-font/${css}.png" >/dev/null 2>&1 || true
   done
 }
 trap pull_theme_evidence EXIT
@@ -165,6 +166,21 @@ for theme,path in zip(p4_themes,p4_themed):
 assert len(unique_theme_frames)>=5, f'P4 seven map themes visually duplicated unexpectedly: {len(unique_theme_frames)}/7'
 print(f'P4 real Android map themes: 7/7, distinct frames {len(unique_theme_frames)}/7; AA contrast checked in instrumented Java')
 
+# Native Android WebSettings textZoom(135) snapshots: this is not a CSS
+# font mock. The Android JUnit requires exactly 135 and restores 100 on exit.
+font_frames=[Path('build/p0-avd/p4-large-font')/f'{css}.png' for css in viewports]
+assert all(p.is_file() for p in font_frames), f'Missing P4 native text-zoom Android captures: {[str(p) for p in font_frames if not p.is_file()]}'
+for css,path in zip(viewports,font_frames):
+    blob=path.read_bytes()
+    assert blob.startswith(b'\x89PNG\r\n\x1a\n'), f'Bad P4 Android font screenshot: {path}'
+    w,h=struct.unpack('>II',blob[16:24])
+    assert (w,h)==dimensions[css], f'P4 native text-zoom dimensions mismatch: {css}: {w}x{h}'
+    original=(Path('build/p0-avd/p4-map-compact')/f'{css}.png').read_bytes()
+    assert hashlib.sha256(blob).hexdigest()!=hashlib.sha256(original).hexdigest(), f'P4 native 135% screenshot reused normal font image at {css}'
+print(f'P4 real Android WebSettings 135% text-zoom map screenshots: {len(font_frames)}/4')
+
+
+
 
 
 
@@ -193,6 +209,7 @@ receipt={'status':'VERIFIED_SYNTHETIC_QA','android_junit_tests':tests,
          'p3_themed_modal_screenshots':themed,
          'p4_real_map_screenshots':p4maps,
          'p4_theme_map_screenshots':len(p4_themed),
+         'p4_native_135_text_zoom_screenshots':len(font_frames),
          'responsive_png_dimensions':{str(k):list(v) for k,v in dimensions.items()},
          'verification':'display-pixel-marker-plus-instrumented-css-layout-focus'}
 Path('build/p0-avd/p1-device-summary.json').write_text(
