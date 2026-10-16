@@ -887,10 +887,19 @@ public class GalaxyDeviceClosureTest {
                             awaitJs("document.querySelector('.journey-place-more[open]')"
                                 + " && !!document.querySelector('.journey-place-more-content'"
                                 + " + ' [data-action=\\\"memory-at-place\\\"]')");
-                            runV5Js("mapData={...(mapData||{}),"+
-                                "places:[{id:601,kind:'home',name:'Lugar sintetico',latitude:4.712,longitude:-74.073}],"+
-                                "destinations:[{person:String(cloud.person),kind:'place',place_id:601,active:true}]};"+
-                                "render();document.querySelector('.history-place-head').click()");
+                            // A full render() replaces #map and schedules drawMap() for the
+                            // next UI turn. Clicking in that same JS evaluation used the
+                            // detached GalaxyMap and lost its delayed marker focus.
+                            // Keep the original mounted fixture and click only when its
+                            // DOM, presenter and synthetic destination agree.
+                            awaitJs("view==='map' && !!map && map.el===document.querySelector('#map')"
+                                + " && mapStateReadsInFlight===0"
+                                + " && (mapData?.destinations||[]).some(d=>"
+                                + "String(d.person)===String(cloud.person) && d.kind==='place'"
+                                + " && String(d.place_id)==='601')"
+                                + " && !!document.querySelector('#map .gmap-marker.place.destination button')"
+                                + " && !!document.querySelector('.history-place-head:not(:disabled)')");
+                            runV5Js("document.querySelector('.history-place-head').click()");
                             try {
                                 // Each assertion still must pass; this snapshot only
                                 // identifies which requirement failed in the emulator.
