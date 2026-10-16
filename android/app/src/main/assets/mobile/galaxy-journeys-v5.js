@@ -61,7 +61,45 @@
   append('encounter',encounters,'started_at');
   return result.sort((a,b)=>(b.occurredAt??-Infinity)-(a.occurredAt??-Infinity));
  }
- const api={FRESH_MS,freshness,renderPresence,sessionProgress,alertPreference,cooldownCopy,timeline};
+
+ // Only connect consecutive, dated route samples from the SAME person and
+ // continuous time window. The prior renderer linked unrelated GPS journeys.
+ // Uses privacy-filtered map-state rows; no GPS reads, storage or networking.
+ function trailSegments(rows,{now=Date.now(),breakMs=20*60*1000}={}){
+  const groups=new Map(),gap=Math.max(60000,Number(breakMs)||20*60*1000);
+  for(const p of Array.isArray(rows)?rows:[]){
+   if(!p||!['0','1'].includes(String(p.person))||
+    p.latitude==null||p.longitude==null||p.created_at==null||
+    (typeof p.latitude==='string'&&!p.latitude.trim())||
+    (typeof p.longitude==='string'&&!p.longitude.trim()))continue;
+   const lat=Number(p.latitude),lon=Number(p.longitude),time=Date.parse(p.created_at);
+   if(!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180||
+    !Number.isFinite(time)||time>now+60000)continue;
+   const key=String(p.person);
+   if(!groups.has(key))groups.set(key,[]);
+   groups.get(key).push({time,latitude:lat,longitude:lon});
+  }
+  const result=[];
+  for(const [person,items] of groups){
+   items.sort((a,b)=>a.time-b.time);
+   let part=[];
+   const finish=()=>{
+    if(part.length>=2)result.push({
+     person,startedAt:part[0].time,endedAt:part[part.length-1].time,
+     points:part.map(p=>[p.latitude,p.longitude])
+    });
+    part=[];
+   };
+   for(const sample of items){
+    if(part.length&&sample.time-part[part.length-1].time>gap)finish();
+    part.push(sample);
+   }
+   finish();
+  }
+  return result;
+ }
+ const api={FRESH_MS,freshness,renderPresence,sessionProgress,alertPreference,cooldownCopy,timeline,trailSegments};
+
  if(typeof module!=='undefined'&&module.exports)module.exports=api;
  root.GalaxyJourneysV5=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
