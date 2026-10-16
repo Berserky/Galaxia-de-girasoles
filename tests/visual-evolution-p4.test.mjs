@@ -248,3 +248,21 @@ test('P4 VE-067/068/070: location people are expandable with accessible speed de
  assert.match(styles,/@media\(prefers-reduced-motion:reduce\)\{\.journey-person-chevron/);
  assert.doesNotMatch(block,/<button[^>]+class="journey-person-summary"/);
 });
+
+
+test('P4 VE-062/064: cartographic themes preserve OSM attribution and trail truth',()=>{
+ for(const theme of ['daylight','cosmic','halloween','christmas','valentine','friendship','easter']){
+  assert.ok(styles.includes('html[data-theme="'+theme+'"] #map .gmap-tiles'),theme);
+ }
+ assert.match(styles,/#map \.gmap-tiles\{transition:filter/);
+ assert.match(styles,/@media\(prefers-reduced-motion:reduce\)\{#map \.gmap-tiles\{transition:none/);
+ assert.match(mapEngine,/https:\/\/tile\.openstreetmap\.org\//);
+ assert.match(mapEngine,/gmap-attrib/);
+ assert.match(app,/class="journey-map-legend" role="note"/);
+ assert.match(app,/Recorrido registrado propio/);
+ assert.match(app,/Recorrido registrado de pareja/);
+ assert.match(app,/no rutas planificadas ni estimaciones en vivo/);
+ assert.match(app,/map\.addPolyline\(points,\{className:'recorded '/);
+ assert.match(styles,/\.journey-route-line\.partner\{border-color:var\(--accent2\)/);
+ assert.doesNotMatch(moduleCode,/openstreetmap|tile\.openstreetmap/);
+});
