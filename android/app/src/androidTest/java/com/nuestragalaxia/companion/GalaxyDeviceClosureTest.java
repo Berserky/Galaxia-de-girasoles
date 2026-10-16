@@ -683,6 +683,93 @@ public class GalaxyDeviceClosureTest {
                     shell("screencap -p /sdcard/Download/V5-P3-notifications-"+targetCss+".png");
                     beforeP3.recycle();
                     runV5Js("closeModal()");
+
+                    // V5-P4: four physical Android screen widths, not viewport mocks.
+                    // Map data are synthetic in this instrumented WebView memory only;
+                    // the test does not start GPS or write a backend record.
+                    assertEquals("P4 assets missing from APK","true",js(
+                        "!!window.GalaxyJourneysV5 && !!document.querySelector("
+                        + "'link[href=\\\"./galaxy-journeys-v5.css\\\"]')"));
+                    android.graphics.Bitmap beforeP4=instrumentation.getUiAutomation().takeScreenshot();
+                    assertNotNull("P4 cannot capture Android map baseline",beforeP4);
+                    try {
+                        runV5Js("go('map');(()=>{const time=new Date().toISOString();"
+                            + "mapData={...(mapData||{}),locations:["
+                            + "{person:'0',sharing:true,latitude:4.711,longitude:-74.0721,updated_at:time},"
+                            + "{person:'1',sharing:false,latitude:null,longitude:null,updated_at:null}],"
+                            + "places:[{id:601,kind:'home',name:'Lugar sintetico',"
+                            + "latitude:4.712,longitude:-74.073}],trips:[],events:[],encounters:[],"
+                            + "context:{settings:{near_enabled:false,arrived_safe_enabled:false},session:null}};"
+                            + "render();})()");
+                        awaitJs("view==='map' && !!document.querySelector('#journeyMapWrap')"
+                            + " && !!document.querySelector('.journey-presence.paused')"
+                            + " && !!document.querySelector('.journey-companion')"
+                            + " && !!document.querySelector('.journey-alerts')");
+                        String mapCompact=jsWithDeadline("JSON.stringify((()=>{"
+                            + "const root=document.getElementById('journeyMapWrap'),"
+                            + "toggle=root.querySelector('.map-immersive-toggle'),"
+                            + "r=root.getBoundingClientRect(),b=toggle.getBoundingClientRect();"
+                            + "return {inside:r.left>=-2&&r.right<=innerWidth+2,"
+                            + "touch:b.width>=44&&b.height>=44,"
+                            + "expanded:toggle.getAttribute('aria-pressed'),"
+                            + "presence:document.querySelectorAll('.journey-presence').length,"
+                            + "privacy:!!document.querySelector('.journey-presence.paused'),"
+                            + "overflow:document.documentElement.scrollWidth<=innerWidth+3};})())",20);
+                        JSONObject compactEvidence=new JSONObject(mapCompact);
+                        assertTrue("P4 compact map outside viewport: "+mapCompact,
+                            compactEvidence.getBoolean("inside"));
+                        assertTrue("P4 map expansion button too small: "+mapCompact,
+                            compactEvidence.getBoolean("touch"));
+                        assertTrue("P4 map body overflows "+targetCss+": "+mapCompact,
+                            compactEvidence.getBoolean("overflow"));
+                        assertEquals("P4 must render both freshness states",2,
+                            compactEvidence.getInt("presence"));
+                        assertTrue("P4 must show paused partner without GPS",compactEvidence.getBoolean("privacy"));
+                        assertEquals("false",compactEvidence.getString("expanded"));
+                        runV5Js("const mark=document.createElement('div');"
+                            + "mark.id='p4-real-frame-marker';mark.setAttribute('aria-hidden','true');"
+                            + "mark.style.cssText='position:fixed;top:42px;left:22px;'+"
+                            + "'width:74px;height:22px;background:#c142f0;z-index:2147483647;pointer-events:none';"
+                            + "document.getElementById('journeyMapWrap').append(mark)");
+                        awaitV5P3ModalPainted(beforeP4,targetCss,"p4-compact-map",193,66,240);
+                        shell("screencap -p /sdcard/Download/V5-P4-map-compact-"+targetCss+".png");
+                        android.graphics.Bitmap compactFrame=instrumentation.getUiAutomation().takeScreenshot();
+                        assertNotNull("P4 missing compact Android framebuffer",compactFrame);
+                        try {
+                            runV5Js("document.querySelector('[data-action=\\\"map-immersive-toggle\\\"]').click();"
+                                + "document.querySelector('#p4-real-frame-marker').style.background='#58cded'");
+                            awaitJs("mapImmersive && document.body.classList.contains('map-immersive-open')"
+                                + " && document.querySelector('#journeyMapWrap.immersive')"
+                                + " && document.querySelector('[data-action=\\\"map-immersive-toggle\\\"]')"
+                                + ".getAttribute('aria-pressed')==='true'");
+                            String immersiveJson=jsWithDeadline("JSON.stringify((()=>{"
+                                + "const root=document.querySelector('#journeyMapWrap.immersive'),"
+                                + "map=document.querySelector('#map').getBoundingClientRect(),"
+                                + "b=root.querySelector('.map-immersive-toggle').getBoundingClientRect();"
+                                + "return {full:map.width>=innerWidth-3 && map.height>=innerHeight-6,"
+                                + "exit:b.width>=44&&b.height>=44&&b.left>=0&&b.right<=innerWidth+2,"
+                                + "overflow:document.documentElement.scrollWidth<=innerWidth+3};})())",20);
+                            JSONObject immersiveEvidence=new JSONObject(immersiveJson);
+                            assertTrue("P4 immersive map not full screen: "+immersiveJson,
+                                immersiveEvidence.getBoolean("full"));
+                            assertTrue("P4 map exit must stay touchable: "+immersiveJson,
+                                immersiveEvidence.getBoolean("exit"));
+                            assertTrue("P4 immersive overflow: "+immersiveJson,
+                                immersiveEvidence.getBoolean("overflow"));
+                            awaitV5P3ModalPainted(compactFrame,targetCss,"p4-immersive-map",88,205,237);
+                            shell("screencap -p /sdcard/Download/V5-P4-map-immersive-"+targetCss+".png");
+                            runV5Js("document.querySelector('[data-action=\\\"map-immersive-toggle\\\"]').click()");
+                            awaitJs("!mapImmersive&&!document.body.classList.contains('map-immersive-open')");
+                            System.out.println("V5_P4_ANDROID_MAP=css:"+targetCss
+                                +";compact:true;immersive:true;privacy:true;realDisplay:true");
+                        } finally {compactFrame.recycle();}
+                    } finally {
+                        beforeP4.recycle();
+                        runV5Js("go('home')");
+                        awaitJs("view==='home' && !document.body.classList.contains('map-immersive-open')");
+                        awaitV5QaPainted("p4-home-restored-"+targetCss);
+                    }
+
                 } finally {
                     topFrame.recycle();
                     runV5Js("window.scrollTo(0,0)");
