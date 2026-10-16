@@ -349,3 +349,36 @@ test('P4 VE-099: historical activity uses only existing place, motion, and timed
  assert.match(trip,/120 m/);
  assert.match(trip,/80 s/);
 });
+
+
+test('P4 VE-063: only the current profile destination is emphasized, without creating a second marker',()=>{
+ const begin=app.indexOf('function drawMap({fit=true}={}){');
+ const end=app.indexOf('function showChatSurface(',begin);
+ assert.ok(begin>0&&end>begin);
+ const draw=app.slice(begin,end);
+ assert.match(draw,/selectedDestination=\(mapData\.destinations\|\|\[\]\)\.find/);
+ assert.match(draw,/String\(d\.person\)===String\(cloud\.person\)/);
+ assert.match(draw,/selectedDestination\?\.kind==='person'/);
+ assert.match(draw,/selectedDestination\?\.kind==='place'/);
+ assert.match(draw,/className:'place'\+\(chosen\?' destination':''\)/);
+ assert.match(draw,/className:\(mine\?'mine':'partner'\).*\(chosen\?' destination':''\)/);
+ assert.match(draw,/Destino elegido · /);
+ assert.match(draw,/l\.speed==null\|\|String\(l\.speed\)\.trim\(\)===''/);
+ assert.match(draw,/Velocidad sin lectura/);
+ assert.match(styles,/#map \.gmap-marker\.destination button/);
+ assert.match(styles,/#map \.gmap-marker\.destination::after/);
+ assert.match(draw,/\(mapData\.places\|\|\[\]\)\.filter\(mapLocationValid\)\.forEach/);
+});
+
+test('P4 VE-073/077: ETA is phrased naturally and privacy is a separate disclosure',()=>{
+ assert.match(app,/Si sigues '\+e\.mode_label\+'/);
+ assert.match(app,/el trayecto podría tardar/);
+ assert.match(app,/ETA = tiempo estimado de llegada/);
+ assert.match(app,/<details class="journey-permissions-row">/);
+ assert.match(app,/<summary aria-label="Ver opciones de privacidad y permisos">/);
+ assert.match(app,/class="journey-permissions-content"/);
+ assert.match(app,/data-action="app-settings">Permisos Android/);
+ assert.match(app,/data-action="'\+\(native\.tracking\?'location-stop':'location-start'\)/);
+ assert.match(styles,/\.journey-permissions-row>summary:focus-visible/);
+ assert.match(styles,/\.journey-permissions-content \.btn\{min-height:44px\}/);
+});
