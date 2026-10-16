@@ -7,7 +7,7 @@ bash scripts/visual-evolution-p0-avd.sh
 
 # Instrumentation is separated from the unpaired baseline. Failures retain
 # any screenshots already produced for diagnosis; no production token is loaded.
-mkdir -p build/p0-avd/p1-synthetic-themes build/p0-avd/p1-responsive-viewports build/p0-avd/p2-bottom-viewports build/p0-avd/p2-question-viewports build/p0-avd/p3-search-viewports build/p0-avd/p3-notifications-viewports build/p0-avd/p3-themed-search build/p0-avd/p3-themed-notifications build/p0-avd/p4-map-compact build/p0-avd/p4-map-immersive
+mkdir -p build/p0-avd/p1-synthetic-themes build/p0-avd/p1-responsive-viewports build/p0-avd/p2-bottom-viewports build/p0-avd/p2-question-viewports build/p0-avd/p3-search-viewports build/p0-avd/p3-notifications-viewports build/p0-avd/p3-themed-search build/p0-avd/p3-themed-notifications build/p0-avd/p4-map-compact build/p0-avd/p4-map-immersive build/p0-avd/p4-themed-maps
 # Preserve partial theme captures even if instrumentation fails later.
 # This runs only against the isolated QA emulator; screenshots are synthetic.
 pull_theme_evidence() {
@@ -15,6 +15,7 @@ pull_theme_evidence() {
     adb pull "/sdcard/Download/V5-P1-synthetic-${theme}.png" "build/p0-avd/p1-synthetic-themes/${theme}.png" >/dev/null 2>&1 || true
     adb pull "/sdcard/Download/V5-P3-theme-search-${theme}.png" "build/p0-avd/p3-themed-search/${theme}.png" >/dev/null 2>&1 || true
     adb pull "/sdcard/Download/V5-P3-theme-notifications-${theme}.png" "build/p0-avd/p3-themed-notifications/${theme}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P4-theme-map-${theme}.png" "build/p0-avd/p4-themed-maps/${theme}.png" >/dev/null 2>&1 || true
   done
   for css in 320 360 393 412; do
     adb pull "/sdcard/Download/V5-P1-viewport-${css}.png" "build/p0-avd/p1-responsive-viewports/${css}.png" >/dev/null 2>&1 || true
@@ -147,6 +148,24 @@ for css in viewports:
     assert hashlib.sha256(compact.read_bytes()).hexdigest()!=hashlib.sha256(immersive.read_bytes()).hexdigest(), f'P4 map mode frames equal at {css}'
 print(f'P4 real Android map compact+immersive screenshots PASS: {p4maps}')
 
+# Seven P4 thematic APK map surfaces must be confirmed on a real Android
+# framebuffer, independently of P1 Home or P3 dialog thematic captures.
+p4_themes=('daylight','cosmic','halloween','christmas','valentine','friendship','easter')
+p4_themed=[Path('build/p0-avd/p4-themed-maps')/f'{theme}.png' for theme in p4_themes]
+assert all(p.is_file() for p in p4_themed), f'Missing seven-theme P4 Android maps: {[str(p) for p in p4_themed if not p.is_file()]}'
+unique_theme_frames=set()
+for theme,path in zip(p4_themes,p4_themed):
+    blob=path.read_bytes()
+    assert blob.startswith(b'\x89PNG\r\n\x1a\n'), f'Invalid P4 map thematic PNG: {path}'
+    w,h=struct.unpack('>II',blob[16:24])
+    assert w<h and w>=320, f'P4 theme map not a physical portrait frame: {path}: {w}x{h}'
+    sha=hashlib.sha256(blob).hexdigest()
+    assert sha!=hashlib.sha256((Path('build/p0-avd/p1-synthetic-themes')/f'{theme}.png').read_bytes()).hexdigest(), f'P4 theme {theme} screenshot reused Home'
+    unique_theme_frames.add(sha)
+assert len(unique_theme_frames)>=5, f'P4 seven map themes visually duplicated unexpectedly: {len(unique_theme_frames)}/7'
+print(f'P4 real Android map themes: 7/7, distinct frames {len(unique_theme_frames)}/7; AA contrast checked in instrumented Java')
+
+
 
 
 
@@ -173,6 +192,7 @@ receipt={'status':'VERIFIED_SYNTHETIC_QA','android_junit_tests':tests,
          'p3_real_modal_screenshots':p3surfaces,
          'p3_themed_modal_screenshots':themed,
          'p4_real_map_screenshots':p4maps,
+         'p4_theme_map_screenshots':len(p4_themed),
          'responsive_png_dimensions':{str(k):list(v) for k,v in dimensions.items()},
          'verification':'display-pixel-marker-plus-instrumented-css-layout-focus'}
 Path('build/p0-avd/p1-device-summary.json').write_text(
