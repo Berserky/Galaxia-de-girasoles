@@ -466,6 +466,11 @@ test('P4D: the actual APK must validate four focused saved places and archive no
  const java=readFileSync(resolve(root,'android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyDeviceClosureTest.java'),'utf8');
  const shell=readFileSync(resolve(root,'scripts/visual-evolution-p1-avd.sh'),'utf8');
  assert.match(java,/V5_P4_PLACE_FOCUS=css:/);
+ assert.match(java,/Reapply ONLY synthetic QA presentation data after the/);
+ assert.match(java,/destinations:\[\{person:String\(cloud\.person\),/);
+ assert.match(java,/mapData=\{\.\.\.\(mapData\|\|\{\}\),/);
+ assert.match(java,/gmap-marker\.place\.destination button/);
+ assert.match(java,/V5_P4_PLACE_FOCUS_GATE=/);
  assert.match(java,/document\.querySelector\('\.journey-place-more summary'\)\.click\(\)/);
  assert.match(java,/document\.querySelector\('\.history-place-head'\)\.click\(\)/);
  assert.match(java,/Math\.abs\(map\.center\.lat-4\.712\)/);
