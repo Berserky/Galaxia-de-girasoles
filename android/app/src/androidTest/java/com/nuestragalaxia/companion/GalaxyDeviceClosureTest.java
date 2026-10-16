@@ -860,6 +860,37 @@ public class GalaxyDeviceClosureTest {
                                     if(realWeb!=null)realWeb.getSettings().setTextZoom(100);
                                 });
                             }
+
+                            // VE-094/095 — exercise the actual packaged WebView
+                            // disclosure and saved-place focus, across all 4 widths.
+                            runV5Js("document.querySelector('.journey-place-more summary').click()");
+                            awaitJs("document.querySelector('.journey-place-more[open]')"
+                                + " && !!document.querySelector('.journey-place-more-content'"
+                                + " + ' [data-action=\\\"memory-at-place\\\"]')");
+                            runV5Js("document.querySelector('.history-place-head').click()");
+                            awaitJs("view==='map' && !!map && "
+                                + "Math.abs(map.center.lat-4.712)<0.000001 && "
+                                + "Math.abs(map.center.lon-(-74.073))<0.000001 && "
+                                + "!!document.querySelector('#map .gmap-marker.place.open button') && "
+                                + "document.activeElement?.closest('#map .gmap-marker.place.open')!==null");
+                            String placeProof=jsWithDeadline("JSON.stringify((()=>{"
+                                + "const b=document.querySelector('#map .gmap-marker.place.open button')"
+                                + ".getBoundingClientRect(),mapRect=document.querySelector('#map')"
+                                + ".getBoundingClientRect();"
+                                + "return {focused:!!document.querySelector("
+                                + "'#map .gmap-marker.place.open button:focus'),"
+                                + "markerInside:b.width>=44&&b.height>=44,"
+                                + "noOverflow:document.documentElement.scrollWidth<=innerWidth+3,"
+                                + "mapInside:mapRect.left>=-2&&mapRect.right<=innerWidth+2};})())",20);
+                            JSONObject placeLayout=new JSONObject(placeProof);
+                            assertTrue("P4 focused place not keyboard accessible: "+placeProof,
+                                placeLayout.getBoolean("focused")&&placeLayout.getBoolean("markerInside"));
+                            assertTrue("P4 focused map outside viewport: "+placeProof,
+                                placeLayout.getBoolean("noOverflow")&&placeLayout.getBoolean("mapInside"));
+                            shell("screencap -p /sdcard/Download/V5-P4-map-place-"+targetCss+".png");
+                            System.out.println("V5_P4_PLACE_FOCUS=css:"+targetCss
+                                +";open:true;keyboardFocus:true;44px:true;noOverflow:true");
+
                             System.out.println("V5_P4_ANDROID_MAP=css:"+targetCss
                                 +";compact:true;immersive:true;privacy:true;realDisplay:true");
                         } finally {compactFrame.recycle();}
