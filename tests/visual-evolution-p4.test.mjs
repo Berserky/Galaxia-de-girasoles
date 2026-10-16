@@ -266,3 +266,26 @@ test('P4 VE-062/064: cartographic themes preserve OSM attribution and trail trut
  assert.match(styles,/\.journey-route-line\.partner\{border-color:var\(--accent2\)/);
  assert.doesNotMatch(moduleCode,/openstreetmap|tile\.openstreetmap/);
 });
+
+
+test('P4 VE-079: selected transport chip has readable contrast in every theme',()=>{
+ assert.match(styles,/\.journey-mobility \.chip\[aria-pressed="true"\]\{background:var\(--text\);\s*color:var\(--bg\);border-color:var\(--text\)\}/);
+ const themeCss=file('app.css');
+ const base=themeCss.match(/:root\s*\{([^}]*)\}/)?.[1];
+ assert.ok(base,'theme base must exist');
+ const token=(block,name)=>block.match(new RegExp('--'+name+':\\s*(#[0-9a-fA-F]{6})'))?.[1];
+ const luminance=hex=>{
+  const rgb=hex.match(/[0-9a-f]{2}/gi).map(x=>parseInt(x,16)/255);
+  const [r,g,b]=rgb.map(v=>v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4);
+  return 0.2126*r+0.7152*g+0.0722*b;
+ };
+ for(const theme of ['daylight','cosmic','halloween','christmas','valentine','friendship','easter']){
+  const block=theme==='daylight'?base:themeCss.match(new RegExp('html\\[data-theme="'+theme+'"\\]\\s*\\{([^}]*)\\}'))?.[1];
+  assert.ok(block,'missing theme '+theme);
+  const foreground=token(block,'bg')||token(base,'bg');
+  const background=token(block,'text')||token(base,'text');
+  assert.ok(foreground&&background,'missing chip colors '+theme);
+  const [lighter,darker]=[luminance(foreground),luminance(background)].sort((x,y)=>y-x);
+  assert.ok((lighter+0.05)/(darker+0.05)>=7,'AAA chip contrast '+theme);
+ }
+});
