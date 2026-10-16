@@ -44,6 +44,8 @@ const legacySurpriseIdeas=[
 
 let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',memoriesTabsScroll=0,media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),insightsCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
 let mapImmersive=false,mapHistoryVisible=6,mapPlacesVisible=6;
+// Read-only signal for deterministic Android WebView QA; never gates GPS or user actions.
+let mapStateReadsInFlight=0;
 let toastTimer,refreshing=false,updateState={text:'La app está al día.',progress:0,busy:false},pendingVoiceDraft=null,voiceReady=false,voiceRecording=false,voiceResumeMusic=false,lastSurprise=null;
 let dateContext=null,dateContextLoadedAt=0,dateQuestionNonce=0,dateMode=null,dateModeTimer=null,dateLastExperience=null;
 let goalsState=null,goalsLoadedAt=0,goalsFilter='active';
@@ -297,6 +299,7 @@ async function refreshStateIfChanged(){
 }
 async function refreshMap({quiet=false,detail=false}={}){
  if(!native.paired)return false;
+ mapStateReadsInFlight++;
  try{
   const next=await api('map-state',{detail});
   mapData=detail||!mapData?next:{...mapData,...next,context:{...(mapData?.context||{}),...(next?.context||{})}};
@@ -304,6 +307,7 @@ async function refreshMap({quiet=false,detail=false}={}){
   else if(view==='map'){drawMap({fit:false});updateCoupleDistanceDom();updateEtaDom();}
   return true;
  }catch(e){if(!quiet)toast(e.message);return false;}
+ finally{mapStateReadsInFlight--;}
 }
 
 async function refreshMapNow(){
