@@ -231,3 +231,20 @@ test('P4: Android themed map paint proof survives asynchronous inner map renderi
  assert.match(section,/screencap -p \/sdcard\/Download\/V5-P4-theme-map-/);
  assert.match(java,/document\.getElementById\('p4-theme-paint-marker'\)\?\.remove\(\)/);
 });
+
+
+test('P4 VE-067/068/070: location people are expandable with accessible speed details',()=>{
+ const block=app.slice(app.indexOf('function personCard(l){'),app.indexOf('function transportLabel(l){'));
+ assert.match(block,/<details class="card person-card journey-person /);
+ assert.match(block,/<summary class="journey-person-summary">/);
+ assert.match(block,/journey-person-heading/);
+ assert.match(block,/class="journey-speed"/);
+ assert.match(block,/Velocidad sin lectura reciente/);
+ assert.match(block,/const hasFix=mapLocationValid\(l\)/);
+ assert.match(block,/data-action="'\+\(mine\?'galaxy-share':'status-chat-reply'\)/);
+ assert.match(styles,/\.person-card\.journey-person\{display:block/);
+ assert.match(styles,/\.journey-person-summary:focus-visible/);
+ assert.match(styles,/\.journey-person-details/);
+ assert.match(styles,/@media\(prefers-reduced-motion:reduce\)\{\.journey-person-chevron/);
+ assert.doesNotMatch(block,/<button[^>]+class="journey-person-summary"/);
+});
