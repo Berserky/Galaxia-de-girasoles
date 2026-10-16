@@ -815,6 +815,21 @@ function coupleDistanceState(){
 }
 function coupleDistanceCard({mapMode=false}={}){
  const state=coupleDistanceState(),title='Distancia entre '+myName()+' y '+partnerName();
+ if(mapMode){
+  const available=!!state.available,stale=state.reason==='stale',mood=state.mood||{};
+  const distance=available?window.GalaxyDistance.formatDistance(state.meters):
+   (stale?'Ubicación histórica':'Distancia no disponible');
+  const age=available?distanceAgeLabel(state.updated_at):'';
+  const explanation=available?(mood.copy||'Distancia calculada en línea recta, no por calles.'):
+   (stale?staleLocationCopy(state):'Ambos deben compartir una ubicación reciente para calcular la distancia.');
+  return '<section class="section"><div class="card journey-distance '+(available?'':'unavailable')+'" id="coupleDistanceCard">'+
+   '<span class="couple-distance-icon">'+ico(available?'navigation':stale?'clock':'map-pin-off')+'</span>'+
+   '<div class="journey-distance-main"><p class="eyebrow">'+esc(title.toUpperCase())+'</p>'+
+   '<strong>'+esc(distance)+'</strong><small>'+esc(available?(age+' · distancia en línea recta'):'Sin ubicaciones recientes suficientes')+'</small></div>'+
+   (available?'<button class="btn small secondary" data-action="couple-distance-focus">'+ico('navigation')+' Ver ambos</button>':'')+
+   '<details class="journey-distance-details"><summary>'+ico('info')+' Cómo se calcula</summary><p>'+esc(explanation)+'</p></details>'+
+   '</div></section>';
+ }
  if(!state.available){
    const stale=state.reason==='stale',copy=stale?staleLocationCopy(state):'Ambos deben compartir una ubicación reciente para calcular la distancia.';
    return '<section class="section"><div class="card couple-distance unavailable" id="coupleDistanceCard"><span class="couple-distance-icon">'+ico(stale?'refresh-cw':'map-pin')+'</span><div><p class="eyebrow">'+esc(title.toUpperCase())+'</p><h3>'+(stale?'Esperando una ubicación reciente':'Distancia no disponible')+'</h3><p>'+esc(copy)+'</p></div>'+(mapMode?'<button class="btn small ghost" data-action="map-refresh">'+ico('refresh-cw')+' Actualizar GPS</button>':'<button class="btn small ghost" data-action="couple-distance-map">'+ico('map-pin')+' Abrir mapa</button>')+'</div></section>';
