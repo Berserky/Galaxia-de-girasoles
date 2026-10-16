@@ -160,7 +160,7 @@ test('P4C: places with invalid coordinates remain readable but cannot focus the 
  assert.match(app,/function historyPlacesView\(\)/);
  assert.match(app,/const valid=mapLocationValid\(p\)/);
  assert.match(app,/disabled aria-disabled="true"/);
- assert.match(app,/if\(!mapLocationValid\(point\)\)return/);
+ assert.match(app,/if\(!map\|\|!mapLocationValid\(point\)\)return false/);
  assert.match(app,/data-action="history-place"/);
  assert.match(app,/data-action="memory-at-place"/);
  assert.match(app,/data-action="galaxy-share"/);
