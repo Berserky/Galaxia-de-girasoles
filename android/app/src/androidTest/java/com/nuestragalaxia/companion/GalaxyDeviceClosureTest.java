@@ -759,7 +759,9 @@ public class GalaxyDeviceClosureTest {
                             + "{person:'0',sharing:true,latitude:4.711,longitude:-74.0721,updated_at:time},"
                             + "{person:'1',sharing:false,latitude:null,longitude:null,updated_at:null}],"
                             + "places:[{id:601,kind:'home',name:'Lugar sintetico',"
-                            + "latitude:4.712,longitude:-74.073}],trips:[],events:[],encounters:[],"
+                            + "latitude:4.712,longitude:-74.073}],"
+                            + "destinations:[{person:'0',kind:'place',place_id:601,active:true}],"
+                            + "trips:[],events:[],encounters:[],"
                             + "context:{settings:{near_enabled:false,arrived_safe_enabled:false},session:null}};"
                             + "render();})()");
                         awaitJs("view==='map' && !!document.querySelector('#journeyMapWrap')"
@@ -871,7 +873,7 @@ public class GalaxyDeviceClosureTest {
                             awaitJs("view==='map' && !!map && "
                                 + "Math.abs(map.center.lat-4.712)<0.000001 && "
                                 + "Math.abs(map.center.lon-(-74.073))<0.000001 && "
-                                + "!!document.querySelector('#map .gmap-marker.place.open button') && "
+                                + "!!document.querySelector('#map .gmap-marker.place.destination.open button') && "
                                 + "document.activeElement?.closest('#map .gmap-marker.place.open')!==null");
                             String placeProof=jsWithDeadline("JSON.stringify((()=>{"
                                 + "const b=document.querySelector('#map .gmap-marker.place.open button')"
