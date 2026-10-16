@@ -215,11 +215,11 @@ public class GalaxyDeviceClosureTest {
 
         // P2 Welcome must be backed by REAL paired QA state and keep all entry points.
         assertEquals("P2 Welcome not loaded from Android APK", "true",
-            js("!!document.querySelector('link[href=\"./galaxy-welcome.css\"]')"
+            jsWithDeadline("!!document.querySelector('link[href=\"./galaxy-welcome.css\"]')"
               + " && !!document.querySelector('.galaxy-welcome .welcome-hero')"
               + " && document.querySelectorAll('.welcome-bento .action-card').length===5"
               + " && !!document.querySelector('.welcome-rituals')"
-              + " && !!document.querySelector('.welcome-connection')"));
+              + " && !!document.querySelector('.welcome-connection')",20));
 
         // QA-only proof-of-paint marker, not a product UI element. A previous
         // Android run showed a stale pairing screen although the in-process
@@ -1583,6 +1583,20 @@ public class GalaxyDeviceClosureTest {
         // Headless API-35 sometimes keeps an android-owned accessibility root
         // even after PickActivity is actually RESUMED and rendered. Use pixel
         // evidence in addition to the strict resumed-activity requirement.
+        // Strict compositor preflight: a headless AVD may expose a VISIBLE WebView
+        // DOM while its native surface is still the launcher/splash screen.
+        // Without a REAL app frame, comparing screenshot deltas against DocumentsUI
+        // is meaningless. Do not launch picker until this proof is positive.
+        if(!isPhysicalDevice()) {
+            runV5Js("const el=document.createElement('div');el.id='v5-qa-paint-marker';"
+                + "el.setAttribute('aria-hidden','true');"
+                + "el.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;'+"
+                + "'background:#07e1f7;z-index:2147483647;pointer-events:none';"
+                + "document.body.appendChild(el)");
+            awaitJs("!!document.getElementById('v5-qa-paint-marker')");
+            awaitV5QaPainted("before-real-system-document-picker");
+            System.out.println("GALAXY_PICKER_APP_FRAMEBASE=real-Android-frame-confirmed");
+        }
         android.graphics.Bitmap beforePicker=instrumentation.getUiAutomation().takeScreenshot();
         assertNotNull("File-picker QA requires a real app baseline frame",beforePicker);
         scenario.onActivity(a -> a.pickMedia("qa-file-picker", "chat-file"));
@@ -1614,6 +1628,9 @@ public class GalaxyDeviceClosureTest {
             cancelPickerAndVerifyForeground(device, pkg, documentsPackage, beforePicker);
         } finally {
             beforePicker.recycle();
+            // This QA-only marker must never leak into camera, mic, or later tests.
+            if(scenario.getState()!=Lifecycle.State.DESTROYED && isResumedPackage(pkg))
+                runV5Js("document.getElementById('v5-qa-paint-marker')?.remove()");
             // Keep the whole instrumented suite hermetic even when a picker
             // assertion fails. Do not mask the failure or bypass its checks.
             for (int cleanup = 0; cleanup < 3; cleanup++) {
