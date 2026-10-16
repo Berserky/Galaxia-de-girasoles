@@ -152,3 +152,28 @@
  min-width:0;color:var(--muted);font-size:11px;line-height:1.5}
 .journey-permissions-row .btn{min-height:44px}
 @media(max-width:390px){.journey-sharing-actions .btn{width:100%}.journey-permissions-row .btn{width:100%}}
+
+/* P4 VE-067/068/070: quiet expandable people cards, speed in details. */
+.person-card.journey-person{display:block;min-width:0;padding:0;overflow:hidden}
+.journey-person-summary{list-style:none;display:flex;align-items:center;gap:10px;
+ min-height:66px;padding:11px;cursor:pointer;color:var(--text);touch-action:manipulation}
+.journey-person-summary::-webkit-details-marker{display:none}
+.journey-person-summary .bubble{flex:0 0 42px;width:42px;height:42px;font-size:18px;border-radius:14px}
+.journey-person-heading{flex:1;min-width:0;display:grid;gap:4px}
+.journey-person-heading b{font-size:13px;line-height:1.35;overflow-wrap:anywhere}
+.journey-person-heading small{font-size:11px;color:var(--muted);line-height:1.45;overflow-wrap:anywhere}
+.journey-person-chevron{flex:0 0 24px;display:grid;place-items:center;color:var(--muted);
+ transition:transform .18s ease}
+.journey-person[open] .journey-person-chevron{transform:rotate(180deg)}
+.journey-person-summary:focus-visible{outline:3px solid var(--v5-action,var(--accent));
+ outline-offset:-3px;border-radius:16px}
+.journey-person-details{display:grid;gap:10px;padding:12px;border-top:1px solid var(--border)}
+.journey-speed{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;
+ color:var(--muted);font-size:12px}
+.person-card.journey-person .speed{display:inline-flex;align-items:baseline;gap:3px;
+ font-size:15px;line-height:1.2;font-weight:800;color:var(--text)}
+.person-card.journey-person .speed small{font-size:11px;line-height:1.2;color:var(--muted);font-weight:500}
+.journey-person-details p{margin:0;font-size:11px;line-height:1.5}
+.journey-person-actions .btn{min-height:44px}
+@media(max-width:390px){.journey-person-summary{min-height:58px;padding:9px}.journey-person-summary .bubble{width:36px;height:36px;flex-basis:36px}}
+@media(prefers-reduced-motion:reduce){.journey-person-chevron{transition:none}}
