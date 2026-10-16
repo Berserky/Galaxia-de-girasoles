@@ -197,7 +197,7 @@ assert.ok(distance.includes('function metersBetween(')&&distance.includes('funct
 assert.ok(app.includes('function coupleDistanceCard(')&&app.includes('function focusCoupleOnMap('),'Falta distancia entre Sebas y Adri en Android');
 assert.ok(app.includes('data-action="couple-distance-map"')&&app.includes('data-action="couple-distance-focus"'),'Faltan acciones de distancia de pareja');
 assert.ok(app.includes('distancia en línea recta'),'La UI debe aclarar que la distancia no es una ruta vial');
-assert.ok(app.includes('function locationFreshState(')&&app.includes('Sin actualizar · hace'),'Las tarjetas de personas deben distinguir ubicaciones viejas de posiciones en vivo');
+assert.ok(app.includes('function locationFreshState(')&&app.includes('Ubicación histórica · hace')&&app.includes('mapLocationValid(l)'),'Las tarjetas de personas deben distinguir ubicaciones viejas de posiciones en vivo');
 assert.ok(css.includes('.status-dot.stale')&&css.includes('.gmap-marker.stale'),'El mapa debe diferenciar visualmente una última ubicación antigua');
 assert.ok(app.includes('function refreshMapNow(')&&app.includes("GalaxyNative.call('refreshLocation')"),'Actualizar mapa debe pedir una lectura GPS real al teléfono, no solo releer Supabase');
 assert.ok(bridge.includes('refreshLocation')&&main.includes('void refreshLocation(')&&main.includes('CurrentLocationRequest'),'Falta actualización GPS nativa de alta precisión');
