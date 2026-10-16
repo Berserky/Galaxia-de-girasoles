@@ -1013,9 +1013,22 @@ function personCard(l){
  const fresh=hasFix&&locationFreshState(l);
  const speed=l.speed==null?NaN:Number(l.speed);
  const kmh=fresh&&Number.isFinite(speed)&&speed>=0?speed*3.6:null;
- const state=!sharing?'Ubicación pausada':!hasFix?(timestamp>Date.now()+60_000?'Hora del dispositivo por verificar':'Sin lectura GPS reciente'):fresh?(esc(transportLabel(l))+(l.status?' · '+esc(l.status):'')):'Sin actualizar · hace '+ageDurationLabel(locationAgeMs(l));
+ const state=!sharing?'Ubicación pausada':!hasFix?
+  (timestamp>Date.now()+60_000?'Hora del dispositivo por verificar':'Sin lectura GPS reciente'):
+  fresh?(transportLabel(l)+(l.status?' · '+l.status:'')):
+  'Ubicación histórica · hace '+ageDurationLabel(locationAgeMs(l));
  const statusAction=l.status?'<button class="btn small secondary" data-action="'+(mine?'galaxy-share':'status-chat-reply')+'" '+(mine?'data-card-type="STATUS" data-kind="status" ':'')+'data-id="'+attr(l.person)+'" data-title="'+attr(l.status)+'">'+ico(mine?'send':'message-circle-reply')+' '+(mine?'Compartir estado':'Responder en Galaxy Chat')+'</button>':'';
- return '<div class="card person-card '+(sharing&&!fresh?'stale':'')+'"><div class="bubble">'+esc(name.slice(0,1))+'</div><div><b><span class="status-dot '+(fresh?'live':sharing?'stale':'')+'"></span>'+esc(name)+'</b><p>'+state+'</p>'+statusAction+'</div><div class="speed"'+(kmh===null?' aria-label="Velocidad sin lectura"':'')+'>'+(kmh===null?'—':kmh.toFixed(kmh<10?1:0))+'<small>km/h</small></div></div>';
+ return '<details class="card person-card journey-person '+(sharing&&!fresh?'stale':'')+'">'+
+  '<summary class="journey-person-summary"><span class="bubble">'+esc(name.slice(0,1))+'</span>'+
+  '<span class="journey-person-heading"><b><span class="status-dot '+(fresh?'live':sharing?'stale':'')+'"></span>'+esc(name)+'</b>'+
+  '<small>'+esc(state)+'</small></span>'+
+  '<span class="journey-person-chevron">'+ico('chevron-down')+'</span></summary>'+
+  '<div class="journey-person-details"><div class="journey-speed"><span>Velocidad aproximada</span>'+
+  '<strong class="speed"'+(kmh===null?' aria-label="Velocidad sin lectura reciente"':'')+'>'+
+  (kmh===null?'—':kmh.toFixed(kmh<10?1:0))+'<small>km/h</small></strong></div>'+
+  (statusAction?'<div class="journey-person-actions">'+statusAction+'</div>':'')+
+  '<p class="muted">'+esc(mine?'Datos enviados únicamente desde tu dispositivo cuando compartes ubicación.':
+  'Solo este teléfono puede consultar la última lectura compartida; no controla el GPS de la otra persona.')+'</p></div></details>';
 }
 function transportLabel(l){
  if(!l.sharing)return'Ubicación pausada';
