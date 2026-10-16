@@ -242,3 +242,8 @@ html[data-theme="easter"] #map .gmap-tiles{filter:brightness(1.01) saturate(.86)
  flex-wrap:wrap;padding:4px 2px 8px}
 .journey-permissions-content .btn{min-height:44px}
 @media(max-width:390px){.journey-permissions-content .btn{width:100%}}
+
+/* VE-064: route segments never connect different journeys or sharing states. */
+#map .gmap-line.recorded.historical{stroke-width:4;opacity:.54}
+#map .gmap-line.recorded.active{stroke-width:6;opacity:.94;stroke-dasharray:none}
+.journey-route-line.active{border-color:var(--good);border-top-style:solid;border-top-width:5px}
