@@ -870,6 +870,8 @@ public class GalaxyDeviceClosureTest {
                             // could be overwritten during the 135% text screenshots.
                             // Reapply ONLY synthetic QA presentation data after the
                             // read and prior to the place action, without backend writes.
+                            // Wait for pending map-state reads before injecting the QA fixture.
+                            awaitJs("view==='map' && !!map && mapStateReadsInFlight===0");
                             runV5Js("mapData={...(mapData||{}),"
                                 + "places:[{id:601,kind:'home',name:'Lugar sintetico',"
                                 + "latitude:4.712,longitude:-74.073}],"
@@ -902,6 +904,7 @@ public class GalaxyDeviceClosureTest {
                                     + "return {view,paired:native.paired,ownPerson:String(cloud?.person),"
                                     + "activeDestinationKind:selected?.kind||null,"
                                     + "activeDestinationMatchesFixture:String(selected?.place_id)==='601',"
+                                    + "mapStateReadsInFlight," 
                                     + "placesInData:(mapData?.places||[]).length,"
                                     + "savedHead:!!document.querySelector('.history-place-head'),"
                                     + "savedHeadDisabled:!!document.querySelector('.history-place-head')?.disabled,"
