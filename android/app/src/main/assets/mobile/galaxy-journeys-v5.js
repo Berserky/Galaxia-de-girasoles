@@ -29,7 +29,23 @@
      '<small>'+esc(state.label)+' · '+esc(state.detail)+'</small></span></div>';
    }).join('')+'</div>';
  }
- const api={FRESH_MS,freshness,renderPresence};
+ function sessionProgress(raw){
+  if(raw==null||raw==='')return null;
+  const n=Number(raw);
+  return Number.isFinite(n)?Math.round(Math.max(0,Math.min(100,n))):null;
+ }
+ function alertPreference(enabled){
+  return enabled===true?'Configurado':'No configurado';
+ }
+ function cooldownCopy(minutes){
+  const n=Number(minutes);
+  if(!Number.isFinite(n)||n<=0)return 'Intervalo sin definir';
+  const m=Math.round(n);
+  return 'Intervalo mínimo de '+(m>=60&&m%60===0?
+   (m/60)+' '+(m===60?'hora':'horas'):
+   m+' '+(m===1?'minuto':'minutos'));
+ }
+ const api={FRESH_MS,freshness,renderPresence,sessionProgress,alertPreference,cooldownCopy};
  if(typeof module!=='undefined'&&module.exports)module.exports=api;
  root.GalaxyJourneysV5=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
