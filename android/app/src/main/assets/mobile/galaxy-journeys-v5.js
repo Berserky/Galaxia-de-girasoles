@@ -2,12 +2,14 @@
 (function(root){
  const FRESH_MS=10*60*1000;
  function freshness(location,now=Date.now(),freshMs=FRESH_MS){
-  if(location?.sharing!==true)return {kind:'paused',label:'Ubicación pausada',detail:'No se comparte ubicación'};
+  if(!location)return {kind:'missing',label:'Sin señal disponible',detail:'Aún no hay lectura compartida'};
+  if(location.sharing!==true)return {kind:'paused',label:'Ubicación pausada',detail:'No se comparte ubicación'};
   const updated=Date.parse(location?.updated_at||'');
   const lat=Number(location?.latitude),lon=Number(location?.longitude);
   if(!Number.isFinite(updated)||location?.latitude==null||location?.longitude==null
    ||!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)
    return {kind:'missing',label:'Sin señal disponible',detail:'No hay una lectura válida'};
+  if(updated>now+60000)return {kind:'missing',label:'Hora del dispositivo por verificar',detail:'Lectura con fecha futura'};
   const age=Math.max(0,now-updated);
   const min=Math.floor(age/60000),time=min<1?'menos de 1 min':
    min<60?min+' min':Math.floor(min/60)+' h'+(min%60?' '+min%60+' min':'');
