@@ -372,14 +372,30 @@ public class GalaxyDeviceClosureTest {
                 assertTrue("P4 map expand button not touchable in "+theme,p4Palette.getBoolean("touch"));
                 assertTrue("P4 location text contrast below WCAG AA in "+theme+": "+mapColors,
                     v5ColorContrast(p4Palette.getString("bg"),p4Palette.getString("fg"))>=4.5d);
-                runV5Js("const el=document.createElement('div');"
+                // The map subtree can be replaced by asynchronous QA state
+                // refresh while GalaxyMap is repainting. Put the QA-only
+                // color marker on stable document.body, not on the map child,
+                // but physically OVER the visible map bounds. It is removed
+                // immediately after the real screenshot, never shipped in UI.
+                runV5Js("document.getElementById('journeyMapWrap')"
+                    + ".scrollIntoView({behavior:'auto',block:'center'})");
+                awaitJs("(()=>{const r=document.getElementById('journeyMapWrap')"
+                    + ".getBoundingClientRect();return view==='map' && "
+                    + "r.top<innerHeight-48 && r.bottom>48 && r.width>200})()");
+                runV5Js("document.getElementById('p4-theme-paint-marker')?.remove();"
+                    + "const rect=document.getElementById('journeyMapWrap').getBoundingClientRect();"
+                    + "const el=document.createElement('div');"
                     + "el.id='p4-theme-paint-marker';el.setAttribute('aria-hidden','true');"
-                    + "el.style.cssText='position:fixed;top:42px;left:22px;width:74px;height:22px;'+"
-                    + "'background:#5ce3aa;z-index:2147483647;pointer-events:none';"
-                    + "document.getElementById('journeyMapWrap').append(el)");
+                    + "const y=Math.min(innerHeight-56,Math.max(22,rect.top+16));"
+                    + "const x=Math.max(16,Math.min(innerWidth-100,rect.left+18));"
+                    + "el.style.cssText='position:fixed;top:'+y+'px;left:'+x+'px;'+"
+                    + "'width:74px;height:22px;background:#5ce3aa;'+"
+                    + "'z-index:2147483647;pointer-events:none';"
+                    + "document.body.append(el)");
+                awaitJs("!!document.getElementById('p4-theme-paint-marker')");
                 awaitV5P3ModalPainted(themedHome,themedCssWidth,"p4-theme-"+theme,92,227,170);
                 shell("screencap -p /sdcard/Download/V5-P4-theme-map-"+theme+".png");
-                runV5Js("go('home')");
+                runV5Js("document.getElementById('p4-theme-paint-marker')?.remove();go('home')");
                 awaitJs("view==='home' && document.querySelector('#bottomNav .nav-btn.active')"
                     + "?.dataset.view==='home'");
                 awaitV5QaPainted("p4-theme-return-"+theme);
@@ -388,6 +404,7 @@ public class GalaxyDeviceClosureTest {
                 System.out.println("V5_P3_THEMED_SURFACES=theme:"+theme+";search:true;notifications:true");
             } finally {
                 themedHome.recycle();
+                runV5Js("document.getElementById('p4-theme-paint-marker')?.remove()");
                 if("true".equals(js("!!document.querySelector('#modal')?.open")))
                     runV5Js("closeModal()");
             }
