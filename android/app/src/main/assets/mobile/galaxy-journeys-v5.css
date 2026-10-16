@@ -218,3 +218,27 @@ html[data-theme="easter"] #map .gmap-tiles{filter:brightness(1.01) saturate(.86)
 .journey-place-more-content .btn:focus-visible,.journey-actions-row .btn:focus-visible{
  outline:3px solid var(--v5-action,var(--accent));outline-offset:2px}
 @media(max-width:390px){.journey-actions-row .btn{flex-basis:100%}.journey-place-more{width:100%}}
+
+/* VE-063: a selected destination is visually differentiated, not duplicated.
+   Marker popup/aria label explicitly identify destination. */
+#map .gmap-marker.destination button{
+ border-color:var(--v5-action,var(--accent));border-style:double;
+ box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 30%,transparent),0 5px 18px rgba(0,0,0,.24);
+}
+#map .gmap-marker.destination::after{
+ content:"";position:absolute;top:-5px;right:-4px;
+ width:12px;height:12px;border-radius:100%;
+ border:2px solid var(--surface);background:var(--v5-action,var(--accent));
+ pointer-events:none;
+}
+/* VE-077: location stop remains always visible. Permissions are secondary. */
+.journey-permissions-row{display:block;min-width:0}
+.journey-permissions-row>summary{list-style:none;display:inline-flex;align-items:center;gap:7px;
+ min-height:44px;padding:9px 10px;border-radius:12px;cursor:pointer;
+ color:var(--text);font-size:12px;font-weight:650}
+.journey-permissions-row>summary::-webkit-details-marker{display:none}
+.journey-permissions-row>summary:focus-visible{outline:3px solid var(--v5-action,var(--accent));outline-offset:2px}
+.journey-permissions-content{display:flex;justify-content:space-between;align-items:center;gap:10px;
+ flex-wrap:wrap;padding:4px 2px 8px}
+.journey-permissions-content .btn{min-height:44px}
+@media(max-width:390px){.journey-permissions-content .btn{width:100%}}
