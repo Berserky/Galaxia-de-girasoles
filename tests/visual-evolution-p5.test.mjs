@@ -80,6 +80,15 @@ test('P5A: all original action IDs remain accessible and grouped by intention',(
  assert.match(html,/id="surprises"/);
 });
 
+test('P5B: stage and caption use identical normalized garden values for invalid metadata',()=>{
+ for(const [raw,expected] of [[0,0],[8,8],[999,8],[-10,0],['invalid',0]]){
+  const ui=renderMoments({stage:raw,days:0,progressPct:0});
+  assert.match(ui,new RegExp('class="bond-garden-scene living-garden-scene" data-stage="'+expected+'"'));
+  assert.match(ui,new RegExp('class="living-garden-caption">Etapa '+expected+' · 0% de avance'));
+  assert.doesNotMatch(ui,/Etapa (?:NaN|Infinity|-10|999)/);
+ }
+});
+
 test('P5A: progress is clamped and accessible without modifying accumulated real streaks',()=>{
  for(const [raw,expected] of [[-40,0],[0,0],[47,47],[150,100],[null,0]]){
   const ui=renderMoments({stage:3,days:12,currentStreak:4,recordStreak:8,progressPct:raw});
