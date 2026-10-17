@@ -16,6 +16,7 @@ const extract=(from,to)=>{
  return app.slice(start,end);
 };
 const gardenSource=extract('function bondGardenVisual(garden){','function bondUnlockables(garden){');
+const milestonesSource=extract('function bondUnlockables(garden){','function openBondGestureForm(');
 const momentsSource=extract('function momentsView(){','function momentSection(');
 
 test('P5A: design stylesheet is isolated and loaded after the current shell and map styles',()=>{
@@ -32,8 +33,8 @@ test('P5A: design stylesheet is isolated and loaded after the current shell and 
 test('P5A: garden illustration uses actual stage; zero, invalid and extreme stages are bounded',()=>{
  const fn=runInNewContext(gardenSource+'\nbondGardenVisual', {ico}, {timeout:1200});
  for(const [input,stage,flowers] of [
-  [{stage:0},0,1],[{stage:2},2,2],[{stage:7},7,7],
-  [{stage:999},7,7],[{stage:-10},0,1],[{stage:'invalid'},0,1]
+  [{stage:0},0,1],[{stage:2},2,2],[{stage:7},7,7],[{stage:8},8,7],
+  [{stage:999},8,7],[{stage:-10},0,1],[{stage:'invalid'},0,1]
  ]){
   const ui=fn(input);
   assert.match(ui,new RegExp('data-stage="'+stage+'"'));
@@ -96,4 +97,47 @@ test('P5A: existing Bond actions and source-of-truth engines remain unchanged',(
  assert.match(app,/if\(a==='plan-roulette-open'\)/);
  assert.match(app,/if\(a==='surprise'\)/);
  assert.doesNotMatch(momentsSource,/\b(?:fetch|api|GalaxyNative|Supabase|localStorage|setInterval|setTimeout)\s*\(/);
+});
+
+
+test('P5B: backend-defined current and future milestones are truthful, distinct and safe',()=>{
+ const render=runInNewContext(milestonesSource+'\nbondUnlockables',{ico,esc:escape,attr:escape},{timeout:1200});
+ const garden={unlockables:[{label:'Primer brote',days:1,unlocked:true,icon:'sprout'}],
+  milestones:[
+   {label:'Primer brote',days:1,unlocked:true,icon:'sprout'},
+   {label:'Hojas nuevas',days:7,unlocked:false,icon:'leaf'},
+   {label:'Hito <no permitido>',days:14,unlocked:false,icon:'invalid-icon'}
+  ]};
+ const html=render(garden);
+ assert.match(html,/role="list" aria-label="Hitos reales del jardín"/);
+ assert.equal((html.match(/role="listitem"/g)||[]).length,3);
+ assert.match(html,/Logrado: Primer brote/);
+ assert.match(html,/Por descubrir: Hojas nuevas/);
+ assert.match(html,/7 días/);
+ assert.match(html,/14 días/);
+ assert.match(html,/&lt;no permitido&gt;/);
+ assert.doesNotMatch(html,/<no permitido>|invalid-icon/);
+ assert.match(html,/sprout/);
+ assert.match(html,/lock/);
+ assert.equal(render({milestones:[],unlockables:[]}),"");
+});
+
+test('P5B: next garden milestone is shown only with real valid server metadata',()=>{
+ const valid=renderMoments({stage:8,totalDays:365,progressPct:100,next:null});
+ assert.match(valid,/Nuestro jardín/);
+ assert.doesNotMatch(valid,/Próximo hito:/);
+ const next=renderMoments({stage:3,totalDays:18,progressPct:25,next:{label:'Girasol',days:30}});
+ assert.match(next,/Próximo hito: Girasol al llegar a 30 días compartidos/);
+ const fake=renderMoments({stage:3,next:{label:'Girasol',days:'unbounded'}});
+ assert.doesNotMatch(fake,/Próximo hito:/);
+});
+
+test('P5B: gesture sends show a busy state, prevent double taps and restore on error',()=>{
+ assert.match(app,/if\(a==='bond-send-gesture'\)\{/);
+ assert.match(app,/if\(btn\.disabled\)return/);
+ assert.match(app,/btn\.disabled=true;btn\.setAttribute\('aria-busy','true'\)/);
+ assert.match(app,/await sendGesture\(btn\.dataset\.gestureId\)/);
+ assert.match(app,/btn\.disabled=false;btn\.removeAttribute\('aria-busy'\)/);
+ assert.match(css,/\.living-gestures \.gesture\[aria-busy="true"\]/);
+ assert.match(css,/\.living-garden-milestones/);
 });
