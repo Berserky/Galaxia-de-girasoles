@@ -7,7 +7,7 @@ bash scripts/visual-evolution-p0-avd.sh
 
 # Instrumentation is separated from the unpaired baseline. Failures retain
 # any screenshots already produced for diagnosis; no production token is loaded.
-mkdir -p build/p0-avd/p1-synthetic-themes build/p0-avd/p1-responsive-viewports build/p0-avd/p2-bottom-viewports build/p0-avd/p2-question-viewports build/p0-avd/p3-search-viewports build/p0-avd/p3-notifications-viewports build/p0-avd/p3-themed-search build/p0-avd/p3-themed-notifications build/p0-avd/p4-map-compact build/p0-avd/p4-map-immersive build/p0-avd/p4-themed-maps build/p0-avd/p4-large-font build/p0-avd/p4-map-place-focus
+mkdir -p build/p0-avd/p1-synthetic-themes build/p0-avd/p1-responsive-viewports build/p0-avd/p2-bottom-viewports build/p0-avd/p2-question-viewports build/p0-avd/p3-search-viewports build/p0-avd/p3-notifications-viewports build/p0-avd/p3-themed-search build/p0-avd/p3-themed-notifications build/p0-avd/p4-map-compact build/p0-avd/p4-map-immersive build/p0-avd/p4-themed-maps build/p0-avd/p4-large-font build/p0-avd/p4-map-place-focus build/p0-avd/p5-moments build/p0-avd/p5-text-zoom build/p0-avd/p5-themed-moments
 # Preserve partial theme captures even if instrumentation fails later.
 # This runs only against the isolated QA emulator; screenshots are synthetic.
 pull_theme_evidence() {
@@ -16,6 +16,7 @@ pull_theme_evidence() {
     adb pull "/sdcard/Download/V5-P3-theme-search-${theme}.png" "build/p0-avd/p3-themed-search/${theme}.png" >/dev/null 2>&1 || true
     adb pull "/sdcard/Download/V5-P3-theme-notifications-${theme}.png" "build/p0-avd/p3-themed-notifications/${theme}.png" >/dev/null 2>&1 || true
     adb pull "/sdcard/Download/V5-P4-theme-map-${theme}.png" "build/p0-avd/p4-themed-maps/${theme}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P5-theme-${theme}.png" "build/p0-avd/p5-themed-moments/${theme}.png" >/dev/null 2>&1 || true
   done
   for css in 320 360 393 412; do
     adb pull "/sdcard/Download/V5-P1-viewport-${css}.png" "build/p0-avd/p1-responsive-viewports/${css}.png" >/dev/null 2>&1 || true
@@ -27,6 +28,8 @@ pull_theme_evidence() {
     adb pull "/sdcard/Download/V5-P4-map-immersive-${css}.png" "build/p0-avd/p4-map-immersive/${css}.png" >/dev/null 2>&1 || true
     adb pull "/sdcard/Download/V5-P4-map-large-font-${css}.png" "build/p0-avd/p4-large-font/${css}.png" >/dev/null 2>&1 || true
     adb pull "/sdcard/Download/V5-P4-map-place-${css}.png" "build/p0-avd/p4-map-place-focus/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P5-moments-${css}.png" "build/p0-avd/p5-moments/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P5-text-zoom-${css}.png" "build/p0-avd/p5-text-zoom/${css}.png" >/dev/null 2>&1 || true
   done
 }
 trap pull_theme_evidence EXIT
@@ -34,7 +37,7 @@ gradle -p android --no-daemon :app:connectedDebugAndroidTest \
   -PQA_EDGE_URL=http://127.0.0.1:18765 \
   -PQA_SUPABASE_PUBLISHABLE_KEY=qa_v5p1 \
   -PQA_APPLICATION_SUFFIX=.v5p1qa \
-  '-Pandroid.testInstrumentationRunnerArguments.class=com.nuestragalaxia.companion.GalaxyDeviceClosureTest#visualEvolutionP1_realWebViewThemesFloatingRailAndModalFocus_areSafe' \
+  '-Pandroid.testInstrumentationRunnerArguments.class=com.nuestragalaxia.companion.GalaxyDeviceClosureTest#visualEvolutionP1_realWebViewThemesFloatingRailAndModalFocus_areSafe,com.nuestragalaxia.companion.GalaxyDeviceClosureTest#visualEvolutionP5_realMomentsAndroidScreens_andPrivacy' \
   2>&1 | tee build/p0-avd/p1-device-instrumentation.log
 
 pull_theme_evidence
@@ -202,6 +205,37 @@ print(f'P4 real Android saved-place center+open popup+keyboard screenshots PASS:
 
 
 
+# P5 cannot inherit P0-P4's visual approval: demand real emulator PNGs of Momentos.
+p5={}
+for variant in ('moments','text-zoom'):
+    images=[Path('build/p0-avd')/f'p5-{variant}'/f'{css}.png' for css in viewports]
+    assert all(p.is_file() for p in images), f'P5 Android {variant} screenshot missing: {[str(p) for p in images if not p.is_file()]}'
+    hashes=set()
+    for css,path in zip(viewports,images):
+        raw=path.read_bytes()
+        assert raw.startswith(b'\x89PNG\r\n\x1a\n'), f'P5 Android {variant} not PNG: {path}'
+        w,h=png_dimensions(path)
+        assert (w,h)==dimensions[css], f'P5 {variant} wrong native dimensions at {css}: {w}x{h}'
+        hashes.add(hashlib.sha256(raw).hexdigest())
+    assert len(hashes)==4, f'P5 {variant} viewport frames repeated'
+    p5[variant]=len(images)
+for css in viewports:
+    normal=Path('build/p0-avd/p5-moments')/f'{css}.png'
+    zoom=Path('build/p0-avd/p5-text-zoom')/f'{css}.png'
+    assert hashlib.sha256(normal.read_bytes()).digest()!=hashlib.sha256(zoom.read_bytes()).digest(), f'P5 native 135% font screenshot identical to normal: {css}'
+themes=('daylight','cosmic','halloween','christmas','valentine','friendship','easter')
+p5themes=[Path('build/p0-avd/p5-themed-moments')/f'{theme}.png' for theme in themes]
+assert all(p.is_file() for p in p5themes), f'P5 themed Android frame missing: {[str(p) for p in p5themes if not p.is_file()]}'
+unique_p5=set()
+for path in p5themes:
+    raw=path.read_bytes()
+    assert raw.startswith(b'\x89PNG\r\n\x1a\n'), f'P5 themed Android screenshot invalid: {path}'
+    w,h=png_dimensions(path)
+    assert w>=320 and w<h, f'P5 themed screenshot invalid resolution: {w}x{h}'
+    unique_p5.add(hashlib.sha256(raw).hexdigest())
+assert len(unique_p5)>=5, f'P5 themed moments frames unexpectedly repeated: {len(unique_p5)}/7'
+print(f'P5 REAL Android Momentos, synthetic QA ONLY: {p5}, seven themes {len(unique_p5)}/7, no reused zoom')
+
 # Keep a machine-readable success receipt based on the actual Android JUnit
 # report (System.out from instrumented tests is not forwarded by Gradle).
 import json
@@ -212,7 +246,7 @@ suites=[node for p in reports for node in ET.parse(p).getroot().iter('testsuite'
 tests=sum(int(s.get('tests','0')) for s in suites)
 failures=sum(int(s.get('failures','0')) for s in suites)
 errors=sum(int(s.get('errors','0')) for s in suites)
-assert tests==1 and failures==0 and errors==0, (tests,failures,errors)
+assert tests==2 and failures==0 and errors==0, (tests,failures,errors)
 receipt={'status':'VERIFIED_SYNTHETIC_QA','android_junit_tests':tests,
          'android_junit_failures':failures,'android_junit_errors':errors,
          'seven_themes':sorted(p.stem for p in paths),
@@ -226,6 +260,9 @@ receipt={'status':'VERIFIED_SYNTHETIC_QA','android_junit_tests':tests,
          'p4_theme_map_screenshots':len(p4_themed),
          'p4_native_135_text_zoom_screenshots':len(font_frames),
          'p4_saved_place_focus_screenshots':len(place_frames),
+         'p5_real_moments_screenshots':p5,
+         'p5_themed_moments_screenshots':len(p5themes),
+         'p5_android_verified_by_real_instrumentation':True,
          'responsive_png_dimensions':{str(k):list(v) for k,v in dimensions.items()},
          'verification':'display-pixel-marker-plus-instrumented-css-layout-focus'}
 Path('build/p0-avd/p1-device-summary.json').write_text(
