@@ -214,7 +214,7 @@ for variant in ('moments','text-zoom'):
     for css,path in zip(viewports,images):
         raw=path.read_bytes()
         assert raw.startswith(b'\x89PNG\r\n\x1a\n'), f'P5 Android {variant} not PNG: {path}'
-        w,h=png_dimensions(path)
+        w,h=struct.unpack('>II',raw[16:24])
         assert (w,h)==dimensions[css], f'P5 {variant} wrong native dimensions at {css}: {w}x{h}'
         hashes.add(hashlib.sha256(raw).hexdigest())
     assert len(hashes)==4, f'P5 {variant} viewport frames repeated'
@@ -230,7 +230,7 @@ unique_p5=set()
 for path in p5themes:
     raw=path.read_bytes()
     assert raw.startswith(b'\x89PNG\r\n\x1a\n'), f'P5 themed Android screenshot invalid: {path}'
-    w,h=png_dimensions(path)
+    w,h=struct.unpack('>II',raw[16:24])
     assert w>=320 and w<h, f'P5 themed screenshot invalid resolution: {w}x{h}'
     unique_p5.add(hashlib.sha256(raw).hexdigest())
 assert len(unique_p5)>=5, f'P5 themed moments frames unexpectedly repeated: {len(unique_p5)}/7'
