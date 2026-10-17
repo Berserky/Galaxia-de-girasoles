@@ -982,6 +982,142 @@ public class GalaxyDeviceClosureTest {
             .put("responsiveViewports",responsive));
     }
 
+    /**
+     * P5: actual packaged Android WebView with synthetic-only Bond entries.
+     * Screenshots are from the physical emulator framebuffer, not Chrome/mock HTML.
+     */
+    @Test public void visualEvolutionP5_realMomentsAndroidScreens_andPrivacy() throws Exception {
+        launch();
+        awaitJs("!!document.querySelector('#bottomNav [data-view=\"moments\"]') && !!cloud.bond");
+        android.graphics.Bitmap before=instrumentation.getUiAutomation().takeScreenshot();
+        assertNotNull("P5 baseline native framebuffer missing",before);
+        final int realWidth=before.getWidth(),realHeight=before.getHeight();
+        before.recycle();
+        final int cssBaseline=Integer.parseInt(js("String(Math.round(innerWidth))"));
+        final double scale=(double)realWidth/cssBaseline;
+        assertTrue("P5 invalid native/CSS scale",scale>0.3d&&scale<6d);
+
+        // No backend writes, personal coordinates, voice binaries or actual user records.
+        runV5Js("""
+            const who=String(cloud.person);
+            const other=who==='0'?'1':'0';
+            const question=Object.keys(gameQuestions)[0];
+            const options=gameQuestions[question]?.options||[];
+            cloud.bond={...(cloud.bond||{}),
+             garden:{stage:3,label:'Primer botón',days:18,totalDays:18,
+              progressPct:25,currentStreak:4,recordStreak:6,
+              next:{label:'Girasol',days:30},
+              milestones:[{label:'Primer brote',days:1,icon:'sprout',unlocked:true},
+               {label:'Girasol',days:30,icon:'flower-2',unlocked:false}]},
+             entries:[
+              {id:'p5-game',author:other,type:'game',data:{
+               questionId:question,answer:'P5_SECRET_ANSWER',correct:false}},
+              {id:'p5-ritual',author:who,type:'ritual',version:2,
+               created:'2026-10-15T16:00:00Z',
+               data:{week:'2026-10-12',gratitude:'Gracias por existir',
+                need:'Necesito escucharte',plan:'Nuestro próximo paseo'}},
+              {id:'p5-note',author:other,type:'sharednote',version:3,
+               created:'2026-10-15T16:00:00Z',
+               data:{title:'Nota de QA',body:'Recuerdo seguro '+('x'.repeat(290))}},
+              {id:'p5-audio',author:who,type:'voice',version:1,
+               data:{title:'Voz de QA',audioUrl:'https://example.invalid/qa-only.m4a'}}
+             ]};
+            cloud.items=[...(cloud.items||[]),
+             {id:'p5-surprise',kind:'note',author:other,
+              data:{surprise:true,title:'P5_SECRET_TITLE',
+               body:'P5_SECRET_MESSAGE',unlockType:'date',unlockDate:'2099-12-31'}}];
+            go('moments');window.scrollTo(0,0);
+            """);
+        awaitJs("view==='moments' && !!document.querySelector('.living-moments')"
+            +" && document.querySelectorAll('.living-ritual-step').length===3"
+            +" && !!document.querySelector('.living-voice-player')"
+            +" && !!document.querySelector('.living-note-full')"
+            +" && !!document.querySelector('.living-surprise-card.sealed')"
+            +" && !!document.querySelector('.living-game-card')");
+        assertEquals("P5 synthetic secret must not appear in DOM","false",
+            js("document.documentElement.innerHTML.includes('P5_SECRET_TITLE')"
+                +"||document.documentElement.innerHTML.includes('P5_SECRET_MESSAGE')"
+                +"||document.documentElement.innerHTML.includes('P5_SECRET_ANSWER')"));
+        runV5Js("const marker=document.createElement('div');"
+            +"marker.id='v5-qa-paint-marker';marker.setAttribute('aria-hidden','true');"
+            +"marker.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;"
+            +"background:#07e1f7;z-index:2147483647;pointer-events:none';"
+            +"document.body.appendChild(marker)");
+        try {
+            for(int css : new int[]{320,360,393,412}) {
+                int w=(int)Math.round(css*scale);
+                shell("wm size "+w+"x"+realHeight);
+                awaitCondition(() -> Math.abs(Integer.parseInt(
+                    js("String(Math.round(innerWidth))"))-css)<=5,UI_TIMEOUT_MS);
+                awaitJs("view==='moments' && !!document.querySelector('.living-garden')"
+                    +"&&document.querySelectorAll('.living-activity-grid .action-card').length===8");
+                String state=jsWithDeadline("JSON.stringify((()=>{"
+                    +"const root=document.querySelector('.living-moments'),"
+                    +"seek=document.querySelector('.living-voice-seek'),"
+                    +"play=document.querySelector('.living-voice-toggle'),"
+                    +"note=document.querySelector('.living-note-full summary'),"
+                    +"gesture=document.querySelector('.living-gestures .gesture'),"
+                    +"intro=document.querySelector('.living-moments-intro').getBoundingClientRect();"
+                    +"const btns=[play,note,gesture];"
+                    +"return {visible:!!root,activities:root.querySelectorAll('.living-activity-grid .action-card').length,"
+                    +"rituals:root.querySelectorAll('.living-ritual-step').length,"
+                    +"noOverflow:document.documentElement.scrollWidth<=innerWidth+3,"
+                    +"introInside:intro.left>=-2&&intro.right<=innerWidth+2,"
+                    +"touch:btns.every(b=>!!b&&b.getBoundingClientRect().height>=44),"
+                    +"audioUnknown:seek.disabled&&document.querySelector('.living-voice-time').textContent.includes('--:--'),"
+                    +"secretAbsent:!document.documentElement.innerHTML.includes('P5_SECRET_MESSAGE')"
+                    +"&&!document.documentElement.innerHTML.includes('P5_SECRET_ANSWER')};})())",20);
+                JSONObject proof=new JSONObject(state);
+                assertEquals("P5 lost activities at "+css,8,proof.getInt("activities"));
+                assertEquals("P5 lost 3 ritual moments at "+css,3,proof.getInt("rituals"));
+                assertTrue("P5 horizontal overflow at "+css+": "+state,proof.getBoolean("noOverflow"));
+                assertTrue("P5 intro cropped at "+css+": "+state,proof.getBoolean("introInside"));
+                assertTrue("P5 touch targets below 44px at "+css+": "+state,proof.getBoolean("touch"));
+                assertTrue("P5 unknown audio duration fabricated at "+css,proof.getBoolean("audioUnknown"));
+                assertTrue("P5 secret leaked at "+css,proof.getBoolean("secretAbsent"));
+                runV5Js("window.scrollTo(0,0)");
+                awaitV5QaPainted("p5-moments-"+css);
+                shell("screencap -p /sdcard/Download/V5-P5-moments-"+css+".png");
+                System.out.println("V5_P5_ANDROID_MOMENTS=css:"+css
+                    +";activities:8;ritualSteps:3;privacy:true;seekUnknown:true");
+
+                // Device WebView text zoom, not CSS font-size simulation.
+                try {
+                    scenario.onActivity(activity -> {
+                        WebView web=activity.findViewById(R.id.webView);
+                        assertNotNull("P5 requires actual Android WebView",web);
+                        web.getSettings().setTextZoom(135);
+                    });
+                    awaitJs("view==='moments' && !!document.querySelector('.living-moments')");
+                    assertEquals("P5 135% text horizontal overflow","true",
+                        js("document.documentElement.scrollWidth<=innerWidth+3"));
+                    awaitV5QaPainted("p5-text-zoom-"+css);
+                    shell("screencap -p /sdcard/Download/V5-P5-text-zoom-"+css+".png");
+                } finally {
+                    scenario.onActivity(activity -> {
+                        WebView web=activity.findViewById(R.id.webView);
+                        if(web!=null)web.getSettings().setTextZoom(100);
+                    });
+                }
+                if(css==393) {
+                    for(String theme : new String[]{"daylight","cosmic","halloween","christmas",
+                          "valentine","friendship","easter"}) {
+                        runV5Js("GalaxyTheme.applyTheme('"+theme+"');window.scrollTo(0,0)");
+                        awaitJs("document.documentElement.dataset.theme==='"+theme+"'"
+                            +" && !!document.querySelector('.living-moments')");
+                        assertEquals("P5 themed page overflow "+theme,"true",
+                            js("document.documentElement.scrollWidth<=innerWidth+3"));
+                        awaitV5QaPainted("p5-theme-"+theme);
+                        shell("screencap -p /sdcard/Download/V5-P5-theme-"+theme+".png");
+                    }
+                }
+            }
+        } finally {
+            shell("wm size reset");
+            runV5Js("document.getElementById('v5-qa-paint-marker')?.remove()");
+        }
+    }
+
     @Test public void galaxyChat_renders13Cards_pollChecklistAndSend() throws Exception {
         launchChat();
         awaitJs("document.querySelectorAll('.chat-galaxy-card').length===13");
