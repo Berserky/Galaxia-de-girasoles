@@ -205,3 +205,55 @@ test('P5C: game sessions separate current turn, waiting and played without leaks
  assert.match(game.gameCard(played),/Respuesta:/);
  assert.ok(css.includes('.living-game-options .chip{min-height:44px'));
 });
+
+const p5dSource=extract('function livingEntryMeta(e){','function voiceTimestamp(seconds){');
+function p5dCards(person=0){
+ const ctx={cloud:{person},esc:escape,attr:escape,partnerName:()=> 'Tu pareja',
+  fmtDate:x=>x};
+ return runInNewContext(p5dSource+'\n({ritualCard,sharedNoteCard})',ctx,{timeout:1200});
+}
+test('P5D: ritual has three semantic moments, truthful metadata and owner-only actions',()=>{
+ const {ritualCard}=p5dCards();
+ const own=ritualCard({id:'ritual-1',author:0,version:3,created:'2026-10-16T16:00:00Z',
+  data:{week:'2026-10-12',gratitude:'Gracias <por todo>',need:'Necesito hablar',plan:'Caminata'}});
+ assert.equal((own.match(/class="living-ritual-step"/g)||[]).length,3);
+ for(const label of ['Gracias','Necesito','Próximo plan'])assert.match(own,new RegExp('<h4>'+label+'</h4>'));
+ assert.match(own,/Gracias &lt;por todo&gt;/);
+ assert.doesNotMatch(own,/<por todo>/);
+ assert.match(own,/datetime="2026-10-16T16:00:00.000Z"/);
+ assert.match(own,/>v3</);
+ assert.match(own,/data-action="ritual-edit" data-id="ritual-1"/);
+ assert.match(own,/data-action="bond-delete" data-id="ritual-1"/);
+ assert.match(own,/<details class="living-secondary-actions">/);
+ const other=ritualCard({id:'ritual-2',author:1,data:{gratitude:'Gracias'}});
+ assert.doesNotMatch(other,/data-action="ritual-edit"|data-action="bond-delete"/);
+ assert.doesNotMatch(other,/<time|>v1</);
+});
+test('P5D: shared notes preserve long body, protect actions and never fabricate versions or dates',()=>{
+ const {sharedNoteCard}=p5dCards();
+ const long='Una nota '+ 'A'.repeat(250)+' <private>';
+ const ui=sharedNoteCard({id:'note-1',author:1,version:4,created:'2026-10-17T12:00:00Z',
+  data:{title:'Nuestro <viaje>',body:long}});
+ assert.match(ui,/Nuestro &lt;viaje&gt;/);
+ assert.doesNotMatch(ui,/<viaje>|<private>/);
+ assert.match(ui,/Leer nota completa/);
+ assert.match(ui,/class="living-note-summary"/);
+ assert.match(ui,/class="living-note-body"/);
+ assert.match(ui,/&lt;private&gt;/);
+ assert.match(ui,/>v4</);
+ assert.match(ui,/data-action="sharednote-edit" data-id="note-1"/);
+ assert.match(ui,/data-action="bond-delete" data-id="note-1"/);
+ const bad=sharedNoteCard({id:'note-2',data:{title:'Corta',body:'Sin cambios'},version:'1',created:'fecha-invalida'});
+ assert.doesNotMatch(bad,/>v1<|<time|Leer nota completa/);
+ assert.match(bad,/Sin cambios/);
+ for(const invalid of [null,0,-1,Infinity,NaN,'5'])assert.doesNotMatch(
+  sharedNoteCard({id:'x',version:invalid,data:{title:'T'}}),/>v(?:0|1|5|Infinity|NaN)</);
+});
+test('P5D: existing version-aware delete and edit contracts are not weakened',()=>{
+ assert.match(app,/if\(!e\|\|!confirm\('¿Eliminar este momento\?'\)\)return/);
+ assert.match(app,/await api\('bond-delete',\{id,version:e.version\}\)/);
+ assert.match(app,/modal.dataset.editId=entry\?\.id\|\|'';modal.dataset.version=entry\?\.version\|\|''/);
+ assert.match(css,/\.living-note-full>summary:focus-visible/);
+ assert.match(css,/\.living-note-full>summary\{[^}]*min-height:44px/);
+ assert.match(css,/@media\(prefers-reduced-motion:reduce\)\{\.living-ritual-card/);
+});

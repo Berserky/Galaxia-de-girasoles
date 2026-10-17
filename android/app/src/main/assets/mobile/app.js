@@ -1315,13 +1315,37 @@ function gameCard(e){
   (mine?'<details class="living-secondary-actions"><summary>Opciones de la partida</summary><div class="item-actions"><button class="btn small ghost" data-action="bond-delete" data-id="'+attr(e.id)+'">Eliminar</button></div></details>':'')+
   '</article>';
 }
+function livingEntryMeta(e){
+ const parts=[];
+ if(e.author!==undefined&&e.author!==null&&e.author!==''){
+  parts.push('<span>'+esc(e.author===cloud.person?'Tú':partnerName())+'</span>');
+ }
+ if(typeof e.created==='string'&&e.created.trim()){
+  const created=new Date(e.created);
+  if(Number.isFinite(created.getTime())){
+   const label=new Intl.DateTimeFormat('es-CO',{day:'numeric',month:'short',year:'numeric'}).format(created);
+   parts.push('<time datetime="'+attr(created.toISOString())+'">'+esc(label)+'</time>');
+  }
+ }
+ if(Number.isSafeInteger(e.version)&&e.version>0)parts.push('<span>v'+e.version+'</span>');
+ return parts.length?'<div class="living-entry-meta" aria-label="Información del momento">'+parts.join('<span aria-hidden="true">·</span>')+'</div>':'';
+}
 function ritualCard(e){
  const mine=e.author===cloud.person,d=e.data||{};
- return '<div class="card"><span class="badge">'+(mine?'Tu ritual':esc(partnerName()))+' · '+esc(fmtDate(d.week))+'</span><h3 style="margin-top:9px">Gracias</h3><p>'+esc(d.gratitude)+'</p><h3 style="margin-top:12px">Necesito</h3><p>'+esc(d.need)+'</p><h3 style="margin-top:12px">Próximo plan</h3><p>'+esc(d.plan)+'</p>'+(mine?'<div class="item-actions"><button class="btn small secondary" data-action="ritual-edit" data-id="'+e.id+'">Editar</button><button class="btn small ghost" data-action="bond-delete" data-id="'+e.id+'">Eliminar</button></div>':'')+'</div>';
+ const steps=[['Gracias',d.gratitude],['Necesito',d.need],['Próximo plan',d.plan]];
+ return '<article class="card living-ritual-card"><div class="living-entry-heading"><span class="badge">'+(mine?'Tu ritual':esc(partnerName()))+'</span>'+livingEntryMeta(e)+'</div>'+
+  '<h3>Ritual semanal</h3>'+(d.week?'<p class="living-ritual-week">Semana del '+esc(fmtDate(d.week))+'</p>':'')+
+  '<div class="living-ritual-moments">'+steps.map(([label,value])=>'<section class="living-ritual-step"><h4>'+label+'</h4><p>'+esc(value??'')+'</p></section>').join('')+'</div>'+
+  (mine?'<details class="living-secondary-actions"><summary>Opciones del ritual</summary><div class="item-actions"><button class="btn small secondary" data-action="ritual-edit" data-id="'+attr(e.id)+'">Editar</button><button class="btn small ghost" data-action="bond-delete" data-id="'+attr(e.id)+'">Eliminar</button></div></details>':'')+'</article>';
 }
 function sharedNoteCard(e){
- const d=e.data||{};
- return '<div class="card"><span class="badge">Compartida · v'+Number(e.version||1)+'</span><h3 style="margin-top:9px">'+esc(d.title)+'</h3><p>'+esc(d.body||'')+'</p><div class="item-actions"><button class="btn small secondary" data-action="sharednote-edit" data-id="'+e.id+'">Editar</button><button class="btn small ghost" data-action="bond-delete" data-id="'+e.id+'">Eliminar</button></div></div>';
+ const d=e.data||{},title=String(d.title??''),body=String(d.body??''),long=body.length>220;
+ const excerpt=long?body.slice(0,180).trimEnd()+'…':body;
+ return '<article class="card living-note-card"><div class="living-entry-heading"><span class="badge">Nota compartida</span>'+livingEntryMeta(e)+'</div>'+
+  '<h3>'+esc(title||'Nota sin título')+'</h3>'+
+  (long?'<p class="living-note-summary">'+esc(excerpt)+'</p><details class="living-note-full"><summary>Leer nota completa</summary><p class="living-note-body">'+esc(body)+'</p></details>':
+   '<p class="living-note-body">'+esc(body)+'</p>')+
+  '<details class="living-secondary-actions"><summary>Opciones de la nota</summary><div class="item-actions"><button class="btn small secondary" data-action="sharednote-edit" data-id="'+attr(e.id)+'">Editar</button><button class="btn small ghost" data-action="bond-delete" data-id="'+attr(e.id)+'">Eliminar</button></div></details></article>';
 }
 function voiceTimestamp(seconds){
  const s=Math.max(0,Number(seconds)||0),m=Math.floor(s/60),r=Math.floor(s%60);return m+':'+String(r).padStart(2,'0');

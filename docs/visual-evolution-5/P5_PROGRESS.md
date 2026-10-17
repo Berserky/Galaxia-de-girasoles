@@ -11,7 +11,7 @@ Epic [#160](https://github.com/Berserky/Galaxia-de-girasoles/issues/160), catál
 | **P5A** | Jerarquía inicial, jardín escénico, gestos y actividades por intención (VE-101–105,108,111–112,117,119–120) | **Primera implementación en rama, NO certificada** |
 | **P5B** | Jardín: hitos reales desbloqueados/por descubrir, etapa máxima 8, siguiente umbral auténtico; gestos con bloqueo temporal durante envío y feedback visual (VE-106,108–110,114,116) | **Implementación parcial en rama, nuevas pruebas/CI pendientes** |
 | **P5C** | Sorpresas y juegos: sobres sin filtración, separación por turno/espera/partidas jugadas, opciones secundarias y pruebas (VE-123–132) | **Implementación inicial, requiere CI del SHA y revisión visual Android** |
-| **P5D** | Ritual y notas: tres momentos semánticos, resumen, autor/versión/fecha, borrado protegido (VE-133–138) | Pendiente |
+| **P5D** | Ritual y notas: tres momentos semánticos, resumen, autor/versión/fecha, borrado protegido (VE-133–138) | **Primera implementación en rama; CI del nuevo SHA y Android P5 pendientes** |
 | **P5E** | Mensajes de voz: estados de carga, audio accesible, duración real, reproducción, evaluación visual y regresión integral (VE-139–142) | Pendiente |
 | **Transversal** | VE-118 contexto disponible y VE-122 navegación contextual | Pendiente |
 
@@ -55,3 +55,12 @@ Epic [#160](https://github.com/Berserky/Galaxia-de-girasoles/issues/160), catál
 - `galaxy-moments-v5.css`: tarjetas diferenciadas, touch targets al menos 44px para opciones, 320px en una columna, foco visible y reduced motion.
 - `tests/visual-evolution-p5.test.mjs`: pruebas de no filtración del DOM bloqueado, preservación de las rutas de botones, agrupación exhaustiva de tres estados y seguridad de la respuesta antes de jugar.
 - **No declarar PASS de P5C hasta probar el nuevo HEAD en Actions**. Pendiente revisar captura de APK real, contenido largo, perfiles de ambos usuarios, comportamiento sin datos y efectos de gestos; la prueba Node por sí sola no certifica interfaz Android.
+
+## Primera implementación P5D — 17 octubre 2026
+
+- `app.js::ritualCard`: ritual semanal distribuido en tres bloques semánticos «Gracias», «Necesito» y «Próximo plan», conservando datos y edición **solo para el autor**. La semana se muestra únicamente cuando existe.
+- `app.js::sharedNoteCard`: las notas largas (>220 caracteres) tienen resumen derivado del propio texto y expansión accesible `details/summary` que preserva **el contenido íntegro**, sin truncar la fuente. Ambos participantes mantienen el acceso a editar.
+- `livingEntryMeta` utiliza únicamente `author`, `created` y `version` disponibles y válidos; si faltan o son inválidos no se muestra una versión inventada ni una fecha falsa. `created` se presenta con `time[datetime]` y formato local.
+- Los botones de editar/eliminar pasan a «Opciones» secundarias, sin alterar rutas `data-action`. `bondDelete` sigue solicitando confirmación y enviando `{id,version}`; no se modifican backend, permisos ni persistencia.
+- CSS exclusivamente en `galaxy-moments-v5.css` con 44px para disclosures, foco visible, contenido largo sin desbordamiento y reduced motion. Pruebas VM de datos faltantes, HTML escapado, nota larga, autor y contratos destructivos en `tests/visual-evolution-p5.test.mjs`.
+- **No declarar P5D cerrada** hasta que apruebe CI del SHA nuevo y se obtengan capturas/JUnit del APK real de P5 en cuatro anchos, siete temas y escala de texto 135 %. P5E y mejoras transversales siguen pendientes.

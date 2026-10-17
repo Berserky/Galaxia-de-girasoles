@@ -97,3 +97,21 @@
 .living-game-card.played{border-color:color-mix(in srgb,var(--good) 22%,var(--border))}
 @media(max-width:359px){.living-surprises .section-head{align-items:flex-start;flex-wrap:wrap}.living-game-options{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.living-surprise-card,.living-game-card,.living-game-options>.chip{animation:none!important;transition:none!important}}
+
+/* P5D · Ritual and shared notes. Data and destructive actions remain controlled by Bond. */
+.living-ritual-card,.living-note-card{min-width:0;overflow-wrap:anywhere;padding:17px;border-radius:20px}
+.living-entry-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.living-entry-meta{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;font-size:11px;color:var(--muted);line-height:1.5}
+.living-ritual-card>h3,.living-note-card>h3{margin:13px 0 6px;font-size:17px;line-height:1.35}
+.living-ritual-week{font-size:12px;color:var(--muted);margin:0 0 12px}
+.living-ritual-moments{display:grid;gap:10px;margin-top:12px}
+.living-ritual-step{min-width:0;border:1px solid var(--border);border-radius:15px;padding:12px;background:var(--surface2)}
+.living-ritual-step h4{font-size:12px;margin:0 0 6px;color:var(--accent)}
+.living-ritual-step p,.living-note-body{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65;font-size:13px}
+.living-note-summary{margin:10px 0;color:var(--text);font-size:13px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
+.living-note-full{margin-top:9px}
+.living-note-full>summary{display:inline-flex;align-items:center;min-height:44px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;color:var(--accent);font-size:12px;cursor:pointer}
+.living-note-full[open]>.living-note-body{margin-top:10px;padding:12px;background:var(--surface2);border-radius:12px}
+.living-note-full>summary:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+@media(min-width:700px){.living-ritual-moments{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(prefers-reduced-motion:reduce){.living-ritual-card,.living-note-card,.living-note-full>summary{animation:none!important;transition:none!important}}
