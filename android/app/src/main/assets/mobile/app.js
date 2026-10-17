@@ -266,7 +266,22 @@ function relationshipClockCard(){
 function livingMomentCard(){const m=livingMoment();return '<section class="section"><button class="card living-moment" data-action="'+m.action+'" '+(m.id?'data-id="'+m.id+'"':'')+'><span class="item-icon">'+ico(m.icon)+'</span><div><p class="eyebrow">'+esc(m.label==='SE ACERCA ALGO ESPECIAL'?'PRÓXIMA FECHA':m.label)+'</p><h3>'+esc(m.title)+'</h3><p>'+esc(m.body)+'</p></div></button></section>';}
 function surpriseNotes(){return items('note').filter(x=>x.data?.surprise);}
 function surpriseUnlocked(i){const d=i.data||{};if(d.unlockType==='date')return !d.unlockDate||d.unlockDate<=cloud.today;if(d.unlockType==='place'){const own=(cloud.locations||[]).find(l=>l.person===cloud.person&&l.sharing);if(!own)return false;const km=(a,b,c,e)=>{const R=6371,p=Math.PI/180,da=(c-a)*p,dl=(e-b)*p,q=Math.sin(da/2)**2+Math.cos(a*p)*Math.cos(c*p)*Math.sin(dl/2)**2;return 2*R*Math.asin(Math.sqrt(q));};return km(Number(own.latitude),Number(own.longitude),Number(d.latitude),Number(d.longitude))*1000<=Number(d.radius||150);}return true;}
-function surpriseNotesView(){const list=surpriseNotes();return '<section class="section"><div class="section-head"><div><h2>Notas sorpresa</h2><p>Mensajes que aparecen en el momento o lugar elegido.</p></div><button class="btn small" data-action="surprise-note-new">+ Sorpresa</button></div><div class="stack">'+(list.length?list.map(i=>{const open=surpriseUnlocked(i),d=i.data||{};return '<div class="card"><span class="badge">'+(open?'Desbloqueada':'Guardada')+'</span><h3 style="margin-top:9px">'+esc(open?d.title:'Hay algo esperando para ti')+'</h3><p>'+esc(open?(d.body||''):(d.unlockType==='date'?'Se abrirá '+fmtDate(d.unlockDate):'Se abrirá al llegar al lugar elegido.'))+'</p>'+(open&&linkedVoices(i.id).length?linkedVoices(i.id).map(voiceCard).join(''):'')+(i.author===cloud.person?'<div class="item-actions"><button class="btn small secondary" data-action="voice-for-item" data-id="'+i.id+'">'+ico('mic')+' Añadir voz</button><button class="btn small ghost" data-action="item-delete" data-id="'+i.id+'">Eliminar</button></div>':'')+'</div>';}).join(''):'<div class="empty">Dejen una nota para una fecha o un lugar especial.</div>')+'</div></section>';}
+function surpriseNotesView(){
+ const list=surpriseNotes();
+ return '<section class="section living-surprises" aria-labelledby="livingSurpriseTitle"><div class="section-head"><div><p class="eyebrow">PEQUEÑOS DETALLES</p><h2 id="livingSurpriseTitle">Notas sorpresa</h2><p>Mensajes que aparecen en el momento o lugar elegido.</p></div><button class="btn small" data-action="surprise-note-new">+ Sorpresa</button></div>'+
+ '<div class="living-surprise-list">'+(list.length?list.map(i=>{
+  const open=surpriseUnlocked(i),d=i.data||{},mine=i.author===cloud.person;
+  const title=open?esc(d.title||'Una sorpresa para ti'):'Hay algo esperando para ti';
+  const hint=open?'Momento especial':d.unlockType==='date'?'Se abrirá '+esc(fmtDate(d.unlockDate)):'Se abrirá al llegar al lugar elegido.';
+  const message=open?'<p class="living-surprise-message">'+esc(d.body||'')+'</p>':'<p class="living-surprise-sealed">El contenido permanece oculto hasta su desbloqueo.</p>';
+  const voices=open?linkedVoices(i.id):[];
+  return '<article class="card living-surprise-card '+(open?'unlocked':'sealed')+'" data-surprise-id="'+attr(i.id)+'">'+
+   '<div class="living-surprise-heading"><span class="living-surprise-emblem" aria-hidden="true">'+ico(open?'mail-open':'gift')+'</span><div><span class="badge">'+(open?'Desbloqueada':'Guardada')+'</span><h3>'+title+'</h3><small>'+hint+'</small></div></div>'+message+
+   (voices.length?'<div class="living-surprise-voices">'+voices.map(voiceCard).join('')+'</div>':'')+
+   (mine?'<details class="living-secondary-actions"><summary>Opciones de esta sorpresa</summary><div class="item-actions"><button class="btn small secondary" data-action="voice-for-item" data-id="'+attr(i.id)+'">'+ico('mic')+' Añadir voz</button><button class="btn small ghost" data-action="item-delete" data-id="'+attr(i.id)+'">Eliminar</button></div></details>':'')+
+   '</article>';
+ }).join(''):'<div class="empty">Dejen una nota para una fecha o un lugar especial.</div>')+'</div></section>';
+}
 
 function cloudRenderFingerprint(data=cloud){
  if(!data)return '';
@@ -1265,20 +1280,40 @@ function momentsView(){
  '<div class="living-activity-cluster"><h3>'+ico('calendar-heart')+' Para una cita</h3><div class="grid living-activity-grid">'+actionCard('sparkles','Cita sorpresa','Tiempo, presupuesto y contexto real','surprise')+actionCard('timer','Modo Cita','Música, preguntas, fotos y recap','date-mode-open')+actionCard('dices','Ruleta de planes','Elegir entre planes pendientes','plan-roulette-open')+actionCard('list-ordered','Planificar una cita','Armar una secuencia con tiempo y presupuesto','date-planner-open')+'</div></div>'+
  '<div class="living-activity-cluster"><h3>'+ico('messages-square')+' Para conectar</h3><div class="grid living-activity-grid">'+actionCard('layers-3','Barajas de preguntas','Elegir un tema para conversar','date-question-decks')+actionCard('gamepad-2','Juego de nosotros','Adivinar lo que elegiría el otro','new-game')+actionCard('notebook-pen','Ritual semanal','Agradecer, pedir y planear','new-ritual')+actionCard('mic','Mensaje de voz','Dejar una voz para el otro','new-voice')+'</div></div></div></section>'+
  surpriseNotesView()+
- momentSection('Juego de nosotros',games,gameCard,'No hay preguntas pendientes todavía.')+
+ gameMomentsSection(games)+
  momentSection('Ritual semanal',rituals,ritualCard,'El primer ritual puede empezar esta semana.')+
  '<section class="section"><div class="section-head"><div><h2>Notas compartidas</h2><p>Los dos pueden editarlas.</p></div><button class="btn small" data-action="new-sharednote">+ Nota</button></div><div class="stack">'+(notes.length?notes.map(sharedNoteCard).join(''):'<div class="empty">Una lista, una idea, una promesa o cualquier cosa de los dos.</div>')+'</div></section>'+
  '<section class="section"><div class="section-head"><div><h2>Mensajes de voz</h2><p>Audios privados dentro de la galaxia.</p></div><button class="btn small" data-action="new-voice">+ Voz</button></div><div class="stack">'+(voices.length?voices.map(voiceCard).join(''):'<div class="empty">Todavía no hay mensajes de voz.</div>')+'</div></section>'+
  '</section>';
 }
 function momentSection(title,list,renderer,empty){return '<section class="section"><div class="section-head"><div><h2>'+esc(title)+'</h2></div></div><div class="stack">'+(list.length?list.map(renderer).join(''):'<div class="empty">'+esc(empty)+'</div>')+'</div></section>';}
+function gameMomentsSection(games){
+ if(!games.length)return momentSection('Juego de nosotros',[],gameCard,'No hay preguntas pendientes todavía.');
+ const incoming=games.filter(e=>e.author!==cloud.person&&!Object.hasOwn(e.data||{},'guess'));
+ const waiting=games.filter(e=>e.author===cloud.person&&!Object.hasOwn(e.data||{},'guess'));
+ const played=games.filter(e=>Object.hasOwn(e.data||{},'guess'));
+ return '<div class="living-game-groups">'+
+  (incoming.length?momentSection('Te toca responder',incoming,gameCard,''):'')+
+  (waiting.length?momentSection('Esperando respuesta',waiting,gameCard,''):'')+
+  (played.length?momentSection('Partidas jugadas',played,gameCard,''):'')+
+  '</div>';
+}
 function gameCard(e){
- const q=gameQuestions[e.data?.questionId]||{label:'Pregunta',options:[]},mine=e.author===cloud.person,guessed=Object.hasOwn(e.data||{},'guess');
- let body='<p>'+esc(q.label)+'</p>';
- if(mine)body+='<p class="muted" style="margin-top:8px">'+(guessed?'Respuesta: '+esc(e.data.answer)+' · '+(e.data.correct?'¡Acertó!':'No acertó esta vez'):'Tu respuesta está guardada hasta que '+esc(partnerName())+' juegue.')+'</p>';
- else if(guessed)body+='<p style="margin-top:8px"><b>Respuesta:</b> '+esc(e.data.answer)+'<br><span class="muted">Tu elección: '+esc(e.data.guess)+' · '+(e.data.correct?'Acertaste':'Esta vez no')+'</span></p>';
- else body+='<div class="chips" style="margin-top:10px">'+q.options.map(o=>'<button class="chip" data-action="game-guess" data-id="'+e.id+'" data-guess="'+attr(o)+'">'+esc(o)+'</button>').join('')+'</div>';
- return '<div class="card"><span class="badge">'+(mine?'Tu pregunta':esc(partnerName()))+'</span><h3 style="margin-top:9px">Juego de nosotros</h3>'+body+(mine?'<div class="item-actions"><button class="btn small ghost" data-action="bond-delete" data-id="'+e.id+'">Eliminar</button></div>':'')+'</div>';
+ const d=e.data||{},q=gameQuestions[d.questionId]||{label:'Pregunta',options:[]},mine=e.author===cloud.person,guessed=Object.hasOwn(d,'guess');
+ const status=guessed?'Completada':mine?'Esperando respuesta':'Tu turno';
+ let body='<p class="living-game-question">'+esc(q.label)+'</p>';
+ if(mine){
+  body+='<p class="living-game-response">'+(guessed?'Respuesta: '+esc(d.answer)+' · '+(d.correct?'¡Acertó!':'No acertó esta vez'):'Tu respuesta está guardada hasta que '+esc(partnerName())+' juegue.')+'</p>';
+ }else if(guessed){
+  body+='<p class="living-game-response"><b>Respuesta:</b> '+esc(d.answer)+'<span class="living-game-choice">Tu elección: '+esc(d.guess)+' · '+(d.correct?'Acertaste':'Esta vez no')+'</span></p>';
+ }else{
+  body+='<div class="living-game-options" role="group" aria-label="Elige una respuesta">'+
+   q.options.map(o=>'<button class="chip" data-action="game-guess" data-id="'+attr(e.id)+'" data-guess="'+attr(o)+'">'+esc(o)+'</button>').join('')+'</div>';
+ }
+ return '<article class="card living-game-card '+(guessed?'played':'pending')+'"><div class="living-game-top"><span class="badge">'+(mine?'Tu pregunta':esc(partnerName()))+'</span><span class="living-game-status">'+ico(guessed?'check-circle':mine?'hourglass':'help-circle')+' '+status+'</span></div>'+
+  '<h3>Juego de nosotros</h3>'+body+
+  (mine?'<details class="living-secondary-actions"><summary>Opciones de la partida</summary><div class="item-actions"><button class="btn small ghost" data-action="bond-delete" data-id="'+attr(e.id)+'">Eliminar</button></div></details>':'')+
+  '</article>';
 }
 function ritualCard(e){
  const mine=e.author===cloud.person,d=e.data||{};
