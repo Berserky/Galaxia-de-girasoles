@@ -46,7 +46,7 @@ test('P5A: garden illustration uses actual stage; zero, invalid and extreme stag
 
 function renderMoments(garden,entries=[]){
  const context={
-  cloud:{person:0,bond:{garden,entries}},
+  cloud:{person:0,capabilities:{chat:true},chat:{unread:3},bond:{garden,entries}},
   bondGestureCatalog:()=>[
    {id:'hug',name:'Abrazo',icon:'hand-heart',behavior:'message_haptic'},
    {id:'tap',name:'Toque',icon:'hand',behavior:'haptic'}
@@ -343,4 +343,15 @@ test('P5E: browser media events enable seeking only when actual metadata exists'
  audio.currentTime=9;media('error');
  assert.equal(status.textContent,'No se pudo cargar este audio.');
  assert.equal(button['aria-label'],'Reproducir mensaje de voz');
+});
+
+test('P5 visual: Chat is reachable from the Momentos cover without a floating overlay and narrow nav labels wrap',()=>{
+ const ui=renderMoments({stage:3,days:18,progressPct:25});
+ assert.match(ui,/class="living-moments-symbol living-moments-chat" data-action="chat-open"/);
+ assert.match(ui,/aria-label="Abrir nuestro chat, 3 mensajes sin leer"/);
+ assert.match(ui,/class="chat-fab-badge" aria-hidden="true">3<\/span>/);
+ assert.match(app,/if\(a==='chat-open'\)/);
+ assert.match(css,/body:not\(\.chat-mode\):has\(\.living-moments\) #chatFab\{display:none\}/);
+ assert.match(css,/\.living-moments-chat:focus-visible/);
+ assert.match(css,/\.bottom-nav \.nav-btn span\{white-space:normal;overflow:visible;text-overflow:clip/);
 });

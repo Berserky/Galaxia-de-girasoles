@@ -144,3 +144,9 @@
 .living-voice-toggle:focus-visible,.living-voice-seek:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 @media(max-width:359px){.living-voice-transport{gap:7px}.living-voice-player{padding:11px 9px}.living-voice-wave{gap:2px}.living-voice-wave i{width:2px;min-width:2px}}
 @media(prefers-reduced-motion:reduce){.living-voice-player,.living-voice-toggle,.living-voice-wave i{animation:none!important;transition:none!important}}
+
+/* P5 visual QA: Chat stays reachable from the cover without obscuring garden text. */
+body:not(.chat-mode):has(.living-moments) #chatFab{display:none}
+.living-moments-chat{position:relative;flex:none;min-width:44px;min-height:44px;cursor:pointer;border:1px solid var(--border)}
+.living-moments-chat:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+@media(max-width:359px){body:not(.chat-mode):has(.living-moments) .bottom-nav .nav-btn span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;text-align:center;line-height:1.05;font-size:9px}}
