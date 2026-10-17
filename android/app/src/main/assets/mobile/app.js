@@ -1357,7 +1357,25 @@ function voiceTranscriptMarkup(transcript){
 }
 function voiceCard(e){
  const d=e.data||{},mine=e.author===cloud.person,transcript=d.transcript||null;
- return '<div class="card audio-card" data-voice-id="'+attr(e.id)+'"><span class="badge">'+(mine?'Tu voz':esc(partnerName()))+'</span><h3 style="margin-top:9px">'+esc(d.title)+'</h3>'+(d.body?'<p>'+esc(d.body)+'</p>':'')+(d.audioUrl?'<audio controls preload="none" src="'+attr(d.audioUrl)+'"></audio>':'<p>El enlace de este audio necesita actualizarse.</p>')+voiceTranscriptMarkup(transcript)+(mine?'<div class="item-actions">'+(transcript?'<button class="btn small secondary" data-action="voice-transcript-delete" data-id="'+attr(e.id)+'">'+ico('captions-off')+' Eliminar transcripción</button>':'<button class="btn small secondary" data-action="voice-transcribe" data-id="'+attr(e.id)+'">'+ico('captions')+' Transcribir</button>')+'<button class="btn small ghost" data-action="bond-delete" data-id="'+attr(e.id)+'">Eliminar audio</button></div>':'')+(mine?'<p class="muted voice-ai-note">Transcribir es opcional. El audio original se mantiene aunque elimines su transcripción.</p>':'')+'</div>';
+ const player=d.audioUrl?
+  '<div class="living-voice-player">'+
+   '<div class="living-voice-transport"><button type="button" class="living-voice-toggle" data-playing="false" aria-label="Reproducir mensaje de voz" aria-pressed="false">'+
+    '<span class="living-voice-play-icon" aria-hidden="true">'+ico('play')+'</span>'+
+    '<span class="living-voice-pause-icon" aria-hidden="true">'+ico('pause')+'</span></button>'+
+    '<div class="living-voice-controls"><span class="living-voice-wave" aria-hidden="true">'+
+     Array.from({length:13},(_,i)=>'<i style="--peak:'+([11,19,28,16,34,22,31,15,25,33,17,24,12][i])+'px"></i>').join('')+
+     '</span><input type="range" class="living-voice-seek" min="0" max="100" step="1" value="0" disabled aria-label="Avanzar audio" aria-valuetext="Duración todavía no disponible"/>'+
+     '<span class="living-voice-time" aria-label="Tiempo de reproducción">0:00 / --:--</span></div></div>'+
+   '<p class="living-voice-status" role="status" aria-live="polite">Duración aún no disponible</p>'+
+   '<audio class="living-voice-audio" preload="none" src="'+attr(d.audioUrl)+'"></audio></div>':
+   '<div class="living-voice-unavailable" role="status">'+ico('audio-lines')+' Este mensaje de voz no está disponible. Actualiza su enlace.</div>';
+ return '<article class="card audio-card living-voice-card" data-voice-id="'+attr(e.id)+'"><div class="living-entry-heading"><span class="badge">'+(mine?'Tu voz':esc(partnerName()))+'</span>'+livingEntryMeta(e)+'</div>'+
+  '<h3>'+esc(d.title||'Mensaje de voz')+'</h3>'+(d.body?'<p class="living-voice-description">'+esc(d.body)+'</p>':'')+player+voiceTranscriptMarkup(transcript)+
+  (mine?'<details class="living-secondary-actions"><summary>Opciones de esta voz</summary><div class="item-actions">'+
+    (transcript?'<button class="btn small secondary" data-action="voice-transcript-delete" data-id="'+attr(e.id)+'">'+ico('captions-off')+' Eliminar transcripción</button>':
+    '<button class="btn small secondary" data-action="voice-transcribe" data-id="'+attr(e.id)+'">'+ico('captions')+' Transcribir</button>')+
+    '<button class="btn small ghost" data-action="bond-delete" data-id="'+attr(e.id)+'">Eliminar audio</button></div></details>':'')+
+  (mine?'<p class="muted voice-ai-note">Transcribir es opcional. El audio original se mantiene aunque elimines su transcripción.</p>':'')+'</article>';
 }
 
 function contextSettings(){
