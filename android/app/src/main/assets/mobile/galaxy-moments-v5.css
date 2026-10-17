@@ -56,3 +56,44 @@
 .living-garden-hito small{font-size:9px;color:var(--muted);line-height:1.35}
 .living-gestures .gesture[aria-busy="true"]{opacity:.72;cursor:progress;outline:2px solid var(--accent);outline-offset:2px}
 .living-gestures .gesture[aria-busy="true"] b:after{content:" · enviando";font-size:10px;font-weight:500;color:var(--muted)}
+
+
+/* P5C · Surprises and game sessions. No hidden surprise content in sealed markup. */
+.living-surprises .section-head{align-items:center}
+.living-surprises .section-head .btn{min-height:44px;flex-shrink:0}
+.living-surprise-list,.living-game-groups{display:grid;gap:12px;min-width:0}
+.living-surprise-card,.living-game-card{min-width:0;overflow-wrap:anywhere}
+.living-surprise-card{position:relative;padding:18px;border-radius:21px;overflow:hidden}
+.living-surprise-card:before{content:"";position:absolute;right:-40px;top:-48px;width:116px;height:116px;border-radius:50%;background:color-mix(in srgb,var(--accent) 8%,transparent);pointer-events:none}
+.living-surprise-card.sealed{background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 8%,var(--surface)),var(--surface));border:1px dashed color-mix(in srgb,var(--accent) 32%,var(--border))}
+.living-surprise-card.unlocked{background:linear-gradient(130deg,color-mix(in srgb,var(--good) 7%,var(--surface)),var(--surface))}
+.living-surprise-heading{display:flex;align-items:start;gap:12px;position:relative}
+.living-surprise-heading>div{min-width:0;flex:1}
+.living-surprise-heading .badge{display:inline-flex;margin-bottom:6px}
+.living-surprise-heading h3{margin:0 0 5px;font-size:clamp(15px,4vw,19px);line-height:1.3}
+.living-surprise-heading small{color:var(--muted);font-size:11px;line-height:1.5}
+.living-surprise-emblem{display:grid;place-items:center;flex:none;width:44px;height:44px;border-radius:16px;color:var(--accent);background:var(--soft-accent)}
+.living-surprise-emblem .ui-icon{width:23px;height:23px}
+.living-surprise-message,.living-surprise-sealed{position:relative;margin:14px 0 0;font-size:13px;line-height:1.65;white-space:pre-wrap}
+.living-surprise-sealed{color:var(--muted)}
+.living-surprise-voices{margin-top:13px}
+.living-secondary-actions{position:relative;margin-top:14px}
+.living-secondary-actions>summary{display:inline-flex;align-items:center;min-height:44px;padding:10px 12px;border:1px solid var(--border);border-radius:13px;color:var(--muted);font-size:12px;cursor:pointer}
+.living-secondary-actions[open]>summary{color:var(--text)}
+.living-secondary-actions>.item-actions{margin-top:9px}
+.living-secondary-actions>summary:focus-visible,.living-game-options>.chip:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.living-game-groups .section{margin-top:10px}
+.living-game-groups .section-head h2{font-size:17px}
+.living-game-card{padding:16px 17px;border-radius:20px}
+.living-game-top{display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap}
+.living-game-status{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:650;color:var(--accent)}
+.living-game-status .ui-icon{width:16px;height:16px}
+.living-game-card h3{font-size:13px;color:var(--muted);margin:11px 0 5px}
+.living-game-question{font-size:15px;line-height:1.5;font-weight:650;margin:0}
+.living-game-response{font-size:12px;line-height:1.6;margin:10px 0 0;color:var(--muted)}
+.living-game-choice{display:block;margin-top:5px}
+.living-game-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
+.living-game-options .chip{min-height:44px;white-space:normal;text-align:left;line-height:1.4;border-radius:12px}
+.living-game-card.played{border-color:color-mix(in srgb,var(--good) 22%,var(--border))}
+@media(max-width:359px){.living-surprises .section-head{align-items:flex-start;flex-wrap:wrap}.living-game-options{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.living-surprise-card,.living-game-card,.living-game-options>.chip{animation:none!important;transition:none!important}}
