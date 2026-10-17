@@ -10,7 +10,7 @@ Epic [#160](https://github.com/Berserky/Galaxia-de-girasoles/issues/160), catál
 |---|---|---|
 | **P5A** | Jerarquía inicial, jardín escénico, gestos y actividades por intención (VE-101–105,108,111–112,117,119–120) | **Primera implementación en rama, NO certificada** |
 | **P5B** | Jardín: hitos reales desbloqueados/por descubrir, etapa máxima 8, siguiente umbral auténtico; gestos con bloqueo temporal durante envío y feedback visual (VE-106,108–110,114,116) | **Implementación parcial en rama, nuevas pruebas/CI pendientes** |
-| **P5C** | Sorpresas y juegos: carta segura, notas desbloqueadas, resultado, sesión e historial, acciones secundarias (VE-123–132) | Pendiente |
+| **P5C** | Sorpresas y juegos: sobres sin filtración, separación por turno/espera/partidas jugadas, opciones secundarias y pruebas (VE-123–132) | **Implementación inicial, requiere CI del SHA y revisión visual Android** |
 | **P5D** | Ritual y notas: tres momentos semánticos, resumen, autor/versión/fecha, borrado protegido (VE-133–138) | Pendiente |
 | **P5E** | Mensajes de voz: estados de carga, audio accesible, duración real, reproducción, evaluación visual y regresión integral (VE-139–142) | Pendiente |
 | **Transversal** | VE-118 contexto disponible y VE-122 navegación contextual | Pendiente |
@@ -46,3 +46,12 @@ Epic [#160](https://github.com/Berserky/Galaxia-de-girasoles/issues/160), catál
 - CSS añade tarjetas de hitos con etiqueta «Logrado» o «Por descubrir», sin atenuación que impida contraste, y feedback de envío; `prefers-reduced-motion` de P5A continúa vigente.
 - `tests/visual-evolution-p5.test.mjs` comprueba stage 8, hitos backend, sanitización HTML, ausencia de umbrales inventados y estado de botón. **No declarar PASS de este HEAD nuevo hasta sus workflows propios y evidencia Android.**
 - **No cerrados aún:** VE-107 (puesta en escena emocional fina), VE-113 (identidad expresiva integral), VE-115 (configuración de gestos junto a acción), VE-116 (permisos/hápticos en flujo real), y el resto de P5C–P5E. Evitar marcar los 42 ID aprobados por la implementación preliminar.
+
+## Primera implementación P5C — 17 octubre 2026
+
+- `app.js::surpriseNotesView` pasa de tarjeta plana a sobre semántico con estado `sealed/unlocked`; las sorpresas bloqueadas **no insertan** título, cuerpo ni reproductores de voz en el DOM. No se altera `surpriseUnlocked` ni se atribuye a esta vista la autorización del backend: el servidor y su proyección privada siguen siendo autoridad sobre acceso.
+- Se mantienen las acciones existentes `surprise-note-new`, `voice-for-item` y `item-delete`, con las destructivas tras `details/summary` y su confirmación de borrado anterior intacta.
+- `app.js::gameMomentsSection` agrupa `Juego de nosotros` en «Te toca responder», «Esperando respuesta» y «Partidas jugadas» sin alterar entradas ni API. `gameCard` conserva la respuesta del otro oculta hasta jugar, las opciones originales `game-guess`, feedback de resultado y eliminación existente dentro del menú secundario.
+- `galaxy-moments-v5.css`: tarjetas diferenciadas, touch targets al menos 44px para opciones, 320px en una columna, foco visible y reduced motion.
+- `tests/visual-evolution-p5.test.mjs`: pruebas de no filtración del DOM bloqueado, preservación de las rutas de botones, agrupación exhaustiva de tres estados y seguridad de la respuesta antes de jugar.
+- **No declarar PASS de P5C hasta probar el nuevo HEAD en Actions**. Pendiente revisar captura de APK real, contenido largo, perfiles de ambos usuarios, comportamiento sin datos y efectos de gestos; la prueba Node por sí sola no certifica interfaz Android.
