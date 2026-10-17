@@ -870,6 +870,8 @@ public class GalaxyDeviceClosureTest {
                             // could be overwritten during the 135% text screenshots.
                             // Reapply ONLY synthetic QA presentation data after the
                             // read and prior to the place action, without backend writes.
+                            // Keep the synthetic destination stable across periodic QA map refreshes.
+                            backend.setQaPlaceDestinationFixture(true);
                             // Wait for pending map-state reads before injecting the QA fixture.
                             awaitJs("view==='map' && !!map && mapStateReadsInFlight===0");
                             runV5Js("mapData={...(mapData||{}),"
@@ -965,6 +967,7 @@ public class GalaxyDeviceClosureTest {
                 }
             }
         } finally {
+            backend.setQaPlaceDestinationFixture(false);
             shell("wm size reset");
             runV5Js("document.getElementById('v5-qa-paint-marker')?.remove()");
             awaitCondition(() -> Math.abs(Integer.parseInt(js(
