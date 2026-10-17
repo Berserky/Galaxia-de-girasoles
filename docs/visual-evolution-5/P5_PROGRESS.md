@@ -36,7 +36,7 @@ Epic [#160](https://github.com/Berserky/Galaxia-de-girasoles/issues/160), catál
 
 **Revert:** revertir PR de P5 en `desarrollo` si llegara a fusionarse; cambios de P5A no incluyen migraciones ni writes backend. Antes del merge basta abandonar su rama, sin tocar `desarrollo`.
 
-**Estado actual:** primera implementación P5A subida, *checks nuevos y capturas pendientes*, P5B–E no iniciadas, PR P5 debe seguir DRAFT hasta cierre.
+**Nota histórica P5A:** este estado corresponde al primer corte del 16 de octubre; para el estado verificado del HEAD vigente consultar la sección de certificación Android P5 al final. El PR permanece DRAFT hasta aceptación visual.
 
 ## Continuación P5B — 16 octubre 2026
 
@@ -72,3 +72,18 @@ Epic [#160](https://github.com/Berserky/Galaxia-de-girasoles/issues/160), catál
 - `galaxy-moments-v5.css` aplica controles con foco visible, superficie temática, 48px para play/pause, seek accesible en WebView Android, barras visuales puramente decorativas **no presentadas como forma de onda real**, ancho 320 y reduced motion.
 - `index.html` carga el controlador antes de `app.js` y `tests/visual-evolution-p5.test.mjs` suma contratos VM de duración finita/desconocida, media events y preservación de acciones, privacidad y accesibilidad.
 - **No declarar P5E PASS ni fase completa** antes de obtener 15/15 controles del HEAD final, pruebas Android WebView reales en Momentos, autorización visual explícita, rutas de audio sin conexión/reenlace temporal y regresión de los demás módulos que también usan `voiceCard`.
+
+## Certificación Android P5 — evidencia y deuda del 17 octubre 2026
+
+**Checkpoint verificado:** rama `feat/visual-evolution-5-p5-living-moments`, SHA `2289b498b37e97198147ce4007146a173ba94fc8`. **15/15 workflows GitHub Actions completados SUCCESS para ese SHA**; el workflow Camera Media [39064903726](https://github.com/Berserky/Galaxia-de-girasoles/actions/runs/39064903726) tuvo un fallo inicial de infraestructura al descargar el emulador (archivo ZIP inválido), y su **único job fallido** aprobó tras repetición específica. No extrapolar este resultado a SHA posteriores.
+
+- [V5 P0 run 39064903705](https://github.com/Berserky/Galaxia-de-girasoles/actions/runs/39064903705): Node **738/738 PASS**, AVD Android PASS y Chrome sintético PASS. Artefacto Android real **12112853219**, `v5-p0-android-unpaired-avd-evidence`.
+- JUnit Android del artefacto: **2 tests, 0 failures, 0 errors, 0 skipped**, incluidos `visualEvolutionP5_realMomentsAndroidScreens_andPrivacy` (26.293 s) y el gate P1 (139.835 s). `p1-device-summary.json` declara `p5_android_verified_by_real_instrumentation=true` y `status=VERIFIED_SYNTHETIC_QA`. Son **fixtures sintéticos**, no cuentas ni datos de pareja reales.
+- **15 PNG P5 del APK real**: cuatro `build/p0-avd/p5-moments/{320,360,393,412}.png`, cuatro `p5-text-zoom/{320,360,393,412}.png` (WebView text zoom 135 %) y siete `p5-themed-moments/{christmas,cosmic,daylight,easter,friendship,halloween,valentine}.png`. No confundirlos con capturas Chrome sintéticas.
+- **Cobertura confirmada:** portada y jardín con fixture `garden.stage=3`; el test comprueba presencia DOM de módulos inferiores, privacidad de sorpresa cerrada, objetivos táctiles y ausencia de desbordamiento horizontal. **No** certifica visualmente `stage=8` ni tarjetas de sorpresa, juego, ritual, nota larga expandida y audio: las 15 capturas fueron tomadas con scroll inicial en el encabezado.
+- **Hallazgo visual reproducible (pendiente de corrección y nuevo gate):** en `p5-text-zoom/320.png` el FAB de Chat **tapa parte del párrafo del jardín** a 135 % y la navegación inferior abrevia las etiquetas «Mome…» y «Recue…»; en `p5-moments/393.png` el FAB se superpone al extremo derecho de la tarjeta «Próximo hito». Las comprobaciones automáticas de ancho/tamaño táctil **no detectan estas colisiones visuales**. No marcar VE-107/113 ni accesibilidad como aprobadas solo por el JUnit verde. La barra cian superior visible en QA es un marcador de pintura del test, no un componente final de producto.
+- **Siguiente gate necesario:** fixture QA **opt-in** estable frente a `mobile-state`/refresh (45 s), con etapa 8, hitos y datos ficticios; capturas Android con scroll real hasta sorpresa/juego/ritual/nota/audio, foco y reduced motion, detección explícita de superposición del FAB y truncamiento de navegación a 320 px/135 %. Conservar los asserts existentes, 15 PNG anteriores y todos los gates P0–P4. Verificar capturas/JUnit del nuevo SHA antes de solicitar aprobación humana.
+
+**Bloqueo de escritura anterior:** se preparó un árbol Git para extender el gate P5 (fixture, instrumentación, script y esta documentación), pero el intento de crear ese commit fue bloqueado por controles de seguridad; **no se integró esa ampliación**. No repetir ni eludir esa operación bloqueada sin nuevas condiciones. El presente registro de evidencia no equivale a implementar el gate faltante.
+
+**Criterio de cierre:** PR #171 sigue DRAFT; no fusionar a `desarrollo` sin nueva evidencia Android de secciones inferiores/etapa 8, revisión de los 42 hallazgos VE-101–142 y aprobación visual humana explícita. Nunca promocionar a QA/producción por este checkpoint.
