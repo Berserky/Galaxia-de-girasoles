@@ -12,7 +12,7 @@ Epic [#160](https://github.com/Berserky/Galaxia-de-girasoles/issues/160), catál
 | **P5B** | Jardín: hitos reales desbloqueados/por descubrir, etapa máxima 8, siguiente umbral auténtico; gestos con bloqueo temporal durante envío y feedback visual (VE-106,108–110,114,116) | **Implementación parcial en rama, nuevas pruebas/CI pendientes** |
 | **P5C** | Sorpresas y juegos: sobres sin filtración, separación por turno/espera/partidas jugadas, opciones secundarias y pruebas (VE-123–132) | **Implementación inicial, requiere CI del SHA y revisión visual Android** |
 | **P5D** | Ritual y notas: tres momentos semánticos, resumen, autor/versión/fecha, borrado protegido (VE-133–138) | **Primera implementación en rama; CI del nuevo SHA y Android P5 pendientes** |
-| **P5E** | Mensajes de voz: estados de carga, audio accesible, duración real, reproducción, evaluación visual y regresión integral (VE-139–142) | Pendiente |
+| **P5E** | Mensajes de voz: transporte HTMLAudioElement delegado, duración/seek reales, estados de carga/error, identidad visual, teclado (VE-139–142) | **Primera implementación en rama; gate CI y evidencia Android P5 pendientes** |
 | **Transversal** | VE-118 contexto disponible y VE-122 navegación contextual | Pendiente |
 
 ## Primera implementación P5A
@@ -64,3 +64,11 @@ Epic [#160](https://github.com/Berserky/Galaxia-de-girasoles/issues/160), catál
 - Los botones de editar/eliminar pasan a «Opciones» secundarias, sin alterar rutas `data-action`. `bondDelete` sigue solicitando confirmación y enviando `{id,version}`; no se modifican backend, permisos ni persistencia.
 - CSS exclusivamente en `galaxy-moments-v5.css` con 44px para disclosures, foco visible, contenido largo sin desbordamiento y reduced motion. Pruebas VM de datos faltantes, HTML escapado, nota larga, autor y contratos destructivos en `tests/visual-evolution-p5.test.mjs`.
 - **No declarar P5D cerrada** hasta que apruebe CI del SHA nuevo y se obtengan capturas/JUnit del APK real de P5 en cuatro anchos, siete temas y escala de texto 135 %. P5E y mejoras transversales siguen pendientes.
+
+## Primera implementación P5E — 17 octubre 2026
+
+- `app.js::voiceCard` conserva tarjeta con autor, fecha/version del registro si existen, transcripción opcional y acciones `voice-transcribe` / `voice-transcript-delete` / `bond-delete` detrás de un menú secundario. El reproductor usa el `audioUrl` privado temporal existente (sin cambios de firma, consulta, backend, permisos ni storage).
+- `galaxy-voice-v5.js` es un controlador delegado único sobre `HTMLAudioElement`, sin API, almacenamiento ni temporizadores propios. Pause/play, detener otros mensajes simultáneos, `loadedmetadata`, `durationchange`, `timeupdate`, `error` y `waiting` actualizan el texto y los controles. El tiempo total se presenta `--:--` **hasta conocer la duración real finita**; si el audio no existe se muestra indisponibilidad y no un player falso; `preload=none` evita cargas anticipadas.
+- `galaxy-moments-v5.css` aplica controles con foco visible, superficie temática, 48px para play/pause, seek accesible en WebView Android, barras visuales puramente decorativas **no presentadas como forma de onda real**, ancho 320 y reduced motion.
+- `index.html` carga el controlador antes de `app.js` y `tests/visual-evolution-p5.test.mjs` suma contratos VM de duración finita/desconocida, media events y preservación de acciones, privacidad y accesibilidad.
+- **No declarar P5E PASS ni fase completa** antes de obtener 15/15 controles del HEAD final, pruebas Android WebView reales en Momentos, autorización visual explícita, rutas de audio sin conexión/reenlace temporal y regresión de los demás módulos que también usan `voiceCard`.
