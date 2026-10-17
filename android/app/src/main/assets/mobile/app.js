@@ -1210,8 +1210,8 @@ function bondGestureCatalog(){
  return [...builtins,...(catalog.custom||[])];
 }
 function bondGardenVisual(garden){
- const n=Number(garden?.stage),stage=Number.isFinite(n)?Math.max(0,Math.min(7,Math.trunc(n))):0;
- const flowers=Math.max(1,stage);
+ const n=Number(garden?.stage),stage=Number.isFinite(n)?Math.max(0,Math.min(8,Math.trunc(n))):0;
+ const flowers=Math.max(1,Math.min(7,stage));
  return '<div class="bond-garden-scene living-garden-scene" data-stage="'+stage+'" role="img" aria-label="Jardín compartido, etapa '+stage+'">'+
   '<span class="living-garden-halo" aria-hidden="true"></span>'+
   '<span class="garden-sun" aria-hidden="true">'+ico('sun')+'</span>'+
@@ -1221,8 +1221,21 @@ function bondGardenVisual(garden){
   (stage>=4?'<span class="garden-glow" aria-hidden="true">'+ico('sparkles')+'</span>':'')+'</div>';
 }
 function bondUnlockables(garden){
- const rows=garden?.unlockables||[];if(!rows.length)return'';
- return '<div class="bond-unlockables">'+rows.map(row=>'<span class="'+(row.unlocked?'unlocked':'locked')+'">'+ico(row.unlocked?'sparkles':'lock')+'<b>'+esc(row.label||'Etapa')+'</b><small>'+Number(row.days||0)+' días</small></span>').join('')+'</div>';
+ const rows=Array.isArray(garden?.milestones)&&garden.milestones.length?garden.milestones:
+  (Array.isArray(garden?.unlockables)?garden.unlockables:[]);
+ if(!rows.length)return'';
+ const allowedIcons=new Set(['sprout','leaf','flower','flower-2','footprints','armchair','sparkles','stars']);
+ const items=rows.map(row=>{
+  const unlocked=row.unlocked===true;
+  const iconName=allowedIcons.has(row.icon)?row.icon:'flower-2';
+  const days=Number(row.days),validDays=Number.isInteger(days)&&days>=0;
+  const badge=unlocked?'Logrado':'Por descubrir';
+  return '<span role="listitem" class="living-garden-hito '+(unlocked?'unlocked':'locked')+'" aria-label="'+attr(badge+': '+String(row.label||'Hito'))+'">'+
+   '<span class="living-garden-hito-icon" aria-hidden="true">'+ico(unlocked?iconName:'lock')+'</span>'+
+   '<b>'+esc(row.label||'Hito')+'</b>'+
+   '<small>'+esc(badge)+(validDays?' · '+days+' días':'')+'</small></span>';
+ });
+ return '<div class="bond-unlockables living-garden-milestones" role="list" aria-label="Hitos reales del jardín">'+items.join('')+'</div>';
 }
 function openBondGestureForm(gesture=null){
  const icons=['hand','hand-heart','heart','message-circle','sparkles','star','sun','flower-2','smile','music','coffee','map-pin','moon','bell','waves'];
@@ -1238,9 +1251,11 @@ function momentsView(){
  const games=entries.filter(x=>x.type==='game'),rituals=entries.filter(x=>x.type==='ritual'),notes=entries.filter(x=>x.type==='sharednote'),voices=entries.filter(x=>x.type==='voice');
  const garden=bond.garden||{},total=Number(garden.totalDays??garden.days??bond.totalDays??0),current=Number(garden.currentStreak??bond.currentStreak??0),record=Number(garden.recordStreak??bond.recordStreak??0);
  const rawProgress=Number(garden.progressPct),progress=Number.isFinite(rawProgress)?Math.min(100,Math.max(0,rawProgress)):0;
+ const next=garden.next&&Number.isFinite(Number(garden.next.days))&&Number(garden.next.days)>=0?
+  '<p class="living-garden-next">'+ico('flag')+' Próximo hito: '+esc(garden.next.label||'Nueva etapa')+' al llegar a '+Number(garden.next.days)+' días compartidos.</p>':'';
  const gestures=bondGestureCatalog();
  return '<section class="living-moments"><div class="living-moments-intro"><div><p class="eyebrow">MOMENTOS COMPARTIDOS</p><h2>Nuestros momentos</h2><p>Pequeñas cosas que nos acercan sin convertir el cariño en una obligación.</p></div><span class="living-moments-symbol" aria-hidden="true">'+ico('heart-handshake')+'</span></div>'+
- '<div class="card bond-garden living-garden">'+bondGardenVisual(garden)+'<div class="bond-garden-copy"><p class="eyebrow">NUESTRO JARDÍN</p><h3>Nuestro jardín · '+esc(garden.label||'Nuestro girasol')+'</h3><p>'+total+' días acumulados en los que ambos dejaron algo en la galaxia. Ese progreso nunca se reinicia.</p><div class="bond-streak-grid"><span><b>'+total+'</b><small>Días totales</small></span><span><b>'+current+'</b><small>Racha actual</small></span><span><b>'+record+'</b><small>Récord</small></span></div><div class="progress living-garden-progress" role="progressbar" aria-label="Avance de la etapa del jardín" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+progress+'"><i style="width:'+progress+'%"></i></div><p class="living-garden-caption">Etapa '+Number(garden.stage||0)+' · '+progress+'% de avance de esta etapa</p>'+bondUnlockables(garden)+'</div></div>'+
+ '<div class="card bond-garden living-garden">'+bondGardenVisual(garden)+'<div class="bond-garden-copy"><p class="eyebrow">NUESTRO JARDÍN</p><h3>Nuestro jardín · '+esc(garden.label||'Nuestro girasol')+'</h3><p>'+total+' días acumulados en los que ambos dejaron algo en la galaxia. Ese progreso nunca se reinicia.</p><div class="bond-streak-grid"><span><b>'+total+'</b><small>Días totales</small></span><span><b>'+current+'</b><small>Racha actual</small></span><span><b>'+record+'</b><small>Récord</small></span></div><div class="progress living-garden-progress" role="progressbar" aria-label="Avance de la etapa del jardín" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+progress+'"><i style="width:'+progress+'%"></i></div><p class="living-garden-caption">Etapa '+Number(garden.stage||0)+' · '+progress+'% de avance de esta etapa</p>'+next+bondUnlockables(garden)+'</div></div>'+
  '<section class="section living-gestures" aria-labelledby="livingGesturesTitle"><div class="section-head"><div><p class="eyebrow">UN GESTO PARA HOY</p><h2 id="livingGesturesTitle">Pensé en ti</h2><p>Mensajes rápidos y toques que ustedes pueden personalizar.</p></div><button class="btn small secondary" data-action="bond-gesture-manage">'+ico('settings-2')+' Personalizar</button></div><div class="gesture-grid bond-gesture-grid">'+gestures.map(g=>'<button class="gesture" data-action="bond-send-gesture" data-gesture-id="'+attr(g.id)+'"><span>'+ico(g.icon||'heart')+'</span><b>'+esc(g.name||'Gesto')+'</b><small>'+esc(g.behavior==='haptic'?'Toque háptico':g.behavior==='message_haptic'?'Mensaje + toque':'Mensaje')+'</small></button>').join('')+'</div></section>'+
  '<section class="section living-activity-section" aria-labelledby="livingActivitiesTitle"><div class="section-head"><div><p class="eyebrow">TIEMPO JUNTOS</p><h2 id="livingActivitiesTitle">¿Qué hacemos hoy?</h2><p>Elijan una experiencia según las ganas que tengan de compartir.</p></div></div><div class="living-activity-clusters">'+
  '<div class="living-activity-cluster"><h3>'+ico('calendar-heart')+' Para una cita</h3><div class="grid living-activity-grid">'+actionCard('sparkles','Cita sorpresa','Tiempo, presupuesto y contexto real','surprise')+actionCard('timer','Modo Cita','Música, preguntas, fotos y recap','date-mode-open')+actionCard('dices','Ruleta de planes','Elegir entre planes pendientes','plan-roulette-open')+actionCard('list-ordered','Planificar una cita','Armar una secuencia con tiempo y presupuesto','date-planner-open')+'</div></div>'+
@@ -3446,7 +3461,14 @@ document.addEventListener('click',async e=>{
   if(a==='item-delete'){await deleteItem(btn.dataset.id);return;}
   if(a==='mood'){await busy(()=>saveDaily('mood',btn.dataset.value),'Estado guardado.');return;}
   if(a==='gesture'){await busy(()=>sendGesture(btn.dataset.gesture));return;}
-  if(a==='bond-send-gesture'){await busy(()=>sendGesture(btn.dataset.gestureId));return;}
+  if(a==='bond-send-gesture'){
+   if(btn.disabled)return;
+   btn.disabled=true;btn.setAttribute('aria-busy','true');
+   try{await sendGesture(btn.dataset.gestureId);}
+   catch(error){toast(error.message||'No se pudo enviar el gesto.');}
+   finally{if(btn.isConnected){btn.disabled=false;btn.removeAttribute('aria-busy');}}
+   return;
+  }
   if(a==='bond-gesture-manage'){openBondGestureManager();return;}
   if(a==='bond-gesture-new'){openBondGestureForm();return;}
   if(a==='bond-gesture-edit'){const gesture=cloud?.bond?.gestures?.custom?.find(g=>String(g.id)===String(btn.dataset.id));if(gesture)openBondGestureForm(gesture);return;}
