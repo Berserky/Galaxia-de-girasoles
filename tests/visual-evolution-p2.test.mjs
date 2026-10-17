@@ -187,7 +187,7 @@ test('P2E detailed GPS card does not fabricate 0 km/h when speed is missing or i
  const fix={sharing:true,latitude:4.6,longitude:-74.1,updated_at:new Date().toISOString()};
  for(const speed of [null,undefined,'unknown',-4]){
   const markup=renderLocationDetail({...fix,speed});
-  assert.match(markup,/aria-label="Velocidad sin lectura">—<small>km\/h<\/small>/);
+  assert.match(markup,/aria-label="Velocidad sin lectura reciente">—<small>km\/h<\/small>/);
   assert.doesNotMatch(markup,/>0(?:\.0)?<small>km\/h/);
  }
  const measured=renderLocationDetail({...fix,speed:2});
@@ -207,7 +207,7 @@ test('P2E detailed GPS card refuses future/missing/stale/paused positions as liv
  assert.match(future,/Hora del dispositivo por verificar/);
  assert.doesNotMatch(future,/Caminando|>18<small>km\/h/);
  const stale=renderLocationDetail({...base,updated_at:new Date(Date.now()-30*60000).toISOString()});
- assert.match(stale,/Sin actualizar/);
+ assert.match(stale,/Ubicación histórica · hace/);
  assert.doesNotMatch(stale,/Caminando|>18<small>km\/h/);
  const paused=renderLocationDetail({...base,sharing:false});
  assert.match(paused,/Ubicación pausada/);

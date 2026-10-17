@@ -43,6 +43,9 @@ const legacySurpriseIdeas=[
 ];
 
 let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',memoriesTabsScroll=0,media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),insightsCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
+let mapImmersive=false,mapHistoryVisible=6,mapPlacesVisible=6;
+// Read-only signal for deterministic Android WebView QA; never gates GPS or user actions.
+let mapStateReadsInFlight=0;
 let toastTimer,refreshing=false,updateState={text:'La app está al día.',progress:0,busy:false},pendingVoiceDraft=null,voiceReady=false,voiceRecording=false,voiceResumeMusic=false,lastSurprise=null;
 let dateContext=null,dateContextLoadedAt=0,dateQuestionNonce=0,dateMode=null,dateModeTimer=null,dateLastExperience=null;
 let goalsState=null,goalsLoadedAt=0,goalsFilter='active';
@@ -295,31 +298,39 @@ async function refreshStateIfChanged(){
  if(before!==cloudRenderFingerprint()&&view!=='map'&&!editingNow())scheduleRender();
 }
 async function refreshMap({quiet=false,detail=false}={}){
- if(!native.paired)return;
+ if(!native.paired)return false;
+ mapStateReadsInFlight++;
  try{
-   const next=await api('map-state',{detail});
-   mapData=detail||!mapData?next:{...mapData,...next,context:{...(mapData?.context||{}),...(next?.context||{})}};
-   if(view==='map'&&!quiet)render();
-   else if(view==='map'){drawMap({fit:false});updateCoupleDistanceDom();updateEtaDom();}
- }catch(e){if(!quiet)toast(e.message);}
+  const next=await api('map-state',{detail});
+  mapData=detail||!mapData?next:{...mapData,...next,context:{...(mapData?.context||{}),...(next?.context||{})}};
+  if(view==='map'&&!quiet)render();
+  else if(view==='map'){drawMap({fit:false});updateCoupleDistanceDom();updateEtaDom();}
+  return true;
+ }catch(e){if(!quiet)toast(e.message);return false;}
+ finally{mapStateReadsInFlight--;}
 }
 
 async function refreshMapNow(){
- let gpsError='';
+ let gpsError='',requestedOwnGps=false;
  if(native.tracking&&native.locationGranted){
-  toast('Solicitando una ubicación GPS reciente…');
-  try{await GalaxyNative.call('refreshLocation');}
-  catch(e){gpsError=String(e?.message||e||'No pudimos actualizar tu GPS.');}
+  toast('Solicitando una nueva lectura GPS solo en este teléfono…');
+  try{await GalaxyNative.call('refreshLocation');requestedOwnGps=true;}
+  catch(e){gpsError=String(e?.message||e||'No pudimos solicitar tu GPS.');}
  }
- await refreshMap({quiet:true,detail:true});
+ const mapLoaded=await refreshMap({quiet:true,detail:true});
  if(view==='map')render();
+ if(!mapLoaded){toast('No fue posible consultar los datos del mapa. Revisa tu conexión.');return;}
  const distance=coupleDistanceState();
- if(distance.available)toast('Ubicaciones actualizadas.');
+ if(gpsError)toast('Mapa consultado. Tu GPS no respondió: '+gpsError);
+ else if(!native.tracking)toast('Mapa consultado. Compartir ubicación está pausado en tu teléfono.');
+ else if(!native.locationGranted)toast('Mapa consultado. Falta permiso de GPS en este teléfono.');
  else if(distance.reason==='stale')toast(staleLocationCopy(distance));
- else if(gpsError)toast(gpsError);
- else if(!native.tracking)toast('Tu ubicación está pausada. Actívala para calcular distancia y ETA.');
- else toast('Mapa actualizado. Falta una ubicación reciente del otro teléfono.');
+ else if(distance.available)toast('Mapa consultado. Distancia estimada con las ubicaciones recientes disponibles.');
+ else toast(requestedOwnGps?
+  'Solicitamos tu GPS. El GPS de tu pareja solo se actualiza desde su propio teléfono.':
+  'Mapa consultado. Falta una ubicación compartida reciente.');
 }
+
 const mediaFresh=kind=>!!media[kind]&&Date.now()-(mediaLoadedAt[kind]||0)<20*60*1000;
 async function loadMedia(kind,force=false){
  const fresh=mediaFresh(kind);
@@ -380,6 +391,7 @@ function go(next){
  const hadMap=!!mapData,previous=view;
  if(previous==='chat'&&next!=='chat'){chatRememberPosition(document.querySelector('#chatMessages'),'chat');chatMediaEngine.detach({release:true});}
  if(next==='chat'&&previous!=='chat'&&!chatInitialScroll)chatRestoreOnRender=true;
+ if(next!=='map'){mapImmersive=false;document.body.classList.remove('map-immersive-open');}
  view=next;syncChatViewportHeight();render();window.scrollTo(0,0);
  if(view==='map'&&hadMap)refreshMap({quiet:true,detail:false});
 }
@@ -408,7 +420,9 @@ function render(){
  if(currentMemoriesTabs)memoriesTabsScroll=currentMemoriesTabs.scrollLeft;
  const themeState=window.GalaxyTheme?.applyTheme(window.GalaxyTheme.getChoice());
  syncSystemTheme(themeState);
+ if(view!=='map')mapImmersive=false;
  document.body.classList.toggle('chat-mode',native.paired&&view==='chat'&&!shouldShowAdriWelcome());
+ document.body.classList.toggle('map-immersive-open',native.paired&&view==='map'&&mapImmersive);
  renderNav();
  renderChatFab();
  if(!native.paired){renderOnboarding();refreshIcons();return;}
@@ -773,8 +787,15 @@ function coupleDistanceLocations(){
  return rows;
 }
 function locationAgeMs(location){const t=Date.parse(location?.updated_at||'');return Number.isFinite(t)?Math.max(0,Date.now()-t):Infinity;}
+function mapLocationValid(location){
+ if(location?.latitude==null||location?.longitude==null)return false;
+ if(typeof location.latitude==='string'&&!location.latitude.trim())return false;
+ if(typeof location.longitude==='string'&&!location.longitude.trim())return false;
+ const lat=Number(location.latitude),lon=Number(location.longitude);
+ return Number.isFinite(lat)&&Number.isFinite(lon)&&Math.abs(lat)<=90&&Math.abs(lon)<=180;
+}
 function locationFreshState(location,freshMs=10*60*1000){
- return !!location?.sharing&&Number.isFinite(Number(location?.latitude))&&Number.isFinite(Number(location?.longitude))&&locationAgeMs(location)<=freshMs;
+ return !!location?.sharing&&mapLocationValid(location)&&locationAgeMs(location)<=freshMs;
 }
 function ageDurationLabel(age){
  const ms=Math.max(0,Number(age)||0),min=Math.floor(ms/60000);
@@ -798,6 +819,21 @@ function coupleDistanceState(){
 }
 function coupleDistanceCard({mapMode=false}={}){
  const state=coupleDistanceState(),title='Distancia entre '+myName()+' y '+partnerName();
+ if(mapMode){
+  const available=!!state.available,stale=state.reason==='stale',mood=state.mood||{};
+  const distance=available?window.GalaxyDistance.formatDistance(state.meters):
+   (stale?'Ubicación histórica':'Distancia no disponible');
+  const age=available?distanceAgeLabel(state.updated_at):'';
+  const explanation=available?(mood.copy||'Distancia calculada en línea recta, no por calles.'):
+   (stale?staleLocationCopy(state):'Ambos deben compartir una ubicación reciente para calcular la distancia.');
+  return '<section class="section"><div class="card journey-distance '+(available?'':'unavailable')+'" id="coupleDistanceCard">'+
+   '<span class="couple-distance-icon">'+ico(available?'navigation':stale?'clock':'map-pin-off')+'</span>'+
+   '<div class="journey-distance-main"><p class="eyebrow">'+esc(title.toUpperCase())+'</p>'+
+   '<strong>'+esc(distance)+'</strong><small>'+esc(available?(age+' · distancia en línea recta'):'Sin ubicaciones recientes suficientes')+'</small></div>'+
+   (available?'<button class="btn small secondary" data-action="couple-distance-focus">'+ico('navigation')+' Ver ambos</button>':'')+
+   '<details class="journey-distance-details"><summary>'+ico('info')+' Cómo se calcula</summary><p>'+esc(explanation)+'</p></details>'+
+   '</div></section>';
+ }
  if(!state.available){
    const stale=state.reason==='stale',copy=stale?staleLocationCopy(state):'Ambos deben compartir una ubicación reciente para calcular la distancia.';
    return '<section class="section"><div class="card couple-distance unavailable" id="coupleDistanceCard"><span class="couple-distance-icon">'+ico(stale?'refresh-cw':'map-pin')+'</span><div><p class="eyebrow">'+esc(title.toUpperCase())+'</p><h3>'+(stale?'Esperando una ubicación reciente':'Distancia no disponible')+'</h3><p>'+esc(copy)+'</p></div>'+(mapMode?'<button class="btn small ghost" data-action="map-refresh">'+ico('refresh-cw')+' Actualizar GPS</button>':'<button class="btn small ghost" data-action="couple-distance-map">'+ico('map-pin')+' Abrir mapa</button>')+'</div></section>';
@@ -812,7 +848,7 @@ function updateCoupleDistanceDom(){
  refreshIcons();
 }
 function focusCoupleOnMap(){
- const rows=coupleDistanceLocations().filter(l=>l.sharing&&Number.isFinite(Number(l.latitude))&&Number.isFinite(Number(l.longitude)));
+ const rows=coupleDistanceLocations().filter(l=>l.sharing&&mapLocationValid(l));
  if(!map||rows.length<2)return;
  map.fitBounds(rows.map(l=>[Number(l.latitude),Number(l.longitude)]),{maxZoom:16});
 }
@@ -838,15 +874,38 @@ function etaCard(){
  }
  const modeIcon=e.mode==='walking'?'person-standing':e.mode==='motorcycle'?'bike':e.mode==='transit'?'bus-front':'navigation';
  const distance=window.GalaxyDistance?.formatDistance(e.meters)||fmtDistance(e.meters),eta=window.GalaxyEta.etaLabel(e.seconds);
- const source=e.speed_source==='live'?'con tu velocidad actual':'con ritmo estimado';
+ const source=e.speed_source==='live'?'tu velocidad actual':'un ritmo estimado';
  const targetNote=e.target_moving?' · el destino también está en movimiento':'';
- return '<section class="section"><div class="card eta-card '+(e.arrived?'arrived':'')+'" id="etaCard"><span class="eta-icon">'+ico(e.arrived?'map-pin-check':modeIcon)+'</span><div class="eta-main"><p class="eyebrow">ETA HACIA '+esc(String(e.label||'DESTINO').toUpperCase())+'</p><div class="eta-value"><strong>'+esc(eta)+'</strong><span>'+esc(distance)+'</span></div><p>'+esc(e.arrived?'Ya estás en el destino.':'Llegarías aproximadamente '+e.mode_label+', '+source+'.')+'</p><small>ETA = tiempo estimado de llegada. Se calcula con distancia geográfica, tu modo de movimiento y velocidad'+esc(targetNote)+'. No reemplaza navegación vial.</small></div><div class="eta-actions">'+(contextSession()?.id?'<button class="btn small secondary" data-action="galaxy-share" data-card-type="ETA" data-kind="context_session" data-id="'+attr(contextSession().id)+'" data-title="'+attr(contextSession().label||'Acompáñame')+'">'+ico('send')+' Chat</button>':'')+'<button class="btn small secondary" data-action="eta-focus">'+ico('crosshair')+' Ver ambos</button><button class="btn small ghost" data-action="destination">'+ico('shuffle')+' Cambiar destino</button></div></div></section>';
+ return '<section class="section"><div class="card eta-card '+(e.arrived?'arrived':'')+'" id="etaCard"><span class="eta-icon">'+ico(e.arrived?'map-pin-check':modeIcon)+'</span><div class="eta-main"><p class="eyebrow">ETA HACIA '+esc(String(e.label||'DESTINO').toUpperCase())+'</p><div class="eta-value"><strong>'+esc(eta)+'</strong><span>'+esc(distance)+'</span></div><p>'+esc(e.arrived?'Ya estás en el destino.':'Si sigues '+e.mode_label+', el trayecto podría tardar '+eta.replace('≈ ','')+' según '+source+'.')+'</p><small>ETA = tiempo estimado de llegada. Se calcula con distancia geográfica, tu modo de movimiento y velocidad'+esc(targetNote)+'. No reemplaza navegación vial.</small></div><div class="eta-actions">'+(contextSession()?.id?'<button class="btn small secondary" data-action="galaxy-share" data-card-type="ETA" data-kind="context_session" data-id="'+attr(contextSession().id)+'" data-title="'+attr(contextSession().label||'Acompáñame')+'">'+ico('send')+' Chat</button>':'')+'<button class="btn small secondary" data-action="eta-focus">'+ico('crosshair')+' Ver ambos</button><button class="btn small ghost" data-action="destination">'+ico('shuffle')+' Cambiar destino</button></div></div></section>';
 }
 function updateEtaDom(){
  const current=document.querySelector('#etaCard');if(!current)return;
  const wrapper=document.createElement('div');wrapper.innerHTML=etaCard();
  const next=wrapper.querySelector('#etaCard');if(next)current.replaceWith(next);
  refreshIcons();
+}
+function focusSavedPlaceOnMap(point){
+ if(!map||!mapLocationValid(point))return false;
+ const lat=Number(point.latitude),lon=Number(point.longitude),targetMap=map;
+ // Only focus an actual saved place. Do not open a marker for an arbitrary
+ // coordinate or accidentally act on a newly replaced map instance.
+ const places=targetMap.markers.filter(marker=>(marker.className||'').split(' ').includes('place'));
+ const index=places.findIndex(marker=>Math.abs(marker.lat-lat)<1e-6&&Math.abs(marker.lon-lon)<1e-6);
+ if(index<0)return false;
+ targetMap.setView([lat,lon],16);
+ requestAnimationFrame(()=>{
+  if(map!==targetMap||view!=='map')return;
+  // A ResizeObserver or deferred frame may have replaced the marker DOM.
+  // Rebuild synchronously at the requested center; GalaxyMap now preserves
+  // popup/focus state through subsequent render frames.
+  targetMap.render();
+  const buttons=[...document.querySelectorAll('#map .gmap-marker.place button')];
+  const button=buttons[index],marker=places[index];
+  if(!button)return;
+  if(!marker.open)button.click();
+  button.focus({preventScroll:true});
+ });
+ return true;
 }
 function focusEtaOnMap(){
  const e=etaState();if(!e.available||!map)return;
@@ -979,13 +1038,26 @@ function dailyQuestionCard(own,partner){
 function personCard(l){
  const name=names()[Number(l.person)]||'Nosotros',sharing=!!l.sharing,mine=String(l.person)===String(cloud.person);
  const timestamp=Date.parse(l.updated_at||'');
- const hasFix=l.latitude!=null&&l.longitude!=null&&Number.isFinite(timestamp)&&timestamp<=Date.now()+60_000;
+ const hasFix=mapLocationValid(l)&&Number.isFinite(timestamp)&&timestamp<=Date.now()+60_000;
  const fresh=hasFix&&locationFreshState(l);
  const speed=l.speed==null?NaN:Number(l.speed);
  const kmh=fresh&&Number.isFinite(speed)&&speed>=0?speed*3.6:null;
- const state=!sharing?'Ubicación pausada':!hasFix?(timestamp>Date.now()+60_000?'Hora del dispositivo por verificar':'Sin lectura GPS reciente'):fresh?(esc(transportLabel(l))+(l.status?' · '+esc(l.status):'')):'Sin actualizar · hace '+ageDurationLabel(locationAgeMs(l));
+ const state=!sharing?'Ubicación pausada':!hasFix?
+  (timestamp>Date.now()+60_000?'Hora del dispositivo por verificar':'Sin lectura GPS reciente'):
+  fresh?(transportLabel(l)+(l.status?' · '+l.status:'')):
+  'Ubicación histórica · hace '+ageDurationLabel(locationAgeMs(l));
  const statusAction=l.status?'<button class="btn small secondary" data-action="'+(mine?'galaxy-share':'status-chat-reply')+'" '+(mine?'data-card-type="STATUS" data-kind="status" ':'')+'data-id="'+attr(l.person)+'" data-title="'+attr(l.status)+'">'+ico(mine?'send':'message-circle-reply')+' '+(mine?'Compartir estado':'Responder en Galaxy Chat')+'</button>':'';
- return '<div class="card person-card '+(sharing&&!fresh?'stale':'')+'"><div class="bubble">'+esc(name.slice(0,1))+'</div><div><b><span class="status-dot '+(fresh?'live':sharing?'stale':'')+'"></span>'+esc(name)+'</b><p>'+state+'</p>'+statusAction+'</div><div class="speed"'+(kmh===null?' aria-label="Velocidad sin lectura"':'')+'>'+(kmh===null?'—':kmh.toFixed(kmh<10?1:0))+'<small>km/h</small></div></div>';
+ return '<details class="card person-card journey-person '+(sharing&&!fresh?'stale':'')+'">'+
+  '<summary class="journey-person-summary"><span class="bubble">'+esc(name.slice(0,1))+'</span>'+
+  '<span class="journey-person-heading"><b><span class="status-dot '+(fresh?'live':sharing?'stale':'')+'"></span>'+esc(name)+'</b>'+
+  '<small>'+esc(state)+'</small></span>'+
+  '<span class="journey-person-chevron">'+ico('chevron-down')+'</span></summary>'+
+  '<div class="journey-person-details"><div class="journey-speed"><span>Velocidad aproximada</span>'+
+  '<strong class="speed"'+(kmh===null?' aria-label="Velocidad sin lectura reciente"':'')+'>'+
+  (kmh===null?'—':kmh.toFixed(kmh<10?1:0))+'<small>km/h</small></strong></div>'+
+  (statusAction?'<div class="journey-person-actions">'+statusAction+'</div>':'')+
+  '<p class="muted">'+esc(mine?'Datos enviados únicamente desde tu dispositivo cuando compartes ubicación.':
+  'Solo este teléfono puede consultar la última lectura compartida; no controla el GPS de la otra persona.')+'</p></div></details>';
 }
 function transportLabel(l){
  if(!l.sharing)return'Ubicación pausada';
@@ -1207,14 +1279,29 @@ function contextSession(){
  return mapData?.context?.session||null;
 }
 function contextEnginePanel(){
- const s=contextSettings(),session=contextSession(),distance=Number(s.near_distance_m||300),cooldown=Number(s.near_cooldown_minutes||60);
- const sessionTitle=session?.mode==='return_home'?'Regreso a casa':'Acompáñame 2.0';
- const sessionBlock=session?'<div class="context-session"><div class="row between"><div><p class="eyebrow">'+esc(sessionTitle.toUpperCase())+'</p><h3>'+esc(session.label||'Destino')+'</h3></div><span class="badge good">Activo</span></div><div class="context-progress"><i style="width:'+Math.max(0,Math.min(100,Number(session.progress_pct||0)))+'%"></i></div><div class="context-metrics"><span><b>'+Math.max(0,Math.min(100,Number(session.progress_pct||0)))+'%</b><small>progreso</small></span><span><b>'+(session.last_distance_m==null?'—':esc(fmtDistance(session.last_distance_m)))+'</b><small>restante</small></span><span><b>'+(session.last_eta_s==null?'—':esc(fmtDuration(session.last_eta_s)))+'</b><small>ETA</small></span></div><button class="btn small secondary" data-action="galaxy-share" data-card-type="ETA" data-kind="context_session" data-id="'+attr(session.id)+'" data-title="'+attr(session.label||'Acompáñame')+'">'+ico('send')+' Galaxy Chat</button><button class="btn small ghost" data-action="context-session-stop">'+ico('square')+' Terminar sesión</button></div>':'<div class="context-session empty-session"><span>'+ico('route')+'</span><div><b>Sin sesión activa</b><small>Acompáñame y Regreso solo funcionan cuando tú los inicias.</small></div></div>';
- return '<section class="section context-engine"><div class="section-head"><div><p class="eyebrow">Contexto compartido</p><h2>Contexto, sin diez GPS distintos</h2><p>Una sola capa interpreta proximidad, lugares, encuentros, recorridos y llegadas.</p></div></div>'+
- '<div class="grid context-controls"><div class="card"><div class="row between"><div><h3>Estamos cerca</h3><p>Aviso opcional cuando ambos comparten ubicación y entran en tu radio.</p></div><span class="badge '+(s.near_enabled?'good':'')+'">'+(s.near_enabled?'Activo':'Apagado')+'</span></div><p class="context-detail">'+distance+' m · cooldown '+cooldown+' min</p><button class="btn small '+(s.near_enabled?'secondary':'')+'" data-action="context-near-toggle">'+ico(s.near_enabled?'bell-off':'bell')+' '+(s.near_enabled?'Desactivar':'Activar')+'</button></div>'+
- '<div class="card"><div class="row between"><div><h3>Llegué bien</h3><p>Solo avisa al otro al alcanzar un destino de Acompáñame/Regreso.</p></div><span class="badge '+(s.arrived_safe_enabled?'good':'')+'">'+(s.arrived_safe_enabled?'Activo':'Apagado')+'</span></div><button class="btn small '+(s.arrived_safe_enabled?'secondary':'')+'" data-action="context-arrived-toggle">'+ico(s.arrived_safe_enabled?'bell-off':'shield-check')+' '+(s.arrived_safe_enabled?'Desactivar':'Activar')+'</button></div></div>'+
- sessionBlock+
- '<div class="row wrap context-actions"><button class="btn secondary" data-action="destination">'+ico('navigation')+' Acompáñame 2.0</button><button class="btn secondary" data-action="context-return-home">'+ico('house')+' Regreso a casa</button><button class="btn ghost" data-action="context-settings-open">'+ico('settings-2')+' Preferencias</button></div></section>';
+ const s=contextSettings(),session=contextSession(),distance=Number(s.near_distance_m||300);
+ const progress=window.GalaxyJourneysV5?.sessionProgress(session?.progress_pct);
+ const cooldown=window.GalaxyJourneysV5?.cooldownCopy(s.near_cooldown_minutes)||'Intervalo entre avisos';
+ const preference=value=>window.GalaxyJourneysV5?.alertPreference(value===true)||(value?'Configurado':'No configurado');
+ const sessionTitle=session?.mode==='return_home'?'Regreso a casa':'Acompáñame';
+ const own=(mapData?.locations||cloud?.locations||[]).find(l=>String(l.person)===String(cloud.person));
+ const signal=window.GalaxyJourneysV5?.freshness(own);
+ const signalCopy=signal?.kind==='fresh'?'Ubicación reciente disponible para acompañarte.':
+  'La información de ubicación puede estar pausada o desactualizada. Las estimaciones no son en tiempo real.';
+ const sessionBlock=session?'<div class="context-session journey-active-session"><div class="row between"><div><p class="eyebrow">RECORRIDO INICIADO POR TI · '+esc(sessionTitle.toUpperCase())+'</p><h3>'+esc(session.label||'Destino')+'</h3></div><span class="badge good">Sesión en curso</span></div>'+
+  '<p class="journey-session-hint">'+esc(signalCopy)+'</p>'+
+  '<div class="context-progress" role="progressbar" aria-label="Progreso aproximado del recorrido" aria-valuemin="0" aria-valuemax="100" '+(progress===null?'aria-valuetext="Progreso no disponible"':'aria-valuenow="'+progress+'"')+'><i style="width:'+(progress===null?0:progress)+'%"></i></div>'+
+  '<div class="context-metrics"><span><b>'+(progress===null?'—':progress+'%')+'</b><small>progreso estimado</small></span><span><b>'+(session.last_distance_m==null?'—':esc(fmtDistance(session.last_distance_m)))+'</b><small>restante estimado</small></span><span><b>'+(session.last_eta_s==null?'—':esc(fmtDuration(session.last_eta_s)))+'</b><small>llegada estimada</small></span></div>'+
+  '<div class="journey-session-actions"><button class="btn small secondary" data-action="galaxy-share" data-card-type="ETA" data-kind="context_session" data-id="'+attr(session.id)+'" data-title="'+attr(session.label||'Acompáñame')+'">'+ico('send')+' Compartir en chat</button><button class="btn small ghost" data-action="context-session-stop">'+ico('square')+' Terminar sesión</button></div></div>':
+  '<div class="context-session empty-session"><span>'+ico('route')+'</span><div><b>Sin recorrido acompañado</b><small>Solo se inicia cuando eliges Acompáñame o Regreso a casa.</small></div></div>';
+ return '<section class="section context-engine journey-context"><div class="section-head"><div><p class="eyebrow">ACOMPAÑAMIENTO</p><h2>Journey Companion</h2><p>Un lugar para tu recorrido y los avisos opcionales.</p></div></div>'+
+  sessionBlock+
+  '<div class="row wrap context-actions"><button class="btn secondary" data-action="destination">'+ico('navigation')+' '+(session?'Cambiar destino':'Acompáñame')+'</button><button class="btn secondary" data-action="context-return-home">'+ico('house')+' Regreso a casa</button></div>'+
+  '<details class="journey-alerts" id="journeyAlerts"><summary class="journey-alerts-summary"><span class="journey-alerts-icon">'+ico('bell-ring')+'</span><span><b>Avisos y preferencias</b><small>Estamos cerca: '+esc(preference(s.near_enabled))+' · Llegué bien: '+esc(preference(s.arrived_safe_enabled))+'</small></span>'+ico('chevron-down')+'</summary>'+
+  '<div class="journey-alerts-content"><p class="journey-alert-explainer">Configurado no significa entregado. Los avisos dependen del GPS compartido, los permisos y la conexión de cada teléfono.</p>'+
+  '<div class="grid context-controls"><div class="card"><div class="row between"><div><h3>Estamos cerca</h3><p>Aviso opcional de proximidad cuando ambos teléfonos comparten ubicación reciente.</p></div><span class="badge">'+esc(preference(s.near_enabled))+'</span></div><p class="context-detail">'+esc(distance)+' m · '+esc(cooldown)+'</p><button class="btn small '+(s.near_enabled?'secondary':'')+'" data-action="context-near-toggle">'+ico(s.near_enabled?'bell-off':'bell')+' '+(s.near_enabled?'Desactivar aviso':'Configurar aviso')+'</button></div>'+
+  '<div class="card"><div class="row between"><div><h3>Llegué bien</h3><p>Solo para una sesión iniciada por ti, si la app detecta llegada a su destino.</p></div><span class="badge">'+esc(preference(s.arrived_safe_enabled))+'</span></div><button class="btn small '+(s.arrived_safe_enabled?'secondary':'')+'" data-action="context-arrived-toggle">'+ico(s.arrived_safe_enabled?'bell-off':'shield-check')+' '+(s.arrived_safe_enabled?'Desactivar aviso':'Configurar aviso')+'</button></div></div>'+
+  '<button class="btn small ghost" data-action="context-settings-open">'+ico('settings-2')+' Personalizar avisos</button></div></details></section>';
 }
 function contextSuggestionsView(){
  const list=mapData?.context?.suggestions||[];if(!list.length)return'';
@@ -1242,17 +1329,52 @@ function renderContextRecapMap(recap){
  const last=coords[coords.length-1];mini.addMarker({lat:last[0],lon:last[1],icon:'flag',popup:'Final'});
  mini.fitBounds(coords,{maxZoom:16});
 }
+function journeyPresenceSummary(){
+ const rows=mapData?.locations?.length?mapData.locations:(cloud?.locations||[]);
+ return window.GalaxyJourneysV5?.renderPresence(rows,cloud?.person,names(),{esc,ico})||'';
+}
+function toggleImmersiveMap(open=!mapImmersive){
+ const panel=document.getElementById('journeyMapWrap');
+ if(!panel||view!=='map')return;
+ mapImmersive=!!open;
+ panel.classList.toggle('immersive',mapImmersive);
+ document.body.classList.toggle('map-immersive-open',mapImmersive);
+ const control=panel.querySelector('[data-action="map-immersive-toggle"]');
+ if(control){
+  control.setAttribute('aria-pressed',String(mapImmersive));
+  control.setAttribute('aria-label',mapImmersive?'Cerrar mapa ampliado':'Ampliar mapa');
+  control.innerHTML=ico(mapImmersive?'minimize':'maximize')+
+   (mapImmersive?' Cerrar mapa':' Ver mapa completo');
+  refreshIcons();
+  control.focus({preventScroll:true});
+ }
+ map?.scheduleRender?.();
+}
+document.addEventListener('keydown',e=>{
+ if(e.key==='Escape'&&mapImmersive&&!modal.open)toggleImmersiveMap(false);
+});
 function mapView(){
  const own=(cloud.locations||[]).find(l=>l.person===cloud.person)||{},partner=(cloud.locations||[]).find(l=>l.person!==cloud.person)||{};
- return '<section><div class="section-head"><div><p class="eyebrow">NUESTRO MAPA</p><h2>Acompañarnos</h2><p>Ubicación voluntaria, recorridos y lugares importantes.</p></div><button class="btn small secondary" data-action="map-refresh">Actualizar</button></div>'+
- '<div class="map-wrap"><div id="map"></div><button class="map-fab" data-action="status-menu" aria-label="Estado rápido">'+ico('sparkles')+'</button><div id="statusMenu" class="map-status-menu">'+['Ya voy','Voy bien','Llegué','En camino','Necesito una pausa'].map(s=>'<button data-action="status-set" data-status="'+attr(s)+'">'+esc(s)+'</button>').join('')+'<button data-action="status-custom">Otro…</button></div></div>'+
- '<div class="grid" style="margin-top:12px">'+personCard(own)+personCard(partner)+'</div>'+coupleDistanceCard({mapMode:true})+etaCard()+
- '<div class="section"><div class="card"><div class="row between"><div><h3>Compartir ubicación</h3><p>'+(native.tracking?'Android la mantiene activa en segundo plano.':'Está detenida en este teléfono.')+'</p></div><span class="badge '+(native.tracking?'good':'')+'">'+(native.tracking?'Activa':'Pausada')+'</span></div><div class="row wrap" style="margin-top:14px"><button class="btn small" data-action="'+(native.tracking?'location-stop':'location-start')+'">'+(native.tracking?'Detener':'Comenzar')+'</button><button class="btn small secondary" data-action="app-settings">Permisos</button></div></div></div>'+
- '<div class="section"><div class="card"><h3>Cómo me muevo normalmente</h3><p>Ayuda a interpretar cuando Android detecta que vas en vehículo.</p><div class="chips" style="margin-top:12px">'+
- ['','motorcycle','transit'].map(value=>'<button class="chip '+((own.transport_preference||'')===value?'active':'')+'" data-action="transport-set" data-value="'+value+'">'+ico(value==='motorcycle'?'bike':value==='transit'?'bus-front':'navigation')+(value==='motorcycle'?'Moto':value==='transit'?'Transporte público':'Automático')+'</button>').join('')+
+ return '<section><div class="section-head"><div><p class="eyebrow">NUESTRO MAPA</p><h2>Acompañarnos</h2><p>Ubicación voluntaria y recorridos. Consultar el mapa solo solicita GPS de este teléfono si ya compartes ubicación; el otro teléfono envía sus propias lecturas.</p></div><button class="btn small secondary" data-action="map-refresh">Consultar mapa</button></div>'+
+ '<div class="map-wrap journey-map-region'+(mapImmersive?' immersive':'')+'" id="journeyMapWrap" role="region" aria-label="Mapa interactivo de nuestra galaxia"><div id="map"></div><button type="button" class="map-immersive-toggle" data-action="map-immersive-toggle" aria-pressed="'+String(mapImmersive)+'" aria-label="'+(mapImmersive?'Cerrar mapa ampliado':'Ampliar mapa')+'">'+ico(mapImmersive?'minimize':'maximize')+(mapImmersive?' Cerrar mapa':' Ver mapa completo')+'</button><button class="map-fab" data-action="status-menu" aria-label="Estado rápido" aria-expanded="false" aria-controls="statusMenu">'+ico('sparkles')+'</button><div id="statusMenu" class="map-status-menu">'+['Ya voy','Voy bien','Llegué','En camino','Necesito una pausa'].map(s=>'<button data-action="status-set" data-status="'+attr(s)+'">'+esc(s)+'</button>').join('')+'<button data-action="status-custom">Otro…</button></div></div>'+
+ (visibleTrailSegments().length?
+  '<div class="journey-map-legend" role="note" aria-label="Significado de líneas del mapa">'+
+  (visibleTrailSegments().some(t=>t.active)?'<span><i class="journey-route-line active"></i> Recorrido en curso registrado</span>':'')+
+  '<span><i class="journey-route-line mine"></i> Recorrido registrado propio</span>'+
+  '<span><i class="journey-route-line partner"></i> Recorrido registrado de pareja</span>'+
+  '<small>Los tramos separados no se conectan; un destino elegido no representa una ruta vial calculada.</small></div>':'')+
+ journeyPresenceSummary()+
+ '<div class="grid" style="margin-top:12px">'+personCard(own)+personCard(partner)+'</div>'+
+ '<section class="journey-companion" aria-label="Distancia y llegada"><div class="journey-companion-head"><h2>Journey Companion</h2><p>Distancia y tiempo estimado de llegada, solo con ubicaciones compartidas válidas y recientes.</p></div>'+coupleDistanceCard({mapMode:true})+etaCard()+'</section>'+
+ '<section class="section journey-sharing"><div class="card journey-sharing-card"><div class="row between"><div><h3>Compartir mi ubicación</h3><p>'+(native.tracking?'Activada únicamente en este teléfono; Android puede mantenerla en segundo plano.':'Pausada en este teléfono. No cambia la ubicación de tu pareja.')+'</p></div><span class="badge '+(native.tracking?'good':'')+'">'+(native.tracking?'Activa':'Pausada')+'</span></div><div class="journey-sharing-actions"><button class="btn small '+(native.tracking?'danger':'secondary')+'" data-action="'+(native.tracking?'location-stop':'location-start')+'">'+ico(native.tracking?'map-pin-off':'map-pin')+' '+(native.tracking?'Detener mi ubicación':'Comenzar a compartir')+'</button></div><details class="journey-permissions-row"><summary aria-label="Ver opciones de privacidad y permisos">'+ico('settings-2')+' Permisos y privacidad</summary><div class="journey-permissions-content"><span>'+ico('shield-check')+' Los permisos se gestionan por separado.</span><button class="btn small ghost" data-action="app-settings">Permisos Android</button></div></details></div></section>'+
+ '<div class="section"><div class="card"><h3>Cómo me muevo normalmente</h3><p>Ayuda a interpretar cuando Android detecta que vas en vehículo.</p><div class="chips journey-mobility" role="group" aria-label="Modo de transporte habitual" style="margin-top:12px">'+
+ ['','motorcycle','transit'].map(value=>'<button class="chip '+((own.transport_preference||'')===value?'active':'')+'" data-action="transport-set" data-value="'+value+'" aria-pressed="'+String((own.transport_preference||'')===value)+'">'+ico(value==='motorcycle'?'bike':value==='transit'?'bus-front':'navigation')+(value==='motorcycle'?'Moto':value==='transit'?'Transporte público':'Automático')+'</button>').join('')+
  '</div></div></div>'+
  contextEnginePanel()+
- '<div class="section"><div class="grid">'+actionCard('route',own.trip_active?'Terminar recorrido':'Iniciar recorrido',own.trip_active?'Guardaremos el resumen al finalizar':'Registra distancia, duración y movimiento','trip-toggle')+actionCard('map-pin','Guardar este lugar','Casa, trabajo, recuerdo o aventura','place-new')+actionCard('navigation','Acompáñame 2.0','Destino, progreso, ETA y llegada','destination')+'</div></div>'+
+ '<div class="section journey-actions" role="group" aria-label="Acciones de recorridos y lugares">'+
+ '<div class="journey-actions-heading"><b>Acciones del mapa</b><small>Los recorridos se registran solo cuando tú los inicias.</small></div>'+
+ '<div class="journey-actions-row"><button class="btn small '+(own.trip_active?'secondary':'ghost')+'" data-action="trip-toggle" aria-label="'+(own.trip_active?'Terminar mi recorrido':'Iniciar mi recorrido')+'">'+ico(own.trip_active?'square':'route')+' '+(own.trip_active?'Terminar recorrido':'Iniciar recorrido')+'</button>'+
+ '<button class="btn small ghost" data-action="place-new">'+ico('map-pin-plus')+' Guardar este lugar</button></div></div>'+
  contextSuggestionsView()+frequentPlacesView()+mapHistoryView()+'</section>';
 }
 function frequentPlacesFresh(){return !!frequentPlacesData&&Date.now()-frequentPlacesLoadedAt<15*60*1000;}
@@ -1291,18 +1413,53 @@ function openFrequentPlaceSuggestion(s){
 
 function historyPlacesView(){
  const places=mapData?.places||[];
- if(!places.length)return '<section class="section"><div class="section-head"><div><h2>Mapa de nuestra historia</h2><p>Guarden lugares y relaciónenlos con recuerdos para construirlo.</p></div></div><div class="empty">Aún no hay lugares guardados.</div></section>';
- return '<section class="section"><div class="section-head"><div><h2>Mapa de nuestra historia</h2><p>Lugares importantes conectados con lo que vivieron allí.</p></div></div><div class="history-places">'+places.map(p=>{const linked=(cloud.items||[]).filter(i=>Number(i.data?.placeId)===Number(p.id));return '<article class="card history-place"><button class="history-place-head" data-action="history-place" data-lat="'+attr(p.latitude)+'" data-lon="'+attr(p.longitude)+'"><span class="item-icon">'+ico(p.kind==='home'?'house':p.kind==='work'?'briefcase':p.kind==='adventure'?'compass':'heart')+'</span><span><b>'+esc(p.name)+'</b><small>'+esc(p.note||'Lugar guardado')+'</small></span></button><button class="btn small secondary" data-action="galaxy-share" data-card-type="PLACE" data-kind="place" data-id="'+attr(p.id)+'" data-title="'+attr(p.name)+'">'+ico('send')+' Compartir en Galaxy Chat</button><div class="history-links">'+(linked.length?linked.slice(0,5).map(i=>'<button class="history-memory" data-action="constellation-item" data-id="'+i.id+'">'+ico(kindMeta[i.kind]?.[0]||'sparkles')+' '+esc(i.data?.title||'Historia')+'</button>').join(''):'<button class="history-memory add" data-action="memory-at-place" data-id="'+p.id+'">'+ico('plus')+' Añadir recuerdo aquí</button>')+'</div></article>';}).join('')+'</div></section>';
+ if(!places.length)return '<section class="section journey-history-places"><div class="section-head"><div><h2>Nuestros lugares</h2><p>Guarden lugares y relaciónenlos con recuerdos.</p></div></div><div class="empty">Aún no hay lugares guardados.</div></section>';
+ const visible=places.slice(0,mapPlacesVisible);
+ const cards=visible.map(p=>{
+  const linked=(cloud?.items||[]).filter(i=>Number(i.data?.placeId)===Number(p.id));
+  const valid=mapLocationValid(p);
+  const icon=p.kind==='home'?'house':p.kind==='work'?'briefcase':p.kind==='adventure'?'compass':'heart';
+  return '<article class="card history-place journey-place-card"><button class="history-place-head" data-action="history-place" data-lat="'+attr(p.latitude)+'" data-lon="'+attr(p.longitude)+'" '+(valid?'':'disabled aria-disabled="true"')+'><span class="item-icon">'+ico(icon)+'</span><span><b>'+esc(p.name||'Lugar guardado')+'</b><small>'+esc(p.note||'Un lugar de nuestra historia')+'</small><small>'+esc(valid?'Toca para verlo en el mapa':'No hay coordenadas válidas para centrar el mapa')+'</small></span>'+ico('map-pin')+'</button>'+
+   '<div class="journey-place-actions">'+(linked.length?'<span class="journey-place-count">'+linked.length+' '+(linked.length===1?'recuerdo asociado':'recuerdos asociados')+'</span>':'<span class="journey-place-count">Sin recuerdos asociados</span>')+
+   '<details class="journey-place-more"><summary aria-label="Opciones del lugar '+attr(p.name||'guardado')+'">'+ico('ellipsis')+' Opciones</summary><div class="journey-place-more-content">'+
+   '<button class="btn small secondary" data-action="galaxy-share" data-card-type="PLACE" data-kind="place" data-id="'+attr(p.id)+'" data-title="'+attr(p.name||'Lugar')+'">'+ico('send')+' Compartir en chat</button>'+
+   '<button class="btn small ghost" data-action="memory-at-place" data-id="'+attr(p.id)+'">'+ico('plus')+' Añadir recuerdo</button></div></details></div>'+
+   (linked.length?'<div class="history-links">'+linked.slice(0,3).map(i=>'<button class="history-memory" data-action="constellation-item" data-id="'+attr(i.id)+'">'+ico(kindMeta[i.kind]?.[0]||'sparkles')+' '+esc(i.data?.title||'Recuerdo')+'</button>').join('')+'</div>':'')+'</article>';
+ }).join('');
+ return '<section class="section journey-history-places"><div class="section-head"><div><p class="eyebrow">LUGARES</p><h2>Nuestros lugares</h2><p>Las historias siguen vinculadas a sus ubicaciones originales.</p></div></div>'+
+  '<div class="journey-place-list">'+cards+'</div>'+
+  (places.length>mapPlacesVisible?'<button class="btn small secondary journey-show-more" data-action="map-places-more" aria-label="Mostrar más lugares">'+ico('chevrons-down')+' Ver más lugares ('+(places.length-mapPlacesVisible)+' restantes)</button>':'')+'</section>';
+}
+function mapTimelineRow(entry){
+ const item=entry.item||{},date=entry.occurredAt==null?'Sin fecha registrada':esc(fmtDateTime(new Date(entry.occurredAt).toISOString()));
+ const duration=(a,b)=>{const start=Date.parse(a||''),end=Date.parse(b||'');
+  return Number.isFinite(start)&&Number.isFinite(end)&&end>=start?fmtDuration(Math.round((end-start)/1000)):null;};
+ if(entry.kind==='trip'){
+  const who=names()[Number(item.person)]||'Nosotros';
+  const motion=item.dominant_motion==='walking'?'Caminando':item.dominant_motion==='vehicle'?'En vehículo':item.dominant_motion==='still'?'Sin movimiento registrado':null;
+  const metrics=[item.distance_m==null?'Distancia no registrada':fmtDistance(item.distance_m),
+   item.duration_s==null?'Duración no registrada':fmtDuration(item.duration_s)];
+  return '<article class="journey-timeline-item"><span class="journey-timeline-icon">'+ico('route')+'</span><div><span class="badge">Recorrido · '+esc(who)+'</span><h3>'+esc(metrics.join(' · '))+'</h3><p>'+date+
+   (motion?' · '+esc(motion):'')+'</p><button class="btn small secondary" data-action="context-trip-recap" data-id="'+attr(item.id)+'">'+ico('map')+' Ver resumen</button></div></article>';
+ }
+ if(entry.kind==='event'){
+  const arrived=item.event==='arrived',left=item.event==='departed'||item.event==='left';
+  const place=item.place_id!=null?(mapData?.places||[]).find(p=>String(p.id)===String(item.place_id)):null;
+  const placeText=place?.name?esc(place.name):'Lugar no disponible';
+  return '<article class="journey-timeline-item"><span class="journey-timeline-icon">'+ico(arrived?'map-pin-check':left?'footprints':'map-pin')+'</span><div><span class="badge">'+esc(arrived?'Llegada':left?'Salida':'Evento de lugar')+'</span><h3>'+esc(arrived?'Llegada registrada':left?'Salida registrada':'Actividad registrada')+'</h3><p>'+date+' · '+placeText+'</p></div></article>';
+ }
+ const elapsed=duration(item.started_at,item.ended_at);
+ const encounterDistance=item.distance_m==null?null:fmtDistance(item.distance_m);
+ return '<article class="journey-timeline-item"><span class="journey-timeline-icon">'+ico('heart-handshake')+'</span><div><span class="badge">Encuentro</span><h3>Nos encontramos</h3><p>'+date+
+  (elapsed?' · Duró '+esc(elapsed):'')+(encounterDistance?' · '+esc(encounterDistance):'')+'</p></div></article>';
 }
 function mapHistoryView(){
  if(!mapData)return '<div class="section">'+loading('Cargando recorridos')+'</div>';
- const trips=mapData.trips||[],events=mapData.events||[],encounters=mapData.encounters||[];
- return historyPlacesView()+'<section class="section" id="encounter-history"><div class="section-head"><div><h2>Actividad reciente</h2><p>Recorridos, llegadas y encuentros.</p></div></div><div class="stack">'+
- (trips.slice(0,4).map(t=>'<div class="card"><span class="badge">'+(names()[Number(t.person)]||'Nosotros')+'</span><h3 style="margin-top:8px">'+fmtDistance(t.distance_m)+' · '+fmtDuration(t.duration_s)+'</h3><p>'+esc(fmtDateTime(t.started_at))+(t.max_speed?' · máx. '+(Number(t.max_speed)*3.6).toFixed(0)+' km/h':'')+'</p><button class="btn small secondary" data-action="context-trip-recap" data-id="'+attr(t.id)+'">'+ico('map')+' Recap de recorrido</button></div>').join('')||
- events.slice(0,4).map(e=>'<div class="card"><h3>'+(e.event==='arrived'?'Llegada':'Salida')+'</h3><p>'+esc(fmtDateTime(e.happened_at))+'</p></div>').join('')||
- encounters.slice(0,3).map(e=>'<div class="card"><h3 class="icon-title">'+ico('heart')+'Nos encontramos</h3><p>'+esc(fmtDateTime(e.started_at))+'</p></div>').join('')||
- '<div class="empty">Aquí aparecerán los recorridos y encuentros que vayamos guardando.</div>')+
- '</div></section>';
+ const timeline=window.GalaxyJourneysV5?.timeline(mapData.trips,mapData.events,mapData.encounters)||[];
+ return historyPlacesView()+'<section class="section journey-timeline" id="encounter-history"><div class="section-head"><div><p class="eyebrow">NUESTRA HISTORIA</p><h2>Actividad reciente</h2><p>Recorridos, llegadas y encuentros en orden temporal, cuando hay fechas disponibles.</p></div></div>'+
+  (timeline.length?'<div class="journey-timeline-list">'+timeline.slice(0,mapHistoryVisible).map(mapTimelineRow).join('')+'</div>':
+  '<div class="empty">Aquí aparecerán los recorridos y encuentros que vayamos guardando.</div>')+
+  (timeline.length>mapHistoryVisible?'<button class="btn small secondary journey-show-more" data-action="map-history-more" aria-label="Mostrar más actividad">'+ico('chevrons-down')+' Ver más actividad ('+(timeline.length-mapHistoryVisible)+' restantes)</button>':'')+'</section>';
 }
 
 async function openPairCode(target){
@@ -2676,31 +2833,59 @@ function updateMarkup(){
 }
 function renderUpdateOnly(){const el=$('#updateCard');if(el)el.innerHTML=updateMarkup();}
 
+function visibleTrailSegments(){
+ const rows=window.GalaxyJourneysV5?.trailSegments(mapData?.tripPoints||[])||[];
+ const locations=mapData?.locations||[];
+ return rows.filter(segment=>{
+  if(String(segment.person)===String(cloud?.person))return true;
+  return locations.some(l=>String(l.person)===String(segment.person)&&l.sharing===true);
+ }).map(segment=>{
+  const location=locations.find(l=>String(l.person)===String(segment.person));
+  const started=Date.parse(location?.trip_started_at||'');
+  const lastFix=Date.parse(location?.updated_at||'');
+  const active=!!location?.trip_active&&locationFreshState(location)&&
+   Number.isFinite(lastFix)&&lastFix<=Date.now()+60000&&
+   Number.isFinite(started)&&segment.startedAt>=started;
+  return {...segment,active};
+ });
+}
 function drawMap({fit=true}={}){
  if(view!=='map'||!$('#map')||typeof GalaxyMap==='undefined'||!mapData)return;
  const previous=map?{center:{...map.center},zoom:map.zoom}:null;
  if(map){map.remove();map=null;}
  map=new GalaxyMap($('#map'),{center:[4.711,-74.0721],zoom:12});
- const locs=(mapData.locations||[]).filter(x=>x.sharing&&Number.isFinite(Number(x.latitude))&&Number.isFinite(Number(x.longitude)));
+ const locs=(mapData.locations||[]).filter(x=>x.sharing&&mapLocationValid(x));
+ // Selected destination of this paired profile only; no new GPS or sharing.
+ const selectedDestination=(mapData.destinations||[]).find(d=>
+  String(d.person)===String(cloud.person)&&d.active!==false);
  const bounds=[];
  locs.forEach(l=>{
    const mine=l.person===cloud.person,name=names()[Number(l.person)]||'Nosotros',fresh=locationFreshState(l);
+   const chosen=selectedDestination?.kind==='person'&&String(selectedDestination.target_person)===String(l.person);
+   const speed=Number(l.speed),speedCopy=l.speed==null||String(l.speed).trim()===''||!Number.isFinite(speed)||speed<0?
+    'Velocidad sin lectura':(speed*3.6).toFixed(0)+' km/h';
    map.addMarker({
      lat:l.latitude,lon:l.longitude,label:esc(name.slice(0,1)),
-     className:(mine?'mine':'partner')+(fresh?'':' stale'),
-     popup:fresh?(name+' · '+transportLabel(l)+' · '+(Number(l.speed||0)*3.6).toFixed(0)+' km/h'):(name+' · última ubicación hace '+ageDurationLabel(locationAgeMs(l)))
+     className:(mine?'mine':'partner')+(fresh?'':' stale')+(chosen?' destination':''),
+     popup:(chosen?'Destino elegido · ':'')+(fresh?(name+' · '+transportLabel(l)+' · '+speedCopy):
+      (name+' · última ubicación hace '+ageDurationLabel(locationAgeMs(l))))
    });
    bounds.push([Number(l.latitude),Number(l.longitude)]);
  });
- (mapData.places||[]).forEach(p=>{
+ (mapData.places||[]).filter(mapLocationValid).forEach(p=>{
    const markerIcon=p.kind==='home'?'house':p.kind==='work'?'briefcase':p.kind==='adventure'?'compass':'heart';
    const linked=(cloud?.items||[]).filter(i=>Number(i.data?.placeId)===Number(p.id));
-   map.addMarker({lat:p.latitude,lon:p.longitude,icon:markerIcon,className:'place',popup:p.name+(linked.length?' · '+linked.length+' '+(linked.length===1?'historia':'historias'):'')+(p.note?' · '+p.note:'')});
+   const chosen=selectedDestination?.kind==='place'&&String(selectedDestination.place_id)===String(p.id);
+   map.addMarker({lat:p.latitude,lon:p.longitude,icon:markerIcon,
+    className:'place'+(chosen?' destination':''),
+    popup:(chosen?'Destino elegido · ':'')+p.name+(linked.length?' · '+linked.length+' '+(linked.length===1?'historia':'historias'):'')+(p.note?' · '+p.note:'')});
  });
- visibleFrequentSuggestions().slice(0,3).forEach(s=>map.addMarker({lat:s.latitude,lon:s.longitude,icon:'map-pin',className:'suggestion',popup:'Lugar frecuente · '+Number(s.days||0)+' días · '+Number(s.visits||0)+' visitas'}));
- const grouped={};
- (mapData.tripPoints||[]).slice().reverse().forEach(p=>(grouped[p.person]??=[]).push([Number(p.latitude),Number(p.longitude)]));
- Object.entries(grouped).forEach(([person,points])=>{if(points.length>1)map.addPolyline(points,{className:person===cloud.person?'mine':'partner',dashed:person!==cloud.person});});
+ visibleFrequentSuggestions().filter(mapLocationValid).slice(0,3).forEach(s=>map.addMarker({lat:s.latitude,lon:s.longitude,icon:'map-pin',className:'suggestion',popup:'Lugar frecuente · '+Number(s.days||0)+' días · '+Number(s.visits||0)+' visitas'}));
+ visibleTrailSegments().forEach(({person,points,active})=>{
+  if(points.length>1)map.addPolyline(points,{className:'recorded '+
+   (String(person)===String(cloud.person)?'mine':'partner')+(active?' active':' historical'),
+   dashed:String(person)!==String(cloud.person)||!active});
+ });
  if(fit||!previous){if(bounds.length)map.fitBounds(bounds,{maxZoom:16});}
  else map.setView([previous.center.lat,previous.center.lon],previous.zoom);
 }
@@ -2887,7 +3072,7 @@ function openPlace(){
 function openDestination(){
  const partner=cloud.person==='0'?'1':'0',places=mapData?.places||[],active=(mapData?.destinations||[]).find(d=>String(d.person)===String(cloud.person)&&d.active!==false);
  const current=active?(active.kind==='person'?'person:'+active.target_person:'place:'+active.place_id):'none';
- showModal('Acompáñame 2.0','<form id="destinationForm" class="stack" style="margin-top:16px"><div class="field"><label>Voy hacia</label><select name="destination"><option value="person:'+partner+'" '+(current==='person:'+partner?'selected':'')+'>'+esc(partnerName())+'</option>'+places.map(p=>'<option value="place:'+p.id+'" '+(current==='place:'+p.id?'selected':'')+'>'+esc(p.name)+'</option>').join('')+'<option value="none" '+(current==='none'?'selected':'')+'>Ningún destino</option></select></div><p class="muted">La sesión muestra distancia restante, progreso, ETA e histórico. No activará tu ubicación por sí sola.</p><button class="btn" type="submit">Iniciar Acompáñame</button></form>','destination');
+ showModal('Acompáñame','<form id="destinationForm" class="stack" style="margin-top:16px"><div class="field"><label>Voy hacia</label><select name="destination"><option value="person:'+partner+'" '+(current==='person:'+partner?'selected':'')+'>'+esc(partnerName())+'</option>'+places.map(p=>'<option value="place:'+p.id+'" '+(current==='place:'+p.id?'selected':'')+'>'+esc(p.name)+'</option>').join('')+'<option value="none" '+(current==='none'?'selected':'')+'>Ningún destino</option></select></div><p class="muted">La sesión muestra distancia restante, progreso, ETA e histórico. No activará tu ubicación por sí sola.</p><button class="btn" type="submit">Iniciar Acompáñame</button></form>','destination');
 }
 
 function storyDocuments(){
@@ -3240,7 +3425,7 @@ document.addEventListener('click',async e=>{
   if(a==='couple-distance-focus'){focusCoupleOnMap();return;}
   if(a==='eta-focus'){focusEtaOnMap();return;}
   if(a==='frequent-place-save'){openFrequentPlaceSuggestion(frequentSuggestionFromButton(btn));return;}
-  if(a==='frequent-place-focus'){if(map){map.setView([Number(btn.dataset.lat),Number(btn.dataset.lon)],16);document.querySelector('#map')?.scrollIntoView({behavior:'smooth',block:'center'});}return;}
+  if(a==='frequent-place-focus'){const point={latitude:btn.dataset.lat,longitude:btn.dataset.lon};if(map&&mapLocationValid(point)){map.setView([Number(point.latitude),Number(point.longitude)],16);document.querySelector('#map')?.scrollIntoView({behavior:'smooth',block:'center'});}return;}
   if(a==='frequent-place-dismiss'){const s=frequentSuggestionFromButton(btn);window.GalaxyFrequentPlaces?.dismiss(s,14);render();toast('Ocultaremos esta sugerencia durante dos semanas.');return;}
   if(a==='map'){go('map');return;}
   if(a==='moments'){go('moments');return;}
@@ -3312,7 +3497,9 @@ document.addEventListener('click',async e=>{
   if(a==='player-expand'){memoryTab='music';go('memories');return;}
   if(a==='media-add'){await GalaxyNative.call('pickMedia',btn.dataset.kind);media[btn.dataset.kind]=null;mediaLoadedAt[btn.dataset.kind]=0;await loadMedia(btn.dataset.kind,true);toast('Archivo añadido.');return;}
   if(a==='media-delete'){if(confirm('¿Eliminar este archivo?')){await api('media-delete',{kind:btn.dataset.kind,path:btn.dataset.path});media[btn.dataset.kind]=null;mediaLoadedAt[btn.dataset.kind]=0;await loadMedia(btn.dataset.kind,true);toast('Archivo eliminado.');}return;}
-  if(a==='history-place'){if(map)map.setView([Number(btn.dataset.lat),Number(btn.dataset.lon)],16);document.querySelector('#map')?.scrollIntoView({behavior:'smooth',block:'center'});return;}
+  if(a==='map-places-more'){mapPlacesVisible+=6;render();document.querySelector('.journey-history-places')?.scrollIntoView({behavior:'auto',block:'start'});return;}
+  if(a==='map-history-more'){mapHistoryVisible+=6;render();document.querySelector('#encounter-history')?.scrollIntoView({behavior:'auto',block:'start'});return;}
+  if(a==='history-place'){const point={latitude:btn.dataset.lat,longitude:btn.dataset.lon};if(!focusSavedPlaceOnMap(point))return;document.querySelector('#map')?.scrollIntoView({behavior:'smooth',block:'center'});return;}
   if(a==='memory-at-place'){openItemForm('memory',{data:{placeId:Number(btn.dataset.id)}});return;}
   if(a==='our-ai'){if(!mapData)await refreshMap({quiet:true,detail:true});openOurAI();return;}
   if(a==='ai-question'){const q=btn.dataset.question||'';const input=modal.querySelector('#ourAiForm [name="question"]');if(input)input.value=q;await showAiAnswer(q);return;}
@@ -3338,10 +3525,11 @@ document.addEventListener('click',async e=>{
   if(a==='context-suggestion-accept'){const suggestion=(mapData?.context?.suggestions||[]).find(s=>String(s.id)===String(btn.dataset.id));const result=await api('context-suggestion',{operation:'accept',id:btn.dataset.id});if(suggestion?.kind==='date'){const recap=await api('context-recap',{kind:'date',sourceEventId:suggestion.source_event_id});showModal('Recap de cita',contextRecapMarkup('Recap de cita',recap.recap));setTimeout(()=>renderContextRecapMap(recap.recap),30);}else{await refreshState({quiet:true});toast(result.item?'Recuerdo guardado.':'Sugerencia aceptada.');}await refreshMap({quiet:true,detail:true});return;}
   if(a==='context-trip-recap'){const recap=await api('context-recap',{kind:'trip',tripId:Number(btn.dataset.id)});showModal('Recap de recorrido',contextRecapMarkup('Recap de recorrido',recap.recap));setTimeout(()=>renderContextRecapMap(recap.recap),30);return;}
   if(a==='map-refresh'){await refreshMapNow();return;}
-  if(a==='status-menu'){$('#statusMenu')?.classList.toggle('open');return;}
+  if(a==='map-immersive-toggle'){toggleImmersiveMap();return;}
+  if(a==='status-menu'){const menu=$('#statusMenu');const expanded=menu?.classList.toggle('open')||false;btn.setAttribute('aria-expanded',String(expanded));return;}
   if(a==='status-set'){await api('status-set',{status:btn.dataset.status});$('#statusMenu')?.classList.remove('open');await refreshMap();toast('Estado actualizado.');return;}
   if(a==='status-custom'){const value=prompt('¿Qué estado quieres mostrar?','');if(value){await api('status-set',{status:value});await refreshMap();}return;}
-  if(a==='location-start'){await GalaxyNative.call('startLocation');native=nativeState();try{await GalaxyNative.call('refreshLocation');}catch{}await refreshMap({quiet:true,detail:false});render();toast('Ubicación activa y GPS actualizado.');return;}
+  if(a==='location-start'){await GalaxyNative.call('startLocation');native=nativeState();let requested=false;try{await GalaxyNative.call('refreshLocation');requested=true;}catch{}await refreshMap({quiet:true,detail:false});render();toast(requested?'Ubicación compartida activada. Se solicitó una lectura GPS local.':'Ubicación compartida activada. La lectura GPS local sigue pendiente.');return;}
   if(a==='location-stop'){await GalaxyNative.call('stopLocation');native=nativeState();render();toast('Ubicación detenida.');return;}
   if(a==='trip-toggle'){const own=(cloud.locations||[]).find(l=>l.person===cloud.person)||{};await api('trip',{operation:own.trip_active?'stop':'start'});await refreshState();await refreshMap({detail:true});toast(own.trip_active?'Recorrido guardado.':'Recorrido iniciado.');return;}
   if(a==='place-new'){if(!mapData)await refreshMap({quiet:true,detail:true});openPlace();return;}
@@ -3452,7 +3640,7 @@ document.addEventListener('submit',async e=>{
   }
   if(e.target.id==='contextSettingsForm'){const fd=new FormData(e.target),payload={operation:'save',nearEnabled:fd.get('nearEnabled')==='on',nearDistanceM:Number(fd.get('nearDistanceM')),nearCooldownMinutes:Number(fd.get('nearCooldownMinutes')),arrivedSafeEnabled:fd.get('arrivedSafeEnabled')==='on',dateSuggestions:fd.get('dateSuggestions')==='on',memorySuggestions:fd.get('memorySuggestions')==='on',sharedTripDetection:fd.get('sharedTripDetection')==='on'};const result=await api('context-settings',payload);await GalaxyNative.call('setContextPushPrefs',!!result.settings.near_enabled,!!result.settings.arrived_safe_enabled);closeModal();await refreshMap({detail:true});toast('Preferencias de contexto guardadas.');return;}
   if(e.target.id==='placeForm'){const fd=new FormData(e.target);await api('place-save',{name:fd.get('name'),kind:fd.get('kind'),note:fd.get('note'),latitude:Number(fd.get('latitude')),longitude:Number(fd.get('longitude'))});closeModal();frequentPlacesLoadedAt=0;await refreshMap();await loadFrequentPlaces(true).catch(()=>{});toast('Lugar guardado.');return;}
-  if(e.target.id==='destinationForm'){const value=String(new FormData(e.target).get('destination'));if(value==='none')await api('context-session',{operation:'stop'});else{if(!native.tracking)throw new Error('Activa Compartir ubicación primero. Acompáñame no la activa automáticamente.');const [kind,id]=value.split(':');await api('context-session',{operation:'start',mode:'accompany',destinationKind:kind,...(kind==='person'?{targetPerson:id,label:partnerName()}:{placeId:Number(id)})});}closeModal();await refreshMap({detail:true});if(view==='map')setTimeout(()=>document.querySelector('#etaCard')?.scrollIntoView({behavior:'smooth',block:'center'}),80);toast(value==='none'?'Sesión desactivada.':'Acompáñame 2.0 iniciado.');return;}
+  if(e.target.id==='destinationForm'){const value=String(new FormData(e.target).get('destination'));if(value==='none')await api('context-session',{operation:'stop'});else{if(!native.tracking)throw new Error('Activa Compartir ubicación primero. Acompáñame no la activa automáticamente.');const [kind,id]=value.split(':');await api('context-session',{operation:'start',mode:'accompany',destinationKind:kind,...(kind==='person'?{targetPerson:id,label:partnerName()}:{placeId:Number(id)})});}closeModal();await refreshMap({detail:true});if(view==='map')setTimeout(()=>document.querySelector('#etaCard')?.scrollIntoView({behavior:'smooth',block:'center'}),80);toast(value==='none'?'Sesión desactivada.':'Acompáñame iniciado.');return;}
   if(e.target.id==='settingsForm'){const fd=new FormData(e.target);await api('settings-save',{version:cloud.settings.version,data:{names:[fd.get('name0'),fd.get('name1')],startDate:fd.get('startDate'),albumUrl:fd.get('albumUrl')}});await refreshState();toast('Ajustes guardados.');return;}
  }catch(err){toast(err.message||'No pudimos guardar.');}
 });

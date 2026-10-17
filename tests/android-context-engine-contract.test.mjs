@@ -91,9 +91,11 @@ test('Android keeps context push preferences local and does not auto-start locat
 });
 
 test('map UI exposes Context Engine controls without enabling GPS itself',()=>{
- for(const marker of ['Galaxy Context Engine','Estamos cerca','Regreso a casa','Acompáñame 2.0','context-near-toggle','context-return-home'])
+ for(const marker of ['Galaxy Context Engine','Estamos cerca','Regreso a casa','Acompáñame','context-near-toggle','context-return-home'])
   assert.ok(app.includes(marker),marker);
  assert.ok(css.includes('/* Mega Update 3.0 · Galaxy Context Engine */'));
+ assert.doesNotMatch(app,/showModal\('Acompáñame 2\.0'/);
+ assert.ok(!app.includes("actionCard('navigation','Acompáñame 2.0'"));
 });
 
 test('mobile QA explicitly guards Context Engine',()=>{

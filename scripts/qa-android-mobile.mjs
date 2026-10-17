@@ -94,9 +94,13 @@ assert.ok(edge.includes('validateUploadMedia')&&edge.includes('readUploadBytes')
 assert.ok(mediaValidation.includes('image/heic')&&mediaValidation.includes('image/heif')&&mediaValidation.includes('DOCX_MIME')&&mediaValidation.includes('XLSX_MIME'),'La matriz multimedia debe reconocer HEIC/HEIF y documentos Office');
 assert.ok(schema.includes("values('galaxy-chat-media','galaxy-chat-media',false,62914560,null)"),'El bucket privado de chat no debe restringir MIME a nivel Storage');
 const scriptSources=[...index.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m=>m[1]);
-assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./insights.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./eta.js','./frequent-places.js','./gps-history.js','./theme.js','./chat-perf.js','./chat-media-engine.js','./chat-motion.js','./chat-message-engine.js','./chat-scroll-engine.js','./chat-delivery-engine.js','./chat-composer.js','./chat-voice-engine.js','./celestial-shell.js','./galaxy-discovery-v5.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
+assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./insights.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./eta.js','./frequent-places.js','./gps-history.js','./theme.js','./chat-perf.js','./chat-media-engine.js','./chat-motion.js','./chat-message-engine.js','./chat-scroll-engine.js','./chat-delivery-engine.js','./chat-composer.js','./chat-voice-engine.js','./celestial-shell.js','./galaxy-discovery-v5.js','./galaxy-journeys-v5.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
 assert.ok(index.includes('href="./galaxy-discovery-v5.css"'),'El diseño de P3 debe estar empaquetado en Android');
 assert.ok(read('android/app/src/main/assets/mobile/galaxy-discovery-v5.js').includes('GalaxyDiscoveryV5'),'P3 debe mantener el presentador local antes de app.js');
+const journeyPresenter=read('android/app/src/main/assets/mobile/galaxy-journeys-v5.js');
+assert.ok(index.includes('href="./galaxy-journeys-v5.css"'),'P4 debe empaquetar CSS aislado en Android');
+assert.ok(journeyPresenter.includes('GalaxyJourneysV5')&&!/\bfetch\s*\(|\bGalaxyNative\b|geolocation|localStorage/.test(journeyPresenter),
+ 'P4 debe mantener el presentador de frescura sin red, permisos ni APIs nativas');
 assert.ok(index.includes("connect-src 'none'"),'La UI local no debe hacer fetch directo ni recibir credenciales');
 assert.equal(/leaflet/i.test(css+index),false,'No deben quedar estilos o assets muertos de Leaflet');
 
@@ -193,7 +197,7 @@ assert.ok(distance.includes('function metersBetween(')&&distance.includes('funct
 assert.ok(app.includes('function coupleDistanceCard(')&&app.includes('function focusCoupleOnMap('),'Falta distancia entre Sebas y Adri en Android');
 assert.ok(app.includes('data-action="couple-distance-map"')&&app.includes('data-action="couple-distance-focus"'),'Faltan acciones de distancia de pareja');
 assert.ok(app.includes('distancia en línea recta'),'La UI debe aclarar que la distancia no es una ruta vial');
-assert.ok(app.includes('function locationFreshState(')&&app.includes('Sin actualizar · hace'),'Las tarjetas de personas deben distinguir ubicaciones viejas de posiciones en vivo');
+assert.ok(app.includes('function locationFreshState(')&&app.includes('Ubicación histórica · hace')&&app.includes('mapLocationValid(l)'),'Las tarjetas de personas deben distinguir ubicaciones viejas de posiciones en vivo');
 assert.ok(css.includes('.status-dot.stale')&&css.includes('.gmap-marker.stale'),'El mapa debe diferenciar visualmente una última ubicación antigua');
 assert.ok(app.includes('function refreshMapNow(')&&app.includes("GalaxyNative.call('refreshLocation')"),'Actualizar mapa debe pedir una lectura GPS real al teléfono, no solo releer Supabase');
 assert.ok(bridge.includes('refreshLocation')&&main.includes('void refreshLocation(')&&main.includes('CurrentLocationRequest'),'Falta actualización GPS nativa de alta precisión');
@@ -381,7 +385,7 @@ assert.ok(main.includes('context-state')&&main.includes('context-settings')&&mai
 assert.ok(contextStore.includes('nearbyEnabled')&&contextStore.includes('arrivedSafeEnabled'),'ContextStore debe preservar opt-ins push');
 assert.ok(pushManager.includes('nearbyEnabled()')&&pushManager.includes('arrivedSafeEnabled()'),'FCM debe respetar preferencias Context locales');
 assert.equal(contextStore.includes('TrackingService.ACTION_START'),false,'ContextStore jamás puede encender ubicación');
-assert.ok(app.includes('Galaxy Context Engine')&&app.includes('Estamos cerca')&&app.includes('Regreso a casa')&&app.includes('Acompáñame 2.0'),'Faltan superficies Context Engine');
+assert.ok(app.includes('Galaxy Context Engine')&&app.includes('Estamos cerca')&&app.includes('Regreso a casa')&&app.includes('Acompáñame'),'Faltan superficies Context Engine');
 assert.ok(css.includes('/* Mega Update 3.0 · Galaxy Context Engine */'),'Faltan estilos Context Engine');
 assert.ok(css.includes('.context-controls{display:grid;grid-template-columns:1fr')&&css.includes('@media(min-width:560px){.context-controls{grid-template-columns:repeat(2,minmax(0,1fr))}}'),'Context Engine debe apilar controles en móvil y usar dos columnas solo con ancho suficiente');
 assert.ok(css.includes('.context-controls .btn{width:100%;max-width:100%'),'Los botones de Context no pueden desbordar sus tarjetas');

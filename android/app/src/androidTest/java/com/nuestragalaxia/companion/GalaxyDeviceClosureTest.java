@@ -215,11 +215,11 @@ public class GalaxyDeviceClosureTest {
 
         // P2 Welcome must be backed by REAL paired QA state and keep all entry points.
         assertEquals("P2 Welcome not loaded from Android APK", "true",
-            js("!!document.querySelector('link[href=\"./galaxy-welcome.css\"]')"
+            jsWithDeadline("!!document.querySelector('link[href=\"./galaxy-welcome.css\"]')"
               + " && !!document.querySelector('.galaxy-welcome .welcome-hero')"
               + " && document.querySelectorAll('.welcome-bento .action-card').length===5"
               + " && !!document.querySelector('.welcome-rituals')"
-              + " && !!document.querySelector('.welcome-connection')"));
+              + " && !!document.querySelector('.welcome-connection')",20));
 
         // QA-only proof-of-paint marker, not a product UI element. A previous
         // Android run showed a stale pairing screen although the in-process
@@ -341,9 +341,70 @@ public class GalaxyDeviceClosureTest {
                     "notifications-theme-"+theme,243,155,66);
                 shell("screencap -p /sdcard/Download/V5-P3-theme-notifications-"+theme+".png");
                 runV5Js("closeModal()");
+
+                // P4 themed Android MAP evidence. Themes must actually apply to
+                // the map surface, not only P1 Home and P3 modals.
+                runV5Js("go('map');mapData={...(mapData||{}),locations:["
+                    + "{person:'0',sharing:true,latitude:4.711,longitude:-74.072,updated_at:new Date().toISOString()},"
+                    + "{person:'1',sharing:false,latitude:null,longitude:null,updated_at:null}],"
+                    + "places:[],trips:[],events:[],encounters:[],"
+                    + "context:{settings:{near_enabled:false,arrived_safe_enabled:false},session:null}};"
+                    + "render();GalaxyTheme.applyTheme('"+theme+"');");
+                awaitJs("view==='map'&&document.documentElement.dataset.theme==='"+theme+"'"
+                    + "&&!!document.querySelector('.journey-presence.paused')"
+                    + "&&!!document.querySelector('.journey-alerts')"
+                    + "&&!!document.querySelector('.journey-companion')");
+                String mapColors=jsWithDeadline("JSON.stringify((()=>{"
+                    + "const region=document.querySelector('#journeyMapWrap'),"
+                    + "card=document.querySelector('.journey-presence'),"
+                    + "copy=card.querySelector('b'),"
+                    + "toggle=region.querySelector('.map-immersive-toggle'),"
+                    + "r=region.getBoundingClientRect(),b=toggle.getBoundingClientRect();"
+                    + "return {bg:getComputedStyle(card).backgroundColor,"
+                    + "fg:getComputedStyle(copy).color,theme:document.documentElement.dataset.theme,"
+                    + "inside:r.left>=-2&&r.right<=innerWidth+2,"
+                    + "touch:b.width>=44&&b.height>=44,"
+                    + "noOverflow:document.documentElement.scrollWidth<=innerWidth+3};})())",20);
+                JSONObject p4Palette=new JSONObject(mapColors);
+                assertEquals("P4 themed map did not retain theme",theme,p4Palette.getString("theme"));
+                assertTrue("P4 map overflows Android screen in "+theme+": "+mapColors,
+                    p4Palette.getBoolean("inside")&&p4Palette.getBoolean("noOverflow"));
+                assertTrue("P4 map expand button not touchable in "+theme,p4Palette.getBoolean("touch"));
+                assertTrue("P4 location text contrast below WCAG AA in "+theme+": "+mapColors,
+                    v5ColorContrast(p4Palette.getString("bg"),p4Palette.getString("fg"))>=4.5d);
+                // The map subtree can be replaced by asynchronous QA state
+                // refresh while GalaxyMap is repainting. Put the QA-only
+                // color marker on stable document.body, not on the map child,
+                // but physically OVER the visible map bounds. It is removed
+                // immediately after the real screenshot, never shipped in UI.
+                runV5Js("document.getElementById('journeyMapWrap')"
+                    + ".scrollIntoView({behavior:'auto',block:'center'})");
+                awaitJs("(()=>{const r=document.getElementById('journeyMapWrap')"
+                    + ".getBoundingClientRect();return view==='map' && "
+                    + "r.top<innerHeight-48 && r.bottom>48 && r.width>200})()");
+                runV5Js("document.getElementById('p4-theme-paint-marker')?.remove();"
+                    + "const rect=document.getElementById('journeyMapWrap').getBoundingClientRect();"
+                    + "const el=document.createElement('div');"
+                    + "el.id='p4-theme-paint-marker';el.setAttribute('aria-hidden','true');"
+                    + "const y=Math.min(innerHeight-56,Math.max(22,rect.top+16));"
+                    + "const x=Math.max(16,Math.min(innerWidth-100,rect.left+18));"
+                    + "el.style.cssText='position:fixed;top:'+y+'px;left:'+x+'px;'+"
+                    + "'width:74px;height:22px;background:#5ce3aa;'+"
+                    + "'z-index:2147483647;pointer-events:none';"
+                    + "document.body.append(el)");
+                awaitJs("!!document.getElementById('p4-theme-paint-marker')");
+                awaitV5P3ModalPainted(themedHome,themedCssWidth,"p4-theme-"+theme,92,227,170);
+                shell("screencap -p /sdcard/Download/V5-P4-theme-map-"+theme+".png");
+                runV5Js("document.getElementById('p4-theme-paint-marker')?.remove();go('home')");
+                awaitJs("view==='home' && document.querySelector('#bottomNav .nav-btn.active')"
+                    + "?.dataset.view==='home'");
+                awaitV5QaPainted("p4-theme-return-"+theme);
+                System.out.println("V5_P4_THEME_MAP=theme:"+theme
+                    +";paint:true;contrastAA:true;safeViewport:true");
                 System.out.println("V5_P3_THEMED_SURFACES=theme:"+theme+";search:true;notifications:true");
             } finally {
                 themedHome.recycle();
+                runV5Js("document.getElementById('p4-theme-paint-marker')?.remove()");
                 if("true".equals(js("!!document.querySelector('#modal')?.open")))
                     runV5Js("closeModal()");
             }
@@ -683,6 +744,221 @@ public class GalaxyDeviceClosureTest {
                     shell("screencap -p /sdcard/Download/V5-P3-notifications-"+targetCss+".png");
                     beforeP3.recycle();
                     runV5Js("closeModal()");
+
+                    // V5-P4: four physical Android screen widths, not viewport mocks.
+                    // Map data are synthetic in this instrumented WebView memory only;
+                    // the test does not start GPS or write a backend record.
+                    assertEquals("P4 assets missing from APK","true",js(
+                        "!!window.GalaxyJourneysV5 && !!document.querySelector("
+                        + "'link[href=\\\"./galaxy-journeys-v5.css\\\"]')"));
+                    android.graphics.Bitmap beforeP4=instrumentation.getUiAutomation().takeScreenshot();
+                    assertNotNull("P4 cannot capture Android map baseline",beforeP4);
+                    try {
+                        runV5Js("go('map');(()=>{const time=new Date().toISOString();"
+                            + "mapData={...(mapData||{}),locations:["
+                            + "{person:'0',sharing:true,latitude:4.711,longitude:-74.0721,updated_at:time},"
+                            + "{person:'1',sharing:false,latitude:null,longitude:null,updated_at:null}],"
+                            + "places:[{id:601,kind:'home',name:'Lugar sintetico',"
+                            + "latitude:4.712,longitude:-74.073}],"
+                            + "destinations:[{person:String(cloud.person),kind:'place',place_id:601,active:true}],"
+                            + "trips:[],events:[],encounters:[],"
+                            + "context:{settings:{near_enabled:false,arrived_safe_enabled:false},session:null}};"
+                            + "render();})()");
+                        awaitJs("view==='map' && !!document.querySelector('#journeyMapWrap')"
+                            + " && !!document.querySelector('.journey-presence.paused')"
+                            + " && !!document.querySelector('.journey-companion')"
+                            + " && !!document.querySelector('.journey-alerts')");
+                        String mapCompact=jsWithDeadline("JSON.stringify((()=>{"
+                            + "const root=document.getElementById('journeyMapWrap'),"
+                            + "toggle=root.querySelector('.map-immersive-toggle'),"
+                            + "r=root.getBoundingClientRect(),b=toggle.getBoundingClientRect();"
+                            + "return {inside:r.left>=-2&&r.right<=innerWidth+2,"
+                            + "touch:b.width>=44&&b.height>=44,"
+                            + "expanded:toggle.getAttribute('aria-pressed'),"
+                            + "presence:document.querySelectorAll('.journey-presence').length,"
+                            + "privacy:!!document.querySelector('.journey-presence.paused'),"
+                            + "overflow:document.documentElement.scrollWidth<=innerWidth+3};})())",20);
+                        JSONObject compactEvidence=new JSONObject(mapCompact);
+                        assertTrue("P4 compact map outside viewport: "+mapCompact,
+                            compactEvidence.getBoolean("inside"));
+                        assertTrue("P4 map expansion button too small: "+mapCompact,
+                            compactEvidence.getBoolean("touch"));
+                        assertTrue("P4 map body overflows "+targetCss+": "+mapCompact,
+                            compactEvidence.getBoolean("overflow"));
+                        assertEquals("P4 must render both freshness states",2,
+                            compactEvidence.getInt("presence"));
+                        assertTrue("P4 must show paused partner without GPS",compactEvidence.getBoolean("privacy"));
+                        assertEquals("false",compactEvidence.getString("expanded"));
+                        runV5Js("const mark=document.createElement('div');"
+                            + "mark.id='p4-real-frame-marker';mark.setAttribute('aria-hidden','true');"
+                            + "mark.style.cssText='position:fixed;top:42px;left:22px;'+"
+                            + "'width:74px;height:22px;background:#c142f0;z-index:2147483647;pointer-events:none';"
+                            + "document.getElementById('journeyMapWrap').append(mark)");
+                        awaitV5P3ModalPainted(beforeP4,targetCss,"p4-compact-map",193,66,240);
+                        shell("screencap -p /sdcard/Download/V5-P4-map-compact-"+targetCss+".png");
+                        android.graphics.Bitmap compactFrame=instrumentation.getUiAutomation().takeScreenshot();
+                        assertNotNull("P4 missing compact Android framebuffer",compactFrame);
+                        try {
+                            runV5Js("document.querySelector('[data-action=\\\"map-immersive-toggle\\\"]').click();"
+                                + "document.querySelector('#p4-real-frame-marker').style.background='#58cded'");
+                            awaitJs("mapImmersive && document.body.classList.contains('map-immersive-open')"
+                                + " && document.querySelector('#journeyMapWrap.immersive')"
+                                + " && document.querySelector('[data-action=\\\"map-immersive-toggle\\\"]')"
+                                + ".getAttribute('aria-pressed')==='true'");
+                            String immersiveJson=jsWithDeadline("JSON.stringify((()=>{"
+                                + "const root=document.querySelector('#journeyMapWrap.immersive'),"
+                                + "map=document.querySelector('#map').getBoundingClientRect(),"
+                                + "b=root.querySelector('.map-immersive-toggle').getBoundingClientRect();"
+                                + "return {full:map.width>=innerWidth-3 && map.height>=innerHeight-6,"
+                                + "exit:b.width>=44&&b.height>=44&&b.left>=0&&b.right<=innerWidth+2,"
+                                + "overflow:document.documentElement.scrollWidth<=innerWidth+3};})())",20);
+                            JSONObject immersiveEvidence=new JSONObject(immersiveJson);
+                            assertTrue("P4 immersive map not full screen: "+immersiveJson,
+                                immersiveEvidence.getBoolean("full"));
+                            assertTrue("P4 map exit must stay touchable: "+immersiveJson,
+                                immersiveEvidence.getBoolean("exit"));
+                            assertTrue("P4 immersive overflow: "+immersiveJson,
+                                immersiveEvidence.getBoolean("overflow"));
+                            awaitV5P3ModalPainted(compactFrame,targetCss,"p4-immersive-map",88,205,237);
+                            shell("screencap -p /sdcard/Download/V5-P4-map-immersive-"+targetCss+".png");
+                            runV5Js("document.querySelector('[data-action=\\\"map-immersive-toggle\\\"]').click()");
+                            awaitJs("!mapImmersive&&!document.body.classList.contains('map-immersive-open')");
+
+                            // A real Android WebSettings text-zoom setting (135%),
+                            // not a browser-simulated CSS viewport/font substitution.
+                            // Always restore 100% before testing the next width.
+                            try {
+                                final java.util.concurrent.atomic.AtomicInteger appliedZoom=
+                                    new java.util.concurrent.atomic.AtomicInteger();
+                                scenario.onActivity(activity -> {
+                                    WebView realWeb=activity.findViewById(R.id.webView);
+                                    assertNotNull("P4 font zoom needs a real WebView",realWeb);
+                                    realWeb.getSettings().setTextZoom(135);
+                                    appliedZoom.set(realWeb.getSettings().getTextZoom());
+                                });
+                                assertEquals("Android native WebView text zoom did not apply",135,appliedZoom.get());
+                                runV5Js("document.querySelector('#p4-real-frame-marker')"
+                                    + ".style.background='#e9bf4a'");
+                                awaitJs("!mapImmersive && document.querySelector('.journey-presence.paused')"
+                                    + " && !!document.querySelector('.journey-alerts')");
+                                String largeEvidence=jsWithDeadline("JSON.stringify((()=>{"
+                                    + "const r=document.querySelector('#journeyMapWrap')"
+                                    + ".getBoundingClientRect(),toggle=document.querySelector("
+                                    + "'.map-immersive-toggle').getBoundingClientRect();"
+                                    + "return {mapInside:r.left>=-2&&r.right<=innerWidth+2,"
+                                    + "touch:toggle.width>=44&&toggle.height>=44,"
+                                    + "noOverflow:document.documentElement.scrollWidth<=innerWidth+3};})())",20);
+                                JSONObject largeLayout=new JSONObject(largeEvidence);
+                                assertTrue("P4 native 135% font layout overflow at "+targetCss+": "+largeEvidence,
+                                    largeLayout.getBoolean("mapInside")&&largeLayout.getBoolean("noOverflow"));
+                                assertTrue("P4 135% map control too small",largeLayout.getBoolean("touch"));
+                                awaitV5P3ModalPainted(beforeP4,targetCss,"p4-large-font",233,191,74);
+                                shell("screencap -p /sdcard/Download/V5-P4-map-large-font-"+targetCss+".png");
+                                System.out.println("V5_P4_ANDROID_TEXT_ZOOM=css:"+targetCss
+                                    +";nativeWebSettings:135;paint:true;noHorizontalOverflow:true");
+                            } finally {
+                                scenario.onActivity(activity -> {
+                                    WebView realWeb=activity.findViewById(R.id.webView);
+                                    if(realWeb!=null)realWeb.getSettings().setTextZoom(100);
+                                });
+                            }
+
+                            // VE-094/095 — exercise the actual packaged WebView.
+                            // go('map') performs an asynchronous map-state read.
+                            // Earlier P4 QA used a temporary destination fixture
+                            // before that read completed, so its synthetic route
+                            // could be overwritten during the 135% text screenshots.
+                            // Reapply ONLY synthetic QA presentation data after the
+                            // read and prior to the place action, without backend writes.
+                            // Wait for pending map-state reads before injecting the QA fixture.
+                            awaitJs("view==='map' && !!map && mapStateReadsInFlight===0");
+                            runV5Js("mapData={...(mapData||{}),"
+                                + "places:[{id:601,kind:'home',name:'Lugar sintetico',"
+                                + "latitude:4.712,longitude:-74.073}],"
+                                + "destinations:[{person:String(cloud.person),"
+                                + "kind:'place',place_id:601,active:true}]};render()");
+                            awaitJs("view==='map' && "
+                                + "(mapData?.destinations||[]).some(d=>"
+                                + "String(d.person)===String(cloud.person)"
+                                + " && d.kind==='place' && String(d.place_id)==='601')"
+                                + " && !!document.querySelector('#map .gmap-marker.place.destination button')"
+                                + " && !!document.querySelector('.history-place-head:not(:disabled)')");
+                            runV5Js("document.querySelector('.journey-place-more summary').click()");
+                            awaitJs("document.querySelector('.journey-place-more[open]')"
+                                + " && !!document.querySelector('.journey-place-more-content'"
+                                + " + ' [data-action=\\\"memory-at-place\\\"]')");
+                            // A full render() replaces #map and schedules drawMap() for the
+                            // next UI turn. Clicking in that same JS evaluation used the
+                            // detached GalaxyMap and lost its delayed marker focus.
+                            // Keep the original mounted fixture and click only when its
+                            // DOM, presenter and synthetic destination agree.
+                            awaitJs("view==='map' && !!map && map.el===document.querySelector('#map')"
+                                + " && mapStateReadsInFlight===0"
+                                + " && (mapData?.destinations||[]).some(d=>"
+                                + "String(d.person)===String(cloud.person) && d.kind==='place'"
+                                + " && String(d.place_id)==='601')"
+                                + " && !!document.querySelector('#map .gmap-marker.place.destination button')"
+                                + " && !!document.querySelector('.history-place-head:not(:disabled)')");
+                            runV5Js("document.querySelector('.history-place-head').click()");
+                            try {
+                                // Each assertion still must pass; this snapshot only
+                                // identifies which requirement failed in the emulator.
+                                awaitJs("view==='map' && !!map && "
+                                    + "Math.abs(map.center.lat-4.712)<0.000001 && "
+                                    + "Math.abs(map.center.lon-(-74.073))<0.000001 && "
+                                    + "!!document.querySelector('#map .gmap-marker.place.destination.open button') && "
+                                    + "!!document.activeElement?.closest('#map .gmap-marker.place.open')");
+                            } catch (AssertionError focusFailure) {
+                                String diagnostic=jsWithDeadline("JSON.stringify((()=>{"
+                                    + "const selected=(mapData?.destinations||[]).find(d=>String(d.person)===String(cloud?.person));"
+                                    + "const buttons=[...document.querySelectorAll('#map .gmap-marker.place button')];"
+                                    + "const opened=document.querySelector('#map .gmap-marker.place.open button');"
+                                    + "return {view,paired:native.paired,ownPerson:String(cloud?.person),"
+                                    + "activeDestinationKind:selected?.kind||null,"
+                                    + "activeDestinationMatchesFixture:String(selected?.place_id)==='601',"
+                                    + "mapStateReadsInFlight," 
+                                    + "placesInData:(mapData?.places||[]).length,"
+                                    + "savedHead:!!document.querySelector('.history-place-head'),"
+                                    + "savedHeadDisabled:!!document.querySelector('.history-place-head')?.disabled,"
+                                    + "mapExists:!!map,centerMatches:!!map&&"
+                                    + "Math.abs(map.center.lat-4.712)<0.000001&&Math.abs(map.center.lon+74.073)<0.000001,"
+                                    + "markerCount:buttons.length,"
+                                    + "destinationMarkerCount:document.querySelectorAll('#map .gmap-marker.place.destination').length,"
+                                    + "popupOpen:!!opened,"
+                                    + "expanded:opened?.getAttribute('aria-expanded')||null,"
+                                    + "focusMatches:!!document.activeElement?.closest('#map .gmap-marker.place.open'),"
+                                    + "focusTag:document.activeElement?.tagName||null};})())",20);
+                                throw new AssertionError("V5_P4_PLACE_FOCUS_GATE=" + diagnostic,
+                                    focusFailure);
+                            }
+                            String placeProof=jsWithDeadline("JSON.stringify((()=>{"
+                                + "const b=document.querySelector('#map .gmap-marker.place.open button')"
+                                + ".getBoundingClientRect(),mapRect=document.querySelector('#map')"
+                                + ".getBoundingClientRect();"
+                                + "return {focused:!!document.querySelector("
+                                + "'#map .gmap-marker.place.open button:focus'),"
+                                + "markerInside:b.width>=44&&b.height>=44,"
+                                + "noOverflow:document.documentElement.scrollWidth<=innerWidth+3,"
+                                + "mapInside:mapRect.left>=-2&&mapRect.right<=innerWidth+2};})())",20);
+                            JSONObject placeLayout=new JSONObject(placeProof);
+                            assertTrue("P4 focused place not keyboard accessible: "+placeProof,
+                                placeLayout.getBoolean("focused")&&placeLayout.getBoolean("markerInside"));
+                            assertTrue("P4 focused map outside viewport: "+placeProof,
+                                placeLayout.getBoolean("noOverflow")&&placeLayout.getBoolean("mapInside"));
+                            shell("screencap -p /sdcard/Download/V5-P4-map-place-"+targetCss+".png");
+                            System.out.println("V5_P4_PLACE_FOCUS=css:"+targetCss
+                                +";open:true;keyboardFocus:true;44px:true;noOverflow:true");
+
+                            System.out.println("V5_P4_ANDROID_MAP=css:"+targetCss
+                                +";compact:true;immersive:true;privacy:true;realDisplay:true");
+                        } finally {compactFrame.recycle();}
+                    } finally {
+                        beforeP4.recycle();
+                        runV5Js("go('home')");
+                        awaitJs("view==='home' && !document.body.classList.contains('map-immersive-open')");
+                        awaitV5QaPainted("p4-home-restored-"+targetCss);
+                    }
+
                 } finally {
                     topFrame.recycle();
                     runV5Js("window.scrollTo(0,0)");
@@ -1413,6 +1689,20 @@ public class GalaxyDeviceClosureTest {
         // Headless API-35 sometimes keeps an android-owned accessibility root
         // even after PickActivity is actually RESUMED and rendered. Use pixel
         // evidence in addition to the strict resumed-activity requirement.
+        // Strict compositor preflight: a headless AVD may expose a VISIBLE WebView
+        // DOM while its native surface is still the launcher/splash screen.
+        // Without a REAL app frame, comparing screenshot deltas against DocumentsUI
+        // is meaningless. Do not launch picker until this proof is positive.
+        if(!isPhysicalDevice()) {
+            runV5Js("const el=document.createElement('div');el.id='v5-qa-paint-marker';"
+                + "el.setAttribute('aria-hidden','true');"
+                + "el.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;'+"
+                + "'background:#07e1f7;z-index:2147483647;pointer-events:none';"
+                + "document.body.appendChild(el)");
+            awaitJs("!!document.getElementById('v5-qa-paint-marker')");
+            awaitV5QaPainted("before-real-system-document-picker");
+            System.out.println("GALAXY_PICKER_APP_FRAMEBASE=real-Android-frame-confirmed");
+        }
         android.graphics.Bitmap beforePicker=instrumentation.getUiAutomation().takeScreenshot();
         assertNotNull("File-picker QA requires a real app baseline frame",beforePicker);
         scenario.onActivity(a -> a.pickMedia("qa-file-picker", "chat-file"));
@@ -1444,6 +1734,9 @@ public class GalaxyDeviceClosureTest {
             cancelPickerAndVerifyForeground(device, pkg, documentsPackage, beforePicker);
         } finally {
             beforePicker.recycle();
+            // This QA-only marker must never leak into camera, mic, or later tests.
+            if(scenario.getState()!=Lifecycle.State.DESTROYED && isResumedPackage(pkg))
+                runV5Js("document.getElementById('v5-qa-paint-marker')?.remove()");
             // Keep the whole instrumented suite hermetic even when a picker
             // assertion fails. Do not mask the failure or bypass its checks.
             for (int cleanup = 0; cleanup < 3; cleanup++) {

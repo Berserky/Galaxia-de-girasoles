@@ -7,7 +7,7 @@ bash scripts/visual-evolution-p0-avd.sh
 
 # Instrumentation is separated from the unpaired baseline. Failures retain
 # any screenshots already produced for diagnosis; no production token is loaded.
-mkdir -p build/p0-avd/p1-synthetic-themes build/p0-avd/p1-responsive-viewports build/p0-avd/p2-bottom-viewports build/p0-avd/p2-question-viewports build/p0-avd/p3-search-viewports build/p0-avd/p3-notifications-viewports build/p0-avd/p3-themed-search build/p0-avd/p3-themed-notifications
+mkdir -p build/p0-avd/p1-synthetic-themes build/p0-avd/p1-responsive-viewports build/p0-avd/p2-bottom-viewports build/p0-avd/p2-question-viewports build/p0-avd/p3-search-viewports build/p0-avd/p3-notifications-viewports build/p0-avd/p3-themed-search build/p0-avd/p3-themed-notifications build/p0-avd/p4-map-compact build/p0-avd/p4-map-immersive build/p0-avd/p4-themed-maps build/p0-avd/p4-large-font build/p0-avd/p4-map-place-focus
 # Preserve partial theme captures even if instrumentation fails later.
 # This runs only against the isolated QA emulator; screenshots are synthetic.
 pull_theme_evidence() {
@@ -15,6 +15,7 @@ pull_theme_evidence() {
     adb pull "/sdcard/Download/V5-P1-synthetic-${theme}.png" "build/p0-avd/p1-synthetic-themes/${theme}.png" >/dev/null 2>&1 || true
     adb pull "/sdcard/Download/V5-P3-theme-search-${theme}.png" "build/p0-avd/p3-themed-search/${theme}.png" >/dev/null 2>&1 || true
     adb pull "/sdcard/Download/V5-P3-theme-notifications-${theme}.png" "build/p0-avd/p3-themed-notifications/${theme}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P4-theme-map-${theme}.png" "build/p0-avd/p4-themed-maps/${theme}.png" >/dev/null 2>&1 || true
   done
   for css in 320 360 393 412; do
     adb pull "/sdcard/Download/V5-P1-viewport-${css}.png" "build/p0-avd/p1-responsive-viewports/${css}.png" >/dev/null 2>&1 || true
@@ -22,6 +23,10 @@ pull_theme_evidence() {
     adb pull "/sdcard/Download/V5-P2-question-${css}.png" "build/p0-avd/p2-question-viewports/${css}.png" >/dev/null 2>&1 || true
     adb pull "/sdcard/Download/V5-P3-search-${css}.png" "build/p0-avd/p3-search-viewports/${css}.png" >/dev/null 2>&1 || true
     adb pull "/sdcard/Download/V5-P3-notifications-${css}.png" "build/p0-avd/p3-notifications-viewports/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P4-map-compact-${css}.png" "build/p0-avd/p4-map-compact/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P4-map-immersive-${css}.png" "build/p0-avd/p4-map-immersive/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P4-map-large-font-${css}.png" "build/p0-avd/p4-large-font/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P4-map-place-${css}.png" "build/p0-avd/p4-map-place-focus/${css}.png" >/dev/null 2>&1 || true
   done
 }
 trap pull_theme_evidence EXIT
@@ -121,6 +126,80 @@ for theme in ('daylight','cosmic','halloween','christmas','valentine','friendshi
 print(f'P3 real Android seven-theme search+notifications screenshots PASS: {themed}')
 
 
+# P4 Connected Journeys must render both compact and immersive MAPS on a
+# real Android framebuffer. No screenshot is accepted solely from DOM state.
+p4maps={}
+for kind in ('compact','immersive'):
+    directory=Path('build/p0-avd')/f'p4-map-{kind}'
+    images=[directory/f'{css}.png' for css in viewports]
+    assert all(p.is_file() for p in images), f'Missing real P4 map {kind} screenshots: {[str(p) for p in images if not p.is_file()]}'
+    hashes=set()
+    for css,path in zip(viewports,images):
+        blob=path.read_bytes()
+        assert blob.startswith(b'\x89PNG\r\n\x1a\n'), f'Invalid P4 map {kind} PNG: {path}'
+        w,h=struct.unpack('>II',blob[16:24])
+        assert (w,h)==dimensions[css], f'P4 map {kind} wrong native dimensions for {css}: {w}x{h}'
+        sha=hashlib.sha256(blob).hexdigest()
+        assert sha!=hashlib.sha256(responsive[viewports.index(css)].read_bytes()).hexdigest(), f'P4 map {kind} stale Home frame: {css}'
+        hashes.add(sha)
+    assert len(hashes)==len(images), f'P4 map {kind} contains repeated Android frames'
+    p4maps[kind]=len(images)
+for css in viewports:
+    compact=Path('build/p0-avd/p4-map-compact')/f'{css}.png'
+    immersive=Path('build/p0-avd/p4-map-immersive')/f'{css}.png'
+    assert hashlib.sha256(compact.read_bytes()).hexdigest()!=hashlib.sha256(immersive.read_bytes()).hexdigest(), f'P4 map mode frames equal at {css}'
+print(f'P4 real Android map compact+immersive screenshots PASS: {p4maps}')
+
+# Seven P4 thematic APK map surfaces must be confirmed on a real Android
+# framebuffer, independently of P1 Home or P3 dialog thematic captures.
+p4_themes=('daylight','cosmic','halloween','christmas','valentine','friendship','easter')
+p4_themed=[Path('build/p0-avd/p4-themed-maps')/f'{theme}.png' for theme in p4_themes]
+assert all(p.is_file() for p in p4_themed), f'Missing seven-theme P4 Android maps: {[str(p) for p in p4_themed if not p.is_file()]}'
+unique_theme_frames=set()
+for theme,path in zip(p4_themes,p4_themed):
+    blob=path.read_bytes()
+    assert blob.startswith(b'\x89PNG\r\n\x1a\n'), f'Invalid P4 map thematic PNG: {path}'
+    w,h=struct.unpack('>II',blob[16:24])
+    assert w<h and w>=320, f'P4 theme map not a physical portrait frame: {path}: {w}x{h}'
+    sha=hashlib.sha256(blob).hexdigest()
+    assert sha!=hashlib.sha256((Path('build/p0-avd/p1-synthetic-themes')/f'{theme}.png').read_bytes()).hexdigest(), f'P4 theme {theme} screenshot reused Home'
+    unique_theme_frames.add(sha)
+assert len(unique_theme_frames)>=5, f'P4 seven map themes visually duplicated unexpectedly: {len(unique_theme_frames)}/7'
+print(f'P4 real Android map themes: 7/7, distinct frames {len(unique_theme_frames)}/7; AA contrast checked in instrumented Java')
+
+# Native Android WebSettings textZoom(135) snapshots: this is not a CSS
+# font mock. The Android JUnit requires exactly 135 and restores 100 on exit.
+font_frames=[Path('build/p0-avd/p4-large-font')/f'{css}.png' for css in viewports]
+assert all(p.is_file() for p in font_frames), f'Missing P4 native text-zoom Android captures: {[str(p) for p in font_frames if not p.is_file()]}'
+for css,path in zip(viewports,font_frames):
+    blob=path.read_bytes()
+    assert blob.startswith(b'\x89PNG\r\n\x1a\n'), f'Bad P4 Android font screenshot: {path}'
+    w,h=struct.unpack('>II',blob[16:24])
+    assert (w,h)==dimensions[css], f'P4 native text-zoom dimensions mismatch: {css}: {w}x{h}'
+    original=(Path('build/p0-avd/p4-map-compact')/f'{css}.png').read_bytes()
+    assert hashlib.sha256(blob).hexdigest()!=hashlib.sha256(original).hexdigest(), f'P4 native 135% screenshot reused normal font image at {css}'
+print(f'P4 real Android WebSettings 135% text-zoom map screenshots: {len(font_frames)}/4')
+
+# Real saved-place navigation after P4C's secondary-actions disclosure.
+# Device-side JUnit verifies map center, popup, keyboard focus and 44px targets.
+place_frames=[Path('build/p0-avd/p4-map-place-focus')/f'{css}.png' for css in viewports]
+assert all(p.is_file() for p in place_frames), f'Missing P4 saved-place focus Android captures: {[str(p) for p in place_frames if not p.is_file()]}'
+for css,path in zip(viewports,place_frames):
+    blob=path.read_bytes()
+    assert blob.startswith(b'\x89PNG\r\n\x1a\n'), f'Invalid P4 saved-place screenshot: {path}'
+    w,h=struct.unpack('>II',blob[16:24])
+    assert (w,h)==dimensions[css], f'P4 place-focus native resolution mismatch for {css}: {w}x{h}'
+    normal=(Path('build/p0-avd/p4-map-compact')/f'{css}.png').read_bytes()
+    assert hashlib.sha256(blob).hexdigest()!=hashlib.sha256(normal).hexdigest(), f'P4 saved-place {css} duplicated earlier map screenshot'
+print(f'P4 real Android saved-place center+open popup+keyboard screenshots PASS: {len(place_frames)}/4')
+
+
+
+
+
+
+
+
 
 
 # Keep a machine-readable success receipt based on the actual Android JUnit
@@ -143,6 +222,10 @@ receipt={'status':'VERIFIED_SYNTHETIC_QA','android_junit_tests':tests,
          'p2_middle_question_screenshots':len(middle),
          'p3_real_modal_screenshots':p3surfaces,
          'p3_themed_modal_screenshots':themed,
+         'p4_real_map_screenshots':p4maps,
+         'p4_theme_map_screenshots':len(p4_themed),
+         'p4_native_135_text_zoom_screenshots':len(font_frames),
+         'p4_saved_place_focus_screenshots':len(place_frames),
          'responsive_png_dimensions':{str(k):list(v) for k,v in dimensions.items()},
          'verification':'display-pixel-marker-plus-instrumented-css-layout-focus'}
 Path('build/p0-avd/p1-device-summary.json').write_text(

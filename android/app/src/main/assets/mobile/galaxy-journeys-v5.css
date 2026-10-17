@@ -1,0 +1,273 @@
+/* Visual Evolution 5.0 · P4 — Connected Journeys visual shell.
+   Only map presentation and navigation: GPS, consent and backend unchanged. */
+.journey-map-region{position:relative}
+.map-immersive-toggle{
+ position:absolute;z-index:560;top:12px;right:12px;
+ display:inline-flex;align-items:center;justify-content:center;gap:8px;
+ min-width:44px;min-height:44px;padding:10px 13px;border:1px solid var(--border);
+ border-radius:14px;color:var(--text);background:var(--control-glass);
+ font-size:12px;font-weight:750;box-shadow:var(--shadow);touch-action:manipulation;
+}
+.map-immersive-toggle:focus-visible,.map-fab:focus-visible,
+.journey-mobility .chip:focus-visible{outline:3px solid var(--v5-action,var(--accent));outline-offset:3px}
+.map-fab{min-width:50px;min-height:50px}
+.map-immersive-open{overflow:hidden}
+.journey-map-region.immersive{
+ position:fixed;inset:0;width:100vw;height:100dvh;max-height:100dvh;
+ z-index:1800;margin:0;padding:0;background:var(--map-bg);
+ border-radius:0;overscroll-behavior:contain;
+}
+.journey-map-region.immersive #map{width:100%;height:100%;min-height:0;max-height:none;border:0;border-radius:0}
+.journey-map-region.immersive .map-immersive-toggle{top:max(14px,env(safe-area-inset-top));right:max(14px,env(safe-area-inset-right))}
+.journey-map-region.immersive .map-fab{right:max(14px,env(safe-area-inset-right));bottom:max(22px,env(safe-area-inset-bottom))}
+.journey-map-region.immersive .map-status-menu{right:max(14px,env(safe-area-inset-right));bottom:max(82px,calc(env(safe-area-inset-bottom) + 72px))}
+.journey-map-region.immersive .gmap-controls{left:max(14px,env(safe-area-inset-left));bottom:max(22px,env(safe-area-inset-bottom))}
+.journey-map-region.immersive .gmap-attrib{bottom:max(0px,env(safe-area-inset-bottom))}
+.journey-freshness{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:12px}
+.journey-presence{
+ min-width:0;display:flex;align-items:flex-start;gap:10px;
+ border:1px solid var(--border);border-radius:16px;padding:12px;
+ background:var(--surface);color:var(--text);
+}
+.journey-presence-icon{flex:0 0 34px;width:34px;height:34px;display:grid;place-items:center;
+ border-radius:11px;background:var(--surface2);color:var(--accent)}
+.journey-presence-copy{display:grid;gap:4px;min-width:0}
+.journey-presence-copy b{font-size:13px;line-height:1.35;overflow-wrap:anywhere}
+.journey-presence-copy small{font-size:11px;line-height:1.5;color:var(--muted);overflow-wrap:anywhere}
+.journey-presence.fresh .journey-presence-icon{background:var(--good-surface);color:var(--good)}
+.journey-presence.stale .journey-presence-icon{border:1px dashed var(--border)}
+.journey-companion{border:1px solid var(--border);background:var(--surface2);border-radius:22px;
+ padding:14px;display:grid;gap:10px;margin-top:14px}
+.journey-companion .section{margin:0}
+.journey-companion .card{box-shadow:none}
+.journey-companion-head h2{margin:0;font-size:18px;line-height:1.3}
+.journey-companion-head p{margin:5px 0 0;font-size:12px;color:var(--muted);line-height:1.5}
+.journey-mobility .chip{min-height:44px;display:inline-flex;align-items:center;gap:6px}
+/* VE-079: paired text/background theme tokens maintain AAA legibility in every theme. */
+.journey-mobility .chip[aria-pressed="true"]{background:var(--text);
+ color:var(--bg);border-color:var(--text)}
+@media(max-width:390px){
+ .journey-freshness{grid-template-columns:minmax(0,1fr)}
+ .journey-companion{padding:10px}
+ .map-immersive-toggle{right:8px;top:8px}
+}
+@media(prefers-reduced-motion:reduce){
+ .map-immersive-toggle,.journey-presence,.journey-companion{animation:none!important;transition:none!important}
+}
+
+/* V5-P4 / VE-065: accessible native map controls, no map engine changes. */
+.gmap-controls{gap:8px;left:12px;bottom:12px}
+.gmap-controls button{min-width:44px;min-height:44px;border-radius:14px;display:grid;
+ place-items:center;touch-action:manipulation;transition:transform .16s ease,background-color .16s ease,border-color .16s ease}
+.gmap-controls button:focus-visible{outline:3px solid var(--v5-action,var(--accent));outline-offset:3px}
+.gmap-controls button:active{transform:scale(.96)}
+/* VE-063/069: distinct marker shape and explicit historical position. */
+.gmap-marker button{display:grid;place-items:center;min-width:44px;min-height:44px;
+ transition:box-shadow .16s ease,transform .16s ease}
+.gmap-marker button:focus-visible{outline:3px solid var(--v5-action,var(--accent));outline-offset:3px}
+.gmap-marker button:active{transform:scale(.96)}
+.gmap-marker.partner button{border-radius:50%}
+.gmap-marker.place button{width:44px;height:44px;border-radius:12px;border-style:solid}
+.gmap-marker.stale button{border-style:dashed}
+.gmap-marker.open button{box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 35%,transparent),0 6px 20px rgba(0,0,0,.22)}
+@media(prefers-reduced-motion:reduce){
+ .gmap-controls button,.gmap-marker button{transition:none;transform:none}
+}
+
+/* P4B / VE-081–090: sessions and optional alerts form one quiet journey surface. */
+.journey-context{display:grid;gap:13px}
+.journey-context .section-head{margin-bottom:0}
+.journey-context .context-session{margin:0;min-width:0}
+.journey-active-session{border-radius:19px;padding:14px;background:var(--surface);border:1px solid var(--border)}
+.journey-session-hint{color:var(--muted);font-size:12px;line-height:1.5;margin:8px 0 12px}
+.journey-session-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.journey-context .context-actions{display:flex;gap:8px;flex-wrap:wrap;margin:0}
+.journey-context .context-actions .btn{min-height:44px;flex:1 1 140px;justify-content:center}
+.journey-alerts{border:1px solid var(--border);border-radius:18px;background:var(--surface);min-width:0;overflow:hidden}
+.journey-alerts-summary{display:flex;align-items:center;gap:10px;padding:13px;min-height:58px;
+ list-style:none;cursor:pointer;touch-action:manipulation;color:var(--text)}
+.journey-alerts-summary::-webkit-details-marker{display:none}
+.journey-alerts-summary >span:nth-child(2){display:grid;gap:3px;flex:1;min-width:0}
+.journey-alerts-summary b{font-size:13px}
+.journey-alerts-summary small{font-size:11px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
+.journey-alerts-summary>.ui-icon{flex-shrink:0;transition:transform .16s ease}
+.journey-alerts[open] .journey-alerts-summary>.ui-icon{transform:rotate(180deg)}
+.journey-alerts-summary:focus-visible{outline:3px solid var(--v5-action,var(--accent));outline-offset:-3px;border-radius:18px}
+.journey-alerts-icon{flex:0 0 36px;width:36px;height:36px;border-radius:12px;background:var(--surface2);
+ display:grid;place-items:center;color:var(--accent)}
+.journey-alerts-content{padding:0 13px 13px;display:grid;gap:12px}
+.journey-alert-explainer{font-size:12px;line-height:1.5;color:var(--muted);margin:0}
+.journey-context .context-controls{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.journey-context .context-controls .card{padding:14px;margin:0;min-width:0}
+.journey-context .context-controls .row{align-items:flex-start;gap:8px;flex-wrap:wrap}
+.journey-context .context-controls p{font-size:12px;line-height:1.45}
+.journey-context .context-controls .badge{font-size:10px}
+.journey-context .context-controls .btn{min-height:44px}
+.journey-context .context-progress[aria-valuetext]{opacity:.65}
+@media(max-width:540px){.journey-context .context-controls{grid-template-columns:minmax(0,1fr)}}
+@media(prefers-reduced-motion:reduce){
+ .journey-alerts-summary>.ui-icon{transition:none}
+}
+
+/* P4C / VE-091–100: a compact location library and chronological activity. */
+.journey-place-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.journey-place-card{min-width:0;padding:12px!important;display:grid;align-content:start;gap:10px}
+.journey-place-card .history-place-head{width:100%;display:flex;align-items:center;gap:9px;text-align:left;
+ min-height:52px;padding:8px;border-radius:13px;min-width:0;background:var(--surface2);color:var(--text)}
+.journey-place-card .history-place-head>span:nth-child(2){display:grid;gap:3px;min-width:0;flex:1}
+.journey-place-card .history-place-head b{font-size:13px;line-height:1.3;overflow-wrap:anywhere}
+.journey-place-card .history-place-head small{font-size:11px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
+.journey-place-card .history-place-head:disabled{opacity:.65;cursor:not-allowed}
+.journey-place-card .history-place-head:focus-visible,.journey-show-more:focus-visible,
+.journey-timeline-item button:focus-visible{outline:3px solid var(--v5-action,var(--accent));outline-offset:2px}
+.journey-place-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.journey-place-actions .btn{min-height:44px}
+.journey-place-count{font-size:11px;color:var(--muted)}
+.journey-place-card .history-links{display:flex;flex-wrap:wrap;gap:6px;margin:0}
+.journey-place-card .history-memory{min-height:44px;max-width:100%;overflow-wrap:anywhere}
+.journey-timeline-list{display:grid;gap:0;position:relative;margin:4px 0 14px}
+.journey-timeline-list:before{content:"";position:absolute;top:20px;bottom:20px;left:19px;
+ width:2px;background:var(--border);pointer-events:none}
+.journey-timeline-item{display:grid;grid-template-columns:40px minmax(0,1fr);gap:12px;padding:10px 0;min-width:0}
+.journey-timeline-icon{width:40px;height:40px;border:1px solid var(--border);
+ border-radius:15px;display:grid;place-items:center;z-index:1;background:var(--surface);color:var(--accent)}
+.journey-timeline-item>div{background:var(--surface);border:1px solid var(--border);
+ border-radius:15px;padding:11px 12px;min-width:0}
+.journey-timeline-item h3{font-size:14px;line-height:1.4;overflow-wrap:anywhere;margin:6px 0}
+.journey-timeline-item p{font-size:11px;line-height:1.5;color:var(--muted);margin:4px 0 10px}
+.journey-timeline-item .btn{min-height:44px}
+.journey-show-more{width:100%;min-height:44px}
+@media(max-width:620px){.journey-place-list{grid-template-columns:minmax(0,1fr)}}
+
+/* P4 UX completion · VE-076–078: own sharing separate from system permissions. */
+.journey-sharing-card{display:grid;gap:12px;padding:14px}
+.journey-sharing-card .row{gap:12px;flex-wrap:wrap}
+.journey-sharing-card .row>div{min-width:0;flex:1 1 160px}
+.journey-sharing-card h3{margin:0 0 4px;font-size:15px}
+.journey-sharing-card p{font-size:12px;line-height:1.55;color:var(--muted)}
+.journey-sharing-actions{display:flex;flex-wrap:wrap;gap:10px}
+.journey-sharing-actions .btn{min-height:44px}
+.journey-permissions-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
+ gap:10px;padding-top:12px;border-top:1px solid var(--border)}
+.journey-permissions-row span{display:inline-flex;align-items:center;gap:6px;
+ min-width:0;color:var(--muted);font-size:11px;line-height:1.5}
+.journey-permissions-row .btn{min-height:44px}
+@media(max-width:390px){.journey-sharing-actions .btn{width:100%}.journey-permissions-row .btn{width:100%}}
+
+/* P4 VE-067/068/070: quiet expandable people cards, speed in details. */
+.person-card.journey-person{display:block;min-width:0;padding:0;overflow:hidden}
+.journey-person-summary{list-style:none;display:flex;align-items:center;gap:10px;
+ min-height:66px;padding:11px;cursor:pointer;color:var(--text);touch-action:manipulation}
+.journey-person-summary::-webkit-details-marker{display:none}
+.journey-person-summary .bubble{flex:0 0 42px;width:42px;height:42px;font-size:18px;border-radius:14px}
+.journey-person-heading{flex:1;min-width:0;display:grid;gap:4px}
+.journey-person-heading b{font-size:13px;line-height:1.35;overflow-wrap:anywhere}
+.journey-person-heading small{font-size:11px;color:var(--muted);line-height:1.45;overflow-wrap:anywhere}
+.journey-person-chevron{flex:0 0 24px;display:grid;place-items:center;color:var(--muted);
+ transition:transform .18s ease}
+.journey-person[open] .journey-person-chevron{transform:rotate(180deg)}
+.journey-person-summary:focus-visible{outline:3px solid var(--v5-action,var(--accent));
+ outline-offset:-3px;border-radius:16px}
+.journey-person-details{display:grid;gap:10px;padding:12px;border-top:1px solid var(--border)}
+.journey-speed{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;
+ color:var(--muted);font-size:12px}
+.person-card.journey-person .speed{display:inline-flex;align-items:baseline;gap:3px;
+ font-size:15px;line-height:1.2;font-weight:800;color:var(--text)}
+.person-card.journey-person .speed small{font-size:11px;line-height:1.2;color:var(--muted);font-weight:500}
+.journey-person-details p{margin:0;font-size:11px;line-height:1.5}
+.journey-person-actions .btn{min-height:44px}
+@media(max-width:390px){.journey-person-summary{min-height:58px;padding:9px}.journey-person-summary .bubble{width:36px;height:36px;flex-basis:36px}}
+@media(prefers-reduced-motion:reduce){.journey-person-chevron{transition:none}}
+
+/* VE-062: theme-adaptive raster styling, retaining the original OSM URL
+   and attribution overlay outside the filtered tile layer. */
+#map .gmap-tiles{transition:filter .2s ease}
+html[data-theme="daylight"] #map .gmap-tiles{filter:none}
+html[data-theme="cosmic"] #map .gmap-tiles{filter:brightness(.8) saturate(.82) contrast(1.08)}
+html[data-theme="halloween"] #map .gmap-tiles{filter:brightness(.79) saturate(.8) contrast(1.12)}
+html[data-theme="christmas"] #map .gmap-tiles{filter:brightness(.91) saturate(.88)}
+html[data-theme="valentine"] #map .gmap-tiles{filter:brightness(.94) saturate(.94)}
+html[data-theme="friendship"] #map .gmap-tiles{filter:brightness(.96) saturate(.9)}
+html[data-theme="easter"] #map .gmap-tiles{filter:brightness(1.01) saturate(.86)}
+/* VE-064: lines shown here are saved routes only; no false planned route. */
+.journey-map-legend{display:flex;gap:8px 14px;align-items:center;flex-wrap:wrap;
+ color:var(--muted);font-size:11px;line-height:1.45;padding:9px 2px 2px}
+.journey-map-legend span{display:inline-flex;align-items:center;gap:6px}
+.journey-map-legend small{flex-basis:100%;color:var(--muted);font-size:10px}
+.journey-route-line{width:29px;height:0;border-top:4px solid var(--accent);border-radius:4px}
+.journey-route-line.partner{border-color:var(--accent2);border-top-style:dashed}
+#map .gmap-line.recorded{opacity:.84}
+@media(prefers-reduced-motion:reduce){#map .gmap-tiles{transition:none}}
+
+/* VE-090: quick map actions are not oversized marketing cards. */
+.journey-actions{display:grid;gap:9px}
+.journey-actions-heading{display:grid;gap:3px}
+.journey-actions-heading b{font-size:13px;color:var(--text)}
+.journey-actions-heading small{font-size:11px;line-height:1.45;color:var(--muted)}
+.journey-actions-row{display:flex;gap:8px;flex-wrap:wrap}
+.journey-actions-row .btn{min-height:44px;flex:1 1 150px;justify-content:center}
+/* VE-093/094: secondary actions are a single disclosure per saved place. */
+.journey-place-more{min-width:0;border:1px solid var(--border);border-radius:13px;background:var(--surface);max-width:100%}
+.journey-place-more summary{list-style:none;display:inline-flex;gap:6px;align-items:center;
+ min-height:44px;padding:8px 12px;cursor:pointer;color:var(--text);font-size:12px;font-weight:650}
+.journey-place-more summary::-webkit-details-marker{display:none}
+.journey-place-more summary:focus-visible{outline:3px solid var(--v5-action,var(--accent));outline-offset:2px;border-radius:12px}
+.journey-place-more[open]{width:100%}
+.journey-place-more-content{display:flex;flex-wrap:wrap;gap:8px;padding:0 10px 10px}
+.journey-place-more-content .btn{min-height:44px;flex:1 1 135px}
+.journey-place-more-content .btn:focus-visible,.journey-actions-row .btn:focus-visible{
+ outline:3px solid var(--v5-action,var(--accent));outline-offset:2px}
+@media(max-width:390px){.journey-actions-row .btn{flex-basis:100%}.journey-place-more{width:100%}}
+
+/* VE-063: a selected destination is visually differentiated, not duplicated.
+   Marker popup/aria label explicitly identify destination. */
+#map .gmap-marker.destination button{
+ border-color:var(--v5-action,var(--accent));border-style:double;
+ box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 30%,transparent),0 5px 18px rgba(0,0,0,.24);
+}
+#map .gmap-marker.destination::after{
+ content:"";position:absolute;top:-5px;right:-4px;
+ width:12px;height:12px;border-radius:100%;
+ border:2px solid var(--surface);background:var(--v5-action,var(--accent));
+ pointer-events:none;
+}
+/* VE-077: location stop remains always visible. Permissions are secondary. */
+.journey-permissions-row{display:block;min-width:0}
+.journey-permissions-row>summary{list-style:none;display:inline-flex;align-items:center;gap:7px;
+ min-height:44px;padding:9px 10px;border-radius:12px;cursor:pointer;
+ color:var(--text);font-size:12px;font-weight:650}
+.journey-permissions-row>summary::-webkit-details-marker{display:none}
+.journey-permissions-row>summary:focus-visible{outline:3px solid var(--v5-action,var(--accent));outline-offset:2px}
+.journey-permissions-content{display:flex;justify-content:space-between;align-items:center;gap:10px;
+ flex-wrap:wrap;padding:4px 2px 8px}
+.journey-permissions-content .btn{min-height:44px}
+@media(max-width:390px){.journey-permissions-content .btn{width:100%}}
+
+/* VE-064: route segments never connect different journeys or sharing states. */
+#map .gmap-line.recorded.historical{stroke-width:4;opacity:.54}
+#map .gmap-line.recorded.active{stroke-width:6;opacity:.94;stroke-dasharray:none}
+.journey-route-line.active{border-color:var(--good);border-top-style:solid;border-top-width:5px}
+
+/* VE-072: distance is a compact two-line reading, details remain available. */
+.journey-companion .journey-distance{display:grid;grid-template-columns:36px minmax(0,1fr) auto;
+ align-items:center;gap:10px;padding:12px;min-width:0}
+.journey-distance .couple-distance-icon{width:36px;height:36px;display:grid;place-items:center;
+ border-radius:12px;background:var(--surface2);color:var(--accent)}
+.journey-distance-main{display:grid;gap:4px;min-width:0}
+.journey-distance-main .eyebrow{margin:0;font-size:9px;line-height:1.3;overflow-wrap:anywhere}
+.journey-distance-main strong{display:block;font-size:clamp(17px,4vw,23px);line-height:1.15;
+ letter-spacing:-.025em;color:var(--text)}
+.journey-distance-main small{font-size:11px;color:var(--muted);line-height:1.45}
+.journey-distance>.btn{min-height:44px}
+.journey-distance-details{grid-column:1/-1;min-width:0;border-top:1px solid var(--border);padding-top:6px}
+.journey-distance-details summary{list-style:none;display:inline-flex;align-items:center;gap:6px;
+ min-height:44px;padding:7px 8px;border-radius:11px;cursor:pointer;color:var(--muted);
+ font-size:12px;font-weight:650}
+.journey-distance-details summary::-webkit-details-marker{display:none}
+.journey-distance-details summary:focus-visible{outline:3px solid var(--v5-action,var(--accent));outline-offset:2px}
+.journey-distance-details p{font-size:12px;line-height:1.55;margin:6px 0;color:var(--muted)}
+@media(max-width:390px){
+ .journey-companion .journey-distance{grid-template-columns:32px minmax(0,1fr)}
+ .journey-distance .couple-distance-icon{width:32px;height:32px}
+ .journey-distance>.btn{grid-column:2;justify-self:start}
+}
