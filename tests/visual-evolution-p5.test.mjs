@@ -257,3 +257,90 @@ test('P5D: existing version-aware delete and edit contracts are not weakened',()
  assert.match(css,/\.living-note-full>summary\{[^}]*min-height:44px/);
  assert.match(css,/@media\(prefers-reduced-motion:reduce\)\{\.living-ritual-card/);
 });
+
+
+const voiceSource=extract('function voiceCard(e){','function contextSettings(){');
+const voiceModule=load('galaxy-voice-v5.js');
+function voiceMarkup(data={},person=0){
+ const ctx={cloud:{person},esc:escape,attr:escape,ico,
+  partnerName:()=> 'Mi pareja',livingEntryMeta:()=>'',voiceTranscriptMarkup:()=>''};
+ return runInNewContext(voiceSource+'\nvoiceCard',ctx,{timeout:1500})({id:'synthetic-voice',author:0,data});
+}
+
+test('P5E: voice markup keeps original audio URLs and action routes while showing unknown duration',()=>{
+ const html=voiceMarkup({title:'Una voz',body:'Te extraño',
+  audioUrl:'https://example.invalid/audio.m4a?tag=<private>&a=1'});
+ assert.match(html,/class="card audio-card living-voice-card"/);
+ assert.match(html,/data-voice-id="synthetic-voice"/);
+ assert.match(html,/class="living-voice-toggle"/);
+ assert.match(html,/class="living-voice-seek"[^>]*disabled/);
+ assert.match(html,/0:00 \/ --:--/);
+ assert.match(html,/preload="none" src="https:\/\/example.invalid\/audio.m4a\?tag=&lt;private&gt;&amp;a=1"/);
+ assert.match(html,/data-action="voice-transcribe" data-id="synthetic-voice"/);
+ assert.match(html,/data-action="bond-delete" data-id="synthetic-voice"/);
+ assert.doesNotMatch(html,/<private>/);
+ assert.match(html,/Opciones de esta voz/);
+ assert.match(css,/\.living-voice-toggle:focus-visible/);
+ assert.match(html,/aria-label="Avanzar audio"/);
+});
+
+test('P5E: absent audio is explicitly unavailable; no false player or duration',()=>{
+ const missing=voiceMarkup({title:'Nota sin archivo'});
+ assert.match(missing,/Este mensaje de voz no está disponible/);
+ assert.doesNotMatch(missing,/<audio|class="living-voice-player"/);
+ assert.doesNotMatch(missing,/0:00 \/ 0:00/);
+ const incoming=voiceMarkup({audioUrl:'https://example.invalid/audio.mp3'},1);
+ assert.match(incoming,/Mi pareja/);
+ assert.doesNotMatch(incoming,/data-action="bond-delete"|data-action="voice-transcribe"/);
+});
+
+test('P5E: the audio controller formats only finite non-negative playback times',()=>{
+ const wnd={},listeners={};
+ runInNewContext(voiceModule,{window:wnd,document:{addEventListener:(name,handler)=>(listeners[name]??=[]).push(handler)}},{timeout:1300});
+ assert.equal(wnd.GalaxyVoiceV5.formatTime(5.9),'0:05');
+ assert.equal(wnd.GalaxyVoiceV5.formatTime(65),'1:05');
+ assert.equal(wnd.GalaxyVoiceV5.formatTime(-1),'--:--');
+ assert.equal(wnd.GalaxyVoiceV5.formatTime(Infinity),'--:--');
+ assert.equal(wnd.GalaxyVoiceV5.formatTime(NaN),'--:--');
+ assert.equal(wnd.GalaxyVoiceV5.hasDuration({duration:Infinity}),false);
+ assert.equal(wnd.GalaxyVoiceV5.hasDuration({duration:42.5}),true);
+ assert.ok(listeners.loadedmetadata.length>0);
+ assert.ok(listeners.error.length>0);
+ assert.doesNotMatch(voiceModule,/fetch\s*\(|GalaxyNative|localStorage|Supabase|geolocation/);
+ assert.match(html,/src="\.\/galaxy-voice-v5\.js"[\s\S]*src="\.\/app\.js"/);
+});
+
+test('P5E: browser media events enable seeking only when actual metadata exists',()=>{
+ const listeners={},button={dataset:{},setAttribute(name,value){this[name]=value;}};
+ const clock={textContent:''},status={textContent:''};
+ const range={disabled:true,max:'100',value:'0',setAttribute(name,value){this[name]=value;}};
+ const player={querySelector(selector){
+  if(selector==='.living-voice-seek')return range;
+  if(selector==='.living-voice-time')return clock;
+  if(selector==='.living-voice-toggle')return button;
+  if(selector==='.living-voice-status')return status;
+  if(selector==='audio.living-voice-audio')return audio;
+  return null;
+ }};
+ const audio={duration:Infinity,currentTime:0,paused:true,ended:false,error:null,
+  closest:selector=>selector==='.living-voice-player'?player:null,
+  matches:selector=>selector==='audio.living-voice-audio',
+  play(){this.paused=false;return Promise.resolve();},pause(){this.paused=true;}};
+ const doc={addEventListener:(kind,fn)=>(listeners[kind]??=[]).push(fn),
+   querySelectorAll:()=>[audio]};
+ runInNewContext(voiceModule,{window:{},document:doc},{timeout:1600});
+ const media=kind=>listeners[kind][0]({target:audio});
+ media('loadedmetadata');
+ assert.equal(range.disabled,true);
+ assert.equal(clock.textContent,'0:00 / --:--');
+ assert.equal(status.textContent,'Duración aún no disponible');
+ audio.duration=125.8;audio.currentTime=70.3;media('durationchange');
+ assert.equal(range.disabled,false);
+ assert.equal(range.max,'125800');
+ assert.equal(range.value,'70300');
+ assert.equal(clock.textContent,'1:10 / 2:05');
+ assert.equal(range['aria-valuetext'],'1:10 de 2:05');
+ audio.currentTime=9;media('error');
+ assert.equal(status.textContent,'No se pudo cargar este audio.');
+ assert.equal(button['aria-label'],'Reproducir mensaje de voz');
+});
