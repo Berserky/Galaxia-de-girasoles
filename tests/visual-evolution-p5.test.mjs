@@ -57,6 +57,7 @@ function renderMoments(garden,entries=[]){
   bondUnlockables:()=>'<div class="bond-unlockables"></div>',
   actionCard:(icon,title,copy,action)=>'<button class="action-card" data-action="'+action+'">'+escape(title)+'</button>',
   surpriseNotesView:()=>'<section id="surprises"></section>',
+  gameMomentsSection:()=>'<section id="game-groups"></section>',
   momentSection:()=>'<section class="existing-moment-history"></section>',
   gameCard:()=>'',ritualCard:()=>'',sharedNoteCard:()=>'',voiceCard:()=>''
  };
@@ -150,4 +151,57 @@ test('P5B: gesture sends show a busy state, prevent double taps and restore on e
  assert.match(app,/btn\.disabled=false;btn\.removeAttribute\('aria-busy'\)/);
  assert.match(css,/\.living-gestures \.gesture\[aria-busy="true"\]/);
  assert.match(css,/\.living-garden-milestones/);
+});
+
+const surpriseSource=extract('function surpriseNotesView(){','function cloudRenderFingerprint(');
+const gameSource=extract('function gameMomentsSection(games){','function ritualCard(e){');
+
+test('P5C: a locked surprise never exposes title, message or linked voice',()=>{
+ const samples=[
+  {id:'locked',author:1,open:false,data:{title:'PRIVATE-TITLE-XYZ',body:'PRIVATE-BODY-XYZ',unlockType:'date',unlockDate:'2027-12-24'}},
+  {id:'opened',author:1,open:true,data:{title:'Una carta',body:'Palabras compartidas'}}
+ ];
+ const ctx={ico,esc:escape,attr:escape,cloud:{person:0},surpriseNotes:()=>samples,
+  surpriseUnlocked:i=>i.open,fmtDate:x=>x,
+  linkedVoices:id=>{assert.equal(id,'opened');return [];},voiceCard:()=>''};
+ const html=runInNewContext(surpriseSource+'\nsurpriseNotesView',ctx,{timeout:1300})();
+ assert.match(html,/Hay algo esperando para ti/);
+ assert.match(html,/El contenido permanece oculto hasta su desbloqueo/);
+ assert.doesNotMatch(html,/PRIVATE-TITLE-XYZ|PRIVATE-BODY-XYZ/);
+ assert.match(html,/Una carta/);
+ assert.match(html,/Palabras compartidas/);
+ assert.equal((html.match(/data-action="surprise-note-new"/g)||[]).length,1);
+ assert.equal((html.match(/data-action="item-delete"/g)||[]).length,0);
+});
+test('P5C: original owner actions remain behind a secondary disclosure',()=>{
+ const sample={id:'one',author:0,open:false,data:{title:'Secret',body:'Never-reveal',unlockType:'place'}};
+ const ctx={ico,esc:escape,attr:escape,cloud:{person:0},surpriseNotes:()=>[sample],surpriseUnlocked:()=>false,
+  fmtDate:x=>x,linkedVoices:()=>{throw Error('Locked voice read');},voiceCard:()=>''};
+ const ui=runInNewContext(surpriseSource+'\nsurpriseNotesView',ctx,{timeout:1300})();
+ assert.match(ui,/data-action="voice-for-item" data-id="one"/);
+ assert.match(ui,/data-action="item-delete" data-id="one"/);
+ assert.match(ui,/Opciones de esta sorpresa/);
+ assert.doesNotMatch(ui,/Never-reveal/);
+ assert.ok(css.includes('.living-surprise-card.sealed'));
+ assert.ok(css.includes('.living-secondary-actions>summary:focus-visible'));
+});
+test('P5C: game sessions separate current turn, waiting and played without leaks',()=>{
+ const ctx={ico,esc:escape,attr:escape,cloud:{person:0},partnerName:()=> 'Tu pareja',
+  gameQuestions:{tea:{label:'¿Café o té?',options:['Té','Café']}},
+  momentSection:(name,list,renderer)=>'<section data-group="'+name+'">'+list.map(renderer).join('')+'</section>'};
+ const game=runInNewContext(gameSource+'\n({gameCard,gameMomentsSection})',ctx,{timeout:1300});
+ const waiting={id:'waiting',author:0,data:{questionId:'tea',answer:'Café'}};
+ const played={id:'played',author:1,data:{questionId:'tea',answer:'Té',guess:'Café',correct:false}};
+ const current={id:'turn',author:1,data:{questionId:'tea',answer:'SECRET-ANSWER-XYZ'}};
+ const ui=game.gameMomentsSection([waiting,played,current]);
+ assert.ok(ui.indexOf('Te toca responder')<ui.indexOf('Esperando respuesta'));
+ assert.ok(ui.indexOf('Esperando respuesta')<ui.indexOf('Partidas jugadas'));
+ assert.equal((ui.match(/class="card living-game-card/g)||[]).length,3);
+ assert.doesNotMatch(game.gameCard(current),/SECRET-ANSWER-XYZ/);
+ assert.match(game.gameCard(current),/data-action="game-guess" data-id="turn"/);
+ assert.doesNotMatch(game.gameCard(current),/data-action="bond-delete"/);
+ assert.match(game.gameCard(waiting),/Opciones de la partida/);
+ assert.match(game.gameCard(waiting),/data-action="bond-delete" data-id="waiting"/);
+ assert.match(game.gameCard(played),/Respuesta:/);
+ assert.ok(css.includes('.living-game-options .chip{min-height:44px'));
 });
