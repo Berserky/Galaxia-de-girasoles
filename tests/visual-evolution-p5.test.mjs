@@ -15,7 +15,7 @@ const extract=(from,to)=>{
  assert.ok(start>=0&&end>start,from+' must exist before '+to);
  return app.slice(start,end);
 };
-const gardenSource=extract('function bondGardenVisual(garden){','function bondUnlockables(garden){');
+const gardenSource=extract('function bondGardenStage(garden){','function bondUnlockables(garden){');
 const milestonesSource=extract('function bondUnlockables(garden){','function openBondGestureForm(');
 const momentsSource=extract('function momentsView(){','function momentSection(');
 
@@ -52,6 +52,7 @@ function renderMoments(garden,entries=[]){
    {id:'tap',name:'Toque',icon:'hand',behavior:'haptic'}
   ],
   ico,esc:escape,attr:escape,
+  bondGardenStage:runInNewContext(gardenSource+'\nbondGardenStage',{ico},{timeout:1200}),
   bondGardenVisual:runInNewContext(gardenSource+'\nbondGardenVisual',{ico},{timeout:1200}),
   bondUnlockables:()=>'<div class="bond-unlockables"></div>',
   actionCard:(icon,title,copy,action)=>'<button class="action-card" data-action="'+action+'">'+escape(title)+'</button>',
