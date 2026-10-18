@@ -65,6 +65,7 @@ test('P5 garden: northern-hemisphere seasons and local dayparts follow the calen
   const html=render({stage:8});
   assert.match(html,new RegExp('data-daypart="'+daypart+'" data-season="'+season+'"'));
   assert.match(html,/data-stage="8"/);
+  assert.match(html,new RegExp(daypart==='night'?'moon-star':'sun'));
  }
 });
 
