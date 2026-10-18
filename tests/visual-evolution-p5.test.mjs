@@ -53,7 +53,7 @@ test('P5 garden: northern-hemisphere seasons and local dayparts follow the calen
  ];
  for(const [instant,season,daypart] of cases){
   const FakeDate=class extends Date{constructor(...args){super(...(args.length?args:[instant]));}};
-  const render=runInNewContext(gardenSource+'\\nbondGardenVisual',{ico,Date:FakeDate},{timeout:1200});
+  const render=runInNewContext(gardenSource+'\nbondGardenVisual',{ico,Date:FakeDate},{timeout:1200});
   const html=render({stage:8});
   assert.match(html,new RegExp('data-daypart="'+daypart+'" data-season="'+season+'"'));
   assert.match(html,/data-stage="8"/);
