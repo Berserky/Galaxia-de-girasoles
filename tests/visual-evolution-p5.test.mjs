@@ -49,7 +49,15 @@ test('P5 garden: northern-hemisphere seasons and local dayparts follow the calen
   ['2026-01-15T02:00:00', 'winter','night'],
   ['2026-04-15T08:00:00', 'spring','morning'],
   ['2026-07-15T14:00:00', 'summer','day'],
-  ['2026-10-15T18:00:00', 'autumn','sunset']
+  ['2026-10-15T18:00:00', 'autumn','sunset'],
+  ['2026-02-28T23:00:00', 'winter','night'],
+  ['2026-03-01T05:00:00', 'spring','morning'],
+  ['2026-05-31T10:00:00', 'spring','morning'],
+  ['2026-06-01T11:00:00', 'summer','day'],
+  ['2026-08-31T16:00:00', 'summer','day'],
+  ['2026-09-01T17:00:00', 'autumn','sunset'],
+  ['2026-11-30T19:00:00', 'autumn','sunset'],
+  ['2026-12-01T20:00:00', 'winter','night']
  ];
  for(const [instant,season,daypart] of cases){
   const FakeDate=class extends Date{constructor(...args){super(...(args.length?args:[instant]));}};
