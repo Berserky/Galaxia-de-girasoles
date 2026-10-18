@@ -60,6 +60,16 @@ test('P5 garden: northern-hemisphere seasons and local dayparts follow the calen
  }
 });
 
+test('P5 garden: applied celebration theme is reflected in scene metadata',()=>{
+ const document={documentElement:{dataset:{theme:'christmas'}}};
+ const render=runInNewContext(gardenSource+'\nbondGardenVisual',{ico,document},{timeout:1200});
+ assert.match(render({stage:5}),/data-celebration="christmas"/);
+ document.documentElement.dataset.theme='halloween';
+ assert.match(render({stage:5}),/data-celebration="halloween"/);
+ document.documentElement.dataset.theme='unrecognized';
+ assert.match(render({stage:5}),/data-celebration="daylight"/);
+});
+
 function renderMoments(garden,entries=[]){
  const context={
   cloud:{person:0,capabilities:{chat:true},chat:{unread:3},bond:{garden,entries}},
