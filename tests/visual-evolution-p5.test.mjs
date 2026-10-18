@@ -345,6 +345,20 @@ test('P5E: browser media events enable seeking only when actual metadata exists'
  assert.equal(button['aria-label'],'Reproducir mensaje de voz');
 });
 
+
+test('P5 VE-118/121: all eight Momentos actions have meaningful categories instead of generic Explore',()=>{
+ const source=extract('function welcomeActionContext(action){','function actionCard(');
+ const context={items:()=>[],cloud:{bond:{garden:{days:12}}},goalsState:null,goalsLoadedAt:0,Date};
+ const classify=runInNewContext(source+'\nwelcomeActionContext',context,{timeout:1200});
+ const expected={surprise:'SORPRENDER','date-mode-open':'CITA','plan-roulette-open':'PLANEAR','date-planner-open':'PLANEAR','date-question-decks':'CONVERSAR','new-game':'JUGAR','new-ritual':'CONECTAR','new-voice':'ESCUCHAR'};
+ for(const [action,category] of Object.entries(expected)){
+  const actual=classify(action);
+  assert.equal(actual.category,category,action);
+  assert.equal(actual.meta,'',action+' must not invent progress');
+ }
+ assert.equal(classify('map').category,'EXPLORAR');
+ assert.equal(classify('add-plan').category,'PLANEAR');
+});
 test('P5 visual: Chat is reachable from the Momentos cover without a floating overlay and narrow nav labels wrap',()=>{
  const ui=renderMoments({stage:3,days:18,progressPct:25});
  assert.match(ui,/class="living-moments-symbol living-moments-chat" data-action="chat-open"/);
