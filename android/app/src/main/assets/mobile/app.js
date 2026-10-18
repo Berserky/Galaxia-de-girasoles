@@ -1238,7 +1238,9 @@ function bondGardenVisual(garden){
  const allowedThemes=new Set(['christmas','cosmic','daylight','easter','friendship','halloween','valentine']);
  const activeTheme=(typeof document!=='undefined'?document.documentElement?.dataset?.theme:null)||(typeof window!=='undefined'?window.GalaxyTheme?.resolve?.(window.GalaxyTheme.getChoice())?.active:null)||'daylight';
  const theme=allowedThemes.has(activeTheme)?activeTheme:'daylight';
- return '<div class="bond-garden-scene living-garden-scene" data-stage="'+stage+'" data-daypart="'+daypart+'" data-season="'+season+'" data-celebration="'+theme+'" role="img" aria-label="Jardín compartido, etapa '+stage+'">'+
+ const seasonLabel={winter:'invierno',spring:'primavera',summer:'verano',autumn:'otoño'}[season];
+ const daypartLabel={morning:'mañana',day:'día',sunset:'atardecer',night:'noche'}[daypart];
+ return '<div class="bond-garden-scene living-garden-scene" data-stage="'+stage+'" data-daypart="'+daypart+'" data-season="'+season+'" data-celebration="'+theme+'" role="img" aria-label="Jardín compartido, etapa '+stage+', '+seasonLabel+', '+daypartLabel+'">'+
   '<span class="living-garden-halo" aria-hidden="true"></span>'+
   '<span class="garden-sun" aria-hidden="true">'+ico('sun')+'</span>'+
   '<span class="living-garden-hill living-garden-hill-back" aria-hidden="true"></span>'+
