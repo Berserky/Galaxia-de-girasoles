@@ -149,4 +149,4 @@
 body:not(.chat-mode):has(.living-moments) #chatFab{display:none}
 .living-moments-chat{position:relative;flex:none;min-width:44px;min-height:44px;cursor:pointer;border:1px solid var(--border)}
 .living-moments-chat:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
-@media(max-width:359px){body:not(.chat-mode):has(.living-moments) .bottom-nav .nav-btn span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;text-align:center;line-height:1.05;font-size:9px}}
+@media(max-width:359px){body:not(.chat-mode):has(.living-moments) .bottom-nav .nav-btn span{max-width:none;white-space:nowrap;overflow:visible;text-overflow:clip;overflow-wrap:normal;text-align:center;line-height:1.05;font-size:9px;letter-spacing:-.025em;transform:scaleX(.7);transform-origin:center}}

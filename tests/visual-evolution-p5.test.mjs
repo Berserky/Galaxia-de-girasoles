@@ -353,5 +353,6 @@ test('P5 visual: Chat is reachable from the Momentos cover without a floating ov
  assert.match(app,/if\(a==='chat-open'\)/);
  assert.match(css,/body:not\(\.chat-mode\):has\(\.living-moments\) #chatFab\{display:none\}/);
  assert.match(css,/\.living-moments-chat:focus-visible/);
- assert.match(css,/\.bottom-nav \.nav-btn span\{white-space:normal;overflow:visible;text-overflow:clip/);
+ assert.match(css,/\.bottom-nav \.nav-btn span\{max-width:none;white-space:nowrap;overflow:visible;text-overflow:clip;overflow-wrap:normal/);
+ assert.match(css,/transform:scaleX\(\.7\);transform-origin:center/);
 });
