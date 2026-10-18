@@ -150,3 +150,84 @@ body:not(.chat-mode):has(.living-moments) #chatFab{display:none}
 .living-moments-chat{position:relative;flex:none;min-width:44px;min-height:44px;cursor:pointer;border:1px solid var(--border)}
 .living-moments-chat:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 @media(max-width:359px){body:not(.chat-mode):has(.living-moments) .bottom-nav .nav-btn span{max-width:none;white-space:nowrap;overflow:visible;text-overflow:clip;overflow-wrap:normal;text-align:center;line-height:1.05;font-size:9px;letter-spacing:-.025em;transform:scaleX(.7);transform-origin:center}}
+
+
+/* VE-107/113 · Botanical garden art direction: layered light, lush hills and stage-aware blossoms.
+   Pure CSS, no external images, network requests, or change to the Bond stage engine. */
+.living-garden-scene{
+ min-height:268px;overflow:hidden;position:relative;
+ background:
+  radial-gradient(ellipse 110px 90px at 79% 23%,rgba(255,238,171,.46),transparent 78%),
+  radial-gradient(ellipse 90% 70% at 50% 105%,color-mix(in srgb,var(--good) 22%,transparent),transparent 80%),
+  linear-gradient(180deg,color-mix(in srgb,var(--accent2) 16%,var(--surface)) 0%,color-mix(in srgb,var(--accent) 9%,var(--surface2)) 55%,color-mix(in srgb,var(--good) 17%,var(--surface2)) 100%);
+}
+.living-garden-scene .living-garden-halo{
+ width:210px;height:210px;top:-22px;left:78%;
+ background:radial-gradient(circle,rgba(255,244,183,.45) 0%,rgba(255,244,183,.13) 36%,transparent 73%);
+}
+.living-garden-scene .living-garden-hill-back{
+ bottom:5px;height:117px;left:-22%;right:25%;
+ border-radius:65% 60% 0 0;
+ background:linear-gradient(165deg,color-mix(in srgb,var(--good) 21%,var(--surface2)),color-mix(in srgb,var(--good) 36%,var(--surface2)));
+}
+.living-garden-scene .garden-ground{
+ bottom:-38px;height:116px;z-index:1;border-radius:52% 48% 0 0;
+ background:linear-gradient(180deg,color-mix(in srgb,var(--good) 42%,var(--surface2)),color-mix(in srgb,var(--good) 24%,var(--surface2)));
+}
+.living-garden-scene .garden-flowers{
+ height:188px;bottom:20px;left:5%;right:5%;max-width:520px;
+ align-items:flex-end;justify-content:space-around;
+}
+.living-garden-scene .garden-flower{
+ position:relative;display:flex;align-items:flex-start;justify-content:center;
+ width:clamp(44px,12vw,72px);height:var(--bloom-height,118px);
+ padding:0;transform-origin:bottom center;
+ filter:drop-shadow(0 9px 9px rgba(20,65,42,.16));
+}
+.living-garden-scene .garden-flower:nth-child(2n){--bloom-height:142px}
+.living-garden-scene .garden-flower:nth-child(3n){--bloom-height:102px}
+.living-garden-scene .garden-flower:nth-child(5n){--bloom-height:154px}
+.living-garden-scene .garden-flower:before{
+ content:"";position:absolute;bottom:0;left:calc(50% - 3px);width:6px;
+ height:calc(100% - 34px);border-radius:6px;
+ background:linear-gradient(90deg,#356b48,#6ea56b 55%,#306847);
+ transform:rotate(-4deg);transform-origin:bottom center;
+}
+.living-garden-scene .garden-flower:after{
+ content:"";position:absolute;bottom:26px;left:calc(50% - 27px);width:54px;height:39px;
+ background:
+  radial-gradient(ellipse 18px 10px at 25% 70%,#77ac73 95%,transparent 100%),
+  radial-gradient(ellipse 18px 10px at 75% 36%,#629d68 95%,transparent 100%);
+ transform:rotate(-9deg);
+}
+.living-garden-scene .garden-flower .ui-icon{
+ position:relative;z-index:2;flex:none;width:clamp(40px,11vw,64px);height:clamp(40px,11vw,64px);
+ padding:8px;border-radius:50%;
+ color:#89511e;stroke-width:2;
+ background:radial-gradient(circle at 43% 43%,#f9c965 0 25%,#f0a940 26% 35%,#f8dc72 36% 52%,#f5bc49 53% 67%,#d98e31 68% 73%,transparent 74%);
+ box-shadow:0 0 0 5px rgba(255,216,101,.10),0 8px 22px rgba(88,63,25,.14);
+}
+.living-garden-scene[data-stage="0"] .garden-flower .ui-icon,
+.living-garden-scene[data-stage="1"] .garden-flower .ui-icon{
+ background:radial-gradient(circle,#a8d69a,#7bb477 70%,transparent 72%);color:#376c45;
+}
+.living-garden-scene[data-stage="0"] .garden-flower,
+.living-garden-scene[data-stage="1"] .garden-flower{--bloom-height:82px}
+.living-garden-scene[data-stage="0"] .garden-flower:before,
+.living-garden-scene[data-stage="1"] .garden-flower:before{height:40px}
+.living-garden-scene[data-stage="0"] .garden-flower:after,
+.living-garden-scene[data-stage="1"] .garden-flower:after{bottom:18px}
+.living-garden-scene[data-stage="6"] .garden-flower .ui-icon,
+.living-garden-scene[data-stage="7"] .garden-flower .ui-icon,
+.living-garden-scene[data-stage="8"] .garden-flower .ui-icon{
+ box-shadow:0 0 0 7px rgba(255,215,111,.15),0 0 30px rgba(255,196,91,.24);
+}
+@media(max-width:359px){
+ .living-garden-scene{min-height:246px}
+ .living-garden-scene .garden-flowers{left:2%;right:2%;height:165px}
+ .living-garden-scene .garden-flower{width:40px}
+ .living-garden-scene .garden-flower .ui-icon{width:40px;height:40px;padding:6px}
+}
+@media(prefers-reduced-motion:reduce){
+ .living-garden-scene .garden-flower,.living-garden-scene .garden-flower .ui-icon{animation:none!important;transition:none!important}
+}
