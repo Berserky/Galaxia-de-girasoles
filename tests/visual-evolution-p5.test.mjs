@@ -44,6 +44,22 @@ test('P5A: garden illustration uses actual stage; zero, invalid and extreme stag
  }
 });
 
+test('P5 garden: northern-hemisphere seasons and local dayparts follow the calendar',()=>{
+ const cases=[
+  ['2026-01-15T02:00:00', 'winter','night'],
+  ['2026-04-15T08:00:00', 'spring','morning'],
+  ['2026-07-15T14:00:00', 'summer','day'],
+  ['2026-10-15T18:00:00', 'autumn','sunset']
+ ];
+ for(const [instant,season,daypart] of cases){
+  const FakeDate=class extends Date{constructor(...args){super(...(args.length?args:[instant]));}};
+  const render=runInNewContext(gardenSource+'\\nbondGardenVisual',{ico,Date:FakeDate},{timeout:1200});
+  const html=render({stage:8});
+  assert.match(html,new RegExp('data-daypart="'+daypart+'" data-season="'+season+'"'));
+  assert.match(html,/data-stage="8"/);
+ }
+});
+
 function renderMoments(garden,entries=[]){
  const context={
   cloud:{person:0,capabilities:{chat:true},chat:{unread:3},bond:{garden,entries}},
