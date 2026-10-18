@@ -1242,7 +1242,7 @@ function bondGardenVisual(garden){
  const daypartLabel={morning:'mañana',day:'día',sunset:'atardecer',night:'noche'}[daypart];
  return '<div class="bond-garden-scene living-garden-scene" data-stage="'+stage+'" data-daypart="'+daypart+'" data-season="'+season+'" data-celebration="'+theme+'" role="img" aria-label="Jardín compartido, etapa '+stage+', '+seasonLabel+', '+daypartLabel+'">'+
   '<span class="living-garden-halo" aria-hidden="true"></span>'+
-  '<span class="garden-sun" aria-hidden="true">'+ico('sun')+'</span>'+
+  '<span class="garden-sun" aria-hidden="true">'+ico(daypart==='night'?'moon-star':'sun')+'</span>'+
   '<svg class="living-garden-mountains" aria-hidden="true" focusable="false" viewBox="0 0 480 160" preserveAspectRatio="xMidYMax slice" style="position:absolute;left:0;right:0;bottom:48px;width:100%;height:142px;opacity:.66;pointer-events:none">'+
    '<path d="M0 130 74 54 121 105 195 19 290 116 357 48 480 132V160H0Z" fill="#829ca2" opacity=".48"/>'+
    '<path d="M0 151 104 81 163 130 249 52 328 136 408 85 480 139V160H0Z" fill="#668d83" opacity=".58"/>'+
