@@ -66,6 +66,8 @@ test('P5 garden: northern-hemisphere seasons and local dayparts follow the calen
   assert.match(html,new RegExp('data-daypart="'+daypart+'" data-season="'+season+'"'));
   assert.match(html,/data-stage="8"/);
   assert.match(html,new RegExp(daypart==='night'?'moon-star':'sun'));
+  if(season==='winter')assert.match(html,/class="living-garden-snow"/);
+  else assert.doesNotMatch(html,/class="living-garden-snow"/);
  }
 });
 
