@@ -39,7 +39,7 @@ test('P5A: garden illustration uses actual stage; zero, invalid and extreme stag
   const ui=fn(input);
   assert.match(ui,new RegExp('data-stage="'+stage+'"'));
   assert.equal((ui.match(/class="garden-flower f\d+"/g)||[]).length,flowers);
-  assert.match(ui,/role="img" aria-label="Jardín compartido, etapa/);
+  assert.match(ui,/data-daypart="(?:morning|day|sunset|night)" data-season="(?:winter|spring|summer|autumn)" data-celebration="[a-z]+" role="img" aria-label="Jardín compartido, etapa/);
   assert.match(ui,/aria-hidden="true"/);
  }
 });
