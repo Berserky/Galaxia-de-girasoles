@@ -1241,6 +1241,7 @@ function bondGardenVisual(garden){
  const seasonLabel={winter:'invierno',spring:'primavera',summer:'verano',autumn:'otoño'}[season];
  const daypartLabel={morning:'mañana',day:'día',sunset:'atardecer',night:'noche'}[daypart];
  return '<div class="bond-garden-scene living-garden-scene" data-stage="'+stage+'" data-daypart="'+daypart+'" data-season="'+season+'" data-celebration="'+theme+'" role="img" aria-label="Jardín compartido, etapa '+stage+', '+seasonLabel+', '+daypartLabel+'">'+
+  (season==='winter'?'<span class="living-garden-snow" aria-hidden="true" style="position:absolute;inset:0;z-index:3;pointer-events:none;opacity:.8;background-image:radial-gradient(circle,#fff 0 2px,transparent 3px),radial-gradient(circle,#e5f3ff 0 1.5px,transparent 2.5px);background-size:48px 54px,67px 61px;background-position:5px 11px,29px 37px"></span>':'')+
   '<span class="living-garden-halo" aria-hidden="true"></span>'+
   '<span class="garden-sun" aria-hidden="true">'+ico(daypart==='night'?'moon-star':'sun')+'</span>'+
   '<svg class="living-garden-mountains" aria-hidden="true" focusable="false" viewBox="0 0 480 160" preserveAspectRatio="xMidYMax slice" style="position:absolute;left:0;right:0;bottom:48px;width:100%;height:142px;opacity:.66;pointer-events:none">'+
