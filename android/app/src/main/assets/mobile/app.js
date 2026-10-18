@@ -1231,7 +1231,14 @@ function bondGardenStage(garden){
 function bondGardenVisual(garden){
  const stage=bondGardenStage(garden);
  const flowers=Math.max(1,Math.min(7,stage));
- return '<div class="bond-garden-scene living-garden-scene" data-stage="'+stage+'" role="img" aria-label="Jardín compartido, etapa '+stage+'">'+
+ // Viewer-local clock and existing theme only; no location permission or network.
+ const now=new Date(),hour=now.getHours(),month=now.getMonth();
+ const daypart=hour>=5&&hour<11?'morning':hour>=11&&hour<17?'day':hour>=17&&hour<20?'sunset':'night';
+ const season=month===11||month<=1?'winter':month<=4?'spring':month<=7?'summer':'autumn';
+ const allowedThemes=new Set(['christmas','cosmic','daylight','easter','friendship','halloween','valentine']);
+ const activeTheme=window.GalaxyTheme?.getState?.()?.active||document.documentElement.dataset.theme||'daylight';
+ const theme=allowedThemes.has(activeTheme)?activeTheme:'daylight';
+ return '<div class="bond-garden-scene living-garden-scene" data-stage="'+stage+'" data-daypart="'+daypart+'" data-season="'+season+'" data-celebration="'+theme+'" role="img" aria-label="Jardín compartido, etapa '+stage+'">'+
   '<span class="living-garden-halo" aria-hidden="true"></span>'+
   '<span class="garden-sun" aria-hidden="true">'+ico('sun')+'</span>'+
   '<span class="living-garden-hill living-garden-hill-back" aria-hidden="true"></span>'+
