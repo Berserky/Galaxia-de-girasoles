@@ -564,7 +564,7 @@ function homeView(){
 // V5 P2K: contextual labels use only already-loaded couple state; no network,
 // location details or private answers are ever embedded in shortcut HTML.
 function welcomeActionContext(action){
- const kinds={map:'EXPLORAR',moments:'CONECTAR','add-memory':'CREAR','add-plan':'PLANEAR','goals-open':'AVANZAR'};
+ const kinds={map:'EXPLORAR',moments:'CONECTAR','add-memory':'CREAR','add-plan':'PLANEAR','goals-open':'AVANZAR',surprise:'SORPRENDER','date-mode-open':'CITA','plan-roulette-open':'PLANEAR','date-planner-open':'PLANEAR','date-question-decks':'CONVERSAR','new-game':'JUGAR','new-ritual':'CONECTAR','new-voice':'ESCUCHAR'};
  const category=kinds[action]||'EXPLORAR';
  if(action==='add-plan'){
   const pending=items('plan').filter(i=>!i.data?.done).length;
