@@ -163,3 +163,42 @@ test('V3.3 demo actually enables the automatic clock option without re-rendering
  assert.match(scripts[1],/autoSeason:false/);
  assert.doesNotMatch(scripts[0],/setInterval\(/,'ambient updates must use event/boundary timers');
 });
+
+test('V3.3 preview: appearance changes preserve the sunflower DOM instead of replaying growth',()=>{
+ assert.match(scripts[1],/function updateAppearance\(\)/);
+ assert.match(scripts[1],/node\.dataset\.celebration=settings\.theme/);
+ assert.match(scripts[1],/node\.dataset\.motion=settings\.motion/);
+ assert.match(scripts[1],/node\.dataset\.season=settings\.season/);
+ for(const control of ['themeSelect','motionToggle','timeSelect']){
+  const line=scripts[1].split('\n').find(x=>x.includes("$('"+control+"').addEventListener('change'"));
+  assert.ok(line,'missing change handler for '+control);
+  assert.match(line,/updateAppearance\(\)/);
+  assert.doesNotMatch(line,/draw\(\)/,'climate-only changes must retain flower nodes');
+ }
+ assert.match(scripts[1],/seasonSelect'\)\.value=settings\.season;updateAppearance\(\)/);
+ assert.match(scripts[1],/function mountScene\(node\)/);
+ assert.match(scripts[1],/dispose=G\.attach\(node/);
+});
+
+test('V3.3 preview: the growth slider still changes chapter and camera with real draw',()=>{
+ assert.match(scripts[1],/stageRange'\)\.addEventListener\('input',e=>\{settings\.total=Number\(e\.target\.value\);draw\(\)\}/);
+ assert.match(scripts[1],/chapterPills'\)\.addEventListener\('click',e=>/);
+ assert.match(scripts[1],/if\(wasAuto!==\(settings\.daypart==='auto'\)\)mountScene/);
+});
+
+test('V3.3 preview: dynamic ambient refresh offers a label update without re-creating scene',()=>{
+ const states=[];
+ const f=sceneFixture({autoAmbient:true,autoSeason:false,onAmbient:state=>states.push(state)});
+ assert.equal(states.length,1,'first visible mount supplies a daylight state');
+ assert.equal(states[0].daypart,f.root.dataset.daypart);
+ assert.equal(f.root.dataset.season,'spring');
+ f.exit();
+ assert.equal(f.root.dataset.paused,'true');
+ f.enter();
+ assert.equal(states.length,2,'returning to view refreshes only the ambient state');
+ f.dispose();
+ assert.equal(f.timers.size,0);
+ assert.equal(f.registered.size,0);
+ assert.match(scripts[1],/onAmbient:\(\)=>accessibleScene\(node\)/);
+ assert.match(scripts[1],/node\.setAttribute\('aria-label'/);
+});
