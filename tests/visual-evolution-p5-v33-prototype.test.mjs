@@ -202,3 +202,42 @@ test('V3.3 preview: dynamic ambient refresh offers a label update without re-cre
  assert.match(scripts[1],/onAmbient:\(\)=>accessibleScene\(node\)/);
  assert.match(scripts[1],/node\.setAttribute\('aria-label'/);
 });
+
+
+test('P5 V3.3: first eight sunflower identities survive planetary zoom and constellation orbit',()=>{
+ const planet=garden.render({stage:8},{demo:true,previewBloomTotal:75,theme:'daylight'});
+ const orbit=garden.render({stage:8},{demo:true,previewBloomTotal:123,theme:'cosmic'});
+ assert.match(planet,/data-chapter="planet"/);
+ assert.match(orbit,/data-chapter="constellation"/);
+ assert.match(planet,/data-official-stage="8"/);
+ assert.match(orbit,/data-official-stage="8"/);
+ for(let id=1;id<=8;id++){
+  const expression=new RegExp('data-origin-flower="'+id+'"');
+  assert.equal((planet.match(expression)||[]).length,1,'planet must retain original sunflower '+id);
+  assert.equal((orbit.match(expression)||[]).length,1,'orbit must retain original sunflower '+id);
+  const pixel=/data-origin-flower="(\d+)" style="--x:([\d.]+)%;--y:([\d.]+)%;--op:1"/g;
+  const p=[...planet.matchAll(pixel)].find(x=>Number(x[1])===id);
+  const o=[...orbit.matchAll(pixel)].find(x=>Number(x[1])===id);
+  assert.ok(p&&o,'original '+id+' must have stable visible coordinates');
+  assert.equal(p[2],o[2],'original '+id+' X changed at orbit zoom');
+  assert.equal(p[3],o[3],'original '+id+' Y changed at orbit zoom');
+  assert.ok(Number(p[2])>=20&&Number(p[2])<=80);
+  assert.ok(Number(p[3])>=20&&Number(p[3])<=80);
+ }
+ assert.equal((planet.match(/data-origin-flower="/g)||[]).length,8);
+ assert.equal((orbit.match(/data-origin-flower="/g)||[]).length,8);
+ assert.match(html,/ng-planet-flower\[data-origin-flower\]/,'original blooms must be visibly distinct');
+});
+
+test('P5 V3.3: planetary sunflower markers never unlock under authentic 0–8 Bond stages',()=>{
+ for(const stage of [0,1,3,8]){
+  const scene=garden.render({stage},{theme:'cosmic'});
+  assert.match(scene,/data-demo="false"/);
+  assert.match(scene,/data-chapter="garden"/);
+  assert.equal((scene.match(/data-flower="/g)||[]).length,stage);
+  // Markers exist in the hidden globe template only; planet rendering remains
+  // strictly inaccessible outside conceptual demo.
+  assert.match(scene,/data-official-stage="'+stage+'"/);
+ }
+ assert.match(garden.render({stage:365}),/data-stage="8"/);
+});
