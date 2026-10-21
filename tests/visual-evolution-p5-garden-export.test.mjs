@@ -5,23 +5,27 @@ import {resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {runInNewContext} from 'node:vm';
 import {createHash} from 'node:crypto';
-import {extractGardenCandidate,exportGardenCandidate,PROTOTYPE} from '../scripts/p5-garden-candidate-export.mjs';
+import {extractGardenCandidate,exportGardenCandidate,PROTOTYPE,BRIDGE} from '../scripts/p5-garden-candidate-export.mjs';
 const repo=resolve(import.meta.dirname,'..');
 const source=readFileSync(resolve(repo,PROTOTYPE),'utf8');
-const candidate=extractGardenCandidate(source);
+const bridgeSource=readFileSync(resolve(repo,BRIDGE),'utf8');
+const candidate=extractGardenCandidate(source,bridgeSource);
 const engine=(globals={})=>{const window=globals;runInNewContext(candidate.javascript,{window},{timeout:2000});return window.GalaxyGardenV5;};
 const e=engine();
 
 test('P5 staging: canonical V3.3 engine and CSS are exported from ONE source',()=>{
  assert.ok(candidate.javascript.length>13000&&candidate.stylesheet.length>30000);
- assert.equal(candidate.manifest.schemaVersion,1);
+ assert.equal(candidate.manifest.schemaVersion,2);
+ assert.equal(candidate.manifest.bridgeSource,BRIDGE);
+ assert.deepEqual(candidate.manifest.files,['galaxy-garden-world-v3.css','galaxy-garden-world-v3.js','p5-garden-bond-bridge.js']);
  assert.equal(candidate.manifest.mode,'CANDIDATE_ONLY_NOT_APK');
  assert.equal(candidate.manifest.worldProgressEnabled,false);
- for(const [key,asset] of [['engine',candidate.javascript],['stylesheet',candidate.stylesheet]]){
+ for(const [key,asset] of [['engine',candidate.javascript],['stylesheet',candidate.stylesheet],['bridge',candidate.bridge]]){
   assert.equal(candidate.manifest.sha256[key],createHash('sha256').update(asset).digest('hex'));
  }
  assert.equal(extractGardenCandidate(source).javascript,candidate.javascript);
  assert.equal(extractGardenCandidate(source).stylesheet,candidate.stylesheet);
+ assert.equal(extractGardenCandidate(source).bridge,candidate.bridge);
 });
 
 test('P5 staging: official 0–8 milestones never gain preview blooms',()=>{
@@ -66,6 +70,8 @@ test('P5 staging: candidate files may be exported OUTSIDE repository, never into
   assert.equal(data.sha256.engine,candidate.manifest.sha256.engine);
   assert.equal(readFileSync(resolve(temp,'galaxy-garden-world-v3.js'),'utf8'),candidate.javascript);
   assert.equal(readFileSync(resolve(temp,'galaxy-garden-world-v3.css'),'utf8'),candidate.stylesheet);
+  assert.equal(readFileSync(resolve(temp,'p5-garden-bond-bridge.js'),'utf8'),candidate.bridge);
+  assert.equal(data.sha256.bridge,candidate.manifest.sha256.bridge);
   assert.ok(existsSync(resolve(temp,'garden-candidate-manifest.json')));
   assert.throws(()=>exportGardenCandidate({repoRoot:repo,outDir:resolve(repo,'android/app/src/main/assets/mobile')}),/P5_STAGING_BLOCKED/);
   assert.throws(()=>exportGardenCandidate({repoRoot:repo,outDir:resolve(repo,'staging-output')}),/P5_STAGING_BLOCKED/);
@@ -78,4 +84,15 @@ test('P5 staging: no fetch, storage, geolocation or demo controls in exported en
  assert.doesNotMatch(candidate.stylesheet,/@import|url\(\s*['"]?https?:/i);
  assert.match(candidate.javascript,/options.onAmbient\?\.\(state\)/);
  assert.match(candidate.javascript,/if\(doc\?\.addEventListener\)/);
+ assert.match(candidate.bridge,/global\.GalaxyGardenBondBridge=Object\.freeze/);
+ assert.doesNotMatch(candidate.bridge,/previewBloomTotal|demo:true|XMLHttpRequest|\bfetch\s*\(/);
+});
+
+test('P5 staging: missing or unsafe Bond bridge is rejected before writing any candidate',()=>{
+ for(const altered of [
+  '',
+  bridgeSource.replace('NO_AUTHENTIC_STAGE','BAD_STAGE'),
+  bridgeSource.replace('global.GalaxyGardenBondBridge=Object.freeze({plan,create})','global.BadBridge={}'),
+  bridgeSource+'\nfetch("https://external.invalid");'
+ ]) assert.throws(()=>extractGardenCandidate(source,altered),/P5_STAGING_BLOCKED/);
 });
