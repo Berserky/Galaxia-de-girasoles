@@ -487,7 +487,7 @@ function render(garden={},options={}){
   }
   function refreshAmbient(){
    if(disposed||!options.autoAmbient||!root.isConnected)return;
-   const state=ambient();root.dataset.daypart=state.daypart;root.dataset.season=state.season;
+   const state=ambient();root.dataset.daypart=state.daypart;if(options.autoSeason!==false)root.dataset.season=state.season;
    if(ambientTimer!==null)global.clearTimeout(ambientTimer);
    if((doc&&doc.hidden)||!visible)return;
    const now=new Date(),next=[];
@@ -501,14 +501,16 @@ function render(garden={},options={}){
    ambientTimer=global.setTimeout(refreshAmbient,delay);
   }
   function onVisibility(){updateVisibility();}
-  if(options.autoAmbient&&doc?.addEventListener){
+  // Always pause offscreen, even when a manual daypart is selected.
+  // Automatic clock refresh is independent from the visibility observer.
+  if(doc?.addEventListener){
    doc.addEventListener('visibilitychange',onVisibility);
    global.addEventListener?.('pageshow',onVisibility);
    if(typeof global.IntersectionObserver==='function'){
     observer=new global.IntersectionObserver(entries=>{visible=entries[0]?.isIntersecting!==false;updateVisibility();},{threshold:.05});
     observer.observe(root);
    }
-   refreshAmbient();
+   updateVisibility();
   }
   function onClick(event){
     const b=event.target?.closest?.('[data-flower]');
@@ -553,7 +555,7 @@ function draw(){
  if(settings.daypart!=='auto')options.daypart=settings.daypart;
  const viewport=$('gardenViewport');dispose();viewport.innerHTML=G.render({stage:Math.min(settings.total,8)},options);
  const node=viewport.querySelector('.ng-garden'),s=G.normalize({stage:Math.min(settings.total,8)},options);
- dispose=G.attach(node,{onFlowerTap:i=>{$('stageDescription').textContent=`El girasol ${i} respondió a tu caricia. Las flores originales permanecen al alejar la cámara.`;}});
+ dispose=G.attach(node,{autoAmbient:settings.daypart==='auto',autoSeason:false,onFlowerTap:i=>{$('stageDescription').textContent=`El girasol ${i} respondió a tu caricia. Las flores originales permanecen al alejar la cámara.`;}});
  if(prevChapter!==s.chapter&&settings.motion==='full'&&!matchMedia('(prefers-reduced-motion:reduce)').matches){
   node.animate([{transform:'scale(1.13)',opacity:.6},{transform:'scale(1)',opacity:1}],{duration:1150,easing:'cubic-bezier(.16,.8,.18,1)'});
  }
