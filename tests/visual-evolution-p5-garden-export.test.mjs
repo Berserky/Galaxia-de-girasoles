@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync,existsSync,mkdtempSync,rmSync} from 'node:fs';
+import {readFileSync,existsSync,mkdtempSync,rmSync,writeFileSync,mkdirSync,symlinkSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {runInNewContext} from 'node:vm';
@@ -95,4 +95,45 @@ test('P5 staging: missing or unsafe Bond bridge is rejected before writing any c
   bridgeSource.replace('global.GalaxyGardenBondBridge=Object.freeze({plan,create})','global.BadBridge={}'),
   bridgeSource+'\nfetch("https://external.invalid");'
  ]) assert.throws(()=>extractGardenCandidate(source,altered),/P5_STAGING_BLOCKED/);
+});
+
+
+test('P5 staging: an external symlink cannot redirect an export back into a checkout',t=>{
+ if(process.platform==='win32'){t.skip('symlinks may require elevated Windows privileges');return;}
+ const temp=mkdtempSync(resolve(tmpdir(),'ng-p5-symlink-'));
+ try{
+  const fakeRepo=resolve(temp,'checkout');
+  const prototypePath=resolve(fakeRepo,PROTOTYPE);
+  const bridgePath=resolve(fakeRepo,BRIDGE);
+  mkdirSync(resolve(prototypePath,'..'),{recursive:true});
+  mkdirSync(resolve(bridgePath,'..'),{recursive:true});
+  mkdirSync(resolve(fakeRepo,'android'),{recursive:true});
+  writeFileSync(prototypePath,source);
+  writeFileSync(bridgePath,bridgeSource);
+  const alias=resolve(temp,'external-export');
+  symlinkSync(resolve(fakeRepo,'android'),alias,'dir');
+  const forgedOutput=resolve(alias,'candidate');
+  assert.throws(()=>exportGardenCandidate({repoRoot:fakeRepo,outDir:forgedOutput}),/P5_STAGING_BLOCKED/);
+  assert.equal(existsSync(resolve(fakeRepo,'android','candidate')),false,'no protected directory must be created');
+ }finally{rmSync(temp,{recursive:true,force:true});}
+});
+
+test('P5 staging: existing output files are never overwritten or used as a source symlink',t=>{
+ if(process.platform==='win32'){t.skip('symlinks may require elevated Windows privileges');return;}
+ const temp=mkdtempSync(resolve(tmpdir(),'ng-p5-no-overwrite-'));
+ try{
+  const output=resolve(temp,'candidate'),important=resolve(temp,'keep.txt');
+  mkdirSync(output,{recursive:true});
+  writeFileSync(important,'THIS MUST NEVER CHANGE\n');
+  const linked=resolve(output,'galaxy-garden-world-v3.js');
+  symlinkSync(important,linked);
+  assert.throws(()=>exportGardenCandidate({repoRoot:repo,outDir:output}),/P5_STAGING_BLOCKED/);
+  assert.equal(readFileSync(important,'utf8'),'THIS MUST NEVER CHANGE\n');
+  assert.equal(existsSync(resolve(output,'garden-candidate-manifest.json')),false);
+  rmSync(linked);
+  writeFileSync(resolve(output,'garden-candidate-manifest.json'),'OLD MANIFEST');
+  assert.throws(()=>exportGardenCandidate({repoRoot:repo,outDir:output}),/P5_STAGING_BLOCKED/);
+  assert.equal(readFileSync(resolve(output,'garden-candidate-manifest.json'),'utf8'),'OLD MANIFEST');
+  assert.equal(existsSync(resolve(output,'p5-garden-bond-bridge.js')),false);
+ }finally{rmSync(temp,{recursive:true,force:true});}
 });
