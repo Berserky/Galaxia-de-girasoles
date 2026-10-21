@@ -10,6 +10,8 @@
  const fallBack='<div class="ng-garden-unavailable" role="status">El progreso del jardín no está disponible por ahora.</div>';
  const allowed=(value,values,defaultValue)=>values.includes(value)?value:defaultValue;
  function plan(garden,preferences={}){
+  // A missing/malformed preference object must not break the Moments screen.
+  const prefs=preferences&&typeof preferences==='object'&&!Array.isArray(preferences)?preferences:{};
   // Reject missing or malformed backend progression, not silently "0 días".
   const n=garden?.stage;
   if(typeof n!=='number'||!Number.isSafeInteger(n)||n<0)return Object.freeze({ready:false,reason:'NO_AUTHENTIC_STAGE'});
@@ -17,11 +19,11 @@
   // Match the current mobile theme when a presenter does not supply an override.
   // No storage, network, or user-permission access is needed.
   const appTheme=global.document?.documentElement?.dataset?.theme;
-  const selectedTheme=preferences.theme===undefined?appTheme:preferences.theme;
+  const selectedTheme=prefs.theme===undefined?appTheme:prefs.theme;
   const theme=allowed(selectedTheme,ALLOWED_THEMES,'daylight');
-  const season=allowed(preferences.season,ALLOWED_SEASONS,null);
-  const daypart=allowed(preferences.daypart,ALLOWED_DAYPARTS,null);
-  const motion=preferences.motion==='reduce'?'reduce':'full';
+  const season=allowed(prefs.season,ALLOWED_SEASONS,null);
+  const daypart=allowed(prefs.daypart,ALLOWED_DAYPARTS,null);
+  const motion=prefs.motion==='reduce'?'reduce':'full';
   return Object.freeze({ready:true,stage,capped:n>8,theme,season,daypart,motion,autoDaypart:daypart===null});
  }
  function create({engine=global.GalaxyGardenV5,host,onFlowerTap}={}){
