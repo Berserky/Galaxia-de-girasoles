@@ -203,6 +203,13 @@
 .ng-garden .ng-planet:before{content:"";position:absolute;inset:6%;border-radius:50%;background:radial-gradient(ellipse 33% 29% at 25% 35%,#b8d58e 48%,transparent 51%),radial-gradient(ellipse 25% 33% at 66% 32%,#78a67e 51%,transparent 55%),radial-gradient(ellipse 36% 29% at 52% 69%,#98bf85 55%,transparent 57%),radial-gradient(ellipse 21% 22% at 79% 73%,#d4c896 57%,transparent 60%);filter:blur(5px);opacity:.89}
 .ng-garden .ng-planet:after{content:"";position:absolute;inset:0;border-radius:50%;background:linear-gradient(115deg,#ffffff22,transparent 45%,#0d274e77);pointer-events:none}
 .ng-garden .ng-planet .ng-planet-flower{position:absolute;z-index:2;left:var(--x);top:var(--y);width:5px;height:5px;border-radius:50%;background:#fff0a1;box-shadow:0 0 0 3px #f4b64d9e,0 0 8px 1px #f9cf6e;opacity:var(--op,.9)}
+/* Eight original sunflowers retain a recognizable golden bloom in orbit.
+   These are decoration, not tiny inaccessible touch targets. */
+.ng-garden .ng-planet .ng-planet-flower[data-origin-flower]{
+ z-index:4;width:7px;height:7px;background:#654024;
+ box-shadow:0 0 0 2px #f7c24e,0 0 0 4px #ffe49b,0 0 9px 3px #fff0b2;
+ opacity:1
+}
 .ng-garden .ng-planet-label{position:absolute;bottom:11%;left:0;right:0;text-align:center;color:#ffebc3;font-size:10px;letter-spacing:.17em;text-shadow:0 2px 9px #10213c}
 .ng-garden[data-chapter="constellation"] .ng-planet{transform:rotate(-17deg) scale(.68) translateX(-16%)}
 .ng-garden[data-chapter="constellation"] .ng-planet-wrap:after{content:"";position:absolute;right:6%;top:25%;width:65px;height:65px;border-radius:50%;background:radial-gradient(circle at 36% 38%,#ffe2a6,#d8a4a4 60%,#675b91 100%);box-shadow:0 0 26px #f3bbe383}
@@ -446,10 +453,14 @@ function skyDecoration(){
 function globeMarkup(s){
  const count=Math.min(s.total,122);
  let bits='';for(let i=0;i<count;i++){
-  const xx=10+seeded(i,11)*80,yy=9+seeded(i,12)*82;
+  // The original eight keep their own deterministic coordinates and identity
+  // on the globe AND in orbit. Never replace them with anonymous random dots.
+  const origin=i<8,plant=origin?gardenPlants[i]:null;
+  const xx=origin?50+(plant.x-50)*.60:10+seeded(i,11)*80;
+  const yy=origin?46+(plant.x-50)*.19+((i%3)-1)*7:9+seeded(i,12)*82;
   const dx=(xx-50)/50,dy=(yy-50)/50;
-  if(dx*dx+dy*dy>.93)continue;
-  bits+=`<i class="ng-planet-flower" style="--x:${xx.toFixed(2)}%;--y:${yy.toFixed(2)}%;--op:${(.55+seeded(i,13)*.45).toFixed(2)}"></i>`;
+  if(!origin&&dx*dx+dy*dy>.93)continue;
+  bits+=`<i class="ng-planet-flower" ${origin?`data-origin-flower="${i+1}"`:''} style="--x:${xx.toFixed(2)}%;--y:${yy.toFixed(2)}%;--op:${origin?1:(.55+seeded(i,13)*.45).toFixed(2)}"></i>`;
  }
  return `<div class="ng-planet-wrap" aria-hidden="true"><div class="ng-planet">${bits}</div><span class="ng-planet-label">${s.chapter==='planet'?'Nuestro planeta':'El universo continúa'}</span></div>`;
 }
