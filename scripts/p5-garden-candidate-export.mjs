@@ -8,7 +8,7 @@
  * Example, from repository root:
  *   node scripts/p5-garden-candidate-export.mjs --out /tmp/ng-p5-v33-staging
  */
-import {readFileSync,mkdirSync,writeFileSync} from 'node:fs';
+import {readFileSync,mkdirSync,writeFileSync,realpathSync,existsSync,lstatSync} from 'node:fs';
 import {resolve,dirname,relative,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
@@ -18,6 +18,21 @@ export const BRIDGE='scripts/p5-garden-bond-bridge.js';
 const sha=s=>createHash('sha256').update(s).digest('hex');
 const sourceRoot=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const fail=m=>{throw new Error('P5_STAGING_BLOCKED: '+m);};
+const within=(base,target)=>{
+ const rel=relative(base,target);
+ return rel===''||!(rel==='..'||rel.startsWith('..'+sep));
+};
+// Resolve symlinks of the nearest existing ancestor BEFORE making any directory.
+// A lexical /tmp/staging path must not redirect into the source checkout.
+function realDestination(target){
+ let ancestor=target;
+ while(!existsSync(ancestor)){
+  const parent=dirname(ancestor);
+  if(parent===ancestor)fail('unresolvable export destination');
+  ancestor=parent;
+ }
+ return resolve(realpathSync(ancestor),relative(ancestor,target));
+}
 
 export function extractGardenCandidate(html,bridgeSource=readFileSync(resolve(sourceRoot,BRIDGE),'utf8')){
  if(typeof html!=='string'||!/<title>[^<]*V3\.3/.test(html)||!html.includes('LABORATORIO VISUAL'))fail('not the approved synthetic V3.3 prototype');
@@ -45,13 +60,27 @@ export function extractGardenCandidate(html,bridgeSource=readFileSync(resolve(so
 export function exportGardenCandidate({repoRoot=sourceRoot,outDir}){
  if(!outDir)fail('explicit --out directory required');
  const root=resolve(repoRoot),target=resolve(outDir);
- const rel=relative(root,target);
- if(rel===''||!(rel==='..'||rel.startsWith('..'+sep)))fail('output MUST be outside repository checkout');
- // Extra defense in depth: refuse to mutate any app or source directory even on unusual paths.
- if(target.includes('/android/')||target.endsWith('/android')||target.includes('\\android\\'))fail('Android directories forbidden');
+ const trueRoot=realpathSync(root),trueTarget=realDestination(target);
+ if(within(root,target)||within(trueRoot,trueTarget))
+  fail('output MUST be outside repository checkout, including symlink aliases');
+ // Refuse Android-like directories in both the requested and resolved path.
+ if([target,trueTarget].some(p=>p.split(sep).includes('android')))fail('Android directories forbidden');
  const files=extractGardenCandidate(readFileSync(resolve(root,PROTOTYPE),'utf8'),readFileSync(resolve(root,BRIDGE),'utf8'));
+ const outputs=[
+  ['galaxy-garden-world-v3.js',files.javascript],
+  ['galaxy-garden-world-v3.css',files.stylesheet],
+  ['p5-garden-bond-bridge.js',files.bridge],
+  ['garden-candidate-manifest.json',JSON.stringify(files.manifest,null,2)+'\n']
+ ];
+ // A pre-existing output or file symlink must never be overwritten. This also
+ // prevents changing source files through symlinked/hardlinked output files.
+ for(const [name] of outputs){
+  if(lstatSync(resolve(target,name),{throwIfNoEntry:false}))fail('refusing to overwrite an existing export file: '+name);
+ }
  mkdirSync(target,{recursive:true});
- for(const [name,contents] of [['galaxy-garden-world-v3.js',files.javascript],['galaxy-garden-world-v3.css',files.stylesheet],['p5-garden-bond-bridge.js',files.bridge],['garden-candidate-manifest.json',JSON.stringify(files.manifest,null,2)+'\n']])writeFileSync(resolve(target,name),contents);
+ const created=realpathSync(target);
+ if(within(trueRoot,created)||created.split(sep).includes('android'))fail('output resolved into a protected directory');
+ for(const [name,contents] of outputs)writeFileSync(resolve(target,name),contents,{flag:'wx'});
  return files.manifest;
 }
 
