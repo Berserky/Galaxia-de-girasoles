@@ -107,14 +107,21 @@ test('P5 staging: an external symlink cannot redirect an export back into a chec
   const bridgePath=resolve(fakeRepo,BRIDGE);
   mkdirSync(resolve(prototypePath,'..'),{recursive:true});
   mkdirSync(resolve(bridgePath,'..'),{recursive:true});
+  mkdirSync(resolve(fakeRepo,'scratch'),{recursive:true});
   mkdirSync(resolve(fakeRepo,'android'),{recursive:true});
   writeFileSync(prototypePath,source);
   writeFileSync(bridgePath,bridgeSource);
+  // This test MUST NOT rely on the separate /android/ path blacklist:
+  // the general source-checkout containment check has to reject any alias.
   const alias=resolve(temp,'external-export');
-  symlinkSync(resolve(fakeRepo,'android'),alias,'dir');
+  symlinkSync(resolve(fakeRepo,'scratch'),alias,'dir');
   const forgedOutput=resolve(alias,'candidate');
   assert.throws(()=>exportGardenCandidate({repoRoot:fakeRepo,outDir:forgedOutput}),/P5_STAGING_BLOCKED/);
-  assert.equal(existsSync(resolve(fakeRepo,'android','candidate')),false,'no protected directory must be created');
+  assert.equal(existsSync(resolve(fakeRepo,'scratch','candidate')),false,'no checkout directory must be created');
+  const androidAlias=resolve(temp,'disguised-android');
+  symlinkSync(resolve(fakeRepo,'android'),androidAlias,'dir');
+  assert.throws(()=>exportGardenCandidate({repoRoot:fakeRepo,outDir:resolve(androidAlias,'candidate')}),/P5_STAGING_BLOCKED/);
+  assert.equal(existsSync(resolve(fakeRepo,'android','candidate')),false,'no Android directory must be created');
  }finally{rmSync(temp,{recursive:true,force:true});}
 });
 
