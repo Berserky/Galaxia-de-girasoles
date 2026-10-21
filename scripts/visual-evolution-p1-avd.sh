@@ -8,18 +8,21 @@ bash scripts/visual-evolution-p0-avd.sh
 # Instrumentation is separated from the unpaired baseline. Failures retain
 # any screenshots already produced for diagnosis; no production token is loaded.
 mkdir -p build/p0-avd/p1-synthetic-themes build/p0-avd/p1-responsive-viewports build/p0-avd/p2-bottom-viewports build/p0-avd/p2-question-viewports build/p0-avd/p3-search-viewports build/p0-avd/p3-notifications-viewports build/p0-avd/p3-themed-search build/p0-avd/p3-themed-notifications build/p0-avd/p4-map-compact build/p0-avd/p4-map-immersive build/p0-avd/p4-themed-maps build/p0-avd/p4-large-font build/p0-avd/p4-map-place-focus build/p0-avd/p5-moments build/p0-avd/p5-text-zoom build/p0-avd/p5-themed-moments
-# Record transfer outcomes for all synthetic QA Android screenshots.
-# Physical screenshot assertions below remain strict and unchanged.
+# Capture adb pull errors for isolated synthetic QA PNGs. Existing literal
+# adb pull commands and strict physical screenshot checks remain untouched.
 CAPTURE_REPORT="build/p0-avd/p1-capture-transfer.tsv"
-pull_png() {
-  local remote="$1" dest="$2" output='' size=0 reason=''
-  if output=$(adb pull "$remote" "$dest" 2>&1); then
+adb() {
+  if [[ "${1:-}" != "pull" ]]; then command adb "$@"; return; fi
+  local remote="${2:-}" dest="${3:-}" output='' size=0 reason=''
+  if output=$(command adb "$@" 2>&1); then
     size=$(wc -c < "$dest" 2>/dev/null || echo 0)
     printf 'COPIED\t%s\t%s bytes\n' "${remote##*/}" "$size" >> "$CAPTURE_REPORT"
+    return 0
   else
     reason="${output##*$'\n'}"
     reason="${reason//$'\t'/ }"
     printf 'MISSING\t%s\t%.180s\n' "${remote##*/}" "$reason" >> "$CAPTURE_REPORT"
+    return 1
   fi
 }
 
@@ -28,30 +31,30 @@ pull_png() {
 pull_theme_evidence() {
   printf 'status\tscreenshot\tdetail\n' > "$CAPTURE_REPORT"
   for theme in daylight cosmic halloween christmas valentine friendship easter; do
-    pull_png "/sdcard/Download/V5-P1-synthetic-${theme}.png" "build/p0-avd/p1-synthetic-themes/${theme}.png"
-    pull_png "/sdcard/Download/V5-P3-theme-search-${theme}.png" "build/p0-avd/p3-themed-search/${theme}.png"
-    pull_png "/sdcard/Download/V5-P3-theme-notifications-${theme}.png" "build/p0-avd/p3-themed-notifications/${theme}.png"
-    pull_png "/sdcard/Download/V5-P4-theme-map-${theme}.png" "build/p0-avd/p4-themed-maps/${theme}.png"
-    pull_png "/sdcard/Download/V5-P5-theme-${theme}.png" "build/p0-avd/p5-themed-moments/${theme}.png"
+    adb pull "/sdcard/Download/V5-P1-synthetic-${theme}.png" "build/p0-avd/p1-synthetic-themes/${theme}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P3-theme-search-${theme}.png" "build/p0-avd/p3-themed-search/${theme}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P3-theme-notifications-${theme}.png" "build/p0-avd/p3-themed-notifications/${theme}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P4-theme-map-${theme}.png" "build/p0-avd/p4-themed-maps/${theme}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P5-theme-${theme}.png" "build/p0-avd/p5-themed-moments/${theme}.png" >/dev/null 2>&1 || true
   done
   for css in 320 360 393 412; do
-    pull_png "/sdcard/Download/V5-P1-viewport-${css}.png" "build/p0-avd/p1-responsive-viewports/${css}.png"
-    pull_png "/sdcard/Download/V5-P2-bottom-${css}.png" "build/p0-avd/p2-bottom-viewports/${css}.png"
-    pull_png "/sdcard/Download/V5-P2-question-${css}.png" "build/p0-avd/p2-question-viewports/${css}.png"
-    pull_png "/sdcard/Download/V5-P3-search-${css}.png" "build/p0-avd/p3-search-viewports/${css}.png"
-    pull_png "/sdcard/Download/V5-P3-notifications-${css}.png" "build/p0-avd/p3-notifications-viewports/${css}.png"
-    pull_png "/sdcard/Download/V5-P4-map-compact-${css}.png" "build/p0-avd/p4-map-compact/${css}.png"
-    pull_png "/sdcard/Download/V5-P4-map-immersive-${css}.png" "build/p0-avd/p4-map-immersive/${css}.png"
-    pull_png "/sdcard/Download/V5-P4-map-large-font-${css}.png" "build/p0-avd/p4-large-font/${css}.png"
-    pull_png "/sdcard/Download/V5-P4-map-place-${css}.png" "build/p0-avd/p4-map-place-focus/${css}.png"
-    pull_png "/sdcard/Download/V5-P5-moments-${css}.png" "build/p0-avd/p5-moments/${css}.png"
-    pull_png "/sdcard/Download/V5-P5-text-zoom-${css}.png" "build/p0-avd/p5-text-zoom/${css}.png"
+    adb pull "/sdcard/Download/V5-P1-viewport-${css}.png" "build/p0-avd/p1-responsive-viewports/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P2-bottom-${css}.png" "build/p0-avd/p2-bottom-viewports/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P2-question-${css}.png" "build/p0-avd/p2-question-viewports/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P3-search-${css}.png" "build/p0-avd/p3-search-viewports/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P3-notifications-${css}.png" "build/p0-avd/p3-notifications-viewports/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P4-map-compact-${css}.png" "build/p0-avd/p4-map-compact/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P4-map-immersive-${css}.png" "build/p0-avd/p4-map-immersive/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P4-map-large-font-${css}.png" "build/p0-avd/p4-large-font/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P4-map-place-${css}.png" "build/p0-avd/p4-map-place-focus/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P5-moments-${css}.png" "build/p0-avd/p5-moments/${css}.png" >/dev/null 2>&1 || true
+    adb pull "/sdcard/Download/V5-P5-text-zoom-${css}.png" "build/p0-avd/p5-text-zoom/${css}.png" >/dev/null 2>&1 || true
   done
   local failures
   failures=$(grep -c $'^MISSING\t' "$CAPTURE_REPORT" || true)
   if (( failures > 0 )); then
-    echo "::warning::Android synthetic QA: $failures screenshot transfers failed; see $CAPTURE_REPORT. Strict physical PNG gates are unchanged."
-    adb shell 'ls -ld /sdcard/Download; ls /sdcard/Download/V5-*.png' 2>&1 | tail -n 30 || true
+    echo "::warning::Android synthetic QA: $failures screenshot transfers failed; see $CAPTURE_REPORT. Strict PNG gate unchanged."
+    command adb shell 'ls -ld /sdcard/Download; ls /sdcard/Download/V5-*.png' 2>&1 | tail -n 30 || true
   else
     echo "Android synthetic QA: all screenshot transfers copied; PNG integrity gate still runs."
   fi
