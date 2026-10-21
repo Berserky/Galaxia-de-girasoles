@@ -177,3 +177,22 @@ test('P5 bridge: parent redraw and Bond transitions release every stale listener
  assert.equal(stops,4,'all active observers must be removed exactly once');
  assert.throws(()=>ctl.update({stage:1}),/DISPOSED/);
 });
+
+
+test('P5 bridge: first entrance can be disabled on parent remount without disabling real unlock',()=>{
+ const rendered=[];
+ const spy={...engine,render(garden,opts){rendered.push({...opts,stage:garden.stage});return engine.render(garden,opts);}};
+ const el=host(),ctl=create({engine:spy,host:el,initialEntrance:'none'});
+ ctl.update({stage:8},{daypart:'day',season:'summer'});
+ assert.equal(rendered[0].entrance,'none');
+ assert.match(el.html,/data-entrance="none"/);
+ ctl.update({stage:8},{daypart:'night',season:'summer'});
+ assert.equal(rendered.length,1,'night mode should not replay any growth');
+ ctl.update({stage:3},{daypart:'night',season:'summer'});
+ assert.equal(rendered[1].entrance,'none','new stage on same controller does not replay initial growth');
+ ctl.dispose();
+ const newEl=host(),fresh=create({engine:spy,host:newEl});
+ fresh.update({stage:0},{daypart:'morning'});
+ assert.equal(rendered[2].entrance,'grow','genuine first view still animates by default');
+ fresh.dispose();
+});
