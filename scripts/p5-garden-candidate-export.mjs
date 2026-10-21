@@ -15,6 +15,7 @@ import {createHash} from 'node:crypto';
 
 export const PROTOTYPE='docs/visual-evolution-5/prototypes/jardin-vivo-v3.3.html';
 export const BRIDGE='scripts/p5-garden-bond-bridge.js';
+export const LIFECYCLE='scripts/p5-moments-garden-lifecycle.js';
 const sha=s=>createHash('sha256').update(s).digest('hex');
 const sourceRoot=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const fail=m=>{throw new Error('P5_STAGING_BLOCKED: '+m);};
@@ -34,7 +35,7 @@ function realDestination(target){
  return resolve(realpathSync(ancestor),relative(ancestor,target));
 }
 
-export function extractGardenCandidate(html,bridgeSource=readFileSync(resolve(sourceRoot,BRIDGE),'utf8')){
+export function extractGardenCandidate(html,bridgeSource=readFileSync(resolve(sourceRoot,BRIDGE),'utf8'),lifecycleSource=readFileSync(resolve(sourceRoot,LIFECYCLE),'utf8')){
  if(typeof html!=='string'||!/<title>[^<]*V3\.3/.test(html)||!html.includes('LABORATORIO VISUAL'))fail('not the approved synthetic V3.3 prototype');
  const styles=[...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map(m=>m[1]);
  const scripts=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(m=>m[1]);
@@ -48,13 +49,17 @@ export function extractGardenCandidate(html,bridgeSource=readFileSync(resolve(so
  if(typeof bridgeSource!=='string'||!bridgeSource.includes('global.GalaxyGardenBondBridge=Object.freeze({plan,create})'))fail('canonical Bond bridge missing');
  const bridge=bridgeSource.trim()+'\n';
  if(/\bfetch\s*\(|XMLHttpRequest|localStorage|navigator\.geolocation|previewBloomTotal|demo:true|supabase|\bapi\s*\(/i.test(bridge))fail('unsafe Bond bridge dependency or preview world');
- if(!bridge.includes('NO_AUTHENTIC_STAGE')||!bridge.includes('engine.render({stage:state.stage},options)'))fail('Bond bridge contract drifted');
- const manifest={schemaVersion:2,source:PROTOTYPE,bridgeSource:BRIDGE,mode:'CANDIDATE_ONLY_NOT_APK',
+ if(!bridge.includes('NO_AUTHENTIC_STAGE')||!bridge.includes('engine.render({stage:state.stage},options)')||!bridge.includes("initialEntrance='grow'"))fail('Bond bridge contract drifted');
+ if(typeof lifecycleSource!=='string'||!lifecycleSource.includes('global.GalaxyMomentsGardenLifecycle=Object.freeze({authenticGarden,create})'))fail('canonical Moments lifecycle missing');
+ const lifecycle=lifecycleSource.trim()+'\n';
+ if(/\bfetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|navigator\.geolocation|previewBloomTotal|demo:true|supabase|\bapi\s*\(/i.test(lifecycle))fail('unsafe Moments lifecycle dependency');
+ if(!lifecycle.includes('authenticGarden(cloud)')||!lifecycle.includes("initialEntrance:everEntered?'none':'grow'")||!lifecycle.includes('controller?.dispose()'))fail('Moments lifecycle contract drifted');
+ const manifest={schemaVersion:3,source:PROTOTYPE,bridgeSource:BRIDGE,lifecycleSource:LIFECYCLE,mode:'CANDIDATE_ONLY_NOT_APK',
   officialStageMin:0,officialStageMax:8,worldProgressEnabled:false,
-  files:['galaxy-garden-world-v3.css','galaxy-garden-world-v3.js','p5-garden-bond-bridge.js'],
-  sha256:{engine:sha(js),stylesheet:sha(css),bridge:sha(bridge)},
-  bytes:{engine:Buffer.byteLength(js),stylesheet:Buffer.byteLength(css),bridge:Buffer.byteLength(bridge)}};
- return {javascript:js,stylesheet:css,bridge,manifest};
+  files:['galaxy-garden-world-v3.css','galaxy-garden-world-v3.js','p5-garden-bond-bridge.js','p5-moments-garden-lifecycle.js'],
+  sha256:{engine:sha(js),stylesheet:sha(css),bridge:sha(bridge),lifecycle:sha(lifecycle)},
+  bytes:{engine:Buffer.byteLength(js),stylesheet:Buffer.byteLength(css),bridge:Buffer.byteLength(bridge),lifecycle:Buffer.byteLength(lifecycle)}};
+ return {javascript:js,stylesheet:css,bridge,lifecycle,manifest};
 }
 
 export function exportGardenCandidate({repoRoot=sourceRoot,outDir}){
@@ -65,11 +70,12 @@ export function exportGardenCandidate({repoRoot=sourceRoot,outDir}){
   fail('output MUST be outside repository checkout, including symlink aliases');
  // Refuse Android-like directories in both the requested and resolved path.
  if([target,trueTarget].some(p=>p.split(sep).includes('android')))fail('Android directories forbidden');
- const files=extractGardenCandidate(readFileSync(resolve(root,PROTOTYPE),'utf8'),readFileSync(resolve(root,BRIDGE),'utf8'));
+ const files=extractGardenCandidate(readFileSync(resolve(root,PROTOTYPE),'utf8'),readFileSync(resolve(root,BRIDGE),'utf8'),readFileSync(resolve(root,LIFECYCLE),'utf8'));
  const outputs=[
   ['galaxy-garden-world-v3.js',files.javascript],
   ['galaxy-garden-world-v3.css',files.stylesheet],
   ['p5-garden-bond-bridge.js',files.bridge],
+  ['p5-moments-garden-lifecycle.js',files.lifecycle],
   ['garden-candidate-manifest.json',JSON.stringify(files.manifest,null,2)+'\n']
  ];
  // A pre-existing output or file symlink must never be overwritten. This also
