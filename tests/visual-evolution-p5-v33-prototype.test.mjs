@@ -241,3 +241,23 @@ test('P5 V3.3: planetary sunflower markers never unlock under authentic 0–8 Bo
  }
  assert.match(garden.render({stage:365}),/data-stage="8"/);
 });
+
+
+test('P5 V3.3: first eight floral identities are unique at every zoom level',()=>{
+ const worlds=[
+  [8,'garden'],[9,'meadow'],[23,'valley'],
+  [43,'region'],[75,'planet'],[123,'constellation']
+ ];
+ for(const [total,chapter] of worlds){
+  const scene=garden.render({stage:8},{demo:true,previewBloomTotal:total});
+  assert.match(scene,new RegExp('data-chapter="'+chapter+'"'));
+  assert.equal((scene.match(/data-origin-flower="/g)||[]).length,8,
+   chapter+' should contain exactly eight original floral identities');
+  for(let id=1;id<=8;id++)
+   assert.ok(scene.includes('data-origin-flower="'+id+'"'),
+    chapter+' lost original sunflower '+id);
+ }
+ const official=garden.render({stage:8});
+ assert.equal((official.match(/data-origin-flower="/g)||[]).length,8);
+ assert.equal((garden.render({stage:0}).match(/data-origin-flower="/g)||[]).length,0);
+});
