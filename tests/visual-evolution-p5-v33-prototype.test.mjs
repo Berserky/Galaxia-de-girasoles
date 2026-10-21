@@ -237,7 +237,7 @@ test('P5 V3.3: planetary sunflower markers never unlock under authentic 0–8 Bo
   assert.equal((scene.match(/data-flower="/g)||[]).length,stage);
   // Markers exist in the hidden globe template only; planet rendering remains
   // strictly inaccessible outside conceptual demo.
-  assert.match(scene,/data-official-stage="'+stage+'"/);
+  assert.ok(scene.includes('data-official-stage="'+stage+'"'));
  }
  assert.match(garden.render({stage:365}),/data-stage="8"/);
 });
