@@ -12,12 +12,16 @@ const stubIndex=[
  '<link rel="stylesheet" href="./galaxy-garden-world-v3.css">',
  '<script src="./galaxy-garden-world-v3.js"></script>',
  '<script src="./p5-garden-bond-bridge.js"></script>',
+ '<script src="./p5-moments-garden-lifecycle.js"></script>',
  '<script src="./app.js"></script>'
 ].join('\n');
 const stubApp=[
  'function bondGardenStage(garden){return garden.stage}',
  'function bondGardenVisual(garden) {',
  ' const ctl=window.GalaxyGardenBondBridge.create({host:container});',
+ ' const gardenLifecycle=window.GalaxyMomentsGardenLifecycle.create();',
+ ' gardenLifecycle.update({host:container,cloud});',
+ ' gardenLifecycle.leave();',
  ' return ctl.update({stage:bondGardenStage(garden)});',
  '}'
 ].join('\n');
@@ -27,7 +31,8 @@ function fixtures(){
   [root+'app.js']:stubApp,
   [root+'galaxy-garden-world-v3.css']:localExpected.stylesheet,
   [root+'galaxy-garden-world-v3.js']:localExpected.javascript,
-  [root+'p5-garden-bond-bridge.js']:localExpected.bridge
+  [root+'p5-garden-bond-bridge.js']:localExpected.bridge,
+  [root+'p5-moments-garden-lifecycle.js']:localExpected.lifecycle
  };
  return {sources,get:path=>sources[path]??null,expected:localExpected};
 }
@@ -43,19 +48,20 @@ test('P5 integration gate: complete, exact candidate is only static-ready, never
  assert.equal(result.prototypeIsNotApk,true);
  assert.equal(result.officialStageMax,8);
  assert.equal(result.blockers.length,0);
+ assert.equal(result.checks.find(x=>x.name==='AUTHENTIC_LIFECYCLE_WIRED').passed,true);
  assert.ok(result.checks.length>=9);
 });
 test('P5 integration gate: app without installed scripts/assets is blocked, not misrepresented as APK',()=>{
  const report=run(files=>{files[root+'index.html']='<!doctype html><script src="./app.js"></script>';
-  delete files[root+'galaxy-garden-world-v3.css'];delete files[root+'galaxy-garden-world-v3.js'];delete files[root+'p5-garden-bond-bridge.js'];
+  delete files[root+'galaxy-garden-world-v3.css'];delete files[root+'galaxy-garden-world-v3.js'];delete files[root+'p5-garden-bond-bridge.js'];delete files[root+'p5-moments-garden-lifecycle.js'];
  });
  assert.equal(report.status,'BLOCKED_NOT_INTEGRATED');
  assert.equal(report.androidVerified,false);
- for(const item of ['ENGINE_BEFORE_BRIDGE_BEFORE_APP','ASSET_STYLESHEET_EXACT_SHA256','ASSET_BRIDGE_EXACT_SHA256'])
+ for(const item of ['ENGINE_BEFORE_BRIDGE_BEFORE_APP','ASSET_STYLESHEET_EXACT_SHA256','ASSET_BRIDGE_EXACT_SHA256','ASSET_LIFECYCLE_EXACT_SHA256'])
   assert.ok(report.blockers.includes(item));
 });
 test('P5 integration gate: exact SHA-256 detects stale or tampered canonical bridge',()=>{
- for(const key of ['galaxy-garden-world-v3.js','galaxy-garden-world-v3.css','p5-garden-bond-bridge.js']){
+ for(const key of ['galaxy-garden-world-v3.js','galaxy-garden-world-v3.css','p5-garden-bond-bridge.js','p5-moments-garden-lifecycle.js']){
   const result=run(files=>{files[root+key]+='\n/* old or modified */\n'});
   assert.equal(result.status,'BLOCKED_NOT_INTEGRATED',key);
   assert.ok(result.blockers.some(x=>x.includes('ASSET_')),key);
@@ -100,4 +106,23 @@ test('P5 integration gate: repository inspection is read-only and honest about i
   'source candidate must be available and gate must return an explicit status');
  assert.equal(result.androidVerified,false,'static checks never certify a real Android display');
  assert.ok(Array.isArray(result.blockers));
+});
+
+
+test('P5 integration gate: lifecycle loaded in index without authentic cloud wiring is blocked',()=>{
+ const report=run(files=>{
+  files[root+'app.js']=stubApp.replace(' gardenLifecycle.update({host:container,cloud});',' gardenLifecycle.update({host:container,cloud:{bond:{garden:{stage:0}}}});');
+ });
+ assert.equal(report.status,'BLOCKED_NOT_INTEGRATED');
+ assert.ok(report.blockers.includes('AUTHENTIC_LIFECYCLE_WIRED'));
+});
+test('P5 integration gate: lifecycle must load after bridge but before app',()=>{
+ const report=run(files=>{
+  files[root+'index.html']=stubIndex.replace(
+   '<script src="./p5-moments-garden-lifecycle.js"></script>',
+   '').replace('<script src="./app.js"></script>',
+   '<script src="./app.js"></script>\n<script src="./p5-moments-garden-lifecycle.js"></script>');
+ });
+ assert.equal(report.status,'BLOCKED_NOT_INTEGRATED');
+ assert.ok(report.blockers.includes('LIFECYCLE_AFTER_BRIDGE_BEFORE_APP'));
 });
