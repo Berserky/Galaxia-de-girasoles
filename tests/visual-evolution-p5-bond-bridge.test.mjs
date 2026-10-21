@@ -105,3 +105,27 @@ test('P5 bridge: staging source has no network, storage, GPS or experimental wor
  assert.match(source,/engine\.attach\(/);
  assert.match(source,/engine\.render\(/);
 });
+
+test('P5 bridge: inherits live seven-theme palette without replacing eight sunflowers',()=>{
+ const previous=window.document;
+ try{
+  const el=host(),ctl=create({engine,host:el});
+  window.document={documentElement:{dataset:{theme:'christmas'}}};
+  const initial=ctl.update({stage:8},{daypart:'day'});
+  assert.equal(initial.theme,'christmas');
+  const flowers=el.current;
+  assert.equal(el.renderCount,1);
+  assert.equal(flowers.dataset.celebration,'christmas');
+  window.document.documentElement.dataset.theme='halloween';
+  const changed=ctl.update({stage:8},{daypart:'day'});
+  assert.equal(changed.theme,'halloween');
+  assert.equal(flowers,el.current);
+  assert.equal(el.renderCount,1,'celebration change must never replay bloom');
+  assert.equal(flowers.dataset.celebration,'halloween');
+  assert.equal(ctl.update({stage:8},{theme:'valentine',daypart:'day'}).theme,'valentine');
+  assert.equal(flowers.dataset.celebration,'valentine','explicit valid override takes priority');
+  assert.equal(ctl.update({stage:8},{theme:'untrusted-theme',daypart:'day'}).theme,'daylight');
+  assert.equal(flowers.dataset.celebration,'daylight','unsafe override has safe fallback');
+  ctl.dispose();
+ }finally{if(previous===undefined)delete window.document;else window.document=previous;}
+});
