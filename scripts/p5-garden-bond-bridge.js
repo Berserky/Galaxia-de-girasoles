@@ -14,7 +14,11 @@
   const n=garden?.stage;
   if(typeof n!=='number'||!Number.isSafeInteger(n)||n<0)return Object.freeze({ready:false,reason:'NO_AUTHENTIC_STAGE'});
   const stage=Math.min(8,n);
-  const theme=allowed(preferences.theme,ALLOWED_THEMES,'daylight');
+  // Match the current mobile theme when a presenter does not supply an override.
+  // No storage, network, or user-permission access is needed.
+  const appTheme=global.document?.documentElement?.dataset?.theme;
+  const selectedTheme=preferences.theme===undefined?appTheme:preferences.theme;
+  const theme=allowed(selectedTheme,ALLOWED_THEMES,'daylight');
   const season=allowed(preferences.season,ALLOWED_SEASONS,null);
   const daypart=allowed(preferences.daypart,ALLOWED_DAYPARTS,null);
   const motion=preferences.motion==='reduce'?'reduce':'full';
