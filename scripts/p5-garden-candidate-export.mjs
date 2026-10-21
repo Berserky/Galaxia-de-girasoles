@@ -53,7 +53,7 @@ export function extractGardenCandidate(html,bridgeSource=readFileSync(resolve(so
  if(typeof lifecycleSource!=='string'||!lifecycleSource.includes('global.GalaxyMomentsGardenLifecycle=Object.freeze({authenticGarden,create})'))fail('canonical Moments lifecycle missing');
  const lifecycle=lifecycleSource.trim()+'\n';
  if(/\bfetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|navigator\.geolocation|previewBloomTotal|demo:true|supabase|\bapi\s*\(/i.test(lifecycle))fail('unsafe Moments lifecycle dependency');
- if(!lifecycle.includes('authenticGarden(cloud)')||!lifecycle.includes("initialEntrance:everEntered?'none':'grow'")||!lifecycle.includes('controller?.dispose()'))fail('Moments lifecycle contract drifted');
+ if(!lifecycle.includes('function authenticGarden(cloud)')||!lifecycle.includes('controller.update(authenticGarden(cloud),preferences)')||!lifecycle.includes("initialEntrance:everEntered?'none':'grow'")||!lifecycle.includes('controller?.dispose()'))fail('Moments lifecycle contract drifted');
  const manifest={schemaVersion:3,source:PROTOTYPE,bridgeSource:BRIDGE,lifecycleSource:LIFECYCLE,mode:'CANDIDATE_ONLY_NOT_APK',
   officialStageMin:0,officialStageMax:8,worldProgressEnabled:false,
   files:['galaxy-garden-world-v3.css','galaxy-garden-world-v3.js','p5-garden-bond-bridge.js','p5-moments-garden-lifecycle.js'],
