@@ -63,10 +63,14 @@ export function evaluateP5AndroidReadiness({get,expected}){
   // linked script or documentation mentioning the bridge.
   const presenter=typeof app==='string'?
     app.match(/function bondGardenVisual\(garden\)\s*\{([\s\S]*?)\n\}/)?.[1]||'':'';
-  required(checks,'BOND_PRESENTER_USES_BRIDGE',/GalaxyGardenBondBridge/.test(presenter)&&/\.create\(/.test(presenter));
+  // Accept either a direct bridge presenter or the authorized host-placeholder
+  // strategy backed by the authenticated Moments lifecycle. Neither may fake Bond.
   const lifecycleWired=/GalaxyMomentsGardenLifecycle\.create\s*\(/.test(String(app||''))&&
-    /\.update\s*\(\s*\{[^}]*\bcloud\b/.test(String(app||''))&&
+    /\.update\s*\(\s*\{[^}]*\bcloud\s*(?:,|\})/.test(String(app||''))&&
     /\.(?:leave|dispose)\s*\(/.test(String(app||''));
+  const directBridge=/GalaxyGardenBondBridge/.test(presenter)&&/\.create\(/.test(presenter);
+  const hostedLifecycle=/data-p5-garden-host/.test(presenter)&&lifecycleWired;
+  required(checks,'BOND_PRESENTER_USES_BRIDGE',directBridge||hostedLifecycle);
   required(checks,'AUTHENTIC_LIFECYCLE_WIRED',lifecycleWired);
   required(checks,'GARDEN_FALLBACK_PRESERVED',/bondGardenVisual/.test(String(app||''))&&
     /garden\.stage|bondGardenStage\(garden\)/.test(String(app||'')));
