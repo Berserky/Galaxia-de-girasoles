@@ -26,10 +26,11 @@
   const motion=prefs.motion==='reduce'?'reduce':'full';
   return Object.freeze({ready:true,stage,capped:n>8,theme,season,daypart,motion,autoDaypart:daypart===null});
  }
- function create({engine=global.GalaxyGardenV5,host,onFlowerTap}={}){
+ function create({engine=global.GalaxyGardenV5,host,onFlowerTap,initialEntrance='grow'}={}){
   if(!engine||typeof engine.render!=='function'||typeof engine.attach!=='function'||typeof engine.normalize!=='function')
    throw new Error('P5_BRIDGE_BLOCKED: canonical garden engine is required');
   if(!host||typeof host.querySelector!=='function')throw new Error('P5_BRIDGE_BLOCKED: valid host required');
+  const firstEntrance=initialEntrance==='none'?'none':'grow';
   let node=null,stage=null,stop=()=>{},last=null,attachedMode=null,disposed=false;
   const modeOf=state=>String(state.autoDaypart)+':'+String(state.season===null);
   const annotate=()=>{
@@ -56,7 +57,7 @@
    const replace=!node||current!==node||stage!==state.stage;
    if(replace){
     stop();stop=()=>{};
-    const options={theme:state.theme,motion:state.motion,entrance:stage===null?'grow':'none'};
+    const options={theme:state.theme,motion:state.motion,entrance:stage===null?firstEntrance:'none'};
     if(state.season)options.season=state.season;
     if(state.daypart)options.daypart=state.daypart;
     // Explicitly avoid the experimental world parameters. Only official stages render.
