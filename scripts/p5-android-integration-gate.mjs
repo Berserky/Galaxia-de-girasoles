@@ -8,7 +8,7 @@ import {readFileSync} from 'node:fs';
 import {resolve,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
-import {extractGardenCandidate,PROTOTYPE,BRIDGE} from './p5-garden-candidate-export.mjs';
+import {extractGardenCandidate,PROTOTYPE,BRIDGE,LIFECYCLE} from './p5-garden-candidate-export.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const mobile='android/app/src/main/assets/mobile/';
@@ -16,7 +16,8 @@ const hash=value=>createHash('sha256').update(value).digest('hex');
 const assetPath={
   stylesheet:'galaxy-garden-world-v3.css',
   engine:'galaxy-garden-world-v3.js',
-  bridge:'p5-garden-bond-bridge.js'
+  bridge:'p5-garden-bond-bridge.js',
+  lifecycle:'p5-moments-garden-lifecycle.js'
 };
 function references(html,kind){
   const regex=kind==='link'?/<link\b[^>]*>/g:/<script\b[^>]*><\/script>/g;
@@ -39,20 +40,21 @@ export function evaluateP5AndroidReadiness({get,expected}){
   required(checks,'ANDROID_INDEX_PRESENT',typeof index==='string');
   required(checks,'ANDROID_APP_PRESENT',typeof app==='string');
   const links=references(index,'link'),scripts=references(index,'script');
-  const css='./'+assetPath.stylesheet,engine='./'+assetPath.engine,bridge='./'+assetPath.bridge;
+  const css='./'+assetPath.stylesheet,engine='./'+assetPath.engine,bridge='./'+assetPath.bridge,lifecycle='./'+assetPath.lifecycle;
   const j=links.indexOf(css),oldCss=links.indexOf('./galaxy-moments-v5.css');
-  const e=scripts.indexOf(engine),b=scripts.indexOf(bridge),a=scripts.indexOf('./app.js');
+  const e=scripts.indexOf(engine),b=scripts.indexOf(bridge),l=scripts.indexOf(lifecycle),a=scripts.indexOf('./app.js');
   required(checks,'GARDEN_STYLESHEET_AFTER_MOMENTS',j>=0&&oldCss>=0&&oldCss<j);
   required(checks,'ENGINE_BEFORE_BRIDGE_BEFORE_APP',e>=0&&b>e&&a>b);
+  required(checks,'LIFECYCLE_AFTER_BRIDGE_BEFORE_APP',l>b&&a>l);
   required(checks,'NO_DUPLICATE_ASSET_LINKS',
-    links.filter(x=>x===css).length===1&&scripts.filter(x=>x===engine).length===1&&scripts.filter(x=>x===bridge).length===1);
+    links.filter(x=>x===css).length===1&&scripts.filter(x=>x===engine).length===1&&scripts.filter(x=>x===bridge).length===1&&scripts.filter(x=>x===lifecycle).length===1);
   const manifest=expected?.manifest;
   required(checks,'CANONICAL_CANDIDATE_SCHEMA',
-    manifest?.schemaVersion===2&&manifest.mode==='CANDIDATE_ONLY_NOT_APK'&&
+    manifest?.schemaVersion===3&&manifest.mode==='CANDIDATE_ONLY_NOT_APK'&&
     manifest.officialStageMin===0&&manifest.officialStageMax===8&&manifest.worldProgressEnabled===false);
   for(const [key,filename] of Object.entries(assetPath)){
     const actual=get(mobile+filename);
-    const correct=expected?.[key==='stylesheet'?'stylesheet':key==='engine'?'javascript':'bridge'];
+    const correct=expected?.[key==='stylesheet'?'stylesheet':key==='engine'?'javascript':key];
     required(checks,'ASSET_'+key.toUpperCase()+'_EXACT_SHA256',
       typeof actual==='string'&&typeof correct==='string'&&hash(actual)===hash(correct),
       typeof actual==='string'?('sha256:'+hash(actual)):'not installed');
@@ -62,6 +64,10 @@ export function evaluateP5AndroidReadiness({get,expected}){
   const presenter=typeof app==='string'?
     app.match(/function bondGardenVisual\(garden\)\s*\{([\s\S]*?)\n\}/)?.[1]||'':'';
   required(checks,'BOND_PRESENTER_USES_BRIDGE',/GalaxyGardenBondBridge/.test(presenter)&&/\.create\(/.test(presenter));
+  const lifecycleWired=/GalaxyMomentsGardenLifecycle\.create\s*\(/.test(String(app||''))&&
+    /\.update\s*\(\s*\{[^}]*\bcloud\b/.test(String(app||''))&&
+    /\.(?:leave|dispose)\s*\(/.test(String(app||''));
+  required(checks,'AUTHENTIC_LIFECYCLE_WIRED',lifecycleWired);
   required(checks,'GARDEN_FALLBACK_PRESERVED',/bondGardenVisual/.test(String(app||''))&&
     /garden\.stage|bondGardenStage\(garden\)/.test(String(app||'')));
   const failures=checks.filter(x=>!x.passed).map(x=>x.name);
@@ -73,9 +79,9 @@ export function evaluateP5AndroidReadiness({get,expected}){
 }
 export function inspectCurrentCheckout(repoRoot=root){
   const get=path=>{try{return readFileSync(resolve(repoRoot,path),'utf8')}catch{return null}};
-  const html=get(PROTOTYPE),bridge=get(BRIDGE);
+  const html=get(PROTOTYPE),bridge=get(BRIDGE),lifecycle=get(LIFECYCLE);
   let expected=null;
-  try{expected=extractGardenCandidate(html,bridge)}
+  try{expected=extractGardenCandidate(html,bridge,lifecycle)}
   catch(err){return {status:'BLOCKED_CANDIDATE_DRIFT',androidVerified:false,blockers:[String(err.message)],checks:[]}}
   return evaluateP5AndroidReadiness({get,expected});
 }
