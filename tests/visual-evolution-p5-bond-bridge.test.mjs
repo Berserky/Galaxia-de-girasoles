@@ -1,0 +1,107 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
+import {runInNewContext} from 'node:vm';
+
+// Execute the canonical prototype engine and the proposed browser-compatible
+// adapter, not a mock of either implementation. Android assets are unchanged.
+const root=resolve(import.meta.dirname,'..');
+const html=readFileSync(resolve(root,'docs/visual-evolution-5/prototypes/jardin-vivo-v3.3.html'),'utf8');
+const source=readFileSync(resolve(root,'scripts/p5-garden-bond-bridge.js'),'utf8');
+const scripts=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(m=>m[1]);
+assert.equal(scripts.length,2);
+const window={};
+runInNewContext(scripts[0],{window},{timeout:3000});
+runInNewContext(source,{window},{timeout:3000});
+const engine=window.GalaxyGardenV5;
+const {plan,create}=window.GalaxyGardenBondBridge;
+function host(){
+ let current=null,renderCount=0;
+ return {get renderCount(){return renderCount},get current(){return current},
+  set innerHTML(value){renderCount++;this.html=value;
+   current=value.includes('ng-garden"')?{
+    dataset:Object.fromEntries([...value.matchAll(/data-([a-z-]+)="([^"]*)"/g)]
+     .filter(x=>['daypart','season','celebration','motion','stage'].includes(x[1])).map(x=>[x[1],x[2]])),
+    isConnected:true,style:{setProperty(){}},addEventListener(){},removeEventListener(){},
+    setAttribute(k,v){this[k]=v}
+   }:null;
+  },
+  get innerHTML(){return this.html},
+  querySelector(name){return name==='.ng-garden'?current:null}
+ };
+}
+
+test('P5 bridge: missing, boolean, empty or malformed Bond stage is unavailable, not a fake seed',()=>{
+ for(const entry of [null,{}, {stage:null},{stage:false},{stage:''},{stage:'8'},{stage:-1},{stage:NaN},{stage:2.5}])
+  assert.equal(plan(entry).ready,false);
+ assert.equal(plan({stage:0}).ready,true);
+});
+
+test('P5 bridge: stages 0–8 are real; future stages are capped, never enabled as demos',()=>{
+ for(const number of [0,1,3,8,9,122,365]){
+  const state=plan({stage:number},{demo:true,previewBloomTotal:122});
+  assert.equal(state.stage,Math.min(number,8));
+  const page=engine.render({stage:state.stage},{theme:state.theme,daypart:state.daypart||undefined});
+  assert.match(page,/data-demo="false"/);
+  assert.match(page,/data-chapter="garden"/);
+  assert.equal((page.match(/data-flower="/g)||[]).length,Math.min(number,8));
+ }
+});
+
+test('P5 bridge: lighting, theme, season and motion updates preserve original flower nodes',()=>{
+ const el=host(),ctl=create({engine,host:el});
+ ctl.update({stage:8},{theme:'daylight',daypart:'day',season:'summer'});
+ const flowerScene=el.current;
+ assert.ok(flowerScene);assert.equal(el.renderCount,1);
+ ctl.update({stage:8},{theme:'christmas',daypart:'night',season:'winter',motion:'reduce'});
+ assert.equal(el.current,flowerScene);assert.equal(el.renderCount,1);
+ assert.equal(flowerScene.dataset.celebration,'christmas');
+ assert.equal(flowerScene.dataset.motion,'reduce');
+ assert.match(flowerScene['aria-label'],/etapa oficial 8/);
+ ctl.dispose();
+});
+
+test('P5 bridge: unlock redraws once; disconnected/malformed Bond state is visibly unavailable',()=>{
+ const el=host(),ctl=create({engine,host:el});
+ ctl.update({stage:3},{daypart:'day'});
+ ctl.update({stage:3},{daypart:'night'});
+ assert.equal(el.renderCount,1);
+ ctl.update({stage:8},{daypart:'night'});
+ assert.equal(el.renderCount,2);
+ assert.match(el.html,/data-stage="8"/);
+ ctl.update({stage:null});
+ assert.match(el.html,/progreso del jardín no está disponible/);
+ ctl.dispose();
+ assert.throws(()=>ctl.update({stage:1}),/DISPOSED/);
+});
+
+test('P5 bridge: only allowlisted theme/season/daypart and reduced-motion preferences',()=>{
+ const invalid=plan({stage:8},{theme:'unsafe',season:'weird',daypart:'zzz',motion:'busy'});
+ assert.deepEqual([invalid.theme,invalid.season,invalid.daypart,invalid.motion],['daylight',null,null,'full']);
+ const valid=plan({stage:2},{theme:'cosmic',daypart:'sunset',season:'winter',motion:'reduce'});
+ assert.deepEqual([valid.theme,valid.season,valid.daypart,valid.motion],['cosmic','winter','sunset','reduce']);
+});
+
+test('P5 bridge: auto-season refresh works alongside manually selected daylight',()=>{
+ const el=host(),calls=[];
+ const tracking={...engine,attach(node,opts){calls.push({node,opts});return()=>{};}};
+ const ctl=create({engine:tracking,host:el});
+ ctl.update({stage:8},{daypart:'sunset'});
+ assert.equal(calls[0].opts.autoAmbient,true,'clock must track season even with manual daypart');
+ assert.equal(calls[0].opts.autoSeason,true);
+ el.current.dataset.daypart='night';
+ calls[0].opts.onAmbient();
+ assert.equal(el.current.dataset.daypart,'sunset');
+ ctl.update({stage:8},{season:'winter',daypart:'sunset'});
+ assert.equal(calls.length,2,'changing clock ownership rebinds observer without redrawing flowers');
+ assert.equal(el.renderCount,1);
+ assert.equal(calls[1].opts.autoSeason,false);
+ ctl.dispose();
+});
+
+test('P5 bridge: staging source has no network, storage, GPS or experimental world controls',()=>{
+ assert.doesNotMatch(source,/\bfetch\s*\(|XMLHttpRequest|localStorage|navigator\.geolocation|previewBloomTotal|demo:true|supabase|api\(/);
+ assert.match(source,/engine\.attach\(/);
+ assert.match(source,/engine\.render\(/);
+});
