@@ -14,11 +14,12 @@ import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 
 export const PROTOTYPE='docs/visual-evolution-5/prototypes/jardin-vivo-v3.3.html';
+export const BRIDGE='scripts/p5-garden-bond-bridge.js';
 const sha=s=>createHash('sha256').update(s).digest('hex');
 const sourceRoot=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const fail=m=>{throw new Error('P5_STAGING_BLOCKED: '+m);};
 
-export function extractGardenCandidate(html){
+export function extractGardenCandidate(html,bridgeSource=readFileSync(resolve(sourceRoot,BRIDGE),'utf8')){
  if(typeof html!=='string'||!/<title>[^<]*V3\.3/.test(html)||!html.includes('LABORATORIO VISUAL'))fail('not the approved synthetic V3.3 prototype');
  const styles=[...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map(m=>m[1]);
  const scripts=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(m=>m[1]);
@@ -29,8 +30,16 @@ export function extractGardenCandidate(html){
  if(!css.includes('V3.3 PERF')||!js.includes('function attach(')||!js.includes('options.onAmbient?.(state)'))fail('latest motion/clock fixes not present');
  if(/@import\b|url\(\s*['"]?https?:/i.test(css)||/\bfetch\s*\(|XMLHttpRequest|localStorage|navigator\.geolocation/i.test(js))fail('external dependency or private-data access');
  if(js.includes('function draw(){')||js.includes('function updateAppearance(){'))fail('demo controls must not ship as Android core engine');
- const manifest={schemaVersion:1,source:PROTOTYPE,mode:'CANDIDATE_ONLY_NOT_APK',officialStageMin:0,officialStageMax:8,worldProgressEnabled:false,sha256:{engine:sha(js),stylesheet:sha(css)},bytes:{engine:Buffer.byteLength(js),stylesheet:Buffer.byteLength(css)}};
- return {javascript:js,stylesheet:css,manifest};
+ if(typeof bridgeSource!=='string'||!bridgeSource.includes('global.GalaxyGardenBondBridge=Object.freeze({plan,create})'))fail('canonical Bond bridge missing');
+ const bridge=bridgeSource.trim()+'\n';
+ if(/\bfetch\s*\(|XMLHttpRequest|localStorage|navigator\.geolocation|previewBloomTotal|demo:true|supabase|\bapi\s*\(/i.test(bridge))fail('unsafe Bond bridge dependency or preview world');
+ if(!bridge.includes('NO_AUTHENTIC_STAGE')||!bridge.includes('engine.render({stage:state.stage},options)'))fail('Bond bridge contract drifted');
+ const manifest={schemaVersion:2,source:PROTOTYPE,bridgeSource:BRIDGE,mode:'CANDIDATE_ONLY_NOT_APK',
+  officialStageMin:0,officialStageMax:8,worldProgressEnabled:false,
+  files:['galaxy-garden-world-v3.css','galaxy-garden-world-v3.js','p5-garden-bond-bridge.js'],
+  sha256:{engine:sha(js),stylesheet:sha(css),bridge:sha(bridge)},
+  bytes:{engine:Buffer.byteLength(js),stylesheet:Buffer.byteLength(css),bridge:Buffer.byteLength(bridge)}};
+ return {javascript:js,stylesheet:css,bridge,manifest};
 }
 
 export function exportGardenCandidate({repoRoot=sourceRoot,outDir}){
@@ -40,9 +49,9 @@ export function exportGardenCandidate({repoRoot=sourceRoot,outDir}){
  if(rel===''||!(rel==='..'||rel.startsWith('..'+sep)))fail('output MUST be outside repository checkout');
  // Extra defense in depth: refuse to mutate any app or source directory even on unusual paths.
  if(target.includes('/android/')||target.endsWith('/android')||target.includes('\\android\\'))fail('Android directories forbidden');
- const files=extractGardenCandidate(readFileSync(resolve(root,PROTOTYPE),'utf8'));
+ const files=extractGardenCandidate(readFileSync(resolve(root,PROTOTYPE),'utf8'),readFileSync(resolve(root,BRIDGE),'utf8'));
  mkdirSync(target,{recursive:true});
- for(const [name,contents] of [['galaxy-garden-world-v3.js',files.javascript],['galaxy-garden-world-v3.css',files.stylesheet],['garden-candidate-manifest.json',JSON.stringify(files.manifest,null,2)+'\n']])writeFileSync(resolve(target,name),contents);
+ for(const [name,contents] of [['galaxy-garden-world-v3.js',files.javascript],['galaxy-garden-world-v3.css',files.stylesheet],['p5-garden-bond-bridge.js',files.bridge],['garden-candidate-manifest.json',JSON.stringify(files.manifest,null,2)+'\n']])writeFileSync(resolve(target,name),contents);
  return files.manifest;
 }
 
