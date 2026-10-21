@@ -129,3 +129,51 @@ test('P5 bridge: inherits live seven-theme palette without replacing eight sunfl
   ctl.dispose();
  }finally{if(previous===undefined)delete window.document;else window.document=previous;}
 });
+
+test('P5 bridge: invalid preference payload never crashes Moments or invents progress',()=>{
+ const previous=window.document;
+ try{
+  window.document={documentElement:{dataset:{theme:'christmas'}}};
+  for(const malformed of [null,undefined,false,0,'night',[],[1,2]]){
+   const result=plan({stage:3},malformed);
+   assert.equal(result.ready,true);
+   assert.equal(result.stage,3);
+   assert.equal(result.theme,'christmas');
+   assert.equal(result.motion,'full');
+   assert.equal(result.autoDaypart,true);
+  }
+  const el=host(),ctl=create({engine,host:el});
+  assert.equal(ctl.update({stage:3},null).stage,3);
+  assert.equal(el.current.dataset.celebration,'christmas');
+  assert.equal(ctl.update({stage:3},{theme:'unlisted'}).theme,'daylight');
+  assert.equal(ctl.update(null,null).ready,false);
+  assert.match(el.html,/El progreso del jardín no está disponible/);
+  ctl.dispose();
+ }finally{if(previous===undefined)delete window.document;else window.document=previous;}
+});
+
+test('P5 bridge: parent redraw and Bond transitions release every stale listener exactly once',()=>{
+ let attaches=0,stops=0;
+ const tracked={...engine,attach(){attaches++;let released=false;return()=>{assert.equal(released,false,'duplicate stop');released=true;stops++;};}};
+ const el=host(),ctl=create({engine:tracked,host:el});
+ ctl.update({stage:3},{daypart:'day',season:'winter'});
+ assert.equal(attaches,1);
+ const original=el.current;
+ ctl.update({stage:3},{theme:'easter',daypart:'night',season:'winter'});
+ assert.equal(el.current,original);
+ assert.equal(attaches,1);
+ ctl.update({stage:8},{daypart:'night',season:'winter'});
+ assert.equal(attaches,2);assert.equal(stops,1);
+ el.innerHTML='<main>Parent replaced the Moments view</main>';
+ ctl.update({stage:8},{daypart:'night',season:'winter'});
+ assert.equal(attaches,3,'detached host must rebind only new scene');
+ assert.equal(stops,2);
+ assert.match(el.html,/data-stage="8"/);
+ assert.equal(ctl.update({stage:null}).ready,false);
+ assert.equal(stops,3);
+ ctl.update({stage:1},{daypart:'day',season:'summer'});
+ assert.equal(attaches,4);
+ ctl.dispose();ctl.dispose();
+ assert.equal(stops,4,'all active observers must be removed exactly once');
+ assert.throws(()=>ctl.update({stage:1}),/DISPOSED/);
+});
