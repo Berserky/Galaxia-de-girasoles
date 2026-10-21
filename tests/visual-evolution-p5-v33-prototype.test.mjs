@@ -83,3 +83,83 @@ test('P5 V3.3: original eight blooms stay present on first conceptual zoom',()=>
  }
  assert.match(zoom,/data-chapter="meadow"/);
 });
+
+
+// A deterministic faux DOM tests scene lifecycle without depending on the
+// host browser, QA device, wall clock, Supabase or real user data.
+function sceneFixture(options={}){
+ const registered=new Map(),removed=[],timers=new Map(),cleared=[],watched=[];
+ let observer=null,nextTimer=1,disconnected=false;
+ const doc={hidden:false,
+  addEventListener:(name,fn)=>registered.set('document:'+name,fn),
+  removeEventListener:(name,fn)=>{removed.push('document:'+name);registered.delete('document:'+name)}
+ };
+ class IO{
+  constructor(cb){this.callback=cb;observer=this;}
+  observe(node){watched.push(node)}
+  disconnect(){disconnected=true;}
+ }
+ const global={document:doc,IntersectionObserver:IO,matchMedia:()=>({matches:false}),
+  addEventListener:(name,fn)=>registered.set('window:'+name,fn),
+  removeEventListener:(name,fn)=>{removed.push('window:'+name);registered.delete('window:'+name)},
+  setTimeout:(fn,delay)=>{const id=nextTimer++;timers.set(id,{fn,delay});return id},
+  clearTimeout:(id)=>{timers.delete(id);cleared.push(id)}
+ };
+ runInNewContext(scripts[0],{window:global},{timeout:3000});
+ const root={dataset:{motion:'full',season:'spring',daypart:'sunset'},isConnected:true,
+  style:{setProperty(){}},addEventListener:(name,fn)=>registered.set('root:'+name,fn),
+  removeEventListener:(name,fn)=>{removed.push('root:'+name);registered.delete('root:'+name)}};
+ const dispose=global.GalaxyGardenV5.attach(root,options);
+ return {root,doc,registered,removed,timers,cleared,watched,dispose,
+  enter:()=>observer?.callback([{isIntersecting:true}]),
+  exit:()=>observer?.callback([{isIntersecting:false}]),
+  disconnected:()=>disconnected,
+  ambient:()=>global.GalaxyGardenV5.ambient()};
+}
+
+test('V3.3 manual daypart still pauses all offscreen animations and restores on return',()=>{
+ const f=sceneFixture({autoAmbient:false});
+ assert.equal(f.watched.length,1,'IntersectionObserver must run even with manual daypart');
+ assert.equal(f.root.dataset.paused,'false');
+ assert.equal(f.timers.size,0,'manual lighting must not create a clock timer');
+ f.exit();
+ assert.equal(f.root.dataset.paused,'true');
+ f.enter();
+ assert.equal(f.root.dataset.paused,'false');
+ assert.equal(f.root.dataset.daypart,'sunset','manual lighting should not change itself');
+ assert.equal(f.root.dataset.season,'spring','manual season should remain selected');
+ f.dispose();
+ assert.equal(f.disconnected(),true);
+ assert.equal(f.registered.size,0,'all listeners are removed');
+});
+
+test('V3.3 automatic clock updates daypart, never overrides the manually selected season',()=>{
+ const f=sceneFixture({autoAmbient:true,autoSeason:false});
+ assert.equal(f.root.dataset.daypart,f.ambient().daypart);
+ assert.equal(f.root.dataset.season,'spring','autumn/spring choice is independent of automatic clock');
+ assert.equal(f.timers.size,1,'clock is scheduled for next daypart boundary only');
+ f.exit();
+ assert.equal(f.root.dataset.paused,'true');
+ assert.equal(f.timers.size,0,'offscreen clocks must be cleared');
+ f.enter();
+ assert.equal(f.root.dataset.paused,'false');
+ assert.equal(f.timers.size,1,'clock resumes only when scene becomes visible');
+ f.doc.hidden=true;
+ f.registered.get('document:visibilitychange')();
+ assert.equal(f.root.dataset.paused,'true');
+ assert.equal(f.timers.size,0,'hidden tabs must not run clock timers');
+ f.doc.hidden=false;
+ f.registered.get('document:visibilitychange')();
+ assert.equal(f.root.dataset.paused,'false');
+ assert.equal(f.timers.size,1);
+ f.dispose();
+ assert.equal(f.registered.size,0);
+ assert.equal(f.timers.size,0);
+ assert.equal(f.disconnected(),true);
+});
+
+test('V3.3 demo actually enables the automatic clock option without re-rendering the flowers',()=>{
+ assert.match(scripts[1],/autoAmbient:settings\.daypart==='auto'/);
+ assert.match(scripts[1],/autoSeason:false/);
+ assert.doesNotMatch(scripts[0],/setInterval\(/,'ambient updates must use event/boundary timers');
+});
