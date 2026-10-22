@@ -5,7 +5,8 @@
  * Usage in an authorized app integration (NOT applied here):
  *   const gardenLifecycle=window.GalaxyMomentsGardenLifecycle.create();
  *   after momentsView() has been inserted:
- *     gardenLifecycle.update({host:document.querySelector('[data-p5-garden-host]'),cloud});
+ *     gardenLifecycle.update({host:document.querySelector('[data-p5-garden-host]'),cloud,sessionKey});
+ *   sessionKey must come from an authenticated pairing identity, never a demo/clock value.
  *   before leaving Moments / unpairing: gardenLifecycle.leave();
  *   after changing paired identity: gardenLifecycle.reset();
  */
@@ -21,16 +22,26 @@
  function create({bridge=global.GalaxyGardenBondBridge,onFlowerTap}={}){
   if(!bridge||typeof bridge.create!=='function'||typeof bridge.plan!=='function')
    throw new Error('P5_LIFECYCLE_BLOCKED: canonical Bond bridge required');
-  let controller=null,currentHost=null,everEntered=false,disposed=false;
+  let controller=null,currentHost=null,everEntered=false,disposed=false,activeSessionKey=null;
   function leave(){
    controller?.dispose();
    controller=null;currentHost=null;
   }
   function reset(){
-   leave();everEntered=false;
+   leave();everEntered=false;activeSessionKey=null;
   }
-  function update({host,cloud,preferences}={}){
+  function update({host,cloud,preferences,sessionKey}={}){
    if(disposed)throw new Error('P5_LIFECYCLE_DISPOSED');
+   // Optional for a legacy presenter. Once bound to an authenticated session,
+   // however, neither a different session nor a missing/invalid key may reuse
+   // observers, a flower view or the first-entrance animation flag.
+   const supplied=typeof sessionKey==='string'&&sessionKey.length>0;
+   if(sessionKey!==undefined&&!supplied){reset();return Object.freeze({ready:false,reason:'INVALID_SESSION_IDENTITY'});}
+   if(activeSessionKey!==null&&!supplied){reset();return Object.freeze({ready:false,reason:'SESSION_IDENTITY_REQUIRED'});}
+   if(supplied&&activeSessionKey!==sessionKey){
+    if(activeSessionKey!==null||everEntered||controller)reset();
+    activeSessionKey=sessionKey;
+   }
    if(!host||typeof host.querySelector!=='function'){
     leave();return unavailable;
    }
