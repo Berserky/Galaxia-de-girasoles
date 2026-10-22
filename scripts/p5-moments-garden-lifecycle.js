@@ -28,7 +28,12 @@
    controller=null;currentHost=null;
   }
   function reset(){
+   const oldHost=currentHost;
    leave();everEntered=false;activeSessionKey=null;
+   // Do not leave the prior couple's flowers on-screen when unpairing or
+   // switching sessions. Only clear a host that still contains our scene.
+   if(oldHost?.querySelector?.('.ng-garden'))
+    oldHost.innerHTML='<div class="ng-garden-unavailable" role="status">El progreso del jardín no está disponible por ahora.</div>';
   }
   function update({host,cloud,preferences,sessionKey}={}){
    if(disposed)throw new Error('P5_LIFECYCLE_DISPOSED');
