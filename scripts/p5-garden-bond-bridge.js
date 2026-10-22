@@ -44,7 +44,7 @@
    const current=node,token=++generation;
    stop();stop=()=>{};
    const active=()=>!disposed&&generation===token&&node===current&&last!==null&&
-    host.querySelector('.ng-garden')===current;
+    current?.isConnected===true&&host.querySelector('.ng-garden')===current;
    stop=engine.attach(current,{autoAmbient:last.autoDaypart||last.season===null,autoSeason:last.season===null,
     onAmbient:()=>{if(!active())return;if(last.daypart)current.dataset.daypart=last.daypart;annotate();},
     onFlowerTap:flower=>{
