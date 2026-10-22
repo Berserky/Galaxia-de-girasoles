@@ -86,3 +86,52 @@ test('P5 lifecycle: rejects missing bridge and cannot fetch, store or enable dem
  assert.match(source,/authenticGarden\(cloud\)/);
  assert.match(source,/controller\?\.dispose\(\)/);
 });
+
+
+test('P5 lifecycle: authenticated session changes reset observers even on the same host',()=>{
+ const {bridge,instances}=tracking(),ctl=create({bridge}),mount=host();
+ const first={bond:{garden:{stage:8}}},other={bond:{garden:{stage:0}}};
+ assert.equal(ctl.update({host:mount,cloud:first,sessionKey:'pair-A'}).stage,8);
+ assert.equal(instances[0].initialEntrance,'grow');
+ assert.equal(ctl.update({host:mount,cloud:{bond:{garden:{stage:7}}},sessionKey:'pair-A'}).stage,7);
+ assert.equal(instances.length,1,'refreshing Bond state for same pair must not remount');
+ const switched=ctl.update({host:mount,cloud:other,sessionKey:'pair-B'});
+ assert.equal(switched.stage,0);
+ assert.equal(instances[0].stopped,1);
+ assert.equal(instances[1].initialEntrance,'grow','new couple must never inherit bloom flag');
+ assert.equal(instances[1].updates[0].garden.stage,0);
+ ctl.leave();
+ ctl.update({host:mount,cloud:other,sessionKey:'pair-B'});
+ assert.equal(instances[2].initialEntrance,'none','same pair return retains prior bloom');
+ ctl.dispose();
+ assert.equal(instances[2].stopped,1);
+});
+
+test('P5 lifecycle: missing or malformed identity after pairing fails closed',()=>{
+ const {bridge,instances}=tracking(),ctl=create({bridge}),mount=host();
+ ctl.update({host:mount,cloud:{bond:{garden:{stage:3}}},sessionKey:'pair-A'});
+ const noKey=ctl.update({host:mount,cloud:{bond:{garden:{stage:8}}}});
+ assert.equal(noKey.ready,false);
+ assert.equal(noKey.reason,'SESSION_IDENTITY_REQUIRED');
+ assert.equal(instances[0].stopped,1,'session loss must disconnect prior scene');
+ const restored=ctl.update({host:mount,cloud:{bond:{garden:{stage:0}}},sessionKey:'pair-B'});
+ assert.equal(restored.ready,true);
+ assert.equal(instances[1].initialEntrance,'grow');
+ for(const invalid of ['',0,null,{},['pair-B']]){
+  const result=ctl.update({host:mount,cloud:{bond:{garden:{stage:8}}},sessionKey:invalid});
+  assert.equal(result.ready,false);
+  assert.equal(result.reason,'INVALID_SESSION_IDENTITY');
+ }
+ assert.equal(instances[1].stopped,1,'invalid identity must disconnect active scene');
+ ctl.dispose();
+});
+
+test('P5 lifecycle: assigning authenticated pairing identity to a legacy scene never reuses it',()=>{
+ const {bridge,instances}=tracking(),ctl=create({bridge}),mount=host();
+ ctl.update({host:mount,cloud:{bond:{garden:{stage:8}}}});
+ assert.equal(instances[0].initialEntrance,'grow');
+ ctl.update({host:mount,cloud:{bond:{garden:{stage:0}}},sessionKey:'pair-new'});
+ assert.equal(instances[0].stopped,1,'legacy scene cannot carry over to authenticated identity');
+ assert.equal(instances[1].initialEntrance,'grow');
+ ctl.dispose();
+});
