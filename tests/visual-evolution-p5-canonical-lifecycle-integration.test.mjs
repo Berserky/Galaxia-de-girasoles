@@ -171,3 +171,19 @@ test('P5 end-to-end privacy: changing pair on same host leaves no previous flowe
  assert.equal(host.scene,null,'explicit unpair reset must remove prior scene');
  ctl.dispose();
 });
+
+
+test('P5 end-to-end: detached real V3.3 scene refuses clicks when old host still holds DOM',()=>{
+ const window=browser(),host=fakeHost(),pressed=[];
+ const ctl=window.GalaxyMomentsGardenLifecycle.create({onFlowerTap:flower=>pressed.push(flower)});
+ ctl.update({host,cloud:{bond:{garden:{stage:8}}},sessionKey:'authenticated-pair'});
+ const scene=host.scene;
+ tap(scene,2);
+ assert.deepEqual(pressed,[2]);
+ scene.isConnected=false;
+ assert.equal(host.querySelector('.ng-garden'),scene,'parent detach does not clear old host children');
+ tap(scene,3);
+ assert.deepEqual(pressed,[2],'detached parent must not send garden actions');
+ ctl.dispose();
+ assert.ok(scene.removed.includes('click'));
+});
