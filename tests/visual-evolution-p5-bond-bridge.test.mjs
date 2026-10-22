@@ -262,3 +262,27 @@ test('P5 bridge: stale ambient callback after observer rebind cannot overwrite m
  assert.equal(scene.dataset.daypart,'night','current observer may honor manual night');
  ctl.dispose();
 });
+
+
+test('P5 bridge: detached parent with unchanged host rejects late clicks and ambient changes',()=>{
+ const registered=[],pressed=[];
+ const tracked={...engine,attach(current,options){
+  registered.push(options);
+  return()=>{};
+ }};
+ const mount=host(),ctl=create({engine:tracked,host:mount,onFlowerTap:flower=>pressed.push(flower)});
+ ctl.update({stage:8},{theme:'daylight',daypart:'night',season:'winter'});
+ const scene=mount.current,listener=registered[0];
+ listener.onFlowerTap(4);
+ assert.deepEqual(pressed,[4]);
+ scene.dataset.daypart='day';
+ // The entire parent is detached, but querySelector on the old host still
+ // returns the SAME garden scene. DOM node identity alone is insufficient.
+ scene.isConnected=false;
+ assert.equal(mount.querySelector('.ng-garden'),scene);
+ assert.doesNotThrow(()=>listener.onAmbient());
+ assert.doesNotThrow(()=>listener.onFlowerTap(5));
+ assert.equal(scene.dataset.daypart,'day','detached scene cannot be rewritten by stale clock callback');
+ assert.deepEqual(pressed,[4],'detached scene cannot cause actions');
+ ctl.dispose();
+});
