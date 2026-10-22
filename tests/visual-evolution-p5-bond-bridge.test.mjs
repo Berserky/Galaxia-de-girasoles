@@ -196,3 +196,69 @@ test('P5 bridge: first entrance can be disabled on parent remount without disabl
  assert.equal(rendered[2].entrance,'grow','genuine first view still animates by default');
  fresh.dispose();
 });
+
+
+test('P5 bridge: late ambient and flower callbacks never reach disposed or replaced scenes',()=>{
+ const callbacks=[],stops=[],pressed=[];
+ const tracking={...engine,attach(scene,options){
+  callbacks.push({scene,options});
+  const slot=callbacks.length-1;
+  stops[slot]=0;
+  return ()=>{stops[slot]++;};
+ }};
+ const el=host(),ctl=create({engine:tracking,host:el,onFlowerTap:id=>pressed.push(id)});
+ ctl.update({stage:3},{daypart:'day',season:'winter'});
+ const first=callbacks[0];
+ first.options.onFlowerTap(1);
+ assert.deepEqual(pressed,[1],'live stage 3 must still accept valid taps');
+ ctl.update({stage:8},{daypart:'night',season:'winter'});
+ assert.equal(stops[0],1);
+ const second=callbacks[1];
+ assert.doesNotThrow(()=>first.options.onAmbient());
+ assert.doesNotThrow(()=>first.options.onFlowerTap(1));
+ assert.deepEqual(pressed,[1],'stale callbacks may not tap the replacement stage');
+ second.options.onFlowerTap(8);
+ assert.deepEqual(pressed,[1,8]);
+ // Parent overwrites innerHTML while callbacks from old scene are still queued.
+ el.innerHTML='<section>new Moments parent</section>';
+ assert.doesNotThrow(()=>second.options.onAmbient());
+ assert.doesNotThrow(()=>second.options.onFlowerTap(8));
+ assert.deepEqual(pressed,[1,8]);
+ ctl.update({stage:8},{daypart:'day',season:'summer'});
+ assert.equal(stops[1],1);
+ const third=callbacks[2];
+ ctl.update({stage:null});
+ assert.equal(stops[2],1);
+ assert.doesNotThrow(()=>third.options.onAmbient());
+ assert.doesNotThrow(()=>third.options.onFlowerTap(1));
+ ctl.update({stage:1},{daypart:'morning',season:'spring'});
+ const fourth=callbacks[3];
+ ctl.dispose();ctl.dispose();
+ assert.equal(stops[3],1);
+ assert.doesNotThrow(()=>fourth.options.onAmbient());
+ assert.doesNotThrow(()=>fourth.options.onFlowerTap(1));
+ assert.deepEqual(pressed,[1,8]);
+});
+
+test('P5 bridge: stale ambient callback after observer rebind cannot overwrite manual time',()=>{
+ const callbacks=[],stops=[];
+ const tracking={...engine,attach(scene,options){
+  callbacks.push({scene,options});
+  let closed=false;
+  return ()=>{assert.equal(closed,false);closed=true;stops.push(scene);};
+ }};
+ const el=host(),ctl=create({engine:tracking,host:el});
+ ctl.update({stage:2},{daypart:'sunset'});
+ const scene=el.current,old=callbacks[0].options;
+ ctl.update({stage:2},{season:'summer',daypart:'night'});
+ assert.equal(stops.length,1,'clock ownership rebinds once');
+ assert.equal(el.current,scene,'no flower DOM changes');
+ const fresh=callbacks[1].options;
+ scene.dataset.daypart='night';
+ assert.doesNotThrow(()=>old.onAmbient());
+ assert.equal(scene.dataset.daypart,'night','stale observer cannot restore sunset');
+ scene.dataset.daypart='day';
+ fresh.onAmbient();
+ assert.equal(scene.dataset.daypart,'night','current observer may honor manual night');
+ ctl.dispose();
+});
