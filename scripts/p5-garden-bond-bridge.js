@@ -31,7 +31,7 @@
    throw new Error('P5_BRIDGE_BLOCKED: canonical garden engine is required');
   if(!host||typeof host.querySelector!=='function')throw new Error('P5_BRIDGE_BLOCKED: valid host required');
   const firstEntrance=initialEntrance==='none'?'none':'grow';
-  let node=null,stage=null,stop=()=>{},last=null,attachedMode=null,disposed=false;
+  let node=null,stage=null,stop=()=>{},last=null,attachedMode=null,disposed=false,generation=0;
   const modeOf=state=>String(state.autoDaypart)+':'+String(state.season===null);
   const annotate=()=>{
    if(!node||!last)return;
@@ -39,10 +39,16 @@
    node.setAttribute('aria-label',`Jardín compartido; etapa oficial ${state.officialStage}; ${state.chapterName}; ${CLIMATE[state.season]}, ${CLIMATE[state.daypart]}`);
   };
   function mount(){
-   stop();
-   stop=engine.attach(node,{autoAmbient:last.autoDaypart||last.season===null,autoSeason:last.season===null,
-    onAmbient:()=>{if(last.daypart)node.dataset.daypart=last.daypart;annotate();},
+   // The engine can have pending observation callbacks even after a parent
+   // removes the scene. Invalidate the previous generation BEFORE teardown.
+   const current=node,token=++generation;
+   stop();stop=()=>{};
+   const active=()=>!disposed&&generation===token&&node===current&&last!==null&&
+    host.querySelector('.ng-garden')===current;
+   stop=engine.attach(current,{autoAmbient:last.autoDaypart||last.season===null,autoSeason:last.season===null,
+    onAmbient:()=>{if(!active())return;if(last.daypart)current.dataset.daypart=last.daypart;annotate();},
     onFlowerTap:flower=>{
+     if(!active())return;
      if(Number.isInteger(flower)&&flower>=1&&flower<=last.stage&&typeof onFlowerTap==='function')onFlowerTap(flower);
     }});
    attachedMode=modeOf(last);
@@ -50,13 +56,13 @@
   function update(garden,preferences={}){
    if(disposed)throw new Error('P5_BRIDGE_DISPOSED');
    const state=plan(garden,preferences);
-   if(!state.ready){stop();stop=()=>{};node=null;stage=null;last=null;attachedMode=null;host.innerHTML=fallBack;return state;}
+   if(!state.ready){generation++;stop();stop=()=>{};node=null;stage=null;last=null;attachedMode=null;host.innerHTML=fallBack;return state;}
    last=state;
    // If host was replaced by a parent render, treat this as a new mount.
    const current=host.querySelector('.ng-garden');
    const replace=!node||current!==node||stage!==state.stage;
    if(replace){
-    stop();stop=()=>{};
+    generation++;stop();stop=()=>{};
     const options={theme:state.theme,motion:state.motion,entrance:stage===null?firstEntrance:'none'};
     if(state.season)options.season=state.season;
     if(state.daypart)options.daypart=state.daypart;
@@ -76,7 +82,7 @@
    annotate();
    return state;
   }
-  function dispose(){if(disposed)return;disposed=true;stop();stop=()=>{};node=null;last=null;attachedMode=null;}
+  function dispose(){if(disposed)return;disposed=true;generation++;stop();stop=()=>{};node=null;last=null;attachedMode=null;}
   return Object.freeze({update,dispose});
  }
  global.GalaxyGardenBondBridge=Object.freeze({plan,create});
