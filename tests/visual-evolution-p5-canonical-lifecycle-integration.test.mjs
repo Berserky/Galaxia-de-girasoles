@@ -134,3 +134,40 @@ test('P5 end-to-end: future-world demonstration is never activated by Bond data'
  assert.equal((host.html.match(/data-flower="/g)||[]).length,8);
  ctl.dispose();
 });
+
+
+test('P5 end-to-end privacy: unpairing clears prior flowers, listeners and scene contents',()=>{
+ const window=browser(),host=fakeHost(),ctl=window.GalaxyMomentsGardenLifecycle.create();
+ const first=ctl.update({host,cloud:{bond:{garden:{stage:8}}},sessionKey:'authenticated-A'});
+ assert.equal(first.stage,8);
+ assert.equal((host.html.match(/data-flower="/g)||[]).length,8);
+ const old=host.scene;
+ const invalidated=ctl.update({host,cloud:{bond:{garden:{stage:8}}}});
+ assert.equal(invalidated.ready,false);
+ assert.equal(invalidated.reason,'SESSION_IDENTITY_REQUIRED');
+ assert.equal(host.scene,null,'previous pairing garden must disappear immediately');
+ assert.doesNotMatch(host.html,/data-flower="/,'old flowers may not remain on screen');
+ assert.match(host.html,/El progreso del jardín no está disponible/);
+ assert.ok(old.removed.includes('click'),'previous callbacks must be disconnected');
+ const recovered=ctl.update({host,cloud:{bond:{garden:{stage:0}}},sessionKey:'authenticated-B'});
+ assert.equal(recovered.stage,0);
+ assert.match(host.html,/data-stage="0"/);
+ assert.doesNotMatch(host.html,/data-flower="/);
+ assert.match(host.html,/data-entrance="grow"/,'new pairing begins its own bloom');
+ ctl.dispose();
+ assert.equal(host.scene,null,'dispose clears current couple garden too');
+});
+test('P5 end-to-end privacy: changing pair on same host leaves no previous flowers visible',()=>{
+ const window=browser(),host=fakeHost(),ctl=window.GalaxyMomentsGardenLifecycle.create();
+ ctl.update({host,cloud:{bond:{garden:{stage:8}}},sessionKey:'pair-A'});
+ const old=host.scene;
+ ctl.update({host,cloud:{bond:{garden:{stage:3}}},sessionKey:'pair-B'});
+ assert.equal(old.isConnected,false);
+ assert.ok(old.removed.includes('click'));
+ assert.match(host.html,/data-stage="3"/);
+ assert.equal((host.html.match(/data-flower="/g)||[]).length,3);
+ assert.match(host.html,/data-entrance="grow"/);
+ ctl.reset();
+ assert.equal(host.scene,null,'explicit unpair reset must remove prior scene');
+ ctl.dispose();
+});
