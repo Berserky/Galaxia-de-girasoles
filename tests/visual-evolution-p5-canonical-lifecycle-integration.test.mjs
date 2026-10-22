@@ -23,7 +23,7 @@ function fakeHost(){
   set innerHTML(text){
    html=text;count++;
    if(scene)scene.isConnected=false;
-   if(!text.includes('class="ng-garden"')){scene=null;return;}
+   if(!/class="[^"]*\bng-garden\b/.test(text)){scene=null;return;}
    const match=[...text.matchAll(/data-([a-z-]+)="([^"]*)"/g)];
    const dataset=Object.fromEntries(match.filter(x=>['stage','daypart','season','celebration','motion'].includes(x[1])).map(x=>[x[1],x[2]]));
    const listeners=new Map();
