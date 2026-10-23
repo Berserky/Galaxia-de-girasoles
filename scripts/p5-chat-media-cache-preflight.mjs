@@ -4,7 +4,7 @@
  * mutate the chat or replace Android instrumentation.
  * Reports aggregate counts only; never exports messages, media URLs or IDs.
  */
-export const mediaCacheSnapshotExpression = String.raw\`JSON.stringify((()=>{
+export const mediaCacheSnapshotExpression = String.raw`JSON.stringify((()=>{
  const root=document.querySelector('#chatMessages');
  const nodes=root?[...root.querySelectorAll('[data-chat-media]')]:[];
  const visible=node=>{
@@ -27,7 +27,7 @@ export const mediaCacheSnapshotExpression = String.raw\`JSON.stringify((()=>{
   active:stats?.active??null,pending:stats?.pending??null,
   queued:stats?.queued??null,requests:stats?.requests??null,failed:stats?.failed??null
  };
-})())\`;
+})())`;
 
 const countFields=['mediaNodes','visibleNodes','wantedNodes','loadedNodes','errorNodes',
  'cacheEntries','active','pending','queued','requests','failed'];
