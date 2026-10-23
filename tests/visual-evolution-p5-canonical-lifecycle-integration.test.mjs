@@ -187,3 +187,27 @@ test('P5 end-to-end: detached real V3.3 scene refuses clicks when old host still
  ctl.dispose();
  assert.ok(scene.removed.includes('click'));
 });
+
+test('P5 end-to-end privacy: absent Moments host clears visible orphan without replaying bloom for same pair',()=>{
+ const window=browser(),oldHost=fakeHost(),newHost=fakeHost(),pressed=[];
+ const ctl=window.GalaxyMomentsGardenLifecycle.create({onFlowerTap:flower=>pressed.push(flower)});
+ const cloud={bond:{garden:{stage:8,totalDays:365}}};
+ ctl.update({host:oldHost,cloud,sessionKey:'pair-A'});
+ const scene=oldHost.scene;
+ tap(scene,2);
+ assert.deepEqual(pressed,[2]);
+ const missing=ctl.update({host:null,cloud,sessionKey:'pair-A'});
+ assert.equal(missing.ready,false);
+ assert.equal(missing.reason,'NO_GARDEN_HOST');
+ assert.equal(oldHost.scene,null,'orphaned host must not display flowers after navigation');
+ assert.doesNotMatch(oldHost.html,/data-flower="/);
+ assert.match(oldHost.html,/El progreso del jardín no está disponible/);
+ assert.equal(scene.isConnected,false);
+ assert.ok(scene.removed.includes('click'),'detached scene has no active handlers');
+ tap(scene,3);
+ assert.deepEqual(pressed,[2],'orphaned scene must not dispatch stale taps');
+ ctl.update({host:newHost,cloud,sessionKey:'pair-A'});
+ assert.match(newHost.html,/data-stage="8"/);
+ assert.match(newHost.html,/data-entrance="none"/,'same pair must not repeat initial bloom');
+ ctl.dispose();
+});

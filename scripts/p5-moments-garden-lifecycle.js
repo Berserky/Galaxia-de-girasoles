@@ -27,13 +27,18 @@
    controller?.dispose();
    controller=null;currentHost=null;
   }
+  function clearGarden(host){
+   // A host may outlive its parent view; clearing the authenticated scene also
+   // prevents stale pixels from remaining visible on a reused DOM container.
+   if(host?.querySelector?.('.ng-garden'))
+    host.innerHTML='<div class="ng-garden-unavailable" role="status">El progreso del jardín no está disponible por ahora.</div>';
+  }
   function reset(){
    const oldHost=currentHost;
    leave();everEntered=false;activeSessionKey=null;
    // Do not leave the prior couple's flowers on-screen when unpairing or
    // switching sessions. Only clear a host that still contains our scene.
-   if(oldHost?.querySelector?.('.ng-garden'))
-    oldHost.innerHTML='<div class="ng-garden-unavailable" role="status">El progreso del jardín no está disponible por ahora.</div>';
+   clearGarden(oldHost);
   }
   function update({host,cloud,preferences,sessionKey}={}){
    if(disposed)throw new Error('P5_LIFECYCLE_DISPOSED');
@@ -48,7 +53,11 @@
     activeSessionKey=sessionKey;
    }
    if(!host||typeof host.querySelector!=='function'){
-    leave();return unavailable;
+    // A temporarily absent presenter must not leave the previous relationship
+    // visibly mounted in its orphaned host, even with listeners disconnected.
+    const orphanedHost=currentHost;
+    leave();clearGarden(orphanedHost);
+    return unavailable;
    }
    if(host!==currentHost||!controller){
     leave();
