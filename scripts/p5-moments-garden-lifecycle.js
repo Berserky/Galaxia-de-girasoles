@@ -60,7 +60,11 @@
     return unavailable;
    }
    if(host!==currentHost||!controller){
+    // The old Moments host can still exist while the parent re-renders into
+    // a new host. Releasing listeners alone does not hide its flowers.
+    const previousHost=currentHost;
     leave();
+    if(previousHost!==host)clearGarden(previousHost);
     controller=bridge.create({host,onFlowerTap,initialEntrance:everEntered?'none':'grow'});
     currentHost=host;
    }

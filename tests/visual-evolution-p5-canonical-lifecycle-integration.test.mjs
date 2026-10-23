@@ -111,9 +111,12 @@ test('P5 end-to-end: changing Moments parent does not replay bloom or keep old l
  const cloud={bond:{garden:{stage:8}}};
  ctl.update({host:first,cloud});
  assert.match(first.html,/data-entrance="grow"/);
+ const retiredScene=first.scene;
  ctl.update({host:second,cloud});
  assert.match(second.html,/data-entrance="none"/);
- assert.ok(first.scene.removed.includes('click'));
+ assert.equal(first.scene,null,'previous host must no longer expose its old flowers');
+ assert.doesNotMatch(first.html,/data-flower="/);
+ assert.ok(retiredScene.removed.includes('click'));
  ctl.leave();
  ctl.update({host:first,cloud});
  assert.match(first.html,/data-entrance="none"/);
@@ -209,5 +212,27 @@ test('P5 end-to-end privacy: absent Moments host clears visible orphan without r
  ctl.update({host:newHost,cloud,sessionKey:'pair-A'});
  assert.match(newHost.html,/data-stage="8"/);
  assert.match(newHost.html,/data-entrance="none"/,'same pair must not repeat initial bloom');
+ ctl.dispose();
+});
+
+test('P5 end-to-end privacy: direct authenticated host replacement clears old DOM and keeps same-pair bloom stable',()=>{
+ const window=browser(),oldHost=fakeHost(),nextHost=fakeHost(),pressed=[];
+ const ctl=window.GalaxyMomentsGardenLifecycle.create({onFlowerTap:id=>pressed.push(id)});
+ const cloud={bond:{garden:{stage:8,totalDays:365}}};
+ ctl.update({host:oldHost,cloud,sessionKey:'paired-identity'});
+ const retiredScene=oldHost.scene;
+ assert.equal((oldHost.html.match(/data-flower="/g)||[]).length,8);
+ ctl.update({host:nextHost,cloud,sessionKey:'paired-identity'});
+ assert.equal(oldHost.scene,null,'old host must never retain a visible garden after direct swap');
+ assert.doesNotMatch(oldHost.html,/data-flower="/,'old flower markup must be cleared');
+ assert.match(oldHost.html,/El progreso del jardín no está disponible/);
+ assert.equal(retiredScene.isConnected,false);
+ assert.ok(retiredScene.removed.includes('click'));
+ tap(retiredScene,3);
+ assert.deepEqual(pressed,[],'retired host cannot emit flower clicks');
+ assert.equal((nextHost.html.match(/data-flower="/g)||[]).length,8);
+ assert.match(nextHost.html,/data-entrance="none"/,'same pairing must not replay first bloom');
+ tap(nextHost.scene,8);
+ assert.deepEqual(pressed,[8]);
  ctl.dispose();
 });
