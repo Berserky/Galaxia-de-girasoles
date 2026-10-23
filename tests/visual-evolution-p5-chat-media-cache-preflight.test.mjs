@@ -4,7 +4,7 @@ import {runInNewContext} from 'node:vm';
 import {mediaCacheSnapshotExpression,classifyMediaCacheSnapshot} from '../scripts/p5-chat-media-cache-preflight.mjs';
 
 const baseline={view:'chat',rootPresent:true,observerSupported:true,
- mediaNodes:2,visibleNodes:1,wantedNodes:1,loadedNodes:0,errorNodes:0,
+ mediaNodes:2,visibleNodes:1,wantedNodes:0,loadedNodes:0,errorNodes:0,
  cacheEntries:0,active:0,pending:0,queued:0,requests:0,failed:0};
 const check=overrides=>classifyMediaCacheSnapshot(JSON.stringify({...baseline,...overrides}));
 test('P5 Phase9: no thumbnail requested after scroll is blocked and diagnosed',()=>{
