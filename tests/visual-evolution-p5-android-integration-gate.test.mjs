@@ -18,12 +18,14 @@ const stubIndex=[
 const stubApp=[
  'function bondGardenStage(garden){return garden.stage}',
  'function bondGardenVisual(garden) {',
- ' const ctl=window.GalaxyGardenBondBridge.create({host:container});',
- ' const gardenLifecycle=window.GalaxyMomentsGardenLifecycle.create();',
- ' gardenLifecycle.update({host:container,cloud});',
- ' gardenLifecycle.leave();',
- ' return ctl.update({stage:bondGardenStage(garden)});',
- '}'
+ ' return \'<div data-p5-garden-host></div>\'+bondGardenStage(garden);',
+ '}',
+ 'const gardenLifecycle=window.GalaxyMomentsGardenLifecycle.create();',
+ 'function onMomentsDomMounted(cloud) {',
+ ' const host=document.querySelector(\'[data-p5-garden-host]\');',
+ ' gardenLifecycle.update({host,cloud});',
+ '}',
+ 'function onMomentsLeave(){gardenLifecycle.leave();}'
 ].join('\n');
 function fixtures(){
  const sources={
@@ -111,7 +113,7 @@ test('P5 integration gate: repository inspection is read-only and honest about i
 
 test('P5 integration gate: lifecycle loaded in index without authentic cloud wiring is blocked',()=>{
  const report=run(files=>{
-  files[root+'app.js']=stubApp.replace(' gardenLifecycle.update({host:container,cloud});',' gardenLifecycle.update({host:container,cloud:{bond:{garden:{stage:0}}}});');
+  files[root+'app.js']=stubApp.replace(' gardenLifecycle.update({host,cloud});',' gardenLifecycle.update({host,cloud:{bond:{garden:{stage:0}}}});');
  });
  assert.equal(report.status,'BLOCKED_NOT_INTEGRATED');
  assert.ok(report.blockers.includes('AUTHENTIC_LIFECYCLE_WIRED'));
@@ -125,4 +127,41 @@ test('P5 integration gate: lifecycle must load after bridge but before app',()=>
  });
  assert.equal(report.status,'BLOCKED_NOT_INTEGRATED');
  assert.ok(report.blockers.includes('LIFECYCLE_AFTER_BRIDGE_BEFORE_APP'));
+});
+
+test('P5 integration gate: rejects creating garden renderer inside HTML factory before DOM mount',()=>{
+ const report=run(files=>{
+  files[root+'app.js']=stubApp.replace(
+   " return '<div data-p5-garden-host></div>'+bondGardenStage(garden);",
+   " const early=window.GalaxyGardenBondBridge.create({host:document.querySelector('[data-p5-garden-host]')}); return '<div data-p5-garden-host></div>'+bondGardenStage(garden);"
+  );
+ });
+ assert.equal(report.status,'BLOCKED_NOT_INTEGRATED');
+ assert.ok(report.blockers.includes('NO_PREMATURE_GARDEN_MOUNT_IN_HTML_FACTORY'));
+ assert.ok(report.blockers.includes('BOND_PRESENTER_USES_BRIDGE'));
+});
+test('P5 integration gate: lifecycle code inside string-producing presenter is not proof of post-render mount',()=>{
+ const report=run(files=>{
+  files[root+'app.js']=[
+   'function bondGardenStage(garden){return garden.stage}',
+   'function bondGardenVisual(garden) {',
+   " const ctl=window.GalaxyMomentsGardenLifecycle.create();",
+   " ctl.update({host:document.querySelector('[data-p5-garden-host]'),cloud});",
+   ' ctl.leave();',
+   " return '<div data-p5-garden-host></div>'+bondGardenStage(garden);",
+   '}'
+  ].join('\n');
+ });
+ assert.equal(report.status,'BLOCKED_NOT_INTEGRATED');
+ assert.ok(report.blockers.includes('AUTHENTIC_LIFECYCLE_WIRED'));
+ assert.ok(report.blockers.includes('NO_PREMATURE_GARDEN_MOUNT_IN_HTML_FACTORY'));
+});
+test('P5 integration gate: scene host without lifecycle after mount is insufficient',()=>{
+ const report=run(files=>{
+  files[root+'app.js']=stubApp.replace(
+   " gardenLifecycle.update({host,cloud});"," // deferred lifecycle has not been wired"
+  );
+ });
+ assert.equal(report.status,'BLOCKED_NOT_INTEGRATED');
+ assert.ok(report.blockers.includes('AUTHENTIC_LIFECYCLE_WIRED'));
 });

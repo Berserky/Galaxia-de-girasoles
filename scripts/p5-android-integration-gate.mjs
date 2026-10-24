@@ -61,16 +61,23 @@ export function evaluateP5AndroidReadiness({get,expected}){
   }
   // This asserts bridge usage in the app's actual garden presenter, not merely a
   // linked script or documentation mentioning the bridge.
-  const presenter=typeof app==='string'?
-    app.match(/function bondGardenVisual\(garden\)\s*\{([\s\S]*?)\n\}/)?.[1]||'':'';
-  // Accept either a direct bridge presenter or the authorized host-placeholder
-  // strategy backed by the authenticated Moments lifecycle. Neither may fake Bond.
-  const lifecycleWired=/GalaxyMomentsGardenLifecycle\.create\s*\(/.test(String(app||''))&&
-    /\.update\s*\(\s*\{[^}]*\bcloud\s*(?:,|\})/.test(String(app||''))&&
-    /\.(?:leave|dispose)\s*\(/.test(String(app||''));
-  const directBridge=/GalaxyGardenBondBridge/.test(presenter)&&/\.create\(/.test(presenter);
-  const hostedLifecycle=/data-p5-garden-host/.test(presenter)&&lifecycleWired;
-  required(checks,'BOND_PRESENTER_USES_BRIDGE',directBridge||hostedLifecycle);
+  // bondGardenVisual() constructs HTML before its host exists in the DOM.
+  // Creating a bridge/controller inside that HTML string factory is premature
+  // and may not attach. Require an explicit scene-only host and lifecycle wiring
+  // OUTSIDE that factory. This is still static preflight, never native QA.
+  const appSource=String(app||'');
+  const presenterMatch=appSource.match(/function bondGardenVisual\(garden\)\s*\{([\s\S]*?)\n\}/);
+  const presenter=presenterMatch?.[1]||'';
+  const runtime=presenterMatch?appSource.replace(presenterMatch[0],''):appSource;
+  const lifecycleWired=/GalaxyMomentsGardenLifecycle\.create\s*\(/.test(runtime)&&
+    /\.update\s*\(\s*\{[^}]*\bcloud\s*(?:,|\})/.test(runtime)&&
+    /\.(?:leave|dispose)\s*\(/.test(runtime);
+  const hasSceneHost=/data-p5-garden-host/.test(presenter);
+  const prematureBridge=/GalaxyGardenBondBridge\.create\s*\(/.test(presenter)||
+    /GalaxyMomentsGardenLifecycle\.create\s*\(/.test(presenter);
+  required(checks,'POST_RENDER_SCENE_HOST_REQUIRED',hasSceneHost);
+  required(checks,'NO_PREMATURE_GARDEN_MOUNT_IN_HTML_FACTORY',!prematureBridge);
+  required(checks,'BOND_PRESENTER_USES_BRIDGE',hasSceneHost&&lifecycleWired&&!prematureBridge);
   required(checks,'AUTHENTIC_LIFECYCLE_WIRED',lifecycleWired);
   required(checks,'GARDEN_FALLBACK_PRESERVED',/bondGardenVisual/.test(String(app||''))&&
     /garden\.stage|bondGardenStage\(garden\)/.test(String(app||'')));
