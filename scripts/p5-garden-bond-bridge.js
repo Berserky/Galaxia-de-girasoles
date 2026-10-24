@@ -67,11 +67,22 @@
     if(state.season)options.season=state.season;
     if(state.daypart)options.daypart=state.daypart;
     // Explicitly avoid the experimental world parameters. Only official stages render.
-    host.innerHTML=engine.render({stage:state.stage},options);
-    node=host.querySelector('.ng-garden');
-    if(!node)throw new Error('P5_BRIDGE_BLOCKED: renderer did not mount scene');
-    stage=state.stage;
-    mount();
+    // A renderer or observer failure must not leave the previous pair's flowers
+    // visible on a reused host. Drop both the scene and stale callbacks before
+    // propagating the error to the authorized Moments integration.
+    try{
+     host.innerHTML=engine.render({stage:state.stage},options);
+     node=host.querySelector('.ng-garden');
+     if(!node)throw new Error('P5_BRIDGE_BLOCKED: renderer did not mount scene');
+     stage=state.stage;
+     mount();
+    }catch(error){
+     generation++;
+     try{stop();}catch{}
+     stop=()=>{};node=null;stage=null;last=null;attachedMode=null;
+     host.innerHTML=fallBack;
+     throw error;
+    }
    }else{
     node.dataset.celebration=state.theme;
     node.dataset.motion=state.motion;

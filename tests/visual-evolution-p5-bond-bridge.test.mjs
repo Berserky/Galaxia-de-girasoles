@@ -286,3 +286,59 @@ test('P5 bridge: detached parent with unchanged host rejects late clicks and amb
  assert.deepEqual(pressed,[4],'detached scene cannot cause actions');
  ctl.dispose();
 });
+
+
+test('P5 bridge: failed renderer clears earlier authenticated flowers and stale handlers',()=>{
+ const calls=[],pressed=[];
+ const tracked={...engine,
+  render(garden,options){
+   if(garden.stage===8)throw Error('synthetic-render-fault');
+   return engine.render(garden,options);
+  },
+  attach(scene,options){
+   const slot={options,stops:0};calls.push(slot);
+   return ()=>{slot.stops++;};
+  }
+ };
+ const el=host(),ctl=create({engine:tracked,host:el,onFlowerTap:id=>pressed.push(id)});
+ ctl.update({stage:3},{season:'winter',daypart:'night'});
+ const original=el.current,oldListener=calls[0].options;
+ oldListener.onFlowerTap(2);
+ assert.deepEqual(pressed,[2]);
+ assert.throws(()=>ctl.update({stage:8},{season:'winter',daypart:'night'}),/synthetic-render-fault/);
+ assert.equal(calls[0].stops,1,'old observer must be stopped exactly once');
+ assert.equal(el.current,null,'the previous scene must be removed from DOM');
+ assert.doesNotMatch(el.html,/data-flower="/);
+ assert.match(el.html,/El progreso del jardín no está disponible/);
+ original.isConnected=false;
+ oldListener.onFlowerTap(3);
+ assert.deepEqual(pressed,[2],'retired flower must not dispatch stale events after failure');
+ const restored=ctl.update({stage:3},{season:'winter',daypart:'night'});
+ assert.equal(restored.stage,3);
+ assert.match(el.html,/data-stage="3"/);
+ assert.equal(calls.length,2);
+ ctl.dispose();
+ assert.equal(calls[1].stops,1);
+});
+
+test('P5 bridge: attach failure leaves neutral fallback and can safely remount',()=>{
+ let fail=true,attached=0;
+ const tracked={...engine,
+  attach(scene){
+   if(fail)throw Error('synthetic-attach-fault');
+   attached++;
+   return ()=>{};
+  }
+ };
+ const el=host(),ctl=create({engine:tracked,host:el});
+ assert.throws(()=>ctl.update({stage:8},{daypart:'day',season:'summer'}),/synthetic-attach-fault/);
+ assert.equal(el.current,null);
+ assert.doesNotMatch(el.html,/data-flower="/);
+ assert.match(el.html,/El progreso del jardín no está disponible/);
+ fail=false;
+ const recovered=ctl.update({stage:8},{daypart:'day',season:'summer'});
+ assert.equal(recovered.ready,true);
+ assert.equal(attached,1);
+ assert.equal((el.html.match(/data-flower="/g)||[]).length,8);
+ ctl.dispose();
+});
