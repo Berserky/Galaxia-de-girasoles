@@ -231,3 +231,11 @@ body:not(.chat-mode):has(.living-moments) #chatFab{display:none}
 @media(prefers-reduced-motion:reduce){
  .living-garden-scene .garden-flower,.living-garden-scene .garden-flower .ui-icon{animation:none!important;transition:none!important}
 }
+
+/* P5: keep all six navigation labels readable under native Android textZoom 135%. */
+body:not(.chat-mode) .bottom-nav .nav-btn span{
+ box-sizing:border-box;display:block;width:100%;max-width:100%;
+ white-space:normal;text-overflow:clip;overflow:visible;
+ overflow-wrap:anywhere;word-break:normal;text-align:center;
+ line-height:1.08;letter-spacing:-.015em;transform:none;
+}

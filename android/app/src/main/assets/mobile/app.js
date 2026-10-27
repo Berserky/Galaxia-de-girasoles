@@ -44,6 +44,8 @@ const legacySurpriseIdeas=[
 
 let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',memoriesTabsScroll=0,media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),insightsCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
 let mapImmersive=false,mapHistoryVisible=6,mapPlacesVisible=6;
+// P5: one authenticated Moments lifecycle; never persist a garden between unpairings.
+let gardenLifecycle=null;
 // Read-only signal for deterministic Android WebView QA; never gates GPS or user actions.
 let mapStateReadsInFlight=0;
 let toastTimer,refreshing=false,updateState={text:'La app está al día.',progress:0,busy:false},pendingVoiceDraft=null,voiceReady=false,voiceRecording=false,voiceResumeMusic=false,lastSurprise=null;
@@ -385,8 +387,10 @@ function renderChatFab(){
  if(!chatFab)return;
  const enabled=!!(native.paired&&cloud?.capabilities?.chat&&!shouldShowAdriWelcome());
  const unread=Math.max(0,Number(cloud?.chat?.unread||0));
- chatFab.classList.toggle('hidden',!enabled||view==='chat');
- if(!enabled||view==='chat'){chatFab.innerHTML='';return;}
+ // Moments has its own Chat shortcut. Avoid overlapping the garden and its milestones.
+ const hidden=!enabled||view==='chat'||view==='moments';
+ chatFab.classList.toggle('hidden',hidden);
+ if(hidden){chatFab.innerHTML='';return;}
  chatFab.innerHTML=ico('message-circle')+(unread?'<span class="chat-fab-badge">'+(unread>99?'99+':unread)+'</span>':'');
  chatFab.classList.toggle('has-unread',unread>0);
 }
@@ -403,11 +407,11 @@ function syncChatViewportHeight(){
  if(chatEl)chatScrollEngine.afterViewportChange(chatEl);
 }
 function go(next){
- const hadMap=!!mapData,previous=view;
+ const hadMap=!!mapData,previous=view,samePage=next===previous,priorScrollY=window.scrollY;
  if(previous==='chat'&&next!=='chat'){chatRememberPosition(document.querySelector('#chatMessages'),'chat');chatMediaEngine.detach({release:true});}
  if(next==='chat'&&previous!=='chat'&&!chatInitialScroll)chatRestoreOnRender=true;
  if(next!=='map'){mapImmersive=false;document.body.classList.remove('map-immersive-open');}
- view=next;syncChatViewportHeight();render();window.scrollTo(0,0);
+ view=next;syncChatViewportHeight();render();window.scrollTo(0,samePage?priorScrollY:0);
  if(view==='map'&&hadMap)refreshMap({quiet:true,detail:false});
 }
 // V5 P2L: the existing privacy controls render synchronously inside go('more').
@@ -427,6 +431,9 @@ function syncSystemTheme(themeState){
  GalaxyNative.call('setSystemTheme',active).catch(()=>{nativeThemeSent='';});
 }
 function render(){
+ // Stop old observers when Moments closes, pairing is lost or welcome replaces the view.
+ if(!native.paired)gardenLifecycle?.reset();
+ else if(view!=='moments'||!cloud||shouldShowAdriWelcome())gardenLifecycle?.leave();
  const previousChatEl=view==='chat'?document.querySelector('#chatMessages'):null;
  const chatRenderState=previousChatEl?chatCapturePositionState(previousChatEl,'render'):null;
  if(chatRenderState&&chatBottomRenderPending===previousChatEl)chatRenderState.atBottom=true;
@@ -446,7 +453,23 @@ function render(){
  if(!media.music&&!mediaLoadedAt.music)setTimeout(()=>loadMedia('music').then(renderGlobalPlayer).catch(()=>{}),0);
  if(view==='home')app.innerHTML=header()+homeView();
  if(view==='map'){app.innerHTML=header()+mapView();setTimeout(()=>{drawMap();if(!mapData)refreshMap({detail:true});if(!frequentPlacesFresh())loadFrequentPlaces().catch(()=>{});},0);}
- if(view==='moments')app.innerHTML=header()+momentsView();
+ if(view==='moments'){
+  app.innerHTML=header()+momentsView();
+  // A garden host can only be mounted after the Moments HTML exists in the document.
+  if(window.GalaxyMomentsGardenLifecycle?.create&&window.GalaxyGardenBondBridge?.create&&window.GalaxyGardenV5?.render){
+   const host=document.querySelector('[data-p5-garden-host]');
+   if(host){
+    try{
+     gardenLifecycle??=window.GalaxyMomentsGardenLifecycle.create();
+     // Do not invent stage or days: use the original authenticated cloud snapshot.
+     gardenLifecycle.update({host,cloud});
+    }catch{
+     gardenLifecycle?.reset();
+     host.innerHTML='<div class="ng-garden-unavailable" role="status">El progreso del jardín no está disponible por ahora.</div>';
+    }
+   }
+  }
+ }
  if(view==='memories'){app.innerHTML=header()+memoriesView();requestAnimationFrame(()=>{const tabs=$('.memories-tabs');if(tabs)tabs.scrollLeft=memoriesTabsScroll;});if((memoryTab==='album'&&!mediaFresh('photo'))||(memoryTab==='music'&&!mediaFresh('music')))setTimeout(()=>loadMedia(memoryTab==='album'?'photo':'music').catch(e=>toast(e.message)),0);}
  if(view==='goals'){app.innerHTML=header()+goalsView();if(!goalsState)setTimeout(()=>loadGoals().catch(e=>toast(e.message)),0);}
  if(view==='ai'){app.innerHTML=header()+intelligenceHubView();if(!mapData)setTimeout(()=>refreshMap({quiet:true,detail:true}).catch(()=>{}),0);}
@@ -1229,6 +1252,12 @@ function bondGardenStage(garden){
  return Number.isFinite(n)?Math.max(0,Math.min(8,Math.trunc(n))):0;
 }
 function bondGardenVisual(garden){
+ // Never render a fabricated zero-stage garden from a missing or malformed Bond snapshot.
+ const officialStage=garden?.stage;
+ if(typeof officialStage!=='number'||!Number.isSafeInteger(officialStage)||officialStage<0)
+  return '<div class="ng-garden-unavailable" role="status">El progreso del jardín no está disponible por ahora.</div>';
+ if(window.GalaxyGardenV5?.render&&window.GalaxyGardenBondBridge?.create&&window.GalaxyMomentsGardenLifecycle?.create)
+  return '<div class="p5-garden-host" data-p5-garden-host><div class="ng-garden-unavailable" role="status">Preparando el jardín compartido.</div></div>';
  const stage=bondGardenStage(garden);
  const flowers=Math.max(1,Math.min(7,stage));
  // Viewer-local clock and existing theme only; no location permission or network.
@@ -1263,7 +1292,7 @@ function bondUnlockables(garden){
  const items=rows.map(row=>{
   const unlocked=row.unlocked===true;
   const iconName=allowedIcons.has(row.icon)?row.icon:'flower-2';
-  const days=Number(row.days),validDays=Number.isInteger(days)&&days>=0;
+  const days=row.days,validDays=typeof days==='number'&&Number.isSafeInteger(days)&&days>=0;
   const badge=unlocked?'Logrado':'Por descubrir';
   return '<span role="listitem" class="living-garden-hito '+(unlocked?'unlocked':'locked')+'" aria-label="'+attr(badge+': '+String(row.label||'Hito'))+'">'+
    '<span class="living-garden-hito-icon" aria-hidden="true">'+ico(unlocked?iconName:'lock')+'</span>'+
@@ -1282,12 +1311,18 @@ function openBondGestureManager(){
  showModal('Gestos personalizados','<div class="row between"><p class="muted">Son atajos compartidos. El historial conserva el texto original aunque luego elimines un gesto.</p><button class="btn small" data-action="bond-gesture-new">+ Crear</button></div><div class="stack" style="margin-top:12px">'+(custom.length?custom.map(g=>'<div class="card bond-gesture-row"><span>'+ico(g.icon||'heart')+'</span><div><b>'+esc(g.name)+'</b><small>'+esc(g.text)+' · '+esc(g.behavior)+'</small></div><div class="row"><button class="btn small secondary" data-action="bond-gesture-edit" data-id="'+attr(g.id)+'">Editar</button>'+(String(g.created_by)===String(cloud.person)?'<button class="btn small ghost" data-action="bond-gesture-delete" data-id="'+attr(g.id)+'">Eliminar</button>':'')+'</div></div>').join(''):'<div class="empty">Todavía no han creado gestos propios.</div>')+'</div>','bond-gestures');
 }
 function momentsView(){
- const bond=cloud.bond||{entries:[],garden:{days:0,stage:0}},entries=bond.entries||[];
+ const bond=cloud.bond||{entries:[]},entries=bond.entries||[];
  const games=entries.filter(x=>x.type==='game'),rituals=entries.filter(x=>x.type==='ritual'),notes=entries.filter(x=>x.type==='sharednote'),voices=entries.filter(x=>x.type==='voice');
- const garden=bond.garden||{},stage=bondGardenStage(garden),total=Number(garden.totalDays??garden.days??bond.totalDays??0),current=Number(garden.currentStreak??bond.currentStreak??0),record=Number(garden.recordStreak??bond.recordStreak??0);
- const rawProgress=Number(garden.progressPct),progress=Number.isFinite(rawProgress)?Math.min(100,Math.max(0,rawProgress)):0;
- const next=garden.next&&Number.isFinite(Number(garden.next.days))&&Number(garden.next.days)>=0?
-  '<p class="living-garden-next">'+ico('flag')+' Próximo hito: '+esc(garden.next.label||'Nueva etapa')+' al llegar a '+Number(garden.next.days)+' días compartidos.</p>':'';
+ const garden=bond.garden||{},stage=typeof garden.stage==='number'&&Number.isSafeInteger(garden.stage)&&garden.stage>=0?bondGardenStage(garden):'—';
+ const verifiedCount=value=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0?value:null;
+ const showCount=value=>value===null?'—':String(value);
+ const total=showCount(verifiedCount(garden.totalDays??garden.days??bond.totalDays));
+ const current=showCount(verifiedCount(garden.currentStreak??bond.currentStreak));
+ const record=showCount(verifiedCount(garden.recordStreak??bond.recordStreak));
+ const rawProgress=garden.progressPct,progress=typeof rawProgress==='number'&&Number.isFinite(rawProgress)?Math.min(100,Math.max(0,rawProgress)):0;
+ const nextDays=verifiedCount(garden.next?.days);
+ const next=garden.next&&nextDays!==null?
+  '<p class="living-garden-next">'+ico('flag')+' Próximo hito: '+esc(garden.next.label||'Nueva etapa')+' al llegar a '+nextDays+' días compartidos.</p>':'';
  const gestures=bondGestureCatalog();
  const chatAvailable=!!cloud?.capabilities?.chat,rawChatUnread=Number(cloud?.chat?.unread||0),chatUnread=Number.isFinite(rawChatUnread)?Math.max(0,Math.floor(rawChatUnread)):0;
  const chatShortcut=chatAvailable?'<button type="button" class="living-moments-symbol living-moments-chat" data-action="chat-open" aria-label="'+attr(chatUnread?'Abrir nuestro chat, '+chatUnread+' mensajes sin leer':'Abrir nuestro chat')+'">'+ico('message-circle')+(chatUnread?'<span class="chat-fab-badge" aria-hidden="true">'+(chatUnread>99?'99+':chatUnread)+'</span>':'')+'</button>':'<span class="living-moments-symbol" aria-hidden="true">'+ico('heart-handshake')+'</span>';
@@ -3693,7 +3728,7 @@ document.addEventListener('click',async e=>{
   if(a==='bond-haptics'){await GalaxyNative.call('setBondHaptics',!native.bondHaptics);native=nativeState();render();toast(native.bondHaptics?'Toques hápticos activados.':'Toques hápticos apagados.');return;}
   if(a==='moment-notification-test'){await GalaxyNative.call('testMomentNotification');native=nativeState();toast('Notificación de prueba enviada. Revisa la bandeja de Android.');return;}
   if(a==='update-check'){await GalaxyNative.call('checkUpdate');return;}
-  if(a==='unpair'){if(confirm('¿Desvincular este teléfono de Nuestra Galaxia?')){await GalaxyNative.call('unpair');native=nativeState();cloud=null;render();}return;}
+  if(a==='unpair'){if(confirm('¿Desvincular este teléfono de Nuestra Galaxia?')){await GalaxyNative.call('unpair');gardenLifecycle?.reset();native=nativeState();cloud=null;render();}return;}
  }catch(err){toast(err.message||'No pudimos completar la acción.');}
 });
 
