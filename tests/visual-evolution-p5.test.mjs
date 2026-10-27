@@ -33,14 +33,18 @@ test('P5A: design stylesheet is isolated and loaded after the current shell and 
 test('P5A: garden illustration uses actual stage; zero, invalid and extreme stages are bounded',()=>{
  const fn=runInNewContext(gardenSource+'\nbondGardenVisual', {ico}, {timeout:1200});
  for(const [input,stage,flowers] of [
-  [{stage:0},0,1],[{stage:2},2,2],[{stage:7},7,7],[{stage:8},8,7],
-  [{stage:999},8,7],[{stage:-10},0,1],[{stage:'invalid'},0,1]
+  [{stage:0},0,1],[{stage:2},2,2],[{stage:7},7,7],[{stage:8},8,7],[{stage:999},8,7]
  ]){
   const ui=fn(input);
   assert.match(ui,new RegExp('data-stage="'+stage+'"'));
   assert.equal((ui.match(/class="garden-flower f\d+"/g)||[]).length,flowers);
   assert.match(ui,/data-daypart="(?:morning|day|sunset|night)" data-season="(?:winter|spring|summer|autumn)" data-celebration="[a-z]+" role="img" aria-label="Jardín compartido, etapa/);
   assert.match(ui,/aria-hidden="true"/);
+ }
+ for(const invalid of [{stage:-10},{stage:'invalid'},{stage:false},{stage:null},{}]){
+  const ui=fn(invalid);
+  assert.match(ui,/El progreso del jardín no está disponible/);
+  assert.doesNotMatch(ui,/data-stage=|garden-flower f\d+/);
  }
 });
 
@@ -119,11 +123,17 @@ test('P5A: all original action IDs remain accessible and grouped by intention',(
 });
 
 test('P5B: stage and caption use identical normalized garden values for invalid metadata',()=>{
- for(const [raw,expected] of [[0,0],[8,8],[999,8],[-10,0],['invalid',0]]){
+ for(const [raw,expected] of [[0,0],[8,8],[999,8]]){
   const ui=renderMoments({stage:raw,days:0,progressPct:0});
   assert.match(ui,new RegExp('class="bond-garden-scene living-garden-scene" data-stage="'+expected+'"'));
   assert.match(ui,new RegExp('class="living-garden-caption">Etapa '+expected+' · 0% de avance'));
   assert.doesNotMatch(ui,/Etapa (?:NaN|Infinity|-10|999)/);
+ }
+ for(const invalid of [-10,'invalid',false,null]){
+  const ui=renderMoments({stage:invalid,progressPct:0});
+  assert.match(ui,/El progreso del jardín no está disponible/);
+  assert.match(ui,/class="living-garden-caption">Etapa — · 0% de avance/);
+  assert.doesNotMatch(ui,/data-stage="-10"|data-stage="0"|NaN/);
  }
 });
 

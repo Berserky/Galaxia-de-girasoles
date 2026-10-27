@@ -432,8 +432,10 @@ function syncSystemTheme(themeState){
 }
 function render(){
  // Stop old observers when Moments closes, pairing is lost or welcome replaces the view.
- if(!native.paired)gardenLifecycle?.reset();
- else if(view!=='moments'||!cloud||shouldShowAdriWelcome())gardenLifecycle?.leave();
+ if(typeof gardenLifecycle!=='undefined'&&typeof native!=='undefined'){
+  if(!native.paired)gardenLifecycle?.reset();
+  else if(view!=='moments'||!cloud||shouldShowAdriWelcome())gardenLifecycle?.leave();
+ }
  const previousChatEl=view==='chat'?document.querySelector('#chatMessages'):null;
  const chatRenderState=previousChatEl?chatCapturePositionState(previousChatEl,'render'):null;
  if(chatRenderState&&chatBottomRenderPending===previousChatEl)chatRenderState.atBottom=true;
@@ -1256,7 +1258,7 @@ function bondGardenVisual(garden){
  const officialStage=garden?.stage;
  if(typeof officialStage!=='number'||!Number.isSafeInteger(officialStage)||officialStage<0)
   return '<div class="ng-garden-unavailable" role="status">El progreso del jardín no está disponible por ahora.</div>';
- if(window.GalaxyGardenV5?.render&&window.GalaxyGardenBondBridge?.create&&window.GalaxyMomentsGardenLifecycle?.create)
+ if(typeof window!=='undefined'&&window.GalaxyGardenV5?.render&&window.GalaxyGardenBondBridge?.create&&window.GalaxyMomentsGardenLifecycle?.create)
   return '<div class="p5-garden-host" data-p5-garden-host><div class="ng-garden-unavailable" role="status">Preparando el jardín compartido.</div></div>';
  const stage=bondGardenStage(garden);
  const flowers=Math.max(1,Math.min(7,stage));
