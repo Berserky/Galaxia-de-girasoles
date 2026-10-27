@@ -107,7 +107,10 @@ const p5Garden=read('android/app/src/main/assets/mobile/galaxy-garden-world-v3.j
 const p5Bond=read('android/app/src/main/assets/mobile/p5-garden-bond-bridge.js');
 const p5Lifecycle=read('android/app/src/main/assets/mobile/p5-moments-garden-lifecycle.js');
 assert.ok(p5Garden.includes('GalaxyGardenV5')&&p5Bond.includes('GalaxyGardenBondBridge')&&p5Lifecycle.includes('GalaxyMomentsGardenLifecycle'),'Canonical V3.3 engine, bridge and lifecycle required');
-for(const src of [p5Garden,p5Bond,p5Lifecycle])assert.doesNotMatch(src,/\bfetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|navigator\.geolocation|previewBloomTotal|demo:true/,'P5 garden scripts cannot fetch, access private storage or fake progression');
+for(const src of [p5Garden,p5Bond,p5Lifecycle])assert.doesNotMatch(src,/\bfetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|navigator\.geolocation/,'P5 presentation must never fetch or access private storage');
+assert.match(p5Garden,/simulated=options\.demo===true/,'The canonical engine requires an explicit demo opt-in');
+assert.match(p5Bond,/engine\.render\(\{stage:state\.stage\},options\)/,'Authenticated Bond bridge must supply official stages only');
+for(const src of [p5Bond,p5Lifecycle])assert.doesNotMatch(src,/previewBloomTotal|demo:true/,'Production bridge and lifecycle cannot enable synthetic world counts');
 
 const journeyPresenter=read('android/app/src/main/assets/mobile/galaxy-journeys-v5.js');
 assert.ok(index.includes('href="./galaxy-journeys-v5.css"'),'P4 debe empaquetar CSS aislado en Android');
