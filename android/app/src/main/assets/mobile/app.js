@@ -3811,19 +3811,20 @@ document.addEventListener('submit',async e=>{
    const form=e.target,check=settingsFormFeedback(form);
    if(!check||!check.valid||!check.changed)return;
    settingsSaveInFlight=true;settingsFormFeedback(form,'Guardando cambios…');
+   let outcome='';
    try{
     await api('settings-save',{version:cloud.settings.version,data:check.data});
     settingsDraftCache=null;
     await refreshState();
+    outcome='Cambios guardados.';
     toast('Datos de nuestra historia guardados.');
-    settingsFormFeedback(document.querySelector('#settingsForm'),'Cambios guardados.');
    }catch(error){
-    settingsFormFeedback(form,'No se guardaron los cambios. Revisa la información y vuelve a intentar.');
+    outcome='No se guardaron los cambios. Revisa la información y vuelve a intentar.';
     throw error;
    }finally{
     settingsSaveInFlight=false;
     const current=document.querySelector('#settingsForm');
-    if(current)settingsFormFeedback(current);
+    if(current)settingsFormFeedback(current,outcome);
    }
    return;
   }
