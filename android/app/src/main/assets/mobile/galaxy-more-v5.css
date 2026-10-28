@@ -12,3 +12,16 @@
 .v5-more-group[data-group="sensitive"]{border-color:var(--danger,#b75e6b)}
 .v5-more-group[data-group="sensitive"]>summary{color:var(--danger,#b75e6b)}
 @media(max-width:360px){.v5-more-group-content{padding:7px}}
+
+/* P7B: clear switch vs GPS navigation and isolated irreversible action. */
+.v5-privacy-audience{margin:12px 0 0;color:var(--muted);font-size:12px;line-height:1.55}
+.v5-more-hub .privacy-toggle[role="switch"]{cursor:pointer}
+.v5-more-hub .privacy-toggle[role="switch"]:focus-visible,
+.v5-more-hub .v5-gps-navigation:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.v5-more-hub .v5-gps-navigation{border-style:dashed}
+.v5-gps-actions{display:grid;gap:14px;margin-top:14px}
+.v5-gps-zone{display:grid;justify-items:start;gap:7px;padding:12px;border:1px solid var(--border);border-radius:12px;min-width:0}
+.v5-gps-zone h4{margin:0;color:var(--text);font-size:14px}
+.v5-gps-zone p{margin:0 0 4px;color:var(--muted);font-size:12px;line-height:1.5}
+.v5-gps-zone-delete{border-color:var(--danger,#b75e6b)}
+.v5-gps-zone-delete h4{color:var(--danger,#b75e6b)}
