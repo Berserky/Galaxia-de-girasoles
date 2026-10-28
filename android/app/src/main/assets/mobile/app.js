@@ -56,7 +56,7 @@ let toastTimer,refreshing=false,updateState={text:'Todavía no se ha comprobado 
 let dateContext=null,dateContextLoadedAt=0,dateQuestionNonce=0,dateMode=null,dateModeTimer=null,dateLastExperience=null;
 let goalsState=null,goalsLoadedAt=0,goalsFilter='active';
 let presenceLastSignature='',voiceTimer=null,voiceSeconds=0,intelligenceSearchNonce=0;
-let chatState=null,chatLoading=false,chatQueuedLoad=null,chatStateSignature='',chatPreferencesState=null,chatUnlockedSession=false,notificationState=null,pendingDeepLink=null;
+let chatState=null,chatLoading=false,chatQueuedLoad=null,chatStateSignature='',chatPreferencesState=null,chatUnlockedSession=false,chatOpenPending=false,notificationState=null,pendingDeepLink=null;
 const chatMessageEngine=window.GalaxyMessageEngine.create({pageSize:60,maxCache:420,windowSize:84,windowStep:28,estimatedHeight:92});
 const chatScrollEngine=window.GalaxyScrollEngine.create({bottomTolerance:110,memoryKey:'galaxy.chat.scroll.position.v1'});
 const chatMediaEngine=window.GalaxyChatMedia.create({maxEntries:96,maxConcurrent:4,preloadMargin:720});
@@ -3485,7 +3485,26 @@ document.addEventListener('click',async e=>{
   if(a==='welcome-skip'){finishAdriWelcome();return;}
   if(a==='welcome-replay'){welcomePreview=true;welcomeStep=0;welcomeGift=true;welcomeEntering=false;tourStep=-1;render();window.scrollTo(0,0);return;}
   if(a==='modal-close'){closeModal();return;}
-  if(a==='chat-open'){window.GalaxyChatPerf?.beginOpen?.(chatState?'warm':'cold');if(native.chatLockEnabled&&!chatUnlockedSession){await GalaxyNative.call('unlockChat');chatUnlockedSession=true;}chatScrollEngine.clearMemory();chatRestoreOnRender=false;chatState=null;chatInitialScroll=true;go('chat');setChatPresence('ONLINE');await loadChat({quiet:true,force:true});flushChatOutbox({retryFailed:true}).catch(()=>{});return;}
+  if(a==='chat-open'){
+   if(chatOpenPending||!native.paired||!cloud?.capabilities?.chat)return;
+   chatOpenPending=true;
+   try{
+    if(native.chatLockEnabled&&!chatUnlockedSession){
+     await GalaxyNative.call('unlockChat');chatUnlockedSession=true;
+    }
+    // Allow the WebView's native click/evaluateJavascript callback to finish
+    // before mounting the full chat. Retain the real authenticated FAB action.
+    const originView=view;
+    await new Promise(resolve=>setTimeout(resolve,16));
+    if(view!==originView||!native.paired||!cloud?.capabilities?.chat)return;
+    window.GalaxyChatPerf?.beginOpen?.(chatState?'warm':'cold');
+    chatScrollEngine.clearMemory();chatRestoreOnRender=false;chatState=null;chatInitialScroll=true;
+    go('chat');setChatPresence('ONLINE');
+    await loadChat({quiet:true,force:true});
+    flushChatOutbox({retryFailed:true}).catch(()=>{});
+   }finally{chatOpenPending=false;}
+   return;
+  }
   if(a==='chat-close'){ensureChatComposer().cancelReply();chatResizeObserver?.disconnect();chatResizeObserver=null;setChatPresence('OFFLINE');go('home');return;}
   if(a==='chat-load-more'){await loadChat({older:true});return;}
   if(a==='chat-reply'){const id=btn.dataset.id,m=(chatState?.messages||[]).find(x=>String(x.id)===String(id))||null;if(m)ensureChatComposer().setReply(m);closeModal();chatRenderComposer({focus:true});return;}

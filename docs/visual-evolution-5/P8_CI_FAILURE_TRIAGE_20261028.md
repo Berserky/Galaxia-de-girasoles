@@ -26,3 +26,13 @@
 - No afirmar que la desconexión se explica únicamente por memoria: hay errores de interacción previos que requieren evidencia funcional.
 - P8 sigue condicionado a APK instrumentado, recorridos de accesibilidad y 19 escenarios consolidados, revisión de las capturas reales y aprobación humana.
 - **No se ha hecho merge ni promoción a `desarrollo`, `qa` o `prod`.**
+
+## Segunda ronda y corrección focalizada del acceso a Chat
+
+- SHA histórico **`4ccc48e22e43b65f752eee64d49fae21f7f77e3e`**: **11/15 workflows SUCCESS; 4 FAILURE**. Las cuatro fallas son las tres instrumentaciones AVD anteriores y `Galaxy Chat 4 Phase 9 Media Performance`; Node 24 y compilación Android pasan.
+- En los registros de esta ronda `chatPhase9` y `chatPhase4` agotaron el callback WebView de 5 segundos durante `#chatFab.click()`; `dailyGoals...` seguía en `view='more'` tras 30 segundos. No confundir estos fallos de interacción con una desconexión del emulador.
+- La tercera ronda propuesta no desactiva la entrada original, ningún permiso ni screenshot. Se agregó `chatOpenPending` para impedir aperturas duplicadas; sólo tras desbloqueo del dispositivo se cede un cuadro de ejecución (16 ms) antes de construir el Chat completo. El handler vuelve a comprobar autenticación, capacidad Chat y si el usuario cambió de pantalla. Las pruebas Node verifican clic concurrente, rechazo de biometría, desvinculación y navegación mientras espera.
+- Tres workflows AVD pasan de `-memory 3072` a `-memory 1536` manteniendo `-no-snapshot`, con el objetivo de dejar memoria al runner para Gradle y gráficos. **Hipótesis, no arreglo demostrado**: revisar emulador y artefactos antes de declarar PASS. No se añade `continue-on-error`.
+- Node Windows del nuevo árbol local: **1.021 tests: 1.016 PASS / 0 FAIL / 5 SKIP**, QA móvil estática PASS, con tests de click seguro `tests/visual-evolution-p8-chat-open.test.mjs`. Estas cifras no certifican el runtime Android.
+
+**Regla:** el resultado 11/15 del SHA `4ccc48e` se mantiene como fallo histórico hasta que todos los checks necesarios de un SHA posterior se ejecuten y pasen. No promoción, no merge, no release.
