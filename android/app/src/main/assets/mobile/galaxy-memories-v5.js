@@ -384,5 +384,42 @@ function constellationView(items,{limit=18,expanded=false}={}, {esc,attr,ico}){
   toolbar+'</section>';
 }
 
-root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumGallery,albumViewer,musicGrouping,musicLibrary,validDate,shiftMonth,calendarMonth,eventOccurrence,eventRows,monthEvents,eventCalendar,organizedCollection,capsuleShelf,journeyShelf,timelineRows,historyTimeline,constellationModel,constellationPreview,constellationView});
+
+/* P6G: local text/category/date filters over already authenticated collections.
+ * Never search private body, media paths, locked capsule content, or other
+ * fields that could reveal data unavailable to the current viewer.
+ */
+const normalizeSearch=value=>String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,' ').toLocaleLowerCase('es');
+const filterableKinds=new Set(['memory','journey','plan','note','wish','capsule']);
+function filterItems(items,filter={}){
+ const query=normalizeSearch(filter.query).slice(0,100);
+ const category=typeof filter.category==='string'?filter.category:'';
+ const month=validMonth(filter.month)?filter.month:'';
+ return (Array.isArray(items)?items:[]).filter(item=>{
+  if(!item||!filterableKinds.has(item.kind)||!item.data||typeof item.data!=='object')return false;
+  const d=item.data;
+  const name=typeof d.title==='string'?d.title:'';
+  const group=typeof d.category==='string'&&d.locked!==true?d.category:'';
+  if(query&&!normalizeSearch(name+' '+group).includes(query))return false;
+  if(category&&group!==category)return false;
+  if(month&&(!validDate(d.date)||d.date.slice(0,7)!==month))return false;
+  return true;
+ });
+}
+function filtersPanel(items,filter={}, {esc,attr,ico}){
+ const all=(Array.isArray(items)?items:[]).filter(x=>x&&filterableKinds.has(x.kind)&&x.data&&typeof x.data==='object');
+ const categories=[...new Set(all.filter(x=>x.data.locked!==true&&typeof x.data.category==='string').map(x=>x.data.category.trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+ const query=typeof filter.query==='string'?filter.query.slice(0,100):'';
+ const month=validMonth(filter.month)?filter.month:'',selected=categories.includes(filter.category)?filter.category:'';
+ const options='<option value="">Todas las categorías</option>'+categories.map(x=>'<option value="'+attr(x)+'"'+(selected===x?' selected':'')+'>'+esc(x)+'</option>').join('');
+ return '<div class="memories-v5-filters" role="search" aria-label="Filtrar recuerdos">'+
+  '<label>Buscar por título o categoría<input data-role="memories-filter-query" type="search" maxlength="100" value="'+attr(query)+'" placeholder="Buscar recuerdos" autocomplete="off"></label>'+
+  '<label>Categoría<select data-role="memories-filter-category">'+options+'</select></label>'+
+  '<label>Mes de la experiencia<input data-role="memories-filter-month" type="month" value="'+attr(month)+'"></label>'+
+  '<div class="memories-v5-filter-buttons"><button type="button" class="btn small" data-action="memories-filter-apply">'+ico('search')+' Aplicar</button>'+
+  '<button type="button" class="btn small secondary" data-action="memories-filter-reset">'+ico('x')+' Limpiar</button></div>'+
+  '<p class="muted">Solo se consultan los títulos, categorías y fechas que ya guardaron. No se buscan contenidos de cápsulas cerradas.</p></div>';
+}
+
+root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumGallery,albumViewer,musicGrouping,musicLibrary,validDate,shiftMonth,calendarMonth,eventOccurrence,eventRows,monthEvents,eventCalendar,organizedCollection,capsuleShelf,journeyShelf,timelineRows,historyTimeline,constellationModel,constellationPreview,constellationView,filterItems,filtersPanel});
 })(window);
