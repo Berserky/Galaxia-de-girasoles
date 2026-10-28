@@ -276,6 +276,22 @@ function timelineRows(items,today){
  undated.sort((a,b)=>(b.created||'').localeCompare(a.created||''));
  return {known,undated,todayKnown};
 }
+/* P6H VE-158: a same-title, same-day event is only a possible visual repeat.
+ * Each original record and its actions remain individually accessible.
+ * No backend changes, deletions or deduplication of stored records. */
+function historyVisualGroups(rows){
+ const groups=[],seen=new Map();
+ for(const row of rows){
+  const item=row?.item,raw=item?.data?.title;
+  const title=typeof raw==='string'?raw.trim():'';
+  const key=item?.kind==='event'&&title&&validDate(row.when)?row.when+'|'+normalizeLabel(title):null;
+  const existing=key?seen.get(key):null;
+  if(existing){existing.push(row);continue;}
+  const next=[row];groups.push(next);
+  if(key)seen.set(key,next);
+ }
+ return groups;
+}
 function historyTimeline(items,today,{esc,attr,ico,itemCard}){
  const {known,undated}=timelineRows(items,today),upcoming=known.filter(x=>x.upcoming),past=known.filter(x=>!x.upcoming);
  const typeNames={memory:['Recuerdo','heart'],journey:['Viaje','route'],event:['Fecha especial','calendar'],capsule:['Cápsula abierta','gift'],song:['Canción','music']};
@@ -298,7 +314,11 @@ function historyTimeline(items,today,{esc,attr,ico,itemCard}){
   }
   return '<section class="memories-v5-history-section"><h3>'+ico(icon)+' '+title+' <small>'+list.length+'</small></h3>'+
    [...months].map(([month,group])=>'<div class="memories-v5-history-month"><h4>'+esc(month)+' <small>'+group.length+'</small></h4>'+
-    '<div class="memories-v5-history-stack">'+group.map(card).join('')+'</div></div>').join('')+'</section>';
+    '<div class="memories-v5-history-stack">'+historyVisualGroups(group).map(rows=>rows.length===1?card(rows[0]):
+    '<details class="memories-v5-history-repeat"><summary>'+ico('copy-check')+
+    '<span><b>Posible repetición visual</b><small>'+esc(rows[0].item.data.title)+' · '+rows.length+' registros independientes</small></span>'+
+    ico('chevron-down')+'</summary><p class="muted">Coinciden título y fecha. Revisa cada evento; no se ha fusionado ni eliminado ningún registro.</p>'+
+    '<div class="memories-v5-history-repeat-items">'+rows.map(card).join('')+'</div></details>').join('')+'</div></div>').join('')+'</section>';
  };
  const unclassified=undated.length?'<section class="memories-v5-history-section"><h3>'+ico('book-open')+' Fecha de vivencia no registrada <small>'+undated.length+'</small></h3>'+
   '<p class="muted">Cuando falta la fecha de la experiencia, mostramos la fecha de guardado si existe.</p>'+
@@ -421,5 +441,5 @@ function filtersPanel(items,filter={}, {esc,attr,ico}){
   '<p class="muted">Solo se consultan los títulos, categorías y fechas que ya guardaron. No se buscan contenidos de cápsulas cerradas.</p></div>';
 }
 
-root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumGallery,albumViewer,musicGrouping,musicLibrary,validDate,shiftMonth,calendarMonth,eventOccurrence,eventRows,monthEvents,eventCalendar,organizedCollection,capsuleShelf,journeyShelf,timelineRows,historyTimeline,constellationModel,constellationPreview,constellationView,filterItems,filtersPanel});
+root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumGallery,albumViewer,musicGrouping,musicLibrary,validDate,shiftMonth,calendarMonth,eventOccurrence,eventRows,monthEvents,eventCalendar,organizedCollection,capsuleShelf,journeyShelf,timelineRows,historyVisualGroups,historyTimeline,constellationModel,constellationPreview,constellationView,filterItems,filtersPanel});
 })(window);
