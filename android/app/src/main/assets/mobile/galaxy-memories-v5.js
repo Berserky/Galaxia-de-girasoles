@@ -462,5 +462,20 @@ function filtersPanel(items,filter={}, {esc,attr,ico}){
   '<p class="muted">Solo se consultan los títulos, categorías y fechas que ya guardaron. No se buscan contenidos de cápsulas cerradas.</p></div>';
 }
 
-root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumDateGroups,albumGallery,albumViewer,musicGrouping,musicLibrary,validDate,shiftMonth,calendarMonth,eventOccurrence,eventRows,monthEvents,eventCalendar,organizedCollection,capsuleShelf,journeyShelf,timelineRows,historyVisualGroups,historyTimeline,constellationModel,constellationPreview,constellationView,filterItems,filtersPanel});
+
+/* P6H: receipt for THIS session only. No persistent sync history is invented. */
+function driveSyncFeedback(state,{esc,ico}){
+ const clean=n=>typeof n==='number'&&Number.isSafeInteger(n)&&n>=0?n:0;
+ if(!state)return '<p class="memories-v5-drive-status muted" role="status">No hay sincronizaciones registradas en esta sesión.</p>';
+ if(state.phase==='working')return '<p class="memories-v5-drive-status" role="status" aria-live="polite">'+ico('loader-circle')+' Sincronizando carpeta elegida…</p>';
+ if(state.phase==='error')return '<p class="memories-v5-drive-status error" role="status" aria-live="polite">'+ico('alert-circle')+' No se pudo sincronizar o actualizar el álbum. Revisa la conexión antes de intentar nuevamente.</p>';
+ if(state.phase!=='success'&&state.phase!=='partial')return '';
+ const imported=clean(state.imported),skipped=clean(state.skipped),failed=clean(state.failed);
+ const stamp=typeof state.completedAt==='number'&&Number.isFinite(state.completedAt)&&state.completedAt>0?
+  'Última sincronización de esta sesión: '+esc(new Date(state.completedAt).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})):'Resultado de esta sesión';
+ return '<div class="memories-v5-drive-receipt" role="status" aria-live="polite"><b>'+ico(state.phase==='partial'?'alert-triangle':'check-circle')+' '+(state.phase==='partial'?'Importación con incidencias':'Sincronización completada')+'</b>'+
+  '<p>'+imported+' nuevas · '+skipped+' ya existentes · '+failed+' con error</p><small>'+stamp+'</small></div>';
+}
+
+root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumDateGroups,albumGallery,albumViewer,musicGrouping,musicLibrary,validDate,shiftMonth,calendarMonth,eventOccurrence,eventRows,monthEvents,eventCalendar,organizedCollection,capsuleShelf,journeyShelf,timelineRows,historyVisualGroups,historyTimeline,constellationModel,constellationPreview,constellationView,filterItems,filtersPanel,driveSyncFeedback});
 })(window);

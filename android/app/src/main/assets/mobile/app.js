@@ -44,6 +44,8 @@ const legacySurpriseIdeas=[
 
 let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',memorySection='discover',memoryCalendarMode='month',memoryCalendarMonth='',memoryCalendarDate='',constellationVisible=18,memoryFilters={query:'',category:'',month:''},memoriesTabsScroll=0,media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),insightsCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
 let mapImmersive=false,mapHistoryVisible=6,mapPlacesVisible=6;
+let driveSyncSnapshot=null,driveSyncInFlight=false; // session only, never stored
+
 // Read-only signal for deterministic Android WebView QA; never gates GPS or user actions.
 let mapStateReadsInFlight=0;
 let toastTimer,refreshing=false,updateState={text:'La app está al día.',progress:0,busy:false},pendingVoiceDraft=null,voiceReady=false,voiceRecording=false,voiceResumeMusic=false,lastSurprise=null;
@@ -1163,7 +1165,18 @@ function itemCard(i){
 function storyTimeline(){return window.GalaxyMemoriesV5.historyTimeline(cloud?.items||[],cloud?.today,{esc,attr,ico,itemCard});}
 function driveAlbumCard(){
  const connected=!!native.driveFolderConnected,name=String(native.driveFolderName||'');
- return '<div class="card cloud-album-card '+(connected?'connected':'')+'"><div class="row between"><div><p class="eyebrow">GOOGLE DRIVE COMPARTIDO</p><h3>'+(connected?esc(name||'Carpeta conectada'):'Sin carpeta conectada')+'</h3><p>'+(connected?'Sincroniza las imágenes nuevas de esta carpeta y sus subcarpetas al álbum privado.':'Elige una carpeta desde Google Drive o el selector de archivos de Android.')+'</p></div>'+ico(connected?'folder-sync':'folder-plus')+'</div><div class="row wrap" style="margin-top:12px">'+(connected?'<button class="btn small secondary" data-action="drive-sync">'+ico('refresh-cw')+' Sincronizar</button><button class="btn small ghost" data-action="drive-folder-connect">'+ico('folder-open')+' Cambiar carpeta</button><button class="btn small ghost" data-action="drive-folder-disconnect">'+ico('unlink')+' Desconectar</button>':'<button class="btn small secondary" data-action="drive-folder-connect">'+ico('folder-open')+' Elegir carpeta Drive</button>')+'</div></div>';
+ const receipt=connected?window.GalaxyMemoriesV5.driveSyncFeedback(driveSyncInFlight?{phase:'working'}:driveSyncSnapshot,{esc,ico}):'';
+ const source='<p class="memories-v5-drive-scope">'+ico('info')+' Origen: carpeta elegida y subcarpetas de Drive. Destino: álbum privado. Los archivos originales no se modifican.</p>';
+ const controls=connected?
+  '<div class="memories-v5-drive-actions"><button class="btn small secondary" data-action="drive-sync"'+(driveSyncInFlight?' disabled':'')+'>'+ico('refresh-cw')+' '+(driveSyncInFlight?'Sincronizando…':'Sincronizar fotos')+'</button>'+
+  '<button class="btn small secondary" data-action="drive-folder-connect"'+(driveSyncInFlight?' disabled':'')+'>'+ico('folder-open')+' Cambiar carpeta</button></div>'+
+  '<details class="memories-v5-drive-danger"><summary>'+ico('shield-alert')+' Administrar conexión</summary><p>Desconectar no elimina fotos importadas ni los originales de Drive.</p>'+
+  '<button class="btn small ghost" data-action="drive-folder-disconnect"'+(driveSyncInFlight?' disabled':'')+'>'+ico('unlink')+' Desconectar carpeta</button></details>':
+  '<div class="memories-v5-drive-actions"><button class="btn small secondary" data-action="drive-folder-connect">'+ico('folder-open')+' Elegir carpeta Drive</button></div>';
+ return '<div class="card cloud-album-card '+(connected?'connected':'')+'"><div class="row between"><div><p class="eyebrow">GOOGLE DRIVE COMPARTIDO</p><h3>'+
+  (connected?esc(name||'Carpeta conectada'):'Sin carpeta conectada')+'</h3><p>'+
+  (connected?'Importación manual desde la carpeta elegida.':'Conecta una carpeta usando el selector de Android.')+
+  '</p></div>'+ico(connected?'folder-sync':'folder-plus')+'</div>'+source+receipt+controls+'</div>';
 }
 function openAlbumAdd(){
  showModal('Añadir fotos al álbum','<div class="music-source-grid album-source-grid"><button class="source-card" data-action="photos-picker">'+ico('images')+'<b>Google Photos Picker</b><span>Fotos locales o de tu proveedor cloud disponible</span></button><button class="source-card" data-action="photo-file">'+ico('image-plus')+'<b>Archivo del teléfono</b><span>Elegir una imagen desde Archivos</span></button><button class="source-card" data-action="drive-folder-connect">'+ico('folder-open')+'<b>Google Drive compartido</b><span>'+(native.driveFolderConnected?'Cambiar la carpeta conectada':'Elegir una carpeta para sincronizar')+'</span></button></div><p class="cloud-source-note">'+ico('shield-check')+' Las fotos elegidas o sincronizadas se copian al álbum privado de Nuestra Galaxia. La app no obtiene acceso completo a tu biblioteca de Google Photos.</p>');
@@ -1181,18 +1194,30 @@ async function importPhotosPicker(){
 async function connectDriveFolder(){
  closeModal();
  const result=await GalaxyNative.call('pickDriveFolder');
- native=nativeState();
+ native=nativeState();driveSyncSnapshot=null;
  if(view==='memories'&&memoryTab==='album')render();
  toast('Carpeta conectada: '+String(result.name||native.driveFolderName||'Google Drive')+'.');
 }
 async function syncDriveAlbum(){
- showModal('Sincronizando Google Drive','<div class="cloud-sync-progress">'+loading('Leyendo carpeta compartida')+'<h3>Buscando fotos nuevas…</h3><p>Recorreremos la carpeta y sus subcarpetas sin modificar los archivos originales.</p></div>');
+ if(driveSyncInFlight||!native.paired||!native.driveFolderConnected)return;
+ driveSyncInFlight=true;driveSyncSnapshot={phase:'working'};
+ showModal('Sincronizando Google Drive','<div class="cloud-sync-progress">'+loading('Leyendo carpeta compartida')+
+  '<h3>Buscando fotos nuevas…</h3><p>Revisando carpeta y subcarpetas sin modificar los originales.</p></div>');
  try{
   const result=await GalaxyNative.call('syncDriveFolder');
+  const valid=n=>typeof n==='number'&&Number.isSafeInteger(n)&&n>=0?n:0;
+  const imported=valid(result.imported),skipped=valid(result.skipped),failed=valid(result.failed);
+  driveSyncSnapshot={phase:failed?'partial':'success',imported,skipped,failed,completedAt:Date.now()};
   await refreshPhotoAlbum();
-  closeModal();
-  toast('Drive: '+Number(result.imported||0)+' nuevas · '+Number(result.skipped||0)+' ya sincronizadas'+(result.failed?' · '+Number(result.failed)+' omitidas':'')+'.');
- }catch(error){if(modal.open)closeModal();throw error;}
+  driveSyncInFlight=false;if(modal.open)closeModal();
+  if(view==='memories'&&memoryTab==='album')render();
+  toast('Drive: '+imported+' nuevas · '+skipped+' ya existentes'+(failed?' · '+failed+' con error':'')+'.');
+ }catch(error){
+  driveSyncInFlight=false;driveSyncSnapshot={phase:'error'};
+  if(modal.open)closeModal();
+  if(view==='memories'&&memoryTab==='album')render();
+  throw error;
+ }
 }
 function albumView(){
  const list=media.photo;
@@ -3555,7 +3580,7 @@ document.addEventListener('click',async e=>{
   if(a==='photo-file'){closeModal();await GalaxyNative.call('pickMedia','photo');await refreshPhotoAlbum();toast('Foto añadida desde el teléfono.');return;}
   if(a==='drive-folder-connect'){await connectDriveFolder();return;}
   if(a==='drive-sync'){await syncDriveAlbum();return;}
-  if(a==='drive-folder-disconnect'){if(confirm('¿Desconectar esta carpeta de Google Drive? Las fotos ya importadas seguirán en el álbum.')){await GalaxyNative.call('disconnectDriveFolder');native=nativeState();render();toast('Carpeta de Drive desconectada.');}return;}
+  if(a==='drive-folder-disconnect'){if(driveSyncInFlight)return;if(confirm('¿Desconectar esta carpeta de Google Drive? Las fotos ya importadas seguirán en el álbum.')){await GalaxyNative.call('disconnectDriveFolder');native=nativeState();driveSyncSnapshot=null;render();toast('Carpeta de Drive desconectada.');}return;}
   if(a==='music-add'){openMusicAdd();return;}
   if(a==='music-upload'){closeModal();await GalaxyNative.call('pickMedia','music');media.music=null;mediaLoadedAt.music=0;await loadMedia('music',true);renderGlobalPlayer();toast('MP3 añadido a Nuestra música.');return;}
   if(a==='music-url'){openMusicUrl();return;}
