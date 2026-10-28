@@ -57,3 +57,15 @@
 - Hallazgos críticos de autenticación, privacidad, GPS, pérdida de datos o arranque se corrigen **de inmediato**, aunque se posponga el resto de AVD.
 - Sin reintentos rutinarios de los tres jobs Android fallidos de P5. Revisión controlada solo durante P8 sobre el candidato, sin desactivar protecciones.
 - El PR #203 original contiene **únicamente el plan**. La rama derivada #204 contiene integración P5+P6+P7 **sin pruebas finales ni APK candidata certificada**. No ejecutar P9 ni desplegar.
+
+## Adenda P8: exportación/restauración y cambio de identidad (28-oct-2026)
+
+Esta adenda **amplía** los 19 escenarios anteriores. No los sustituye ni convierte las pruebas de contrato Node en aceptación Android. El candidato derivado de #204 incorpora las correcciones de #205–#207; debe evaluarse sobre **un solo HEAD** con los required checks vigentes.
+
+| ID | Escenario Android real | Evidencia exigida | Estado |
+| --- | --- | --- | --- |
+| P8-20 | Exportación de JSON: pulsaciones repetidas, cancelación del selector, fallo de escritura/cierre y confirmación nativa `saved:true` | Un solo selector, ningún éxito falso y archivo legible tras cierre; comprobar Storage Access Framework | NOT_EXECUTED |
+| P8-21 | Privacidad al desvincular o volver a vincular durante un selector de exportación abierto | No escribir JSON del vínculo anterior; verificar rechazo por cambio de token, sin registrar tokens ni contenidos | NOT_EXECUTED |
+| P8-22 | Restauración: doble toque, cancelación, manifiesto, confirmación y error de refresco tras `verified:true` | Una sola mutación; no sugerir repetir una restauración ya confirmada; preservar datos existentes según contrato servidor | NOT_EXECUTED |
+
+**Regla de aceptación:** los 22 escenarios y todos los required checks deben referirse al mismo SHA final. Si cambia el árbol, se reinicia la certificación de ese SHA; no reutilizar resultados anteriores. No merge, despliegue ni P9 sin autorización expresa.
