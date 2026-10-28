@@ -83,5 +83,104 @@ function musicLibrary(queue,currentIndex,playing,{esc,attr,ico}){
  }).join('')+'</div>';
 }
 
-root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumGallery,albumViewer,musicGrouping,musicLibrary});
+
+/* P6D — only a valid, explicit event date can appear on the calendar.
+ * An annual event repeats on its declared month/day; we do not invent dates
+ * for unclassified events or silently reinterpret item.created as event date.
+ */
+function validDate(raw){
+ if(typeof raw!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(raw))return false;
+ const year=Number(raw.slice(0,4)),month=Number(raw.slice(5,7)),day=Number(raw.slice(8,10));
+ if(year<1900||year>2199||month<1||month>12||day<1||day>31)return false;
+ return new Date(Date.UTC(year,month-1,day)).toISOString().slice(0,10)===raw;
+}
+const validMonth=value=>typeof value==='string'&&/^\d{4}-(0[1-9]|1[0-2])$/.test(value)&&Number(value.slice(0,4))>=1900&&Number(value.slice(0,4))<=2199;
+function shiftMonth(value,offset){
+ if(!validMonth(value)||!Number.isSafeInteger(offset)||Math.abs(offset)>12)return null;
+ const y=Number(value.slice(0,4)),m=Number(value.slice(5,7));
+ const next=new Date(Date.UTC(y,m-1+offset,1)),out=next.toISOString().slice(0,7);
+ return validMonth(out)?out:null;
+}
+function calendarMonth(month,today,items){
+ if(validMonth(month))return month;
+ if(validDate(today))return today.slice(0,7);
+ const found=(Array.isArray(items)?items:[]).find(item=>validDate(item?.data?.date));
+ return found?found.data.date.slice(0,7):null;
+}
+function annualDateForYear(original,year){
+ const day=original.slice(5),result=String(year).padStart(4,'0')+'-'+day;
+ return validDate(result)?result:null;
+}
+function eventOccurrence(item,today){
+ const date=item?.data?.date;
+ if(!validDate(date))return null;
+ if(!item.data?.annual||!validDate(today))return date;
+ const currentYear=Number(today.slice(0,4)),firstYear=Number(date.slice(0,4));
+ for(let y=Math.max(currentYear,firstYear);y<=Math.min(2199,currentYear+8);y++){
+  const when=annualDateForYear(date,y);
+  if(when&&when>=today)return when;
+ }
+ return null;
+}
+function eventRows(items,today){
+ const validToday=validDate(today)?today:null,dated=[],undated=[];
+ for(const item of Array.isArray(items)?items:[]){
+  if(!item||item.kind!=='event'||typeof item!=='object')continue;
+  const when=eventOccurrence(item,validToday);
+  if(when)dated.push({item,when,annual:item.data?.annual===true,upcoming:validToday?when>=validToday:null});
+  else if(!validDate(item?.data?.date))undated.push(item);
+ }
+ dated.sort((a,b)=>a.when.localeCompare(b.when)||String(a.item.id??'').localeCompare(String(b.item.id??'')));
+ return {dated,undated,validToday};
+}
+function monthEvents(items,month){
+ if(!validMonth(month))return [];
+ const output=[],year=Number(month.slice(0,4));
+ for(const item of Array.isArray(items)?items:[]){
+  if(!item||item.kind!=='event'||!validDate(item.data?.date))continue;
+  const original=item.data.date;
+  const when=item.data.annual===true&&year>=Number(original.slice(0,4))?
+   annualDateForYear(original,year):(original.slice(0,7)===month?original:null);
+  if(when&&when.slice(0,7)===month)output.push({item,when,annual:item.data.annual===true});
+ }
+ return output.sort((a,b)=>a.when.localeCompare(b.when));
+}
+function eventCalendar(items,{today,month,mode='month',selectedDate}={}, {esc,attr,ico,itemCard}){
+ const safe=Array.isArray(items)?items.filter(x=>x?.kind==='event'):[];
+ const current=calendarMonth(month,today,safe),rows=eventRows(safe,today);
+ const view=mode==='agenda'?'agenda':'month',button=(value,label)=>'<button type="button" data-action="memories-calendar-view" data-mode="'+value+'" aria-pressed="'+(view===value)+'">'+label+'</button>';
+ const toolbar='<div class="memories-v5-calendar-toggle" role="group" aria-label="Vista del calendario">'+button('month','Mes')+button('agenda','Agenda')+'</div>';
+ const renderItems=list=>'<div class="memories-v5-calendar-items">'+list.map(x=>itemCard(x.item||x)).join('')+'</div>';
+ if(view==='agenda'){
+  const upcoming=rows.validToday?rows.dated.filter(x=>x.upcoming):rows.dated;
+  const past=rows.validToday?rows.dated.filter(x=>!x.upcoming).reverse():[];
+  const section=(name,list,empty)=>'<section class="memories-v5-event-group"><h4>'+name+' <small>'+list.length+'</small></h4>'+(list.length?renderItems(list):'<p class="muted">'+empty+'</p>')+'</section>';
+  return '<div class="memories-v5-event-calendar">'+toolbar+
+   section(rows.validToday?'Próximas fechas':'Fechas guardadas',upcoming,'No hay fechas en esta sección.')+
+   (rows.validToday?section('Fechas vividas',past,'Aún no hay fechas anteriores.'):'')+
+   (rows.undated.length?section('Sin fecha definida',rows.undated,''):'')+'</div>';
+ }
+ if(!current)return '<div class="memories-v5-event-calendar">'+toolbar+'<p class="muted">Agrega una fecha válida a un evento para ver el calendario.</p></div>';
+ const [year,monthNum]=current.split('-').map(Number);
+ const first=(new Date(Date.UTC(year,monthNum-1,1)).getUTCDay()+6)%7;
+ const days=new Date(Date.UTC(year,monthNum,0)).getUTCDate();
+ const entries=monthEvents(safe,current),dayCounts=new Map();
+ for(const row of entries)dayCounts.set(row.when,(dayCounts.get(row.when)||0)+1);
+ const chosen=validDate(selectedDate)&&selectedDate.slice(0,7)===current?selectedDate:
+  validDate(today)&&today.slice(0,7)===current?today:null;
+ const controls='<div class="memories-v5-month-controls"><button type="button" data-action="memories-month-shift" data-offset="-1" aria-label="Mes anterior"'+(!shiftMonth(current,-1)?' disabled':'')+'>'+ico('chevron-left')+'</button><h4>'+esc(new Date(Date.UTC(year,monthNum-1,1)).toLocaleDateString('es-CO',{month:'long',year:'numeric',timeZone:'UTC'}))+'</h4><button type="button" data-action="memories-month-shift" data-offset="1" aria-label="Mes siguiente"'+(!shiftMonth(current,1)?' disabled':'')+'>'+ico('chevron-right')+'</button></div>';
+ const dayHeaders=['L','M','M','J','V','S','D'].map((label,index)=>'<span role="columnheader" aria-label="'+['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'][index]+'">'+label+'</span>').join('');
+ const slots=Array.from({length:first},()=>'<span class="memories-v5-calendar-empty" aria-hidden="true"></span>').join('')+
+  Array.from({length:days},(_,i)=>{const date=current+'-'+String(i+1).padStart(2,'0'),num=dayCounts.get(date)||0;
+   return '<button type="button" class="memories-v5-calendar-day'+(chosen===date?' selected':'')+(num?' has-events':'')+'" data-action="memories-calendar-day" data-date="'+date+'" aria-pressed="'+(chosen===date)+'" aria-label="'+attr('Día '+(i+1)+', '+num+' '+(num===1?'evento':'eventos'))+'">'+(i+1)+(num?'<span class="memories-v5-day-count" aria-hidden="true">'+num+'</span>':'')+'</button>';
+  }).join('');
+ const selection=chosen?entries.filter(x=>x.when===chosen):[];
+ return '<div class="memories-v5-event-calendar">'+toolbar+controls+
+  '<div class="memories-v5-calendar-grid" role="grid" aria-label="Calendario de fechas especiales">'+dayHeaders+slots+'</div>'+
+  '<section class="memories-v5-selected-day"><h4>'+(chosen?'Día '+esc(chosen)+' · '+selection.length+' '+(selection.length===1?'evento':'eventos'):'Selecciona un día')+'</h4>'+
+   (selection.length?renderItems(selection):'<p class="muted">'+(chosen?'No hay eventos guardados para este día.':'Selecciona una fecha para consultar sus eventos.')+'</p>')+'</section>'+
+   (rows.undated.length?'<p class="muted">'+rows.undated.length+' '+(rows.undated.length===1?'evento sin fecha':'eventos sin fecha')+'. Puedes consultarlos en Agenda.</p>':'')+'</div>';
+}
+
+root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumGallery,albumViewer,musicGrouping,musicLibrary,validDate,shiftMonth,calendarMonth,eventOccurrence,eventRows,monthEvents,eventCalendar});
 })(window);
