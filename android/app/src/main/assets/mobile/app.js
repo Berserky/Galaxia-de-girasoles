@@ -403,6 +403,7 @@ function go(next){
 // No timeout or new permissions: focus the real destination on navigation.
 function openPresencePrivacySettings(){
  go('more');
+ window.GalaxyMoreV5?.revealGroup(app,'privacy');
  const panel=document.getElementById('presencePrivacySettings');
  if(!panel)return;
  panel.scrollIntoView({behavior:'auto',block:'center'});
@@ -423,13 +424,14 @@ function render(){
  const currentMemoriesTabs=$('.memories-tabs');
  if(currentMemoriesTabs)memoriesTabsScroll=currentMemoriesTabs.scrollLeft;
  const themeState=window.GalaxyTheme?.applyTheme(window.GalaxyTheme.getChoice());
+ app.classList.toggle('v5-more-route',native.paired&&view==='more'&&!!cloud);
  syncSystemTheme(themeState);
  if(view!=='map')mapImmersive=false;
  document.body.classList.toggle('chat-mode',native.paired&&view==='chat'&&!shouldShowAdriWelcome());
  document.body.classList.toggle('map-immersive-open',native.paired&&view==='map'&&mapImmersive);
  renderNav();
  renderChatFab();
- if(!native.paired){settingsDraftCache=null;settingsDraftOwner='';renderOnboarding();refreshIcons();return;}
+ if(!native.paired){settingsDraftCache=null;settingsDraftOwner='';window.GalaxyMoreV5?.resetNavigation();renderOnboarding();refreshIcons();return;}
  if(shouldShowAdriWelcome()){globalPlayer.className='global-player';renderAdriWelcome();refreshIcons();return;}
  if(!cloud){app.innerHTML=header()+loading('Cargando nuestra galaxia');refreshIcons();refreshState();return;}
  if(!media.music&&!mediaLoadedAt.music)setTimeout(()=>loadMedia('music').then(renderGlobalPlayer).catch(()=>{}),0);
@@ -460,7 +462,7 @@ function render(){
   });
   window.GalaxyChatPerf?.renderEnd?.(perfRender);if(!chatState&&!chatLoading)setTimeout(()=>loadChat({quiet:true}),0);if(!chatPreferencesState)setTimeout(()=>loadChatPreferences(),0);
  }
- if(view==='more'){app.innerHTML=header()+moreView();window.GalaxyMoreV5?.organize(app);restoreSettingsForm();}
+ if(view==='more'){window.GalaxyMoreV5?.captureNavigation(app);app.innerHTML=header()+moreView();window.GalaxyMoreV5?.organize(app);restoreSettingsForm();}
  refreshIcons();
  if(view==='chat')globalPlayer.className='global-player';else renderGlobalPlayer();
  if(view==='home'&&!encounterStatsCache&&!encounterStatsLoading)setTimeout(()=>loadEncounterStats().catch(()=>{}),0);

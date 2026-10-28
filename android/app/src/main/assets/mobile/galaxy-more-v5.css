@@ -96,3 +96,36 @@
 #settingsForm [data-role="settings-save"]:disabled{opacity:.55;cursor:not-allowed}
 #settingsForm input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 @media(max-width:360px){#settingsForm .grid{grid-template-columns:1fr}}
+
+/* P7J: shortcut navigation, compact header and responsive text zoom.
+ * Keep 44px primary touch targets; never conceal privacy action buttons.
+ */
+#app.v5-more-route>.header{margin-bottom:11px;gap:8px}
+#app.v5-more-route .brand{min-width:0;gap:8px}
+#app.v5-more-route .brand-mark{flex:0 0 36px;width:36px;height:36px;border-radius:12px}
+#app.v5-more-route .brand strong{font-size:14px;overflow-wrap:anywhere}
+#app.v5-more-route .brand small{font-size:11px;line-height:1.25}
+#app.v5-more-route .header-actions{gap:5px}
+#app.v5-more-route .header-search{min-width:44px;min-height:44px}
+#app.v5-more-route>section>.section-head{display:none!important}
+.v5-more-hub>.v5-more-intro{padding:5px 4px 8px}
+.v5-more-intro h3{font-size:20px}
+.v5-more-quick{display:grid;gap:7px;min-width:0;margin:0 0 8px}
+.v5-more-quick-caption{font-size:11px;letter-spacing:.05em;color:var(--muted);font-weight:750;margin:0 3px}
+.v5-more-quick-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;min-width:0}
+.v5-more-quick-link{min-width:0;min-height:48px;overflow-wrap:anywhere;hyphens:auto;padding:9px 10px;text-align:left;border:1px solid var(--border);border-radius:12px;background:var(--surface2);color:var(--text);font:inherit;font-size:12px;font-weight:700;line-height:1.35;cursor:pointer}
+.v5-more-quick-link:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.v5-more-group>summary{min-height:56px;overflow-wrap:anywhere;line-height:1.4;scroll-margin-top:12px}
+.v5-more-group-content{min-width:0;overflow-wrap:anywhere}
+.v5-more-group-content :is(button,input,select,textarea){max-width:100%}
+@media(max-width:390px){
+ #app.v5-more-route .header{gap:4px}
+ #app.v5-more-route .avatar{display:none}
+ .v5-more-quick-grid{gap:6px}
+ .v5-more-quick-link{padding:9px;font-size:12px}
+}
+@media(max-width:335px){
+ .v5-more-quick-grid{grid-template-columns:1fr 1fr}
+ .v5-more-quick-link{font-size:11px}
+}
+@media(prefers-reduced-motion:reduce){.v5-more-quick-link,.v5-more-group>summary{transition:none!important}}

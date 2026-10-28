@@ -406,6 +406,38 @@ function pairCodeValidity(minutes){
   :'El servidor no informó una vigencia verificable. Si el código vence, genera otro.';
 }
 
+
+/* P7J - in-memory navigation state. Never persist settings, session keys or
+ * location in the navigation layer. All buttons only open existing DOM.
+ */
+let expandedGroups=new Set(['privacy']);
+function navigationGroups(){
+ return groups.map(([id,title])=>({id,title}));
+}
+function captureNavigation(container){
+ const hub=container?.querySelector?.('.v5-more-hub');
+ if(!hub)return false;
+ const open=[...hub.querySelectorAll('details.v5-more-group')].filter(el=>el.open).map(el=>el.dataset.group);
+ expandedGroups=new Set(open);
+ return true;
+}
+function revealGroup(container,id,focus=false){
+ if(!groups.some(g=>g[0]===id))return false;
+ const details=container?.querySelector?.('.v5-more-group[data-group="'+id+'"]');
+ if(!details)return false;
+ details.open=true;
+ expandedGroups.add(id);
+ if(focus){
+  const summary=details.querySelector('summary');
+  summary?.focus?.({preventScroll:true});
+  summary?.scrollIntoView?.({behavior:'auto',block:'nearest'});
+ }
+ return true;
+}
+function resetNavigation(){
+ expandedGroups=new Set(['privacy']);
+}
+
 function organize(container){
  const section=container?.querySelector?.('section');
  if(!section||section.querySelector('.v5-more-hub'))return false;
@@ -434,9 +466,28 @@ function organize(container){
  }
  for(const [id,slot] of slots){
   if(!slot.body.childNodes.length)slot.details.remove();
-  else if(id==='privacy')slot.details.open=true;
+  else{
+   slot.details.open=expandedGroups.has(id);
+   slot.details.addEventListener('toggle',()=>{if(slot.details.open)expandedGroups.add(id);else expandedGroups.delete(id);});
+  }
  }
  section.append(hub);
+ const quick=doc.createElement('nav');quick.className='v5-more-quick';
+ quick.setAttribute('aria-label','Acceso rápido a los ajustes');
+ const caption=doc.createElement('p');caption.className='v5-more-quick-caption';
+ caption.textContent='Ir a un ajuste';quick.append(caption);
+ const shortcuts=doc.createElement('div');shortcuts.className='v5-more-quick-grid';
+ for(const [id,title] of groups){
+  const entry=slots.get(id)?.details;
+  if(!entry?.isConnected)continue;
+  entry.id='v5-more-'+id;
+  const button=doc.createElement('button');button.type='button';button.className='v5-more-quick-link';
+  button.textContent=title;button.setAttribute('aria-controls',entry.id);
+  button.addEventListener('click',()=>revealGroup(hub,id,true));
+  shortcuts.append(button);
+ }
+ quick.append(shortcuts);
+ hub.insertBefore(quick,heading.nextSibling);
  enhancePrivacy(hub);
  enhanceAppearance(hub);
  enhanceNotifications(hub);
@@ -499,5 +550,5 @@ function enhanceIdentity(hub){
  return true;
 }
 
-root.GalaxyMoreV5=Object.freeze({classify,organize,enhancePrivacy,privacyAudience,themePalette,nextAutoChange,enhanceAppearance,notificationIndicator,enhanceNotifications,enhanceBackups,permissionReadings,enhanceDevices,enhanceWidgets,backupManifestPreview,deviceRevokePreview,pairCodeValidity,settingsDraft,enhanceIdentity});
+root.GalaxyMoreV5=Object.freeze({classify,organize,navigationGroups,captureNavigation,revealGroup,resetNavigation,enhancePrivacy,privacyAudience,themePalette,nextAutoChange,enhanceAppearance,notificationIndicator,enhanceNotifications,enhanceBackups,permissionReadings,enhanceDevices,enhanceWidgets,backupManifestPreview,deviceRevokePreview,pairCodeValidity,settingsDraft,enhanceIdentity});
 })(window);
