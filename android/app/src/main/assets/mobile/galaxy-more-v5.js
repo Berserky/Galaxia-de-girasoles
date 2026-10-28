@@ -384,6 +384,28 @@ function backupManifestPreview(backup){
   +'¿Enviar esta copia para verificación y posible restauración?'};
 }
 
+
+/* P7G: use authenticated device metadata for a contextual, fail-closed
+   confirmation. Never trust a name or profile supplied by the clicked button. */
+function deviceRevokePreview(devices,currentId,targetId,labels=[]){
+ const invalid={ok:false,message:'Actualiza la lista de dispositivos antes de revocar.'};
+ if(!Array.isArray(devices)||!targetId||String(targetId)===String(currentId))return invalid;
+ const target=devices.find(d=>d&&String(d.id)===String(targetId));
+ if(!target||target.revoked_at)return invalid;
+ const clean=value=>String(value||'').replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,64);
+ const name=clean(target.name)||'Android';
+ const profile=clean(labels[Number(target.person)]||('Perfil '+String(target.person)));
+ return {ok:true,message:'¿Revocar el dispositivo «'+name+'» del perfil '+profile+'?\n\n'
+  +'Este teléfono perderá acceso a Nuestra Galaxia y dejará de recibir avisos vinculados. '
+  +'Para volver a entrar tendrá que vincularse otra vez.\n\n'
+  +'Esta acción no desvincula el teléfono actual. ¿Confirmar revocación?'};
+}
+function pairCodeValidity(minutes){
+ return Number.isSafeInteger(minutes)&&minutes>0&&minutes<=60
+  ?'Vigencia informada por el servidor: '+minutes+' minutos desde la creación. Uso único.'
+  :'El servidor no informó una vigencia verificable. Si el código vence, genera otro.';
+}
+
 function organize(container){
  const section=container?.querySelector?.('section');
  if(!section||section.querySelector('.v5-more-hub'))return false;
@@ -423,5 +445,5 @@ function organize(container){
  enhanceWidgets(hub);
  return true;
 }
-root.GalaxyMoreV5=Object.freeze({classify,organize,enhancePrivacy,privacyAudience,themePalette,nextAutoChange,enhanceAppearance,notificationIndicator,enhanceNotifications,enhanceBackups,permissionReadings,enhanceDevices,enhanceWidgets,backupManifestPreview});
+root.GalaxyMoreV5=Object.freeze({classify,organize,enhancePrivacy,privacyAudience,themePalette,nextAutoChange,enhanceAppearance,notificationIndicator,enhanceNotifications,enhanceBackups,permissionReadings,enhanceDevices,enhanceWidgets,backupManifestPreview,deviceRevokePreview,pairCodeValidity});
 })(window);
