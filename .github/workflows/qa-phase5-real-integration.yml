@@ -36,7 +36,18 @@ jobs:
           SDK_ROOT=/usr/local/lib/android/sdk
           SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | head -1)
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "platform-tools" "emulator"
+          # GitHub's Android SDK mirror occasionally returns truncated emulator ZIPs.
+          # Retry the original strict SDK install; no jobs or tests are skipped.
+          sdk_ok=0
+          for attempt in 1 2 3; do
+            if "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "platform-tools" "emulator"; then
+              sdk_ok=1
+              break
+            fi
+            echo "::warning::Android emulator SDK ZIP failed integrity check (attempt $attempt/3)"
+            sleep $((attempt * 10))
+          done
+          test "$sdk_ok" -eq 1
           echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
 
@@ -61,8 +72,13 @@ jobs:
           target: google_apis
           profile: pixel_6
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader -noaudio -no-boot-anim -camera-back none -camera-front none
+          emulator-options: -no-window -gpu swiftshader_indirect -memory 1536 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash scripts/qa-phase5-emulator.sh
+
+      - name: Capturar diagnóstico de AVD si falla el gate
+        if: failure()
+        shell: bash
+        run: bash scripts/p8-emulator-diagnostics.sh
 
       - name: Publicar resultados device closure
         if: always()
