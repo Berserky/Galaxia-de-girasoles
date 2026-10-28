@@ -75,3 +75,28 @@
 .memories-v5-track-more>summary:focus-visible,.memories-v5-track-source .music-play:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 @media(max-width:360px){.memories-v5-track-source{flex-wrap:wrap}.memories-v5-provider{font-size:11px}.memories-v5-track-more>summary{font-size:10px}}
 @media(prefers-reduced-motion:reduce){.memories-v5-track-source{transition:none!important}}
+
+/* P6D calendar + agenda. All entries use authenticated items and existing actions. */
+.memories-v5-event-calendar{display:grid;gap:14px;margin:14px 0 22px;min-width:0}
+.memories-v5-calendar-toggle{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.memories-v5-calendar-toggle button{min-height:44px;border:1px solid var(--border);border-radius:12px;background:var(--surface2);color:var(--text);font:inherit;font-size:13px;font-weight:700}
+.memories-v5-calendar-toggle button[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 -3px 0 var(--accent)}
+.memories-v5-month-controls{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.memories-v5-month-controls h4{margin:0;font-size:15px;text-transform:capitalize;text-align:center}
+.memories-v5-month-controls button{display:grid;place-items:center;min-width:44px;min-height:44px;border:1px solid var(--border);border-radius:12px;background:var(--surface2);color:var(--text)}
+.memories-v5-month-controls button:disabled{opacity:.35}
+.memories-v5-month-controls .ui-icon{height:19px;width:19px}
+.memories-v5-calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;min-width:0}
+.memories-v5-calendar-grid [role="columnheader"]{display:grid;place-items:center;min-height:27px;color:var(--muted);font-size:11px;font-weight:800}
+.memories-v5-calendar-day{position:relative;display:grid;place-items:center;min-width:0;min-height:44px;padding:6px 2px;border:1px solid transparent;border-radius:10px;background:var(--surface2);color:var(--text);font:inherit;font-size:12px}
+.memories-v5-calendar-day.selected{background:var(--surface);border-color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
+.memories-v5-calendar-day.has-events{font-weight:800}
+.memories-v5-day-count{position:absolute;right:2px;top:2px;display:grid;place-items:center;min-width:13px;height:13px;padding:0 2px;border-radius:999px;background:var(--accent);color:var(--surface);font-size:9px}
+.memories-v5-calendar-day:focus-visible,.memories-v5-calendar-toggle button:focus-visible,.memories-v5-month-controls button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.memories-v5-selected-day,.memories-v5-event-group{display:grid;gap:9px;min-width:0}
+.memories-v5-selected-day h4,.memories-v5-event-group h4{margin:2px 0;font-size:14px}
+.memories-v5-event-group h4 small{color:var(--muted);font-weight:500}
+.memories-v5-calendar-items{display:grid;gap:9px}
+.memories-v5-calendar-items .card{min-width:0}
+@media(max-width:360px){.memories-v5-calendar-grid{gap:2px}.memories-v5-calendar-day{padding:5px 1px}.memories-v5-events>.row{flex-wrap:wrap}}
+@media(prefers-reduced-motion:reduce){.memories-v5-calendar-day,.memories-v5-month-controls button{transition:none!important}}

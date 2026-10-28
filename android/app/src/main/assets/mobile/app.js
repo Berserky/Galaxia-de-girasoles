@@ -42,7 +42,7 @@ const legacySurpriseIdeas=[
  {title:'Álbum del mes',body:'Elegir juntos las mejores fotos del mes y escribir una frase para cada una.',minutes:60,budget:0,where:'casa'}
 ];
 
-let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',memorySection='discover',memoriesTabsScroll=0,media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),insightsCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
+let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',memorySection='discover',memoryCalendarMode='month',memoryCalendarMonth='',memoryCalendarDate='',memoriesTabsScroll=0,media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),insightsCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
 let mapImmersive=false,mapHistoryVisible=6,mapPlacesVisible=6;
 // Read-only signal for deterministic Android WebView QA; never gates GPS or user actions.
 let mapStateReadsInFlight=0;
@@ -1126,6 +1126,7 @@ function memoriesView(){
 }
 function itemList(kind){
  const list=items(kind),meta=kindMeta[kind]||['sparkles','Contenido'];
+ if(kind==='event')return '<div class="section memories-v5-events"><div class="row between"><div><h3 style="margin:0">Calendario</h3><small class="muted">Fechas reales de sus eventos</small></div><button class="btn small" data-action="item-new" data-kind="event">+ Añadir</button></div>'+window.GalaxyMemoriesV5.eventCalendar(list,{today:cloud?.today,month:memoryCalendarMonth,mode:memoryCalendarMode,selectedDate:memoryCalendarDate},{esc,attr,ico,itemCard})+'</div>';
  return '<div class="section"><div class="row between"><div><h3 style="margin:0">'+meta[1]+'</h3><small class="muted">'+list.length+' guardados</small></div><button class="btn small" data-action="item-new" data-kind="'+kind+'">+ Añadir</button></div><div class="'+(kind==='memory'||kind==='journey'?'timeline':'stack')+'" style="margin-top:12px">'+(list.length?list.map(itemCard).join(''):'<div class="empty"><span class="big">'+ico(meta[0])+'</span>Aquí aparecerá lo que vayan guardando.</div>')+'</div></div>';
 }
 function linkedVoices(id){return (cloud?.bond?.entries||[]).filter(x=>x.type==='voice'&&x.data?.referenceId===id);}
@@ -3445,6 +3446,10 @@ document.addEventListener('click',async e=>{
   if(a==='moments'){go('moments');return;}
   if(a==='memories-section'){if(['discover','collections','history'].includes(btn.dataset.section)){memorySection=btn.dataset.section;render();}return;}
   if(a==='memories-category'){if(window.GalaxyMemoriesV5.categories.some(c=>c[0]===btn.dataset.kind)){memoryTab=btn.dataset.kind;memorySection='collections';render();}return;}
+  if(a==='memories-calendar-view'&&view==='memories'){if(['agenda','month'].includes(btn.dataset.mode)){memoryCalendarMode=btn.dataset.mode;render();}return;}
+  if(a==='memories-month-shift'&&view==='memories'){const delta=Number(btn.dataset.offset),hub=window.GalaxyMemoriesV5;const old=hub.calendarMonth(memoryCalendarMonth,cloud?.today,items('event'));const next=hub.shiftMonth(old,delta);if(next){memoryCalendarMonth=next;memoryCalendarDate='';render();}return;}
+  if(a==='memories-calendar-day'&&view==='memories'){const day=btn.dataset.date,hub=window.GalaxyMemoriesV5,month=hub.calendarMonth(memoryCalendarMonth,cloud?.today,items('event'));if(hub.validDate(day)&&day.slice(0,7)===month){memoryCalendarDate=day;render();}return;}
+
   if(a==='memories-recent'){const id=String(btn.dataset.id||''),item=cloud?.items?.find(x=>String(x.id)===id);if(!item||item.kind==='capsule'||item.kind!==btn.dataset.kind)return;memoryTab=item.kind==='song'?'music':item.kind;memorySection='collections';render();requestAnimationFrame(()=>{const target=[...document.querySelectorAll('[data-item-id]')].find(el=>String(el.dataset.itemId)===id);target?.scrollIntoView({behavior:'auto',block:'center'});});return;}
   if(a==='add-memory'){if(!mapData)await refreshMap({quiet:true,detail:false});openItemForm('memory');return;}
   if(a==='add-plan'){openItemForm('plan');return;}
