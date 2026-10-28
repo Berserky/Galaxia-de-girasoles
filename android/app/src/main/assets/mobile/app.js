@@ -458,7 +458,7 @@ function render(){
   });
   window.GalaxyChatPerf?.renderEnd?.(perfRender);if(!chatState&&!chatLoading)setTimeout(()=>loadChat({quiet:true}),0);if(!chatPreferencesState)setTimeout(()=>loadChatPreferences(),0);
  }
- if(view==='more')app.innerHTML=header()+moreView();
+ if(view==='more'){app.innerHTML=header()+moreView();window.GalaxyMoreV5?.organize(app);}
  refreshIcons();
  if(view==='chat')globalPlayer.className='global-player';else renderGlobalPlayer();
  if(view==='home'&&!encounterStatsCache&&!encounterStatsLoading)setTimeout(()=>loadEncounterStats().catch(()=>{}),0);
