@@ -462,7 +462,18 @@ function render(){
   });
   window.GalaxyChatPerf?.renderEnd?.(perfRender);if(!chatState&&!chatLoading)setTimeout(()=>loadChat({quiet:true}),0);if(!chatPreferencesState)setTimeout(()=>loadChatPreferences(),0);
  }
- if(view==='more'){window.GalaxyMoreV5?.captureNavigation(app);app.innerHTML=header()+moreView();window.GalaxyMoreV5?.organize(app);restoreSettingsForm();}
+ if(view==='more'){
+  // Native/cloud refreshes can re-render while someone edits our shared names.
+  // Keep only focus/caret, never a second copy of the private form values.
+  const settingsFocus=window.GalaxyMoreV5?.captureSettingsFocus(app);
+  const focusOwner=settingsDraftOwner;
+  window.GalaxyMoreV5?.captureNavigation(app);
+  app.innerHTML=header()+moreView();
+  window.GalaxyMoreV5?.organize(app);
+  restoreSettingsForm();
+  if(focusOwner===settingsDraftOwner&&String(native.person??'')===String(cloud.person??''))
+   window.GalaxyMoreV5?.restoreSettingsFocus(app,settingsFocus);
+ }
  refreshIcons();
  if(view==='chat')globalPlayer.className='global-player';else renderGlobalPlayer();
  if(view==='home'&&!encounterStatsCache&&!encounterStatsLoading)setTimeout(()=>loadEncounterStats().catch(()=>{}),0);
