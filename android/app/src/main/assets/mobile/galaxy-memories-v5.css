@@ -243,3 +243,9 @@
 .memories-v5-history-repeat>summary small{opacity:.75}
 .memories-v5-history-repeat>p{margin:10px 0}
 .memories-v5-history-repeat-items{display:grid;gap:10px}
+
+/* P6H: dates are Storage incorporation dates, never inferred camera dates. */
+.memories-v5-photo-date-group{min-width:0}
+.memories-v5-photo-date-group h4{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0 12px;font-size:.95rem}
+.memories-v5-photo-date-group h4 small{opacity:.7}
+.memories-v5-photo-date-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,130px),1fr));gap:10px}
