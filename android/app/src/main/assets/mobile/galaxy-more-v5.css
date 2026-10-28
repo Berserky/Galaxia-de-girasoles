@@ -1,0 +1,14 @@
+
+/* P7A: group real settings without changing handlers. */
+.v5-more-hub{display:grid;gap:10px;min-width:0;margin-bottom:calc(96px + env(safe-area-inset-bottom))}
+.v5-more-intro{padding:10px 4px}
+.v5-more-intro h3{margin:0 0 5px;font-size:22px}
+.v5-more-intro p{margin:0;color:var(--muted);font-size:12px;line-height:1.5}
+.v5-more-group{min-width:0;border:1px solid var(--border);border-radius:17px;background:var(--surface2)}
+.v5-more-group>summary{display:flex;align-items:center;min-height:62px;padding:13px 16px;color:var(--text);font-size:14px;font-weight:750;cursor:pointer}
+.v5-more-group>summary:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
+.v5-more-group-content{display:grid;gap:11px;min-width:0;padding:10px;border-top:1px solid var(--border)}
+.v5-more-group-content>.card{margin:0;min-width:0}
+.v5-more-group[data-group="sensitive"]{border-color:var(--danger,#b75e6b)}
+.v5-more-group[data-group="sensitive"]>summary{color:var(--danger,#b75e6b)}
+@media(max-width:360px){.v5-more-group-content{padding:7px}}
