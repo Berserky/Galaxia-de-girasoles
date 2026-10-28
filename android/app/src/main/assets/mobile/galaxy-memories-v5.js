@@ -44,5 +44,44 @@ function albumViewer(photos,at,{attr,ico}){
   '</div>';
 }
 
-root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumGallery,albumViewer});
+
+/* P6C: grouping is visual only. Original queue positions, providers and deletion
+ * permissions remain unchanged. No inference when the artist is missing.
+ */
+const normalizeLabel=s=>String(s??'').trim().replace(/\s+/g,' ').toLocaleLowerCase('es');
+const providerLabel=p=>p==='spotify'?'Spotify':p==='youtube'?'YouTube / YouTube Music':p==='mp3'?'MP3 privado':'Audio por URL';
+function musicGrouping(queue){
+ const rows=Array.isArray(queue)?queue:[];
+ const groups=[],byKey=new Map();
+ rows.forEach((track,index)=>{
+  if(!track||typeof track!=='object')return;
+  const artist=typeof track.artist==='string'?track.artist.trim():'';
+  const title=typeof track.title==='string'&&track.title.trim()?track.title.trim():'Canción';
+  const isProvider=track.platform==='spotify'||track.platform==='youtube';
+  const key=isProvider&&artist?normalizeLabel(title)+'|'+normalizeLabel(artist):null;
+  let group=key?byKey.get(key):null;
+  // Two entries from the same provider can be distinct recordings: do not merge.
+  if(group&&group.entries.some(e=>e.track.platform===track.platform))group=null;
+  if(!group){group={title,artist,entries:[]};groups.push(group);if(key&&!byKey.has(key))byKey.set(key,group);}
+  group.entries.push({track,index});
+ });
+ return groups;
+}
+function musicLibrary(queue,currentIndex,playing,{esc,attr,ico}){
+ const groups=musicGrouping(queue);
+ return '<div class="memories-v5-music-library" role="list" aria-label="Biblioteca de música">'+groups.map(group=>{
+  const multi=group.entries.length>1;
+  return '<article class="memories-v5-track-group" role="listitem"><div class="memories-v5-track-head"><span class="memories-v5-track-art" aria-hidden="true">'+ico('music-2')+'</span><div><h4>'+esc(group.title)+'</h4><small>'+esc(group.artist||'Artista no especificado')+(multi?' · '+group.entries.length+' fuentes':'')+'</small></div></div><div class="memories-v5-track-sources">'+group.entries.map(({track,index})=>{
+    const provider=providerLabel(track.platform),isActive=index===currentIndex;
+    const mp3=track.type==='mp3';
+    const deletion=mp3?(typeof track.path==='string'&&track.path?
+      '<button class="btn small ghost" data-action="media-delete" data-kind="music" data-path="'+attr(track.path)+'">Eliminar</button>':''):
+      '<button class="btn small ghost" data-action="item-delete" data-id="'+attr(track.id||'')+'">Eliminar</button>';
+    const share=!mp3?'<button class="btn small secondary" data-action="galaxy-share" data-card-type="SONG" data-kind="song" data-id="'+attr(track.id||'')+'" data-title="'+attr(track.title||'Canción')+'">'+ico('send')+' Galaxy Chat</button>':'';
+    return '<div class="memories-v5-track-source'+(isActive?' active':'')+'"><button type="button" class="music-play" data-action="music-play" data-index="'+index+'" aria-label="'+attr('Reproducir con '+provider+': '+group.title)+'">'+ico(isActive&&playing?'pause':'play')+'</button><span class="memories-v5-provider">'+esc(provider)+'</span><details class="memories-v5-track-more"><summary aria-label="'+attr('Opciones de '+provider)+'">'+ico('ellipsis')+' Opciones</summary><div class="row wrap">'+share+deletion+'</div></details></div>';
+   }).join('')+'</div></article>';
+ }).join('')+'</div>';
+}
+
+root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumGallery,albumViewer,musicGrouping,musicLibrary});
 })(window);
