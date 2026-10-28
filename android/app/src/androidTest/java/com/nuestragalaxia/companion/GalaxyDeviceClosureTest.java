@@ -1639,9 +1639,18 @@ public class GalaxyDeviceClosureTest {
         assertTrue(restored.getBoolean("restored"));
 
         runJs("go('more')");
-        awaitJs("document.body.innerText.includes('Copia de nuestra galaxia')");
-        assertTrue(js("document.body.innerText").contains("Actualizaciones"));
-        assertTrue(js("!!document.querySelector('[data-action=\"update-check\"]')").equals("true"));
+        // P7 groups hide their body until a real quick-link opens the <details>.
+        // Verify the user-facing navigation AND the original sensitive controls,
+        // instead of treating collapsed text as an absent feature.
+        awaitJs("!!document.querySelector('.v5-more-quick-link[aria-controls=\"v5-more-backups\"]')");
+        runJs("document.querySelector('.v5-more-quick-link[aria-controls=\"v5-more-backups\"]').click()");
+        awaitJs("document.querySelector('#v5-more-backups')?.open===true && document.body.innerText.includes('Copia de nuestra galaxia')");
+        assertTrue(js("!!document.querySelector('#v5-more-backups [data-action=\"backup-export\"]')").equals("true"));
+        assertTrue(js("!!document.querySelector('#v5-more-backups [data-action=\"backup-import\"]')").equals("true"));
+        awaitJs("!!document.querySelector('.v5-more-quick-link[aria-controls=\"v5-more-system\"]')");
+        runJs("document.querySelector('.v5-more-quick-link[aria-controls=\"v5-more-system\"]').click()");
+        awaitJs("document.querySelector('#v5-more-system')?.open===true && document.body.innerText.includes('Actualizaciones')");
+        assertTrue(js("!!document.querySelector('#v5-more-system [data-action=\"update-check\"]')").equals("true"));
 
         launchChat();
         awaitJs("document.querySelector('#chatMessages')?.innerText.includes('CÁPSULA BLOQUEADA')");
