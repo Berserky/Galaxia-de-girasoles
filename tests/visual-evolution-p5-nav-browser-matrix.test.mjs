@@ -40,6 +40,9 @@ test('P5 #176 browser matrix: Python syntax compiles without needing third-party
  const result=spawnSync('python3',['-c',"import sys;compile(sys.stdin.read(),'p5-nav-browser-audit.py','exec')"],{
   input:source,encoding:'utf8',timeout:10000
  });
- if(result.error?.code==='ENOENT'){t.skip('python3 unavailable on runner');return;}
+ if(result.error?.code==='ENOENT'||(process.platform==='win32'&&result.status===9009)){
+  t.skip('python3 unavailable on this Windows runner; keep Python QA pending');
+  return;
+ }
  assert.equal(result.status,0,result.stderr);
 });

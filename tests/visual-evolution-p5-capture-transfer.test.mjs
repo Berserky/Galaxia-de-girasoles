@@ -4,7 +4,7 @@ import {mkdtempSync,readFileSync,writeFileSync,chmodSync,rmSync,existsSync} from
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {spawnSync} from 'node:child_process';
-const source=readFileSync(resolve(import.meta.dirname,'../scripts/visual-evolution-p1-avd.sh'),'utf8');
+const source=readFileSync(resolve(import.meta.dirname,'../scripts/visual-evolution-p1-avd.sh'),'utf8').replace(/\r\n/g,'\n');
 const adbFn=source.match(/^adb\(\) \{\n[\s\S]*?^\}/m)?.[0];
 function simulate(fail){
  const dir=mkdtempSync(join(tmpdir(),'p5-adb-proof-'));

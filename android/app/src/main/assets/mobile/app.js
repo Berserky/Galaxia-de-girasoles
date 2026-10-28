@@ -42,7 +42,7 @@ const legacySurpriseIdeas=[
  {title:'Álbum del mes',body:'Elegir juntos las mejores fotos del mes y escribir una frase para cada una.',minutes:60,budget:0,where:'casa'}
 ];
 
-let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',memorySection='discover',memoryCalendarMode='month',memoryCalendarMonth='',memoryCalendarDate='',constellationVisible=18,memoryFilters={query:'',category:'',month:''},memoriesTabsScroll=0,media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),insightsCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
+let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',memorySection='discover',memoryCalendarMode='month',memoryCalendarMonth='',memoryCalendarDate='',constellationVisible=18,memoryFilters={query:'',category:'',month:''},media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),insightsCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
 let mapImmersive=false,mapHistoryVisible=6,mapPlacesVisible=6;
 // P5: one authenticated Moments lifecycle; never persist a garden between unpairings.
 let gardenLifecycle=null;
@@ -445,8 +445,6 @@ function render(){
  const chatRenderState=previousChatEl?chatCapturePositionState(previousChatEl,'render'):null;
  if(chatRenderState&&chatBottomRenderPending===previousChatEl)chatRenderState.atBottom=true;
  chatBottomRenderPending=null;
- const currentMemoriesTabs=$('.memories-tabs');
- if(currentMemoriesTabs)memoriesTabsScroll=currentMemoriesTabs.scrollLeft;
  const themeState=window.GalaxyTheme?.applyTheme(window.GalaxyTheme.getChoice());
  app.classList.toggle('v5-more-route',native.paired&&view==='more'&&!!cloud);
  syncSystemTheme(themeState);

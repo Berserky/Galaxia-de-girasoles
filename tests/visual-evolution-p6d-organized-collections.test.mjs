@@ -40,7 +40,7 @@ test('P6D: capsule and nonmatching items never render in collections',()=>{
 test('P6D: app retains item create/edit/delete and opens notes via recent link',()=>{
  const app=read('app.js');
  assert.match(app,/GalaxyMemoriesV5\.organizedCollection\(list,kind,\{esc,attr,ico,itemCard\}\)/);
- assert.match(app,/matches\?\.\('details\.memories-v5-note'\)/);
+ assert.match(app,/target\?\.matches\?\.\('details\.memories-v5-note,details\.memories-v5-journey/);
  assert.match(app,/if\(a==='item-delete'\)/);
  assert.match(app,/data-action="item-new"/);
  assert.doesNotMatch(read('galaxy-memories-v5.js'),/\bfetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|GalaxyNative/);

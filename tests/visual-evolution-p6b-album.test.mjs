@@ -38,9 +38,12 @@ test('P6B: invalid or missing URL cannot open and does not reveal private paths'
  assert.equal(hub.albumViewer(broken,2,ui),'');
 });
 test('P6B: escaped URL attributes do not inject HTML or event handlers',()=>{
- const h=hub.albumGallery([{url:'https://media.example.invalid/img?name=" onerror="evil'}],ui);
- assert.match(h,/&quot; onerror=&quot;/);
- assert.doesNotMatch(h,/ onerror="evil"/);
+ const h=hub.albumGallery([{url:'https://media.example.invalid/img?name="safe"'}],ui);
+ assert.match(h,/name=&quot;safe&quot;/);
+ assert.doesNotMatch(h,/\sonerror=/);
+ const blocked=hub.albumGallery([{url:'https://media.example.invalid/img?name=" onerror="evil'}],ui);
+ assert.match(blocked,/Imagen no disponible/);
+ assert.doesNotMatch(blocked,/data-action="album-photo-view"|onerror=/);
  const v=hub.albumViewer([{url:'https://media.example.invalid/image',path:'a" onclick="evil'}],0,ui);
  assert.match(v,/data-path="a&quot; onclick=&quot;evil"/);
  assert.doesNotMatch(v,/onclick="evil"/);

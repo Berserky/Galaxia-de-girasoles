@@ -20,7 +20,7 @@ test('P7E permission labels are parsed from Android-rendered data only',()=>{
  assert.equal(permissionReadings('Ubicación: concedida · GPS: activo · Notificaciones: pendientes').length,0);
 });
 test('P7E preserves server-side revoke and repair confirmation',()=>{
- assert.match(app,/if\(a==='device-revoke'\)\{\s*if\(!confirm\(/);
+ assert.match(app,/if\(a==='device-revoke'\)\{[\s\S]*?GalaxyMoreV5\?\.deviceRevokePreview\?\.\([\s\S]*?if\(!context\?\.ok\)[\s\S]*?if\(!confirm\(context\.message\)\)return;/);
  assert.match(app,/if\(a==='profile-repair'\)\{[\s\S]*?if\(!confirm\(/);
  assert.match(app,/if\(a==='unpair'\)\{if\(confirm\(/);
 });

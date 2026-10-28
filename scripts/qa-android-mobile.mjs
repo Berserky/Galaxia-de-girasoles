@@ -343,8 +343,9 @@ assert.ok(edge.includes('body.detail!==true'),'El mapa debe tener refresco liger
 assert.ok(app.includes("refreshMap({quiet:true,detail:false})"),'El polling del mapa debe usar refresco ligero');
 assert.ok(app.includes("document.visibilityState!=='visible'"),'La app debe pausar polling fuera de primer plano');
 assert.ok(app.includes('editingNow()'),'La sincronización automática debe respetar formularios en edición');
-assert.ok(app.includes("memoriesTabsScroll=0")&&app.includes("$('.memories-tabs')")&&app.includes("tabs.scrollLeft=memoriesTabsScroll"),'Las etiquetas de Recuerdos deben conservar su posición horizontal después de renderizar');
-assert.ok(app.includes('class="chips memories-tabs"'),'La barra de etiquetas de Recuerdos necesita un selector estable para restaurar el scroll');
+// P6 replaced the obsolete horizontal chip scroller with an accessible 3-door hub and 9-category grid.
+assert.ok(app.includes('const navigation=hub.sectionsNav(memorySection,context)')&&app.includes('const categories=hub.collections(all,media,memoryTab,context)'),'Recuerdos debe usar navegación P6 real por secciones y categorías');
+assert.ok(app.includes("if(a==='memories-section')")&&app.includes("if(a==='memories-category')")&&read('android/app/src/main/assets/mobile/galaxy-memories-v5.css').includes('.memories-v5-categories{display:grid'),'Recuerdos debe conservar rutas y cuadrícula accesibles después de renderizar');
 assert.ok(app.includes("WELCOME_KEY='nuestra-galaxia.adri-welcome.v1'"),'Falta persistencia de la bienvenida de Adri');
 assert.ok(app.includes("String(native.person)==='1'"),'La bienvenida especial debe limitarse a Adri/person 1');
 assert.ok(app.includes("welcomePreview||(String(native.person)==='1'&&!welcomeDone())"),'El preview de Sebas debe poder abrir la bienvenida sin alterar la regla real de Adri');

@@ -60,8 +60,8 @@ test('P7C date rules cover holiday exit without inventing schedules',()=>{
 
 test('P7C presenter cannot call network, native bridge or persistent storage',()=>{
  const src=read('galaxy-more-v5.js');
- assert.doesNotMatch(src,/\\bfetch\\s*\\(|XMLHttpRequest|localStorage|sessionStorage|GalaxyNative|navigator\\.geolocation/);
- assert.match(src,/original\\.dataset\\.value/);
+ assert.doesNotMatch(src,/\bfetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|GalaxyNative|navigator\.geolocation/);
+ assert.match(src,/original\.dataset\.value/);
  assert.match(src,/data-action="theme-set"/);
 });
 

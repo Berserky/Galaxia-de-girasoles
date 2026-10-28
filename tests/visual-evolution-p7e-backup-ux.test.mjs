@@ -46,10 +46,13 @@ test('P7E warns that media is referenced and JSON contains private information',
  assert.match(zones.children[0].children[1].textContent,/información privada/);
  assert.match(zones.children[0].children[1].textContent,/por referencia/);
 });
-test('P7E does not pretend import impact preview or bypass original confirmation',()=>{
+test('P7E/P7F distinguishes impact preview from server-verified manifest and preserves confirmation',()=>{
  const f=fixture();enhanceBackups(f.hub);
  assert.match(f.card.children[0].children[1].children[1].textContent,/no existe una vista previa/);
- assert.match(app,/if\(a==='backup-import'\)\{if\(!confirm\(/);
+ assert.match(app,/if\(a==='backup-import'\)\{\s*const file=await GalaxyNative\.call\('importJson'\)/);
+ assert.match(app,/GalaxyMoreV5\?\.backupManifestPreview\?\.\(backup\)/);
+ assert.match(app,/if\(!preview\?\.ok\)\{toast\(/);
+ assert.match(app,/if\(!confirm\(preview\.message\)\)return;/);
  assert.match(app,/api\('backup-import',\{backup\}\)/);
 });
 test('P7E is idempotent and does not change native, network or RLS logic',()=>{
