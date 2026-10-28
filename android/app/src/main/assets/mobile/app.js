@@ -1187,7 +1187,17 @@ async function syncDriveAlbum(){
 function albumView(){
  const list=media.photo;
  if(!list)return loading('Cargando álbum');
- return '<div class="section"><div class="row between"><div><h3 style="margin:0">Nuestro álbum</h3><small class="muted">'+list.length+' fotos privadas</small></div><button class="btn small" data-action="album-add">+ Añadir</button></div>'+driveAlbumCard()+(list.length?'<div class="gallery" style="margin-top:12px">'+list.map(x=>'<div class="photo"><img loading="lazy" src="'+attr(x.url)+'" alt="Foto de nuestro álbum"><button data-action="media-delete" data-kind="photo" data-path="'+attr(x.path)+'" aria-label="Eliminar foto">'+ico('trash-2')+'</button></div>').join('')+'</div>':'<div class="empty"><span class="big">'+ico('camera')+'</span>Añade la primera foto desde Google Photos, Drive o este teléfono.</div>')+'</div>';
+ const drive='<details class="memories-v5-drive"><summary>'+ico('folder-sync')+' Google Drive · '+(native.driveFolderConnected?'Carpeta conectada':'Configurar sincronización')+'</summary>'+driveAlbumCard()+'</details>';
+ return '<div class="section memories-v5-album"><div class="row between"><div><h3 style="margin:0">Nuestro álbum</h3><small class="muted">'+list.length+' '+(list.length===1?'foto privada':'fotos privadas')+'</small></div><button class="btn small" data-action="album-add">+ Añadir</button></div>'+
+  drive+(list.length?window.GalaxyMemoriesV5.albumGallery(list,{attr,ico}):
+   '<div class="empty"><span class="big">'+ico('camera')+'</span>Añade la primera foto desde Google Photos, Drive o este teléfono.</div>')+'</div>';
+}
+function openAlbumViewer(index){
+ if(!native.paired||view!=='memories'||memorySection!=='collections'||memoryTab!=='album')return;
+ const n=Number(index),list=media.photo;
+ if(!Array.isArray(list)||!Number.isSafeInteger(n)||n<0||n>=list.length)return;
+ const body=window.GalaxyMemoriesV5.albumViewer(list,n,{attr,ico});
+ if(body)showModal('Foto de nuestro álbum',body,'album-photo-viewer');
 }
 function musicView(){
  rebuildMusicQueue();
@@ -3484,6 +3494,7 @@ document.addEventListener('click',async e=>{
   if(a==='date-planner-save'&&dateLastExperience?.planner){const p=dateLastExperience.planner;await api('item-save',{kind:'plan',data:{title:'Cita planificada · '+cloud.today,body:p.steps.map((x,n)=>(n+1)+'. '+x.title).join('\n'),category:'Galaxy Date',planCategory:'when-possible',budget:Number(p.totalBudget||0),minutes:Number(p.totalMinutes||0),where:p.constraints?.where==='casa'?'casa':'salir',done:false,source:{type:'date-engine-planner',stepIds:p.steps.map(x=>x.id)}}});await refreshState({quiet:true});await loadDateContext(true);toast('Cita planificada guardada.');return;}
   if(a==='date-mode-start-experience'&&dateLastExperience){const id=dateLastExperience.candidate?.source==='pending'?dateLastExperience.candidate.id:'';dateMode=newDateModeSession(id);openDateMode(id);return;}
   if(a==='date-mode-start-plan'){dateMode=newDateModeSession(btn.dataset.planId);openDateMode(btn.dataset.planId);return;}
+  if(a==='album-photo-view'){openAlbumViewer(btn.dataset.index);return;}
   if(a==='album-add'){openAlbumAdd();return;}
   if(a==='photos-picker'){await importPhotosPicker();return;}
   if(a==='capsule-photo-file'){const upload=await GalaxyNative.call('pickMedia','photo'),form=modal.querySelector('#itemForm');if(form){form.querySelector('[name="capsulePhotoPath"]').value=upload.path||'';form.querySelector('[data-role="capsule-photo-state"]').textContent=upload.path?'Foto añadida':'Sin foto';}return;}
@@ -3500,7 +3511,7 @@ document.addEventListener('click',async e=>{
   if(a==='player-next'){playMusicAt(musicIndex+1);return;}
   if(a==='player-expand'){memorySection='collections';memoryTab='music';go('memories');return;}
   if(a==='media-add'){await GalaxyNative.call('pickMedia',btn.dataset.kind);media[btn.dataset.kind]=null;mediaLoadedAt[btn.dataset.kind]=0;await loadMedia(btn.dataset.kind,true);toast('Archivo añadido.');return;}
-  if(a==='media-delete'){if(confirm('¿Eliminar este archivo?')){await api('media-delete',{kind:btn.dataset.kind,path:btn.dataset.path});media[btn.dataset.kind]=null;mediaLoadedAt[btn.dataset.kind]=0;await loadMedia(btn.dataset.kind,true);toast('Archivo eliminado.');}return;}
+  if(a==='media-delete'){if(confirm('¿Eliminar este archivo?')){if(modal.open&&modal.dataset.form==='album-photo-viewer')closeModal();await api('media-delete',{kind:btn.dataset.kind,path:btn.dataset.path});media[btn.dataset.kind]=null;mediaLoadedAt[btn.dataset.kind]=0;await loadMedia(btn.dataset.kind,true);toast('Archivo eliminado.');}return;}
   if(a==='map-places-more'){mapPlacesVisible+=6;render();document.querySelector('.journey-history-places')?.scrollIntoView({behavior:'auto',block:'start'});return;}
   if(a==='map-history-more'){mapHistoryVisible+=6;render();document.querySelector('#encounter-history')?.scrollIntoView({behavior:'auto',block:'start'});return;}
   if(a==='history-place'){const point={latitude:btn.dataset.lat,longitude:btn.dataset.lon};if(!focusSavedPlaceOnMap(point))return;document.querySelector('#map')?.scrollIntoView({behavior:'smooth',block:'center'});return;}

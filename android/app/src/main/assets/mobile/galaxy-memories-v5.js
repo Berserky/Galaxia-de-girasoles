@@ -15,5 +15,34 @@ function discover(items,media,{esc,ico}){
  const mediaCount=(Array.isArray(media?.photo)?media.photo.length:0)+(Array.isArray(media?.music)?media.music.length:0)+countByKind(items,'song');
  return '<div class="memories-v5-discover"><div class="memories-v5-hero"><span class="memories-v5-kicker">'+ico('sparkles')+' NUESTRA HISTORIA</span><h3>Todo lo que nos hace nosotros</h3><p>Explora nuestros momentos y encuentra cada recuerdo donde lo guardamos.</p><div class="memories-v5-stats"><span>'+total+' historias y planes</span><span>'+mediaCount+' archivos y canciones</span></div><button type="button" class="btn small" data-action="memories-section" data-section="collections">Explorar colecciones '+ico('arrow-right')+'</button></div><div class="section"><div class="row between"><h3>Lo más reciente</h3><button type="button" class="btn small secondary" data-action="memories-section" data-section="history">Ver historia</button></div>'+(entries.length?'<div class="memories-v5-recent">'+entries.map(item=>{const kind=categories.find(c=>c[0]===item.kind),title=String(item.data?.title||kind?.[1]||'Recuerdo');return '<button type="button" class="memories-v5-recent-card" data-action="memories-recent" data-kind="'+esc(item.kind)+'" data-id="'+esc(String(item.id??''))+'">'+ico(kind?.[2]||'heart')+'<span><b>'+esc(title)+'</b><small>'+esc(kind?.[1]||'Recuerdo')+'</small></span>'+ico('chevron-right')+'</button>';}).join('')+'</div>':'<p class="muted">Aquí aparecerán sus primeros recuerdos cuando los guarden.</p>')+'</div></div>';
 }
-root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems});
+
+/* P6B: private gallery uses only signed URLs already supplied by the app.
+ * The presentational module never makes a request, stores identifiers or changes media.
+ */
+const usablePhoto=photo=>photo&&typeof photo.url==='string'&&/^https?:\/\/[^\s]+$/i.test(photo.url);
+function albumGallery(photos,{attr,ico}){
+ const items=Array.isArray(photos)?photos:[];
+ return '<div class="memories-v5-photo-grid" role="list" aria-label="Fotos del álbum privado">'+items.map((photo,index)=>{
+  const label='Ver foto '+(index+1)+' de '+items.length;
+  return '<div class="memories-v5-photo-card" role="listitem">'+(usablePhoto(photo)?
+   '<button type="button" class="memories-v5-photo-open" data-action="album-photo-view" data-index="'+index+'" aria-label="'+attr(label)+'">'+
+   '<img loading="lazy" decoding="async" src="'+attr(photo.url)+'" alt="Foto '+(index+1)+' del álbum privado">'+
+   '<span class="memories-v5-photo-hint" aria-hidden="true">'+ico('expand')+'</span></button>':
+   '<span class="memories-v5-photo-missing" role="status">Imagen no disponible</span>')+'</div>';
+ }).join('')+'</div>';
+}
+function albumViewer(photos,at,{attr,ico}){
+ const entries=Array.isArray(photos)?photos:[];
+ if(!Number.isSafeInteger(at)||at<0||at>=entries.length||!usablePhoto(entries[at]))return '';
+ const photo=entries[at],label='Foto '+(at+1)+' de '+entries.length;
+ return '<div class="memories-v5-photo-viewer" role="group" aria-label="'+attr(label)+'">'+
+  '<figure><img src="'+attr(photo.url)+'" alt="'+attr(label)+'" loading="eager" decoding="async"></figure>'+
+  '<div class="memories-v5-photo-toolbar"><button type="button" data-action="album-photo-view" data-index="'+(at-1)+'"'+(at===0?' disabled':'')+' aria-label="Foto anterior">'+ico('chevron-left')+' Anterior</button>'+
+  '<output aria-live="polite">'+label+'</output>'+
+  '<button type="button" data-action="album-photo-view" data-index="'+(at+1)+'"'+(at===entries.length-1?' disabled':'')+' aria-label="Foto siguiente">Siguiente '+ico('chevron-right')+'</button></div>'+
+  (typeof photo.path==='string'&&photo.path.length?'<div class="memories-v5-photo-danger"><button type="button" class="btn small ghost" data-action="media-delete" data-kind="photo" data-path="'+attr(photo.path)+'">'+ico('trash-2')+' Eliminar esta foto</button><p>Esta acción requiere confirmación.</p></div>':'')+
+  '</div>';
+}
+
+root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumGallery,albumViewer});
 })(window);
