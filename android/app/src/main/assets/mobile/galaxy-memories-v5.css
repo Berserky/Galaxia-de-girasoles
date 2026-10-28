@@ -250,3 +250,22 @@
 .memories-v5-photo-date-group h4 small{opacity:.7}
 .memories-v5-photo-grid{display:block;grid-template-columns:none;grid-auto-rows:auto;grid-auto-flow:row}
 .memories-v5-photo-date-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:minmax(90px,1fr);grid-auto-flow:dense;gap:7px;min-width:0}
+
+/* P6H - Drive sync receipt and safely separated disconnect. */
+.memories-v5-drive-scope{display:flex;gap:8px;align-items:flex-start;font-size:12px;line-height:1.45;color:var(--muted);margin:12px 0}
+.memories-v5-drive-scope .ui-icon{flex:0 0 17px;width:17px;height:17px}
+.memories-v5-drive-status,.memories-v5-drive-receipt{margin:10px 0;padding:11px;border:1px solid var(--border);border-radius:12px;background:var(--surface2);color:var(--text);font-size:12px}
+.memories-v5-drive-status.error{border-color:var(--danger,#b65d72)}
+.memories-v5-drive-receipt b{display:flex;gap:7px;align-items:center}
+.memories-v5-drive-receipt .ui-icon,.memories-v5-drive-status .ui-icon{width:16px;height:16px}
+.memories-v5-drive-receipt p{margin:8px 0 4px;font-variant-numeric:tabular-nums}
+.memories-v5-drive-receipt small{font-size:11px;color:var(--muted)}
+.memories-v5-drive-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.memories-v5-drive-actions button{min-height:44px}
+.memories-v5-drive-danger{margin-top:16px;padding-top:11px;border-top:1px solid var(--border)}
+.memories-v5-drive-danger summary{display:flex;align-items:center;gap:8px;min-height:44px;color:var(--muted);font-size:12px;cursor:pointer}
+.memories-v5-drive-danger summary .ui-icon{width:16px;height:16px}
+.memories-v5-drive-danger p{color:var(--muted);font-size:12px}
+.memories-v5-drive-danger button{min-height:44px}
+.memories-v5-drive-danger summary:focus-visible,.memories-v5-drive-actions button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+@media(max-width:360px){.memories-v5-drive-actions{display:grid;grid-template-columns:1fr}.memories-v5-drive-actions button{width:100%}}
