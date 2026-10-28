@@ -62,3 +62,19 @@
 - Para la prueba P5 se agregaron marcadores Android `NG_P8_VISUAL` sin datos privados, antes/después de montar Momentos y por viewport de 320/360/393/412. El script P0/P1 conserva estos marcadores en un artefacto aunque el emulador desaparezca. **No se ha quitado ninguna comprobación de píxeles, JUnit, privacidad, 135% ni de 7 temas.**
 
 **Estado:** corrección del falso negativo de P7 verificada por contratos Node; falta repetir instrumentación Android y recuperar todas las capturas nativas en el SHA nuevo. No confundir logs guardados con un resultado PASS.
+
+## Ronda Android posterior: b4a3b5a, aislamiento gráfico y cierre por shards
+
+El SHA `b4a3b5a0b365d6fc00781dec525f262ded4b0398` concluyó **11/15 workflows PASS; 4 FAIL**. La comprobación de P7 de paneles plegables dejó de fallar. Los cuatro fallos restantes pertenecen a instrumentación Android/AVD: `Phase5`, `Phase10 Android Performance`, `Phase11 Torture` y `V5 P0 Android Visual`. **El resto de los checks no certifica automáticamente estos cuatro gates.**
+
+Evidencia física de GitHub (artefactos de QA aislados): `12847088640` (Phase5), `12847449027` (Phase11), `12847851912` (P0) y `12846508244` (Phase10). En P0 los marcadores nativos demuestran `P5_START → P5_MOMENTS_DOM_READY → P5_VIEWPORT_START_320`; faltó `P5_VIEWPORT_PAINTED_320` porque se perdió el emulador. Phase5 arroja la misma secuencia y muestra cientos de milisegundos de gráficos y frames omitidos; hay cierres repetidos de procesos Chromium renderer. Phase11 perdió el AVD tras ~15 tests, no un fallo funcional reproducible en su prueba 16. Phase10 bloqueó su callback de blur luego de abrir Chat: **no se puede afirmar que el código de negocio falló**.
+
+Comprobación independiente en el emulador limpio `NG_V5_P8_ISOLATED_API35` de Bati-Compu: `wm size` a **960x2400**, **1080x2400**, **1179x2400** y **1236x2400** preservó `sys.boot_completed=1`. Esto *no* reproduce el jardín completo ni certifica Momentos, pero descarta que cambiar resolución, por sí solo, destruya todos los AVD API35. La hipótesis actual es presión de composición/renderizado durante cambios de tamaño con el jardín vivo.
+
+Se aplicó una corrección de QA orientada a la causa: antes de cada `wm size` se sale realmente de Momentos hacia Inicio y se desmonta el jardín; se vuelve a Momentos una vez estabilizado el display y se mantienen intactos los 4 anchos CSS, 135% texto WebView, 7 temas, 8 actividades, 3 rituales, privacidad, marcadores de pintura y capturas de framebuffer reales. Se añadió `P5_VIEWPORT_RESIZE_RETURNED` para discriminar pérdida dentro/fuera de `wm size`.
+
+Para Phase11, 23 métodos `GalaxyDeviceClosureTest` ahora se distribuyen mediante AndroidJUnitRunner `numShards=2` en **dos AVD frescos** en secuencia. Las clases Media/Voice se ejecutan aparte en el segundo AVD. La herramienta `scripts/p8-verify-phase11-shards.mjs` exige XML JUnit real, PASS sin errores/saltos, nombres esperados extraídos de Java, y cobertura exactamente-una-vez sin duplicados. Sus tests de contrato comprueban que los recibos incompletos se rechazan. Es una sola campaña automatizada consolidada y no salta casos.
+
+Phase10: se cambió la salida del foco de Chat a `runJsNoWait` seguida de comprobación real `awaitJs`, conservando el límite normal de 5 segundos de lectura y la validación de foco; evita asociar la limpieza del teclado a un callback de acción costoso.
+
+**Gates que siguen bloqueados:** validación de todos los jobs del SHA final, capturas nativas reales de P5, integridad de los 23+ tests Android en el runner y aceptación visual humana. No mergear ni promocionar.

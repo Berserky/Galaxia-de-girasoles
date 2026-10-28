@@ -1048,12 +1048,22 @@ public class GalaxyDeviceClosureTest {
         try {
             for(int css : new int[]{320,360,393,412}) {
                 android.util.Log.i("NG_P8_VISUAL","P5_VIEWPORT_START_"+css);
+                // Resize the real Android display *outside* the animated
+                // garden. CI's software renderer was saturated while changing
+                // display metrics with the full Moments scene still mounted.
+                // Re-enter Moments after resizing; test the identical real
+                // framebuffer, source content, focus, privacy and touch gates.
+                runV5Js("go('home')");
+                awaitJs("view==='home' && !document.querySelector('.living-moments')");
                 int w=(int)Math.round(css*scale);
                 shell("wm size "+w+"x"+realHeight);
+                android.util.Log.i("NG_P8_VISUAL","P5_VIEWPORT_RESIZE_RETURNED_"+css);
                 awaitCondition(() -> Math.abs(Integer.parseInt(
                     js("String(Math.round(innerWidth))"))-css)<=5,UI_TIMEOUT_MS);
+                runV5Js("go('moments');window.scrollTo(0,0)");
                 awaitJs("view==='moments' && !!document.querySelector('.living-garden')"
-                    +"&&document.querySelectorAll('.living-activity-grid .action-card').length===8");
+                    +"&&document.querySelectorAll('.living-activity-grid .action-card').length===8"
+                    +"&&document.querySelectorAll('.living-ritual-step').length===3");
                 String state=jsWithDeadline("JSON.stringify((()=>{"
                     +"const root=document.querySelector('.living-moments'),"
                     +"seek=document.querySelector('.living-voice-seek'),"
@@ -1820,7 +1830,10 @@ public class GalaxyDeviceClosureTest {
         scenario = ActivityScenario.launch(intent);
         awaitJs("view==='chat' && !!document.querySelector('.chat-shell')");
         awaitCondition(() -> backend.actions().contains("chat-state"), UI_TIMEOUT_MS);
-        runJs("document.activeElement?.blur();");
+        // Execute keyboard blur without waiting for an overloaded WebView
+        // action callback; the real focus-state read remains mandatory.
+        runJsNoWait("document.activeElement?.blur()");
+        awaitJs("document.activeElement!==document.querySelector('#chatForm textarea')");
         scenario.onActivity(activity -> ((android.view.inputmethod.InputMethodManager)activity.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(activity.getWindow().getDecorView().getWindowToken(),0));
         SystemClock.sleep(300);
     }
@@ -2093,7 +2106,10 @@ public class GalaxyDeviceClosureTest {
         runJs("document.querySelector('#chatFab')?.click()");
         awaitJs("view==='chat' && !!document.querySelector('.chat-shell')");
         awaitCondition(() -> backend.actions().contains("chat-state"), UI_TIMEOUT_MS);
-        runJs("document.activeElement?.blur();");
+        // A one-way blur prevents asynchronous keyboard dismissal from
+        // blocking native Chat opening. Verify focus afterwards.
+        runJsNoWait("document.activeElement?.blur()");
+        awaitJs("document.activeElement!==document.querySelector('#chatForm textarea')");
         scenario.onActivity(activity -> ((android.view.inputmethod.InputMethodManager)activity.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(activity.getWindow().getDecorView().getWindowToken(),0));
         SystemClock.sleep(300);
     }

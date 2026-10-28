@@ -146,3 +146,19 @@ test('P8 forensic visual milestones are real Android events and cannot replace P
  assert.ok(sh.includes('Android JUnit XML missing'));
  assert.ok(sh.includes('p5_android_verified_by_real_instrumentation'));
 });
+
+test('P8 real Moments viewports resize display outside live garden without weakening gates',()=>{
+ const java=readFileSync(resolve(root,'android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyDeviceClosureTest.java'),'utf8');
+ const start=java.indexOf('void visualEvolutionP5_realMomentsAndroidScreens_andPrivacy()');
+ const end=java.indexOf('@Test public void galaxyChat_renders13Cards_',start);
+ assert.ok(start>0&&end>start);
+ const p5=java.slice(start,end);
+ assert.ok(p5.indexOf('runV5Js("go(\'home\')")')<p5.indexOf('shell("wm size "+w+"x"+realHeight)'));
+ assert.ok(p5.indexOf('runV5Js("go(\'moments\');window.scrollTo(0,0)")')>p5.indexOf('shell("wm size "+w+"x"+realHeight)'));
+ for(const css of ['320','360','393','412'])assert.ok(p5.includes('new int[]{320,360,393,412}'));
+ assert.ok(p5.includes('awaitV5QaPainted("p5-moments-"+css)'));
+ assert.ok(p5.includes('awaitV5QaPainted("p5-text-zoom-"+css)'));
+ assert.ok(p5.includes('awaitV5QaPainted("p5-theme-"+theme)'));
+ assert.ok(p5.includes('shell("screencap -p /sdcard/Download/V5-P5-moments-"+css+".png")'));
+ assert.ok(p5.includes('shell("wm size reset")'));
+});
