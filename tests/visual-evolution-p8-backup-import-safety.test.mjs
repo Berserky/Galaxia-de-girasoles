@@ -94,3 +94,55 @@ test('P8 affected browser modules retain valid JavaScript syntax',()=>{
  assert.doesNotThrow(()=>new Function(more));
  assert.doesNotThrow(()=>new Function(app));
 });
+
+function importHandler(deps){
+ const factory=new Function('deps',
+  'let backupImportInFlight=false;'+
+  'const {GalaxyNative,window,api,confirm,toast,refreshState,refreshMap,render}=deps;'+
+  'return async function handle(a){'+importBlock+'}');
+ return factory(deps);
+}
+
+test('P8 concurrent import runtime ignores second tap and releases guard after completion',async()=>{
+ let releasePicker;
+ const pendingPicker=new Promise(resolve=>{releasePicker=resolve;});
+ let pickerCalls=0,serverCalls=0,allow=true;
+ const messages=[];
+ const handle=importHandler({
+  GalaxyNative:{call:async()=>{pickerCalls++;return pendingPicker;}},
+  window:{GalaxyMoreV5:{backupManifestPreview:()=>({ok:true,message:'Confirmar'})}},
+  api:async()=>{serverCalls++;return {verified:true,restored:{items:2,places:0,bond:0}};},
+  confirm:()=>allow,toast:message=>messages.push(message),
+  refreshState:async()=>{},refreshMap:async()=>{},render:()=>{}
+ });
+ const first=handle('backup-import');
+ await handle('backup-import');
+ assert.equal(pickerCalls,1,'second tap must not open another picker');
+ releasePicker({json:'{"format":"nuestra-galaxia-backup"}'});
+ await first;
+ assert.equal(serverCalls,1);
+ assert.ok(messages.some(message=>message.includes('Copia verificada y restaurada')));
+ allow=false;
+ await handle('backup-import');
+ assert.equal(pickerCalls,2,'guard must release after success');
+ assert.equal(serverCalls,1,'cancellation must not mutate server');
+});
+
+test('P8 verified restore runtime reports refresh failure without another server mutation',async()=>{
+ let serverCalls=0;
+ const messages=[];
+ const handle=importHandler({
+  GalaxyNative:{call:async()=>({json:'{"format":"nuestra-galaxia-backup"}'})},
+  window:{GalaxyMoreV5:{backupManifestPreview:()=>({ok:true,message:'Confirmar'})}},
+  api:async()=>{serverCalls++;return {verified:true,restored:{items:1}};},
+  confirm:()=>true,toast:message=>messages.push(message),
+  refreshState:async()=>{throw new Error('offline after restore');},
+  refreshMap:async()=>{throw new Error('should not reach map');},
+  render:()=>{throw new Error('should not rerender');}
+ });
+ await handle('backup-import');
+ assert.equal(serverCalls,1);
+ assert.equal(messages.length,1);
+ assert.match(messages[0],/Restauración verificada en el servidor/);
+ assert.match(messages[0],/no vuelvas a importar la misma copia/);
+});
