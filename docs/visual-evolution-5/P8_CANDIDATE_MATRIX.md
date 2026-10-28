@@ -1,5 +1,8 @@
 # Visual Evolution V5 — P8: matriz de candidatura integrada (preflight)
 
+> **ACTUALIZACIÓN OPERATIVA 28/oct/2026 — PR #204 DRAFT.** Esta rama derivada de #203 **sí contiene integración de código P5+P6+P7**, sin liberar: se importaron 41 rutas exclusivas de P5 y se reconciliaron manualmente tres rutas compartidas (app.js, index.html y scripts/qa-android-mobile.mjs). Los commits de código son `47cc560a` y `1e937898`; el test de cableado está en `tests/visual-evolution-p8-integrated-wiring.test.mjs` (commit `edc86217`). Solo se validaron localmente en el proceso de integración la sintaxis de app.js y coincidencia de 32 scripts entre HTML/manifiesto. **Node, required checks, AVD, Android, privacidad en dispositivo, 19 escenarios y aprobación humana siguen NO EJECUTADOS / NO CERTIFICADOS.** #203 continúa siendo el PR del plan previo; #204 es una implementación aislada, todavía no una versión candidata aprobada. No fusionar ni promover.
+
+
 **Corte:** 28-oct-2026. **Estado:** `PLANIFICADO / NO EJECUTADO`. Esta matriz **no es evidencia QA** ni autorización para fusionar o liberar.
 
 ## Fuentes exactas verificadas
@@ -53,4 +56,4 @@
 - Capturas y fixtures **sintéticos**: prohibido incluir fotos, coordenadas, mensajes, audio, tokens o datos reales privados. El backend sigue siendo autoridad para permisos y cápsulas.
 - Hallazgos críticos de autenticación, privacidad, GPS, pérdida de datos o arranque se corrigen **de inmediato**, aunque se posponga el resto de AVD.
 - Sin reintentos rutinarios de los tres jobs Android fallidos de P5. Revisión controlada solo durante P8 sobre el candidato, sin desactivar protecciones.
-- Esta rama contiene **únicamente el plan**, no un APK candidata ni la integración material P5+P6+P7. No ejecutar P9 ni desplegar.
+- El PR #203 original contiene **únicamente el plan**. La rama derivada #204 contiene integración P5+P6+P7 **sin pruebas finales ni APK candidata certificada**. No ejecutar P9 ni desplegar.
