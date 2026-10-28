@@ -233,3 +233,20 @@
 .memories-v5-card-more>summary:focus-visible,.memories-v5-card-full>summary:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 @media(max-width:360px){.memories-v5-card-actions{align-items:stretch}.memories-v5-card-more[open]{width:100%}.memories-v5-card-more-actions{flex-direction:column}}
 @media(prefers-reduced-motion:reduce){.memories-v5-card,.memories-v5-card-more{transition:none!important}}
+
+/* P6H: possible repeated events remain separate, inspectable records. */
+.memories-v5-history-repeat{border:1px solid var(--border,rgba(255,255,255,.18));border-radius:16px;padding:10px 12px}
+.memories-v5-history-repeat>summary{display:flex;align-items:center;gap:12px;cursor:pointer;list-style:none;min-height:44px}
+.memories-v5-history-repeat>summary::-webkit-details-marker{display:none}
+.memories-v5-history-repeat>summary span{flex:1;min-width:0}
+.memories-v5-history-repeat>summary b,.memories-v5-history-repeat>summary small{display:block;overflow-wrap:anywhere}
+.memories-v5-history-repeat>summary small{opacity:.75}
+.memories-v5-history-repeat>p{margin:10px 0}
+.memories-v5-history-repeat-items{display:grid;gap:10px}
+
+/* P6H: dates are Storage incorporation dates, never inferred camera dates. */
+.memories-v5-photo-date-group{min-width:0}
+.memories-v5-photo-date-group h4{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0 12px;font-size:.95rem}
+.memories-v5-photo-date-group h4 small{opacity:.7}
+.memories-v5-photo-grid{display:block;grid-template-columns:none;grid-auto-rows:auto;grid-auto-flow:row}
+.memories-v5-photo-date-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:minmax(90px,1fr);grid-auto-flow:dense;gap:7px;min-width:0}
