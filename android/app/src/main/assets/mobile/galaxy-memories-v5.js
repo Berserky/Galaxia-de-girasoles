@@ -256,5 +256,58 @@ function journeyShelf(items,{esc,attr,ico,itemCard}){
  return '<div class="memories-v5-shelf">'+(sections||'<div class="empty">Sus próximas aventuras aparecerán aquí cuando las guarden.</div>')+'</div>';
 }
 
-root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumGallery,albumViewer,musicGrouping,musicLibrary,validDate,shiftMonth,calendarMonth,eventOccurrence,eventRows,monthEvents,eventCalendar,organizedCollection,capsuleShelf,journeyShelf});
+
+/* P6F: history derived only from authenticated items and explicit event dates.
+ * The creation timestamp, if available, is labelled as save date, never as event date.
+ * Locked capsules are excluded even when their public unlock date is in the past.
+ */
+function timelineRows(items,today){
+ const allowed=new Set(['memory','journey','event','capsule','song']),todayKnown=validDate(today);
+ const known=[],undated=[];
+ for(const item of Array.isArray(items)?items:[]){
+  if(!item||!allowed.has(item.kind)||!item.data||typeof item.data!=='object')continue;
+  if(item.kind==='capsule'&&item.data.locked===true)continue;
+  const date=validDate(item.data.date)?item.data.date:null;
+  const created=typeof item.created==='string'&&/^\d{4}-\d{2}-\d{2}T/.test(item.created)&&validDate(item.created.slice(0,10))?item.created.slice(0,10):null;
+  const row={item,when:date,created,upcoming:date!==null&&todayKnown&&date>today};
+  if(date)known.push(row);else undated.push(row);
+ }
+ known.sort((a,b)=>b.when.localeCompare(a.when)||String(b.item.id??'').localeCompare(String(a.item.id??'')));
+ undated.sort((a,b)=>(b.created||'').localeCompare(a.created||''));
+ return {known,undated,todayKnown};
+}
+function historyTimeline(items,today,{esc,attr,ico,itemCard}){
+ const {known,undated}=timelineRows(items,today),upcoming=known.filter(x=>x.upcoming),past=known.filter(x=>!x.upcoming);
+ const typeNames={memory:['Recuerdo','heart'],journey:['Viaje','route'],event:['Fecha especial','calendar'],capsule:['Cápsula abierta','gift'],song:['Canción','music']};
+ const card=row=>{
+  const item=row.item,label=typeNames[item.kind]||['Historia','sparkles'];
+  const title=String(item.data?.title||label[0]);
+  return '<details class="memories-v5-history-card" data-item-id="'+attr(item.id??'')+'"><summary>'+
+   '<span class="memories-v5-history-icon" aria-hidden="true">'+ico(label[1])+'</span>'+
+   '<span class="memories-v5-history-summary"><b>'+esc(title)+'</b><small>'+esc(label[0])+
+   (row.when?' · Vivido el '+esc(row.when):row.created?' · Guardado el '+esc(row.created):' · Sin fecha registrada')+'</small></span>'+
+   ico('chevron-down')+'</summary><div class="memories-v5-history-detail">'+itemCard(item)+'</div></details>';
+ };
+ const group=(title,list,icon)=>{
+  if(!list.length)return '';
+  const months=new Map();
+  for(const row of list){
+   const month=row.when?.slice(0,7)||'Sin fecha de vivencia';
+   if(!months.has(month))months.set(month,[]);
+   months.get(month).push(row);
+  }
+  return '<section class="memories-v5-history-section"><h3>'+ico(icon)+' '+title+' <small>'+list.length+'</small></h3>'+
+   [...months].map(([month,group])=>'<div class="memories-v5-history-month"><h4>'+esc(month)+' <small>'+group.length+'</small></h4>'+
+    '<div class="memories-v5-history-stack">'+group.map(card).join('')+'</div></div>').join('')+'</section>';
+ };
+ const unclassified=undated.length?'<section class="memories-v5-history-section"><h3>'+ico('book-open')+' Fecha de vivencia no registrada <small>'+undated.length+'</small></h3>'+
+  '<p class="muted">Cuando falta la fecha de la experiencia, mostramos la fecha de guardado si existe.</p>'+
+  '<div class="memories-v5-history-stack">'+undated.map(card).join('')+'</div></section>':'';
+ return '<section class="section memories-v5-history"><div class="section-head"><div><h2>Nuestra historia</h2>'+
+  '<p>Fechas auténticas de lo que vivimos, próximas experiencias y recuerdos aún sin fecha.</p></div></div>'+
+  group('Próximamente',upcoming,'calendar-clock')+group('Lo que vivimos',past,'book-heart')+unclassified+
+  (!known.length&&!undated.length?'<div class="empty">Nuestra historia crecerá a medida que guardemos recuerdos juntos.</div>':'')+'</section>';
+}
+
+root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumGallery,albumViewer,musicGrouping,musicLibrary,validDate,shiftMonth,calendarMonth,eventOccurrence,eventRows,monthEvents,eventCalendar,organizedCollection,capsuleShelf,journeyShelf,timelineRows,historyTimeline});
 })(window);

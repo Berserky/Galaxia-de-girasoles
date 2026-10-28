@@ -143,3 +143,25 @@
 .memories-v5-shelf-detail{border-top:1px solid var(--border);padding:8px}
 .memories-v5-shelf-detail>.card{margin:0}
 @media(max-width:360px){.memories-v5-collection-detail>.row{flex-wrap:wrap}.memories-v5-capsule.locked{padding:12px}}
+
+/* P6F: hierarchical history, months and expandable records; no mixed future dates. */
+.memories-v5-history{display:grid;gap:16px;min-width:0}
+.memories-v5-history-section,.memories-v5-history-month{display:grid;gap:10px;min-width:0}
+.memories-v5-history-section>h3{display:flex;align-items:center;gap:8px;font-size:17px;margin:0}
+.memories-v5-history-section>h3 .ui-icon{width:19px;height:19px;color:var(--accent)}
+.memories-v5-history-section h3 small,.memories-v5-history-month h4 small{color:var(--muted);font-size:12px;font-weight:500}
+.memories-v5-history-month>h4{font-size:13px;margin:4px 0 0;color:var(--muted)}
+.memories-v5-history-stack{display:grid;gap:9px;min-width:0}
+.memories-v5-history-card{min-width:0;border:1px solid var(--border);border-radius:15px;background:var(--surface2);color:var(--text);overflow:hidden}
+.memories-v5-history-card>summary{display:flex;align-items:center;gap:10px;min-height:64px;padding:11px;list-style:none;cursor:pointer}
+.memories-v5-history-card>summary>.ui-icon{margin-left:auto;width:17px;height:17px;color:var(--accent);flex-shrink:0}
+.memories-v5-history-icon{display:grid;place-items:center;flex:0 0 42px;width:42px;height:42px;border-radius:13px;background:var(--surface);color:var(--accent)}
+.memories-v5-history-icon .ui-icon{width:20px;height:20px}
+.memories-v5-history-summary{display:grid;gap:4px;min-width:0;flex:1}
+.memories-v5-history-summary b{font-size:13px;overflow-wrap:anywhere}
+.memories-v5-history-summary small{font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.memories-v5-history-card>summary:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
+.memories-v5-history-detail{padding:9px;border-top:1px solid var(--border)}
+.memories-v5-history-detail>.card{margin:0}
+@media(max-width:360px){.memories-v5-history-card>summary{padding:9px}}
+@media(prefers-reduced-motion:reduce){.memories-v5-history-card{transition:none!important}}
