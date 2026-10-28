@@ -44,6 +44,8 @@ const legacySurpriseIdeas=[
 
 let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',memorySection='discover',memoryCalendarMode='month',memoryCalendarMonth='',memoryCalendarDate='',constellationVisible=18,memoryFilters={query:'',category:'',month:''},memoriesTabsScroll=0,media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),insightsCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
 let mapImmersive=false,mapHistoryVisible=6,mapPlacesVisible=6;
+let settingsDraftCache=null,settingsDraftOwner='',settingsSaveInFlight=false; // Never persisted
+
 let driveSyncSnapshot=null,driveSyncInFlight=false; // session only, never stored
 
 // Read-only signal for deterministic Android WebView QA; never gates GPS or user actions.
@@ -427,7 +429,7 @@ function render(){
  document.body.classList.toggle('map-immersive-open',native.paired&&view==='map'&&mapImmersive);
  renderNav();
  renderChatFab();
- if(!native.paired){renderOnboarding();refreshIcons();return;}
+ if(!native.paired){settingsDraftCache=null;settingsDraftOwner='';renderOnboarding();refreshIcons();return;}
  if(shouldShowAdriWelcome()){globalPlayer.className='global-player';renderAdriWelcome();refreshIcons();return;}
  if(!cloud){app.innerHTML=header()+loading('Cargando nuestra galaxia');refreshIcons();refreshState();return;}
  if(!media.music&&!mediaLoadedAt.music)setTimeout(()=>loadMedia('music').then(renderGlobalPlayer).catch(()=>{}),0);
@@ -458,7 +460,7 @@ function render(){
   });
   window.GalaxyChatPerf?.renderEnd?.(perfRender);if(!chatState&&!chatLoading)setTimeout(()=>loadChat({quiet:true}),0);if(!chatPreferencesState)setTimeout(()=>loadChatPreferences(),0);
  }
- if(view==='more'){app.innerHTML=header()+moreView();window.GalaxyMoreV5?.organize(app);}
+ if(view==='more'){app.innerHTML=header()+moreView();window.GalaxyMoreV5?.organize(app);restoreSettingsForm();}
  refreshIcons();
  if(view==='chat')globalPlayer.className='global-player';else renderGlobalPlayer();
  if(view==='home'&&!encounterStatsCache&&!encounterStatsLoading)setTimeout(()=>loadEncounterStats().catch(()=>{}),0);
@@ -2863,6 +2865,40 @@ function intelligenceHubView(){
  '<div class="card ai-hub-privacy"><span>'+ico('shield-check')+'</span><div><b>Privada por diseño</b><p>Las fuentes bloqueadas no se muestran ni se usan antes de tiempo. Si la IA no está disponible, la búsqueda clásica sigue funcionando.</p></div></div></section>';
 }
 
+
+function currentSettingsDraft(form){
+ const fd=new FormData(form);
+ return {names:[String(fd.get('name0')??''),String(fd.get('name1')??'')],
+  startDate:String(fd.get('startDate')??''),albumUrl:String(fd.get('albumUrl')??'')};
+}
+function settingsFormFeedback(form,message=''){
+ if(!form||!cloud?.settings)return null;
+ const original=cloud.settings.data||{},check=window.GalaxyMoreV5.settingsDraft(original,currentSettingsDraft(form));
+ settingsDraftCache=check.changed?currentSettingsDraft(form):null;
+ const button=form.querySelector('[data-role="settings-save"]');
+ if(button)button.disabled=settingsSaveInFlight||!check.changed||!check.valid;
+ const status=form.querySelector('[data-settings-status]');
+ if(status){
+  status.textContent=message||(settingsSaveInFlight?'Guardando cambios…':
+   check.reason||(!check.changed?'Sin cambios pendientes.':'Cambios pendientes de guardar.'));
+  status.classList.toggle('invalid',!check.valid);
+ }
+ return check;
+}
+function restoreSettingsForm(){
+ const form=document.querySelector('#settingsForm');
+ if(!form||!cloud?.settings)return;
+ const owner=String(cloud.person??'')+'|'+String(cloud.device?.id??'');
+ if(owner!==settingsDraftOwner){settingsDraftOwner=owner;settingsDraftCache=null;}
+ if(settingsDraftCache){
+  for(const [name,value] of [['name0',settingsDraftCache.names?.[0]],['name1',settingsDraftCache.names?.[1]],
+   ['startDate',settingsDraftCache.startDate],['albumUrl',settingsDraftCache.albumUrl]]){
+   const input=form.elements.namedItem(name);if(input)input.value=String(value??'');
+  }
+ }
+ settingsFormFeedback(form);
+}
+
 function moreView(){
  const settings=cloud.settings||{data:{},version:1},data=settings.data||{},presence=ownPresence();
  return '<section><div class="section-head"><div><p class="eyebrow">CONFIGURACIÓN</p><h2>Más</h2><p>Privacidad, permisos, respaldo, dispositivos, apariencia y mantenimiento de la app.</p></div></div>'+
@@ -3694,6 +3730,7 @@ document.addEventListener('click',async e=>{
 });
 
 document.addEventListener('input',e=>{
+ if(e.target.closest?.('#settingsForm'))settingsFormFeedback(e.target.form);
  if(e.target.id==='universalSearchInput')renderUniversalSearchResults(e.target.value);
  if(e.target.id==='chatGalaxySearch')filterChatGalaxyPicker();
  if(e.target.id==='chatStickerSearch')scheduleChatStickerSearch(e.target);
@@ -3710,6 +3747,7 @@ document.addEventListener('input',e=>{
 });
 
 document.addEventListener('change',e=>{
+ if(e.target.closest?.('#settingsForm'))settingsFormFeedback(e.target.form);
  if(e.target.matches('#chatSearchForm [name="date"],#chatSearchForm [name="sender"],#chatSearchForm [name="type"]'))scheduleChatSearch(e.target.form,80);
  if(e.target.matches('[data-role="chat-ttl"]')){const box=modal.querySelector('[data-role="chat-ttl-custom"]');if(box)box.hidden=e.target.value!=='custom';}
  if(e.target.matches('#chatPreferencesForm [name="defaultTtlSeconds"]')){const box=modal.querySelector('[data-role="chat-default-ttl-custom"]');if(box)box.hidden=e.target.value!=='custom';}
@@ -3768,7 +3806,27 @@ document.addEventListener('submit',async e=>{
   if(e.target.id==='contextSettingsForm'){const fd=new FormData(e.target),payload={operation:'save',nearEnabled:fd.get('nearEnabled')==='on',nearDistanceM:Number(fd.get('nearDistanceM')),nearCooldownMinutes:Number(fd.get('nearCooldownMinutes')),arrivedSafeEnabled:fd.get('arrivedSafeEnabled')==='on',dateSuggestions:fd.get('dateSuggestions')==='on',memorySuggestions:fd.get('memorySuggestions')==='on',sharedTripDetection:fd.get('sharedTripDetection')==='on'};const result=await api('context-settings',payload);await GalaxyNative.call('setContextPushPrefs',!!result.settings.near_enabled,!!result.settings.arrived_safe_enabled);closeModal();await refreshMap({detail:true});toast('Preferencias de contexto guardadas.');return;}
   if(e.target.id==='placeForm'){const fd=new FormData(e.target);await api('place-save',{name:fd.get('name'),kind:fd.get('kind'),note:fd.get('note'),latitude:Number(fd.get('latitude')),longitude:Number(fd.get('longitude'))});closeModal();frequentPlacesLoadedAt=0;await refreshMap();await loadFrequentPlaces(true).catch(()=>{});toast('Lugar guardado.');return;}
   if(e.target.id==='destinationForm'){const value=String(new FormData(e.target).get('destination'));if(value==='none')await api('context-session',{operation:'stop'});else{if(!native.tracking)throw new Error('Activa Compartir ubicación primero. Acompáñame no la activa automáticamente.');const [kind,id]=value.split(':');await api('context-session',{operation:'start',mode:'accompany',destinationKind:kind,...(kind==='person'?{targetPerson:id,label:partnerName()}:{placeId:Number(id)})});}closeModal();await refreshMap({detail:true});if(view==='map')setTimeout(()=>document.querySelector('#etaCard')?.scrollIntoView({behavior:'smooth',block:'center'}),80);toast(value==='none'?'Sesión desactivada.':'Acompáñame iniciado.');return;}
-  if(e.target.id==='settingsForm'){const fd=new FormData(e.target);await api('settings-save',{version:cloud.settings.version,data:{names:[fd.get('name0'),fd.get('name1')],startDate:fd.get('startDate'),albumUrl:fd.get('albumUrl')}});await refreshState();toast('Ajustes guardados.');return;}
+  if(e.target.id==='settingsForm'){
+   if(settingsSaveInFlight)return;
+   const form=e.target,check=settingsFormFeedback(form);
+   if(!check||!check.valid||!check.changed)return;
+   settingsSaveInFlight=true;settingsFormFeedback(form,'Guardando cambios…');
+   try{
+    await api('settings-save',{version:cloud.settings.version,data:check.data});
+    settingsDraftCache=null;
+    await refreshState();
+    toast('Datos de nuestra historia guardados.');
+    settingsFormFeedback(document.querySelector('#settingsForm'),'Cambios guardados.');
+   }catch(error){
+    settingsFormFeedback(form,'No se guardaron los cambios. Revisa la información y vuelve a intentar.');
+    throw error;
+   }finally{
+    settingsSaveInFlight=false;
+    const current=document.querySelector('#settingsForm');
+    if(current)settingsFormFeedback(current);
+   }
+   return;
+  }
  }catch(err){toast(err.message||'No pudimos guardar.');}
 });
 
