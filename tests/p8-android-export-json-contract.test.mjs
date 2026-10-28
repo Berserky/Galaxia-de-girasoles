@@ -22,7 +22,7 @@ test('Android backup export confirms success only after stream closes and sessio
   const closeGuard = handler.indexOf('if(!sessionToken.equals(store.token()))');
   const write = handler.indexOf('out.write(bytes);');
   const confirm = handler.indexOf('resolve(request,new JSONObject().put("saved",true))');
-  assert.ok(handler.includes('try(OutputStream out=getContentResolver().openOutputStream(uri,"w"))');
+  assert.ok(handler.includes('try(OutputStream out=getContentResolver().openOutputStream(uri,"w"))'));
   assert.ok(handler.includes('if(sessionToken==null||!sessionToken.equals(store.token()))'));
   assert.ok(write >= 0 && closeGuard > write && confirm > closeGuard);
 });
