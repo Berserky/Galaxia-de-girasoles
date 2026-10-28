@@ -105,3 +105,15 @@ test('P8 emulator CI captures device health without hiding failed instrumented j
  assert.ok(diagnostic.includes('qa-artifacts/p8-emulator-health.txt'));
  assert.doesNotMatch(diagnostic,/secrets\.|token|credential|authorization/i);
 });
+
+test('P8 failed-download recovery retries SDK without bypassing Android instrumented checks',()=>{
+ for(const name of ['qa-phase5-real-integration.yml','chat-4-phase11-torture.yml','chat-4-phase9-media-performance.yml']){
+  const ci=readFileSync(resolve(root,'.github/workflows',name),'utf8');
+  assert.ok(ci.includes('sdk_ok=0')&&ci.includes('for attempt in 1 2 3')&&ci.includes('test "$sdk_ok" -eq 1'),name+' must fail closed after bounded SDK retries');
+  assert.ok(ci.includes('connectedDebugAndroidTest')||ci.includes('scripts/qa-phase5-emulator.sh'),name+' must execute native instrumentation');
+ }
+ for(const name of ['qa-phase5-real-integration.yml','chat-4-phase11-torture.yml','visual-evolution-p0.yml']){
+  const ci=readFileSync(resolve(root,'.github/workflows',name),'utf8');
+  assert.ok(ci.includes('-gpu swiftshader_indirect -memory 1536 -no-snapshot'),name+' must use the bounded AVD software graphics profile');
+ }
+});

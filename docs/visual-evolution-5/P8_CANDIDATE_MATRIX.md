@@ -1,9 +1,9 @@
 # Visual Evolution V5 — P8: matriz de candidatura integrada (preflight)
 
-> **ACTUALIZACIÓN OPERATIVA 28/oct/2026 — PR #204 DRAFT.** Esta rama derivada de #203 **sí contiene integración de código P5+P6+P7**, sin liberar: se importaron 41 rutas exclusivas de P5 y se reconciliaron manualmente tres rutas compartidas (app.js, index.html y scripts/qa-android-mobile.mjs). Los commits de código son `47cc560a` y `1e937898`; el test de cableado está en `tests/visual-evolution-p8-integrated-wiring.test.mjs` (commit `edc86217`). Solo se validaron localmente en el proceso de integración la sintaxis de app.js y coincidencia de 32 scripts entre HTML/manifiesto. **Node, required checks, AVD, Android, privacidad en dispositivo, 19 escenarios y aprobación humana siguen NO EJECUTADOS / NO CERTIFICADOS.** #203 continúa siendo el PR del plan previo; #204 es una implementación aislada, todavía no una versión candidata aprobada. No fusionar ni promover.
+> **CORTE OPERATIVO 28/oct/2026 — PR #204 DRAFT.** #203 es el plan; #204 contiene la integración P5+P6+P7 con 41 rutas P5 exclusivas y tres archivos compartidos reconciliados. El snapshot `f43e584` pasó **1016 pruebas Node locales**, con 0 fallos y 5 omisiones, pero su CI oficial aún fallaba en el paso de descarga SDK de Phase5; los demás jobs estaban en curso. Se prepararon reintentos estrictos del SDK y ajustes del emulador sin desactivar sus pruebas. **El APK real, 19 escenarios completos, required checks del SHA final y aprobación visual siguen SIN CERTIFICAR.** Las evidencias históricas no se transfieren a commits nuevos. No fusionar ni promover.
 
 
-**Corte:** 28-oct-2026. **Estado:** `PLANIFICADO / NO EJECUTADO`. Esta matriz **no es evidencia QA** ni autorización para fusionar o liberar.
+**Corte:** 28-oct-2026. **Estado actual:** `P8 EN EJECUCIÓN / NO CERTIFICADO`. La matriz incluye progreso de fuente y Node, pero **no certifica APK, evidencia visual ni release**. Ver `P8_LOCAL_VALIDATION_20261028.md` y `P8_CI_FAILURE_TRIAGE_20261028.md` para logs por SHA.
 
 ## Fuentes exactas verificadas
 
@@ -30,9 +30,9 @@
 
 | ID | Escenario y criterio verificable | Variantes / evidencias requeridas | Estado |
 | --- | --- | --- | --- |
-| P8-01 | Integridad de árbol, rutas P5+P6+P7 y ausencia de conflictos | Diff y lista de assets/imports del SHA candidato | NOT_EXECUTED |
-| P8-02 | Node completo, contratos, privacidad, sintaxis y build Android | Logs y JUnit con SHA idéntico; no heredar PASS histórico | NOT_EXECUTED |
-| P8-03 | 15 workflows obligatorios / required checks sin bypass | Run IDs, conclusiones, artefactos y SHA candidato | NOT_EXECUTED |
+| P8-01 | Integridad de árbol, rutas P5+P6+P7 y ausencia de conflictos | Diff y lista de assets/imports del SHA candidato | **PASS_SOURCE** en `f43e584` (solo árbol/JS; no es aceptación de APK) |
+| P8-02 | Node completo, contratos, privacidad, sintaxis y build Android | Logs y JUnit con SHA idéntico; no heredar PASS histórico | **PARTIAL**: Node local `f43e584` 1016/1021, 0 FAIL, 5 SKIP; build CI del mismo SHA aún sin certificar |
+| P8-03 | 15 workflows obligatorios / required checks sin bypass | Run IDs, conclusiones, artefactos y SHA candidato | **FAIL / IN_PROGRESS** en `f43e584`: Phase5 bloqueado por ZIP de SDK corrupto, otros checks pendientes; nunca heredar 12/15 del SHA anterior |
 | P8-04 | Inicio, Mapa, Momentos, Recuerdos y Más en APK real | Capturas framebuffer nativo, navegación ida/vuelta | NOT_EXECUTED |
 | P8-05 | 320, 360, 393 y 412 px; texto Android 135% | Portrait, landscape, teclado, insets, seis etiquetas inferiores, FAB | NOT_EXECUTED |
 | P8-06 | Siete temas reales y automático | daylight, cosmic, halloween, christmas, valentine, friendship, easter; contraste/foco | NOT_EXECUTED |
@@ -47,7 +47,7 @@
 | P8-15 | P7 dispositivos y respaldos | Revocar solo otro dispositivo; restauración con manifiesto y confirmación | NOT_EXECUTED |
 | P8-16 | P7 temas, push, permisos, widget y actualización | No confundir permiso con entrega; callback nativo y estados reales | NOT_EXECUTED |
 | P8-17 | Regresión transversal | Chat, GPS/ETA, FCM, auth, arranque, permisos, offline, foreground/background | NOT_EXECUTED |
-| P8-18 | Riesgos antiguos #173–#177 | Clasificar framebuffer/ADB vs defecto real con logs y artefactos | NOT_EXECUTED |
+| P8-18 | Riesgos antiguos #173–#177 | Clasificar framebuffer/ADB vs defecto real con logs y artefactos | **PARTIAL**: errores funcionales de Chat vs caída AVD y ZIP corrupto distinguidos en reporte forense; captura real y fix definitivo no certificados |
 | P8-19 | Aprobación visual humana independiente | Evidencia sanitizada del APK integrada, firma de aceptación | NOT_EXECUTED |
 
 ## Reglas de evidencias y bloqueo

@@ -36,3 +36,19 @@
 - Node Windows del nuevo árbol local: **1.021 tests: 1.016 PASS / 0 FAIL / 5 SKIP**, QA móvil estática PASS, con tests de click seguro `tests/visual-evolution-p8-chat-open.test.mjs`. Estas cifras no certifican el runtime Android.
 
 **Regla:** el resultado 11/15 del SHA `4ccc48e` se mantiene como fallo histórico hasta que todos los checks necesarios de un SHA posterior se ejecuten y pasen. No promoción, no merge, no release.
+
+## Tercera ronda y hallazgo de descarga SDK
+
+- SHA `f43e584463056665fb488fb1eaa552afa174d040`: el job Phase 5 falló en el paso **Preparar Android SDK**, antes de iniciar Gradle/instrumentación, debido a `Error reading Zip content from a SeekableByteChannel` mientras descargaba el paquete Android Emulator. Es una incidencia observable del repositorio remoto de SDK; **no corresponde a un test de la app**.
+- Se preparó recuperación acotada con 3 intentos, validación estricta `sdk_ok=1` y mensajes de advertencia. Se agrega el mismo patrón a los jobs de emulador Phase11 y Phase9 para disminuir interrupciones por ZIP corruptos; P0 ya contaba con política de reintentos.
+- AVD de los tres workflows con mayor incidencia de pérdida de `emulator-5554` usa ahora `swiftshader_indirect`, `-memory 1536`, `-no-snapshot`, alineando el perfil gráfico/software con otros jobs Android del repositorio. **Aún no comprobado en GitHub**, sin retirar captura de framebuffer ni instrumentación.
+- Nueva prueba de contrato: cada SDK sigue siendo obligatorio y un tercer error impide declarar verde el job. No se marca `FAIL` como `SKIP`.
+
+## Verificación local del ajuste SDK / GPU antes de publicar nuevo SHA
+
+- `npm.cmd test`: **1.022 tests, 1.017 PASS, 0 FAIL, 5 SKIP**.
+- `node scripts/qa-android-mobile.mjs`: **PASS**.
+- `git diff --check`: **PASS**.
+- Los workflows Phase5, Phase11 y Phase9 reintentan `sdkmanager` 3 veces, pero **fallan** después de la tercera descarga defectuosa. La regla no convierte un bloqueo en éxito.
+- Los tres jobs históricos con pérdida del framebuffer cambian a `-gpu swiftshader_indirect -memory 1536 -no-snapshot` por consistencia con otros jobs Android; las pruebas instrumentadas y capturas reales son obligatorias.
+- **Esta verificación es solo local.** La ejecución Android/CI del SHA posterior sigue pendiente y define la admisión de P8.
