@@ -52,7 +52,7 @@ test('P6F: app preserves safe shortcut gate and fullscreen modal cleanup',()=>{
  const app=read('app.js');
  assert.match(app,/if\(a==='constellation-item'\)/);
  assert.match(app,/if\(a==='constellation-expand'/);
- assert.match(app,/!\\['memory','journey','song','event'\\]\\.includes\\(item.kind\\)/);
+ assert.match(app,/!\['memory','journey','song','event'\]\.includes\(item\.kind\)/);
  assert.match(app,/memories-v5-constellation-modal/);
  assert.match(app,/GalaxyMemoriesV5\.constellationView\(cloud\?\.items/);
  assert.doesNotMatch(read('galaxy-memories-v5.js'),/\bfetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|GalaxyNative/);

@@ -3484,11 +3484,12 @@ document.addEventListener('click',async e=>{
    else showModal(item.data?.title||'Recuerdo',preview+'<button type="button" class="btn small" data-action="constellation-open" data-id="'+attr(item.id)+'">Abrir colección</button>','constellation-preview');
    return;
   }
-  if(a==='constellation-open'&&native.paired&&view==='memories'&&cloud){
+  if(a==='constellation-open'&&native.paired&&cloud){
    const item=(cloud.items||[]).find(x=>String(x.id)===String(btn.dataset.id));
    if(!item||!['memory','journey','song','event'].includes(item.kind)||item.data?.locked===true)return;
    if(modal.open)closeModal();
-   memorySection='collections';memoryTab=item.kind==='song'?'music':item.kind;render();
+   memorySection='collections';memoryTab=item.kind==='song'?'music':item.kind;
+   if(view==='memories')render();else go('memories');
    requestAnimationFrame(()=>{const found=[...document.querySelectorAll('[data-item-id]')].find(el=>String(el.dataset.itemId)===String(item.id));
     if(found?.tagName==='DETAILS')found.open=true;
     found?.scrollIntoView({block:'center',behavior:'auto'});});
