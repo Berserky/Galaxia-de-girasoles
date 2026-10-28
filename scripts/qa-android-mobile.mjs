@@ -94,9 +94,24 @@ assert.ok(edge.includes('validateUploadMedia')&&edge.includes('readUploadBytes')
 assert.ok(mediaValidation.includes('image/heic')&&mediaValidation.includes('image/heif')&&mediaValidation.includes('DOCX_MIME')&&mediaValidation.includes('XLSX_MIME'),'La matriz multimedia debe reconocer HEIC/HEIF y documentos Office');
 assert.ok(schema.includes("values('galaxy-chat-media','galaxy-chat-media',false,62914560,null)"),'El bucket privado de chat no debe restringir MIME a nivel Storage');
 const scriptSources=[...index.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m=>m[1]);
-assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./insights.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./eta.js','./frequent-places.js','./gps-history.js','./theme.js','./chat-perf.js','./chat-media-engine.js','./chat-motion.js','./chat-message-engine.js','./chat-scroll-engine.js','./chat-delivery-engine.js','./chat-composer.js','./chat-voice-engine.js','./celestial-shell.js','./galaxy-discovery-v5.js','./galaxy-journeys-v5.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
+assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./insights.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./eta.js','./frequent-places.js','./gps-history.js','./theme.js','./chat-perf.js','./chat-media-engine.js','./chat-motion.js','./chat-message-engine.js','./chat-scroll-engine.js','./chat-delivery-engine.js','./chat-composer.js','./chat-voice-engine.js','./celestial-shell.js','./galaxy-discovery-v5.js','./galaxy-journeys-v5.js','./galaxy-voice-v5.js','./galaxy-garden-world-v3.js','./p5-garden-bond-bridge.js','./p5-moments-garden-lifecycle.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
 assert.ok(index.includes('href="./galaxy-discovery-v5.css"'),'El diseño de P3 debe estar empaquetado en Android');
 assert.ok(read('android/app/src/main/assets/mobile/galaxy-discovery-v5.js').includes('GalaxyDiscoveryV5'),'P3 debe mantener el presentador local antes de app.js');
+const voicePresenter=read('android/app/src/main/assets/mobile/galaxy-voice-v5.js');
+assert.ok(voicePresenter.includes('GalaxyVoiceV5')&&!/\bfetch\s*\(|\bGalaxyNative\b|geolocation|localStorage|Supabase/.test(voicePresenter),
+ 'P5 voice controller must remain local, without server, GPS or storage access');
+assert.ok(index.includes('href="./galaxy-moments-v5.css"'),'P5 isolated design sheet must be packaged in Android');
+// V3.3 presentation assets remain local, strictly ordered and non-networked.
+assert.ok(index.includes('href="./galaxy-garden-world-v3.css"'),'V3.3 stylesheet must be installed');
+const p5Garden=read('android/app/src/main/assets/mobile/galaxy-garden-world-v3.js');
+const p5Bond=read('android/app/src/main/assets/mobile/p5-garden-bond-bridge.js');
+const p5Lifecycle=read('android/app/src/main/assets/mobile/p5-moments-garden-lifecycle.js');
+assert.ok(p5Garden.includes('GalaxyGardenV5')&&p5Bond.includes('GalaxyGardenBondBridge')&&p5Lifecycle.includes('GalaxyMomentsGardenLifecycle'),'Canonical V3.3 engine, bridge and lifecycle required');
+for(const src of [p5Garden,p5Bond,p5Lifecycle])assert.doesNotMatch(src,/\bfetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|navigator\.geolocation/,'P5 presentation must never fetch or access private storage');
+assert.match(p5Garden,/simulated=options\.demo===true/,'The canonical engine requires an explicit demo opt-in');
+assert.match(p5Bond,/engine\.render\(\{stage:state\.stage\},options\)/,'Authenticated Bond bridge must supply official stages only');
+for(const src of [p5Bond,p5Lifecycle])assert.doesNotMatch(src,/previewBloomTotal|demo:true/,'Production bridge and lifecycle cannot enable synthetic world counts');
+
 const journeyPresenter=read('android/app/src/main/assets/mobile/galaxy-journeys-v5.js');
 assert.ok(index.includes('href="./galaxy-journeys-v5.css"'),'P4 debe empaquetar CSS aislado en Android');
 assert.ok(journeyPresenter.includes('GalaxyJourneysV5')&&!/\bfetch\s*\(|\bGalaxyNative\b|geolocation|localStorage/.test(journeyPresenter),
