@@ -39,6 +39,7 @@ test('P6G: filter controls escape external labels and never offer locked categor
 test('P6G: app uses existing authenticated item list with local filters',()=>{
  const app=read('app.js'),module=read('galaxy-memories-v5.js');
  assert.match(app,/GalaxyMemoriesV5\.filterItems\(source,memoryFilters\)/);
+ assert.match(app,/\?window\.GalaxyMemoriesV5\.filterItems\(source,memoryFilters\):source/);
  assert.match(app,/if\(a==='memories-filter-reset'/);
  assert.match(app,/if\(a==='memories-filter-apply'/);
  assert.doesNotMatch(module,/\bfetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|GalaxyNative/);
