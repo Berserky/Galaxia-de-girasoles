@@ -94,11 +94,36 @@ assert.ok(edge.includes('validateUploadMedia')&&edge.includes('readUploadBytes')
 assert.ok(mediaValidation.includes('image/heic')&&mediaValidation.includes('image/heif')&&mediaValidation.includes('DOCX_MIME')&&mediaValidation.includes('XLSX_MIME'),'La matriz multimedia debe reconocer HEIC/HEIF y documentos Office');
 assert.ok(schema.includes("values('galaxy-chat-media','galaxy-chat-media',false,62914560,null)"),'El bucket privado de chat no debe restringir MIME a nivel Storage');
 const scriptSources=[...index.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m=>m[1]);
-assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./insights.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./eta.js','./frequent-places.js','./gps-history.js','./theme.js','./chat-perf.js','./chat-media-engine.js','./chat-motion.js','./chat-message-engine.js','./chat-scroll-engine.js','./chat-delivery-engine.js','./chat-composer.js','./chat-voice-engine.js','./celestial-shell.js','./galaxy-discovery-v5.js','./galaxy-journeys-v5.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
+assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./insights.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./eta.js','./frequent-places.js','./gps-history.js','./theme.js','./chat-perf.js','./chat-media-engine.js','./chat-motion.js','./chat-message-engine.js','./chat-scroll-engine.js','./chat-delivery-engine.js','./chat-composer.js','./chat-voice-engine.js','./celestial-shell.js','./galaxy-discovery-v5.js','./galaxy-journeys-v5.js','./galaxy-voice-v5.js','./galaxy-garden-world-v3.js','./p5-garden-bond-bridge.js','./p5-moments-garden-lifecycle.js','./galaxy-memories-v5.js','./galaxy-more-v5.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
 assert.ok(index.includes('href="./galaxy-discovery-v5.css"'),'El diseño de P3 debe estar empaquetado en Android');
 assert.ok(read('android/app/src/main/assets/mobile/galaxy-discovery-v5.js').includes('GalaxyDiscoveryV5'),'P3 debe mantener el presentador local antes de app.js');
+const voicePresenter=read('android/app/src/main/assets/mobile/galaxy-voice-v5.js');
+assert.ok(voicePresenter.includes('GalaxyVoiceV5')&&!/\bfetch\s*\(|\bGalaxyNative\b|geolocation|localStorage|Supabase/.test(voicePresenter),
+ 'P5 voice controller must remain local, without server, GPS or storage access');
+assert.ok(index.includes('href="./galaxy-moments-v5.css"'),'P5 isolated design sheet must be packaged in Android');
+// V3.3 presentation assets remain local, strictly ordered and non-networked.
+assert.ok(index.includes('href="./galaxy-garden-world-v3.css"'),'V3.3 stylesheet must be installed');
+const p5Garden=read('android/app/src/main/assets/mobile/galaxy-garden-world-v3.js');
+const p5Bond=read('android/app/src/main/assets/mobile/p5-garden-bond-bridge.js');
+const p5Lifecycle=read('android/app/src/main/assets/mobile/p5-moments-garden-lifecycle.js');
+assert.ok(p5Garden.includes('GalaxyGardenV5')&&p5Bond.includes('GalaxyGardenBondBridge')&&p5Lifecycle.includes('GalaxyMomentsGardenLifecycle'),'Canonical V3.3 engine, bridge and lifecycle required');
+for(const src of [p5Garden,p5Bond,p5Lifecycle])assert.doesNotMatch(src,/\bfetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|navigator\.geolocation/,'P5 presentation must never fetch or access private storage');
+assert.match(p5Garden,/simulated=options\.demo===true/,'The canonical engine requires an explicit demo opt-in');
+assert.match(p5Bond,/engine\.render\(\{stage:state\.stage\},options\)/,'Authenticated Bond bridge must supply official stages only');
+for(const src of [p5Bond,p5Lifecycle])assert.doesNotMatch(src,/previewBloomTotal|demo:true/,'Production bridge and lifecycle cannot enable synthetic world counts');
+
 const journeyPresenter=read('android/app/src/main/assets/mobile/galaxy-journeys-v5.js');
 assert.ok(index.includes('href="./galaxy-journeys-v5.css"'),'P4 debe empaquetar CSS aislado en Android');
+const memoriesHub=read('android/app/src/main/assets/mobile/galaxy-memories-v5.js');
+const moreHub=read('android/app/src/main/assets/mobile/galaxy-more-v5.js');
+assert.ok(index.includes('href="./galaxy-more-v5.css"'),'P7A stylesheet must be packaged');
+assert.ok(index.includes('src="./galaxy-more-v5.js"')&&moreHub.includes('GalaxyMoreV5'),'P7A presenter must be local and bundled');
+assert.doesNotMatch(moreHub,/\bfetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|GalaxyNative/,'P7A must not create network or native calls');
+
+assert.ok(index.includes('href="./galaxy-memories-v5.css"'),'P6A debe cargar su CSS móvil');
+assert.ok(memoriesHub.includes('GalaxyMemoriesV5')&&index.includes('src="./galaxy-memories-v5.js"'),'P6A debe cargar su presentador de colecciones local');
+assert.doesNotMatch(memoriesHub,/\bfetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|navigator\.geolocation|GalaxyNative/,'P6A no debe acceder por sí mismo a red, permisos o almacenamiento privado');
+
 assert.ok(journeyPresenter.includes('GalaxyJourneysV5')&&!/\bfetch\s*\(|\bGalaxyNative\b|geolocation|localStorage/.test(journeyPresenter),
  'P4 debe mantener el presentador de frescura sin red, permisos ni APIs nativas');
 assert.ok(index.includes("connect-src 'none'"),'La UI local no debe hacer fetch directo ni recibir credenciales');
@@ -318,8 +343,9 @@ assert.ok(edge.includes('body.detail!==true'),'El mapa debe tener refresco liger
 assert.ok(app.includes("refreshMap({quiet:true,detail:false})"),'El polling del mapa debe usar refresco ligero');
 assert.ok(app.includes("document.visibilityState!=='visible'"),'La app debe pausar polling fuera de primer plano');
 assert.ok(app.includes('editingNow()'),'La sincronización automática debe respetar formularios en edición');
-assert.ok(app.includes("memoriesTabsScroll=0")&&app.includes("$('.memories-tabs')")&&app.includes("tabs.scrollLeft=memoriesTabsScroll"),'Las etiquetas de Recuerdos deben conservar su posición horizontal después de renderizar');
-assert.ok(app.includes('class="chips memories-tabs"'),'La barra de etiquetas de Recuerdos necesita un selector estable para restaurar el scroll');
+// P6 replaced the obsolete horizontal chip scroller with an accessible 3-door hub and 9-category grid.
+assert.ok(app.includes('const navigation=hub.sectionsNav(memorySection,context)')&&app.includes('const categories=hub.collections(all,media,memoryTab,context)'),'Recuerdos debe usar navegación P6 real por secciones y categorías');
+assert.ok(app.includes("if(a==='memories-section')")&&app.includes("if(a==='memories-category')")&&read('android/app/src/main/assets/mobile/galaxy-memories-v5.css').includes('.memories-v5-categories{display:grid'),'Recuerdos debe conservar rutas y cuadrícula accesibles después de renderizar');
 assert.ok(app.includes("WELCOME_KEY='nuestra-galaxia.adri-welcome.v1'"),'Falta persistencia de la bienvenida de Adri');
 assert.ok(app.includes("String(native.person)==='1'"),'La bienvenida especial debe limitarse a Adri/person 1');
 assert.ok(app.includes("welcomePreview||(String(native.person)==='1'&&!welcomeDone())"),'El preview de Sebas debe poder abrir la bienvenida sin alterar la regla real de Adri');

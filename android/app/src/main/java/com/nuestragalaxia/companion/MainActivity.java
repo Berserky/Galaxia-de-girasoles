@@ -84,8 +84,11 @@ public final class MainActivity extends FragmentActivity {
     private String pendingVoiceStartRequest;
     private String pendingBackupExportRequest;
     private String pendingBackupJson;
+    private String pendingBackupExportToken; // Bind the pending private JSON to the authenticated device session.
     private String pendingBackupImportRequest;
+    private String pendingBackupImportToken;
     private String pendingDriveFolderRequest;
+    private String pendingDriveFolderToken;
     private String pendingPhotoPickerRequest;
     private String pendingPhotoPickerKind="photo";
     private String pendingCameraRequest;
@@ -354,7 +357,16 @@ public final class MainActivity extends FragmentActivity {
         io.execute(()->{
             try{
                 ApiClient.PairResult result=ApiClient.pair(clean,Build.MANUFACTURER+" "+Build.MODEL);
-                store.save(result.token,result.person,result.name);
+                // Serialize identity changes with Drive picker results to prevent cross-session grants.
+                synchronized(cloudMedia){
+                    String oldToken=store.token();
+                    store.save(result.token,result.person,result.name);
+                    if(oldToken==null||!oldToken.equals(result.token)){
+                        Uri oldDrive=cloudMedia.driveTree();
+                        if(oldDrive!=null)try{getContentResolver().releasePersistableUriPermission(oldDrive,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}
+                        cloudMedia.clearDrive();
+                    }
+                }
                 PushManager.initialize(this);
                 bootstrapPush();
                 refreshMomentsInternal();
@@ -372,7 +384,13 @@ public final class MainActivity extends FragmentActivity {
                 if(previous!=null)try{ApiClient.pushUnregister(previous);}catch(Exception ignored){}
                 if(previous!=null)try{ApiClient.stop(previous);}catch(Exception ignored){}
                 PushManager.cancel(this);
-                store.clear();
+                // Revoke private Drive grants atomically with the local identity.
+                synchronized(cloudMedia){
+                    Uri oldDrive=cloudMedia.driveTree();
+                    if(oldDrive!=null)try{getContentResolver().releasePersistableUriPermission(oldDrive,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}
+                    cloudMedia.clearDrive();
+                    store.clear();
+                }
                 new BondStore(this).clear();
                 new ContextStore(this).clear();
                 resolve(requestId,nativeState());
@@ -720,11 +738,13 @@ public final class MainActivity extends FragmentActivity {
         if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
         runOnUiThread(()->{
             if(pendingDriveFolderRequest!=null){reject(requestId,"Ya hay un selector de carpeta abierto.");return;}
-            pendingDriveFolderRequest=requestId;
+            String sessionToken=store.token();
+            if(sessionToken==null){reject(requestId,"El vínculo del dispositivo ya no es válido.");return;}
+            pendingDriveFolderRequest=requestId;pendingDriveFolderToken=sessionToken;
             Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION|Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
             try{startActivityForResult(intent,REQ_DRIVE_FOLDER);}
-            catch(Exception e){pendingDriveFolderRequest=null;reject(requestId,"Android no pudo abrir el selector de carpetas.");}
+            catch(Exception e){pendingDriveFolderRequest=null;pendingDriveFolderToken=null;reject(requestId,"Android no pudo abrir el selector de carpetas.");}
         });
     }
 
@@ -848,14 +868,28 @@ public final class MainActivity extends FragmentActivity {
             return;
         }
         if(requestCode==REQ_DRIVE_FOLDER){
-            String request=pendingDriveFolderRequest;pendingDriveFolderRequest=null;
+            String request=pendingDriveFolderRequest,sessionToken=pendingDriveFolderToken;
+            pendingDriveFolderRequest=null;pendingDriveFolderToken=null;
             if(request==null)return;
+            if(sessionToken==null||!sessionToken.equals(store.token())){
+                reject(request,"La sesión cambió; vuelve a elegir la carpeta desde tu perfil actual.");
+                return;
+            }
             if(resultCode!=RESULT_OK||data==null||data.getData()==null){reject(request,"Selección cancelada.");return;}
             Uri uri=data.getData();
             try{
                 getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                String name=documentName(uri);cloudMedia.saveDrive(uri,name);nativeChanged();
-                resolve(request,new JSONObject().put("connected",true).put("name",name));
+                String name=documentName(uri);
+                synchronized(cloudMedia){
+                    if(!sessionToken.equals(store.token())){
+                        try{getContentResolver().releasePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}
+                        reject(request,"La sesión cambió; descartamos la carpeta seleccionada.");
+                        return;
+                    }
+                    cloudMedia.saveDrive(uri,name);
+                    resolve(request,new JSONObject().put("connected",true).put("name",name));
+                }
+                nativeChanged();
             }catch(Exception e){reject(request,"La carpeta seleccionada no permite acceso persistente. Elige la carpeta desde Google Drive o Archivos.");}
             return;
         }
@@ -876,28 +910,57 @@ public final class MainActivity extends FragmentActivity {
             return;
         }
         if(requestCode==REQ_BACKUP_EXPORT){
-            String request=pendingBackupExportRequest,json=pendingBackupJson;
-            pendingBackupExportRequest=null;pendingBackupJson=null;
+            String request=pendingBackupExportRequest,json=pendingBackupJson,sessionToken=pendingBackupExportToken;
+            pendingBackupExportRequest=null;pendingBackupJson=null;pendingBackupExportToken=null;
             if(request==null)return;
             if(resultCode!=RESULT_OK||data==null||data.getData()==null){reject(request,"Exportación cancelada.");return;}
             Uri uri=data.getData();
             io.execute(()->{
+                // A picker may outlive unpair/re-pair. Never export the previous couple's JSON in a new session.
+                if(sessionToken==null||!sessionToken.equals(store.token())){
+                    reject(request,"La sesión cambió; vuelve a solicitar la copia desde tu perfil actual.");
+                    return;
+                }
                 try(OutputStream out=getContentResolver().openOutputStream(uri,"w")){
                     if(out==null)throw new IOException("No se pudo abrir el archivo.");
                     byte[] bytes=(json==null?"{}":json).getBytes(java.nio.charset.StandardCharsets.UTF_8);
                     if(bytes.length>2*1024*1024)throw new IOException("La copia supera el tamaño permitido.");
                     out.write(bytes);
-                    resolve(request,new JSONObject().put("saved",true));
-                }catch(Exception e){reject(request,e.getMessage()==null?"No pudimos guardar la copia.":e.getMessage());}
+                    out.flush();
+                }catch(Exception e){
+                    reject(request,e.getMessage()==null?"No pudimos guardar la copia.":e.getMessage());
+                    return;
+                }
+                // Confirm only while the original identity remains current after stream close.
+                synchronized(cloudMedia){
+                    if(!sessionToken.equals(store.token())){
+                        reject(request,"La sesión cambió durante la exportación; descarta el archivo generado.");
+                        return;
+                    }
+                    try{
+                        resolve(request,new JSONObject().put("saved",true));
+                    }catch(org.json.JSONException e){
+                        reject(request,"No pudimos confirmar la exportación del archivo.");
+                    }
+                }
             });
             return;
         }
         if(requestCode==REQ_BACKUP_IMPORT){
-            String request=pendingBackupImportRequest;pendingBackupImportRequest=null;
+            String request=pendingBackupImportRequest,sessionToken=pendingBackupImportToken;
+            pendingBackupImportRequest=null;pendingBackupImportToken=null;
             if(request==null)return;
+            if(sessionToken==null||!sessionToken.equals(store.token())){
+                reject(request,"La sesión cambió; vuelve a importar desde tu perfil actual.");
+                return;
+            }
             if(resultCode!=RESULT_OK||data==null||data.getData()==null){reject(request,"Importación cancelada.");return;}
             Uri uri=data.getData();
             io.execute(()->{
+                if(!sessionToken.equals(store.token())){
+                    reject(request,"La sesión cambió; no abrimos el archivo de la sesión anterior.");
+                    return;
+                }
                 try(InputStream in=getContentResolver().openInputStream(uri);ByteArrayOutputStream out=new ByteArrayOutputStream()){
                     if(in==null)throw new IOException("No se pudo abrir el archivo.");
                     byte[] buffer=new byte[8192];int read,total=0;
@@ -907,7 +970,13 @@ public final class MainActivity extends FragmentActivity {
                     }
                     String json=out.toString(java.nio.charset.StandardCharsets.UTF_8.name());
                     new JSONObject(json);
-                    resolve(request,new JSONObject().put("json",json));
+                    synchronized(cloudMedia){
+                        if(!sessionToken.equals(store.token())){
+                            reject(request,"La sesión cambió durante la lectura; descartamos la copia.");
+                            return;
+                        }
+                        resolve(request,new JSONObject().put("json",json));
+                    }
                 }catch(Exception e){reject(request,"El archivo no es una copia válida de Nuestra Galaxia.");}
             });
         }
@@ -917,13 +986,15 @@ public final class MainActivity extends FragmentActivity {
         if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
         runOnUiThread(()->{
             if(pendingBackupExportRequest!=null){reject(requestId,"Ya hay una exportación abierta.");return;}
-            pendingBackupExportRequest=requestId;pendingBackupJson=json==null?"{}":json;
+            String sessionToken=store.token();
+            if(sessionToken==null){reject(requestId,"El vínculo del dispositivo ya no es válido.");return;}
+            pendingBackupExportRequest=requestId;pendingBackupJson=json==null?"{}":json;pendingBackupExportToken=sessionToken;
             Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);
             intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.setType("application/json");
             intent.putExtra(Intent.EXTRA_TITLE,(fileName==null||fileName.trim().isEmpty())?"nuestra-galaxia-backup.json":fileName);
             try{startActivityForResult(intent,REQ_BACKUP_EXPORT);}
-            catch(Exception e){pendingBackupExportRequest=null;pendingBackupJson=null;reject(requestId,"Android no pudo abrir el selector para guardar la copia.");}
+            catch(Exception e){pendingBackupExportRequest=null;pendingBackupJson=null;pendingBackupExportToken=null;reject(requestId,"Android no pudo abrir el selector para guardar la copia.");}
         });
     }
 
@@ -942,12 +1013,14 @@ public final class MainActivity extends FragmentActivity {
         if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
         runOnUiThread(()->{
             if(pendingBackupImportRequest!=null){reject(requestId,"Ya hay una importación abierta.");return;}
-            pendingBackupImportRequest=requestId;
+            String sessionToken=store.token();
+            if(sessionToken==null){reject(requestId,"El vínculo del dispositivo ya no es válido.");return;}
+            pendingBackupImportRequest=requestId;pendingBackupImportToken=sessionToken;
             Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
             intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.setType("application/json");
             try{startActivityForResult(intent,REQ_BACKUP_IMPORT);}
-            catch(Exception e){pendingBackupImportRequest=null;reject(requestId,"Android no pudo abrir el selector de copias.");}
+            catch(Exception e){pendingBackupImportRequest=null;pendingBackupImportToken=null;reject(requestId,"Android no pudo abrir el selector de copias.");}
         });
     }
 
