@@ -17,6 +17,7 @@ function classify(meta={}){
  if(has('backup-export')||has('backup-import'))return 'backups';
  if(has('widget-add')||has('widget-photo'))return 'widgets';
  if(forms.includes('settingsForm')||has('pair-code-self')||has('pair-code-partner')||has('device-revoke')||has('welcome-replay'))return 'profiles';
+ if(meta.heading==='Permisos de Android')return 'profiles';
  if(meta.id==='updateCard'||has('update-check')||has('app-settings'))return 'system';
  return 'other';
 }
@@ -243,6 +244,111 @@ function enhanceBackups(hub){
  return true;
 }
 
+
+/* P7E: the authenticated device list and native permission labels remain the
+   only sources of truth. Keep all original action buttons and confirmations. */
+function permissionReadings(value){
+ const parts=String(value||'').split(' · ');
+ if(parts.length!==3)return [];
+ const names=['Ubicación','Segundo plano','Notificaciones'];
+ const rows=parts.map((part,index)=>{
+  const colon=part.indexOf(':');
+  if(colon<0||part.slice(0,colon).trim()!==names[index])return null;
+  const state=part.slice(colon+1).trim();
+  return state?[names[index],state]:null;
+ });
+ return rows.every(Boolean)?rows:[];
+}
+function enhanceDevices(hub){
+ const area=hub?.querySelector?.('[data-group="profiles"] .v5-more-group-content');
+ if(!area)return false;
+ let changed=false;
+ const card=[...area.querySelectorAll('.card')].find(node=>node.querySelector('[data-action="pair-code-self"]'));
+ if(card&&!card.querySelector('.v5-device-safety')){
+  const doc=card.ownerDocument;
+  for(const button of card.querySelectorAll('[data-action="device-revoke"]')){
+   const row=button.closest('.row.between');
+   if(row)row.classList.add('v5-device-row');
+  }
+  const current=card.querySelector('.badge.good');
+  const currentRow=current?.closest('.row.between');
+  if(currentRow)currentRow.classList.add('v5-device-row','v5-device-current');
+  const partner=card.querySelector('[data-action="pair-code-partner"]');
+  const self=card.querySelector('[data-action="pair-code-self"]');
+  const controls=self?.parentNode;
+  if(controls){
+   const options=doc.createElement('div');options.className='v5-device-code-options';
+   const addOption=(button,title,help)=>{
+    if(!button)return;
+    const section=doc.createElement('section');section.className='v5-device-code-option';
+    const heading=doc.createElement('h4');heading.textContent=title;
+    const info=doc.createElement('p');info.textContent=help;
+    section.append(heading,info,button);options.append(section);
+   };
+   addOption(partner,'Vincular teléfono de mi pareja','Genera un código para el perfil de la pareja. No cambia el perfil de este teléfono.');
+   addOption(self,'Vincular otro teléfono mío','Genera un código para mi perfil actual. No cambia el perfil de este teléfono.');
+   controls.parentNode.insertBefore(options,controls);
+   const repair=card.querySelector('[data-action="profile-repair"]');
+   if(repair){
+    const existingHelp=repair.nextElementSibling?.matches('p')?repair.nextElementSibling:null;
+    const advanced=doc.createElement('details');advanced.className='v5-device-recovery';
+    const summary=doc.createElement('summary');summary.textContent='Corrección de perfil · acción avanzada';
+    const warning=doc.createElement('p');warning.textContent='Solo si este teléfono quedó vinculado al perfil equivocado. Cambiar el perfil puede alterar qué información privada muestra este dispositivo; verifica a quién pertenece antes de continuar.';
+    advanced.append(summary,warning);
+    if(existingHelp)advanced.append(existingHelp);
+    advanced.append(repair);
+    controls.parentNode.insertBefore(advanced,controls);
+   }
+   if(!controls.children.length)controls.remove();
+  }
+  const safety=doc.createElement('p');safety.className='v5-device-safety';
+  safety.textContent='La lista refleja dispositivos asociados a la sesión actual. Revocar impide volver a entrar desde ese teléfono hasta vincularlo de nuevo; se conserva la confirmación original.';
+  card.append(safety);
+  changed=true;
+ }
+ const permissions=[...area.querySelectorAll('.card')].find(node=>node.querySelector('h3')?.textContent?.trim()==='Permisos de Android');
+ if(permissions&&!permissions.querySelector('.v5-permission-list')){
+  const paragraph=permissions.querySelector('p'),readings=permissionReadings(paragraph?.textContent);
+  if(readings.length===3){
+   const doc=permissions.ownerDocument,list=doc.createElement('dl');list.className='v5-permission-list';
+   for(const [name,value] of readings){
+    const row=doc.createElement('div'),dt=doc.createElement('dt'),dd=doc.createElement('dd');
+    dt.textContent=name;dd.textContent=value;row.append(dt,dd);list.append(row);
+   }
+   paragraph.replaceWith(list);
+   const help=doc.createElement('p');help.className='v5-permission-help';
+   help.textContent='Estos estados provienen de Android. Abrir ajustes no concede permisos automáticamente; revisa cada permiso en el sistema.';
+   permissions.append(help);changed=true;
+  }
+ }
+ return changed;
+}
+function enhanceWidgets(hub){
+ const area=hub?.querySelector?.('[data-group="widgets"] .v5-more-group-content');
+ if(!area||area.querySelector('.v5-widget-zones'))return false;
+ const add=area.querySelector('[data-action="widget-add"]');
+ const photo=area.querySelector('[data-action="widget-photo"]');
+ const clear=area.querySelector('[data-action="widget-photo-clear"]');
+ if(!add||!photo||!clear||add.parentNode!==photo.parentNode||photo.parentNode!==clear.parentNode)return false;
+ const row=add.parentNode;
+ if(row.children.length!==3||!row.parentNode)return false;
+ const card=add.closest('.card');
+ if(!card)return false;
+ const doc=card.ownerDocument,zones=doc.createElement('div');zones.className='v5-widget-zones';
+ const addZone=(title,help,buttons)=>{
+  const section=doc.createElement('section');section.className='v5-widget-zone';
+  const heading=doc.createElement('h4');heading.textContent=title;
+  const note=doc.createElement('p');note.textContent=help;
+  section.append(heading,note,...buttons);zones.append(section);
+ };
+ addZone('Añadir a Android','Android gestiona la creación y disponibilidad del widget; aquí no se simula una vista previa.',[add]);
+ addZone('Imagen del widget','Elegir o quitar la imagen afecta a la configuración del widget, no elimina la foto original.',[photo,clear]);
+ row.parentNode.insertBefore(zones,row);row.remove();
+ const heading=card.querySelector('h3');
+ if(heading&&heading.textContent.includes('Widget'))heading.textContent='Widget Nuestra Galaxia';
+ return true;
+}
+
 function organize(container){
  const section=container?.querySelector?.('section');
  if(!section||section.querySelector('.v5-more-hub'))return false;
@@ -265,7 +371,8 @@ function organize(container){
   const meta={id:el.id,classes:[...el.classList],
    actions:[...el.querySelectorAll('[data-action]')].map(x=>x.dataset.action),
    forms:[...el.querySelectorAll('form[id]')].map(x=>x.id),
-   notificationHealth:!!el.querySelector('.notification-health')};
+   notificationHealth:!!el.querySelector('.notification-health'),
+   heading:el.querySelector('h3')?.textContent?.trim()};
   slots.get(classify(meta)).body.append(el);
  }
  for(const [id,slot] of slots){
@@ -277,7 +384,9 @@ function organize(container){
  enhanceAppearance(hub);
  enhanceNotifications(hub);
  enhanceBackups(hub);
+ enhanceDevices(hub);
+ enhanceWidgets(hub);
  return true;
 }
-root.GalaxyMoreV5=Object.freeze({classify,organize,enhancePrivacy,privacyAudience,themePalette,nextAutoChange,enhanceAppearance,notificationIndicator,enhanceNotifications,enhanceBackups});
+root.GalaxyMoreV5=Object.freeze({classify,organize,enhancePrivacy,privacyAudience,themePalette,nextAutoChange,enhanceAppearance,notificationIndicator,enhanceNotifications,enhanceBackups,permissionReadings,enhanceDevices,enhanceWidgets});
 })(window);
