@@ -46,14 +46,21 @@ test('P7E warns that media is referenced and JSON contains private information',
  assert.match(zones.children[0].children[1].textContent,/información privada/);
  assert.match(zones.children[0].children[1].textContent,/por referencia/);
 });
-test('P7E/P7F distinguishes impact preview from server-verified manifest and preserves confirmation',()=>{
+test('P7E/P7F distinguishes manifest preview from real data impact and preserves confirmation',()=>{
  const f=fixture();enhanceBackups(f.hub);
- assert.match(f.card.children[0].children[1].children[1].textContent,/no existe una vista previa/);
- assert.match(app,/if\(a==='backup-import'\)\{\s*const file=await GalaxyNative\.call\('importJson'\)/);
- assert.match(app,/GalaxyMoreV5\?\.backupManifestPreview\?\.\(backup\)/);
- assert.match(app,/if\(!preview\?\.ok\)\{toast\(/);
- assert.match(app,/if\(!confirm\(preview\.message\)\)return;/);
- assert.match(app,/api\('backup-import',\{backup\}\)/);
+ const warning=f.card.children[0].children[1].children[1].textContent;
+ assert.match(warning,/manifiesto con cantidades declaradas/);
+ assert.match(warning,/no una comparación con los datos actuales/);
+ assert.match(warning,/conflictos o sustituciones/);
+ assert.doesNotMatch(warning,/no existe una vista previa/);
+ const restore=app.slice(app.indexOf("if(a==='backup-import'){"),app.indexOf("if(a==='context-near-toggle')"));
+ assert.match(restore,/if\(backupImportInFlight\)return/);
+ assert.match(restore,/GalaxyNative\.call\('importJson'\)/);
+ assert.match(restore,/GalaxyMoreV5\?\.backupManifestPreview\?\.\(backup\)/);
+ assert.match(restore,/if\(!preview\?\.ok\)\{toast\(/);
+ assert.match(restore,/if\(!confirm\(preview\.message\)\)return;/);
+ assert.match(restore,/api\('backup-import',\{backup\}\)/);
+ assert.match(restore,/result\?\.verified!==true/);
 });
 test('P7E is idempotent and does not change native, network or RLS logic',()=>{
  const f=fixture();assert.equal(enhanceBackups(f.hub),true);
