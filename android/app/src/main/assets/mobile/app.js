@@ -1514,7 +1514,9 @@ function mapHistoryView(){
 async function openPairCode(target){
  const profile=names()[Number(target)]||('Perfil '+target);
  const r=await api('pair-code-create',{target_person:String(target),device_name:'Android de '+profile});
- showModal('Código para '+profile,'<div class="stack" style="margin-top:16px"><p>Este código vinculará el próximo teléfono como <b>'+esc(profile)+'</b>. Dura 10 minutos y sirve una sola vez.</p><input class="input" readonly value="'+attr(r.code)+'" aria-label="Código de vinculación"><button class="btn" data-action="pair-code-copy" data-code="'+attr(r.code)+'">'+ico('key')+' Copiar código</button><p class="muted">Antes de compartirlo, verifica que arriba diga el nombre correcto.</p></div>');
+ if(!/^[A-F0-9]{8}$/.test(String(r?.code||''))){toast('El servidor no entregó un código válido.');return;}
+ const validity=window.GalaxyMoreV5?.pairCodeValidity?.(r.expires_minutes)||'Vigencia no confirmada por el servidor.';
+ showModal('Código para '+profile,'<div class="stack" style="margin-top:16px"><p>Este código vinculará el próximo teléfono como <b>'+esc(profile)+'</b>. '+esc(validity)+'</p><input class="input" readonly value="'+attr(r.code)+'" aria-label="Código de vinculación"><button class="btn" data-action="pair-code-copy" data-code="'+attr(r.code)+'">'+ico('key')+' Copiar código</button><p class="muted">Antes de compartirlo, verifica que arriba diga el nombre correcto.</p></div>');
 }
 
 function deviceProfilesCard(){
@@ -3657,8 +3659,11 @@ document.addEventListener('click',async e=>{
     await refreshState({quiet:true});render();toast('Perfil corregido: este teléfono ahora es '+partner+'.');return;
   }
   if(a==='device-revoke'){
-    if(!confirm('¿Revocar este teléfono? Dejará de poder entrar hasta vincularlo otra vez.'))return;
-    await api('device-revoke',{id:btn.dataset.id});await refreshState({quiet:true});render();toast('Teléfono revocado.');return;
+    const id=String(btn.dataset.id||'');
+    const context=window.GalaxyMoreV5?.deviceRevokePreview?.(cloud?.devices,cloud?.device?.id,id,names());
+    if(!context?.ok){toast(context?.message||'No se pudo verificar el dispositivo. Actualiza antes de revocar.');return;}
+    if(!confirm(context.message))return;
+    await api('device-revoke',{id});await refreshState({quiet:true});render();toast('Teléfono revocado.');return;
   }
   if(a==='app-settings'){await GalaxyNative.call('openAppSettings');return;}
   if(a==='widget-add'){await GalaxyNative.call('addWidget');toast('Android abrió la solicitud del widget.');return;}
