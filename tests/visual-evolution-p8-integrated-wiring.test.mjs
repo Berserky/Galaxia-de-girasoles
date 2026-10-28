@@ -117,3 +117,32 @@ test('P8 failed-download recovery retries SDK without bypassing Android instrume
   assert.ok(ci.includes('-gpu swiftshader_indirect -memory 1536 -no-snapshot'),name+' must use the bounded AVD software graphics profile');
  }
 });
+
+test('P8 Android device QA verifies P7 grouped backups and updates by opening real details',()=>{
+ const java=readFileSync(resolve(root,'android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyDeviceClosureTest.java'),'utf8');
+ const start=java.indexOf('void dailyGoalsPlansEventsCapsulesMapContextBackupAndUpdate_areReachable()');
+ const end=java.indexOf('@Test public void networkOfflineSlowTimeoutAndChatRetry_',start);
+ assert.ok(start>0&&end>start);
+ const flow=java.slice(start,end);
+ assert.ok(flow.includes("GalaxyMoreV5.revealGroup(app,'backups')"));
+ assert.ok(flow.includes("GalaxyMoreV5.revealGroup(app,'system')"));
+ assert.ok(flow.includes("document.querySelector('.v5-more-group[data-group="));
+ assert.ok(flow.includes("document.body.innerText.includes('Copia de nuestra galaxia')"));
+ assert.ok(flow.includes("document.body.innerText.includes('Actualizaciones')"));
+ assert.ok(flow.includes('backup-export')&&flow.includes('update-check'));
+ const more=read('galaxy-more-v5.js');
+ assert.match(more,/\['backups','Datos y copias'\]/);
+ assert.match(more,/\['system','Sistema y actualizaciones'\]/);
+ assert.match(more,/function revealGroup\(container,id,focus=false\)/);
+});
+test('P8 forensic visual milestones are real Android events and cannot replace PNG',()=>{
+ const java=readFileSync(resolve(root,'android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyDeviceClosureTest.java'),'utf8');
+ assert.ok(java.includes('android.util.Log.i("NG_P8_VISUAL","P5_VIEWPORT_START_"+css)'));
+ assert.ok(java.includes('awaitV5QaPainted("p5-moments-"+css)'));
+ assert.ok(java.includes('android.util.Log.i("NG_P8_VISUAL","P5_VIEWPORT_PAINTED_"+css)'));
+ const sh=readFileSync(resolve(root,'scripts/visual-evolution-p1-avd.sh'),'utf8');
+ assert.ok(sh.includes('p5-device-milestones.txt'));
+ assert.ok(sh.includes('pull_theme_evidence'));
+ assert.ok(sh.includes('Android JUnit XML missing'));
+ assert.ok(sh.includes('p5_android_verified_by_real_instrumentation'));
+});

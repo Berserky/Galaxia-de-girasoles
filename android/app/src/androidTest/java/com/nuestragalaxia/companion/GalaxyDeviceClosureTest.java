@@ -987,6 +987,7 @@ public class GalaxyDeviceClosureTest {
      * Screenshots are from the physical emulator framebuffer, not Chrome/mock HTML.
      */
     @Test public void visualEvolutionP5_realMomentsAndroidScreens_andPrivacy() throws Exception {
+        android.util.Log.i("NG_P8_VISUAL","P5_START");
         launch();
         awaitJs("!!document.querySelector('#bottomNav [data-view=\"moments\"]') && !!cloud.bond");
         android.graphics.Bitmap before=instrumentation.getUiAutomation().takeScreenshot();
@@ -1034,6 +1035,7 @@ public class GalaxyDeviceClosureTest {
             +" && !!document.querySelector('.living-note-full')"
             +" && !!document.querySelector('.living-surprise-card.sealed')"
             +" && !!document.querySelector('.living-game-card')");
+        android.util.Log.i("NG_P8_VISUAL","P5_MOMENTS_DOM_READY");
         assertEquals("P5 synthetic secret must not appear in DOM","false",
             js("document.documentElement.innerHTML.includes('P5_SECRET_TITLE')"
                 +"||document.documentElement.innerHTML.includes('P5_SECRET_MESSAGE')"
@@ -1045,6 +1047,7 @@ public class GalaxyDeviceClosureTest {
             +"document.body.appendChild(marker)");
         try {
             for(int css : new int[]{320,360,393,412}) {
+                android.util.Log.i("NG_P8_VISUAL","P5_VIEWPORT_START_"+css);
                 int w=(int)Math.round(css*scale);
                 shell("wm size "+w+"x"+realHeight);
                 awaitCondition(() -> Math.abs(Integer.parseInt(
@@ -1077,6 +1080,7 @@ public class GalaxyDeviceClosureTest {
                 assertTrue("P5 secret leaked at "+css,proof.getBoolean("secretAbsent"));
                 runV5Js("window.scrollTo(0,0)");
                 awaitV5QaPainted("p5-moments-"+css);
+                android.util.Log.i("NG_P8_VISUAL","P5_VIEWPORT_PAINTED_"+css);
                 shell("screencap -p /sdcard/Download/V5-P5-moments-"+css+".png");
                 System.out.println("V5_P5_ANDROID_MOMENTS=css:"+css
                     +";activities:8;ritualSteps:3;privacy:true;seekUnknown:true");
@@ -1639,9 +1643,20 @@ public class GalaxyDeviceClosureTest {
         assertTrue(restored.getBoolean("restored"));
 
         runJs("go('more')");
-        awaitJs("document.body.innerText.includes('Copia de nuestra galaxia')");
-        assertTrue(js("document.body.innerText").contains("Actualizaciones"));
-        assertTrue(js("!!document.querySelector('[data-action=\"update-check\"]')").equals("true"));
+        // V5-P7 groups existing controls in real <details> sections. Text inside
+        // a closed group is not in innerText: open the actual authenticated
+        // backups/system sections before asserting that their controls work.
+        awaitJs("document.querySelector('.nav-btn.active')?.dataset.view==='more'");
+        awaitJs("!!document.querySelector('.v5-more-group[data-group=\"backups\"]')"
+            + " && !!document.querySelector('.v5-more-group[data-group=\"system\"]')");
+        runJs("GalaxyMoreV5.revealGroup(app,'backups')");
+        awaitJs("document.querySelector('.v5-more-group[data-group=\"backups\"]')?.open===true"
+            + " && document.body.innerText.includes('Copia de nuestra galaxia')");
+        assertEquals("true",js("!!document.querySelector('[data-action=\"backup-export\"]')"));
+        runJs("GalaxyMoreV5.revealGroup(app,'system')");
+        awaitJs("document.querySelector('.v5-more-group[data-group=\"system\"]')?.open===true"
+            + " && document.body.innerText.includes('Actualizaciones')");
+        assertEquals("true",js("!!document.querySelector('[data-action=\"update-check\"]')"));
 
         launchChat();
         awaitJs("document.querySelector('#chatMessages')?.innerText.includes('CÁPSULA BLOQUEADA')");

@@ -59,7 +59,16 @@ pull_theme_evidence() {
     echo "Android synthetic QA: all screenshot transfers copied; PNG integrity gate still runs."
   fi
 }
-trap pull_theme_evidence EXIT
+# Preserve only synthetic QA milestones from the device even if QEMU dies.
+# This does not replace real PNG, JUnit, privacy or framebuffer requirements.
+command adb logcat -v brief -s NG_P8_VISUAL:I > build/p0-avd/p5-device-milestones.txt 2> build/p0-avd/p5-device-milestones-stderr.txt &
+P8_VISUAL_LOGCAT_PID=$!
+p8_preserve_visual_evidence() {
+  kill "$P8_VISUAL_LOGCAT_PID" 2>/dev/null || true
+  wait "$P8_VISUAL_LOGCAT_PID" 2>/dev/null || true
+  pull_theme_evidence
+}
+trap p8_preserve_visual_evidence EXIT
 gradle -p android --no-daemon :app:connectedDebugAndroidTest \
   -PQA_EDGE_URL=http://127.0.0.1:18765 \
   -PQA_SUPABASE_PUBLISHABLE_KEY=qa_v5p1 \

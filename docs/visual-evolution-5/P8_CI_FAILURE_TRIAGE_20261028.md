@@ -52,3 +52,13 @@
 - Los workflows Phase5, Phase11 y Phase9 reintentan `sdkmanager` 3 veces, pero **fallan** después de la tercera descarga defectuosa. La regla no convierte un bloqueo en éxito.
 - Los tres jobs históricos con pérdida del framebuffer cambian a `-gpu swiftshader_indirect -memory 1536 -no-snapshot` por consistencia con otros jobs Android; las pruebas instrumentadas y capturas reales son obligatorias.
 - **Esta verificación es solo local.** La ejecución Android/CI del SHA posterior sigue pendiente y define la admisión de P8.
+
+## Triage con evidencia JUnit y logcat del SHA 6042f4d
+
+- GitHub CI del **SHA `6042f4d7b996289b1cd7c02f3a1a269577bc9195`** concluyó con **12/15 SUCCESS y 3 FAILURE**: Phase5 Android, Phase11 Android stress y V5 P0 AVD.
+- Evidencia específica: artefacto `qa-phase5-android-device-closure` (GitHub artifact **12847105556**), XML de JUnit y `qa-artifacts/logcat-live.txt`.
+- El fallo `dailyGoalsPlansEventsCapsulesMapContextBackupAndUpdate_areReachable` fue en **línea 1642**, **antes de llamar `launchChat()`**. La aserción buscaba `Copia de nuestra galaxia` en `document.body.innerText`; P7 ahora pone esa sección dentro de `details[data-group=backups]` **colapsado**. Lo mismo aplica al grupo `system` para Actualizaciones. Corregido el test para navegar a Más, abrir ambos grupos auténticos con `GalaxyMoreV5.revealGroup` y exigir los controles existentes. **No se cambió el runtime de Chat para este problema.**
+- La desconexión del `emulator-5554` sigue pendiente: el logcat registra cierres/recreaciones de renderers WebView durante tests (no demuestra por sí solo fallo de la app ni OOM). MemAvailable del host al finalizar ≈12,4 GB y no hay señal OOM en el artefacto, por lo que **la hipótesis de RAM es insuficiente**.
+- Para la prueba P5 se agregaron marcadores Android `NG_P8_VISUAL` sin datos privados, antes/después de montar Momentos y por viewport de 320/360/393/412. El script P0/P1 conserva estos marcadores en un artefacto aunque el emulador desaparezca. **No se ha quitado ninguna comprobación de píxeles, JUnit, privacidad, 135% ni de 7 temas.**
+
+**Estado:** corrección del falso negativo de P7 verificada por contratos Node; falta repetir instrumentación Android y recuperar todas las capturas nativas en el SHA nuevo. No confundir logs guardados con un resultado PASS.
