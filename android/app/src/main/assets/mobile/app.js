@@ -3608,7 +3608,21 @@ document.addEventListener('click',async e=>{
   if(a==='gps-history-delete-open'){openGpsHistoryDelete();return;}
   if(a==='gps-history-map'){closeModal();go('map');return;}
   if(a==='theme-set'){const state=window.GalaxyTheme?.applyTheme(btn.dataset.value);render();toast(state?.selected==='auto'?'Tema automático · ahora '+window.GalaxyTheme.LABELS[state.active]+'.':'Tema '+window.GalaxyTheme.LABELS[state?.active]+' activado.');return;}
-  if(a==='backup-import'){if(!confirm('Restaurar una copia añadirá lo que falte sin borrar lo que ya existe. ¿Continuar?'))return;const file=await GalaxyNative.call('importJson'),backup=JSON.parse(file.json||'{}'),result=await api('backup-import',{backup});await refreshState({quiet:true});await refreshMap({quiet:true,detail:true});render();const r=result.restored||{};toast('Copia restaurada: '+Number(r.items||0)+' contenidos, '+Number(r.places||0)+' lugares y '+Number(r.bond||0)+' momentos.');return;}
+  if(a==='backup-import'){
+    const file=await GalaxyNative.call('importJson');
+    if(typeof file?.json!=='string'||!file.json)return;
+    let backup;
+    try{backup=JSON.parse(file.json);}catch{toast('El archivo no contiene un JSON válido.');return;}
+    const preview=window.GalaxyMoreV5?.backupManifestPreview?.(backup);
+    if(!preview?.ok){toast(preview?.reason||'No se pudo revisar el manifiesto del respaldo.');return;}
+    if(!confirm(preview.message))return;
+    const result=await api('backup-import',{backup});
+    if(result?.verified!==true){toast('El servidor no confirmó la verificación. Revisa los datos antes de volver a intentar.');return;}
+    await refreshState({quiet:true});await refreshMap({quiet:true,detail:true});render();
+    const r=result.restored||{};
+    toast('Copia verificada y restaurada: '+Number(r.items||0)+' contenidos, '+Number(r.places||0)+' lugares y '+Number(r.bond||0)+' momentos.');
+    return;
+  }
   if(a==='context-near-toggle'){const s=contextSettings(),next=!s.near_enabled;const result=await api('context-settings',{operation:'save',nearEnabled:next});await GalaxyNative.call('setContextPushPrefs',!!result.settings.near_enabled,!!result.settings.arrived_safe_enabled);await refreshMap({detail:true});toast(next?'Avisos de cercanía activados.':'Avisos de cercanía apagados.');return;}
   if(a==='context-arrived-toggle'){const s=contextSettings(),next=!s.arrived_safe_enabled;const result=await api('context-settings',{operation:'save',arrivedSafeEnabled:next});await GalaxyNative.call('setContextPushPrefs',!!result.settings.near_enabled,!!result.settings.arrived_safe_enabled);await refreshMap({detail:true});toast(next?'Llegué bien automático activado.':'Llegué bien automático apagado.');return;}
   if(a==='context-settings-open'){openContextSettings();return;}
