@@ -220,5 +220,41 @@ function organizedCollection(items,kind,{esc,attr,ico,itemCard}){
   (groups||'<div class="empty">Todavía no hay '+label+' guardados.</div>')+'</div>';
 }
 
-root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumGallery,albumViewer,musicGrouping,musicLibrary,validDate,shiftMonth,calendarMonth,eventOccurrence,eventRows,monthEvents,eventCalendar,organizedCollection});
+
+/* P6E: presentation only. Locked capsules must never invoke the full renderer. */
+function capsuleShelf(items,{esc,attr,ico,itemCard}){
+ const rows=(Array.isArray(items)?items:[]).filter(x=>x?.kind==='capsule'&&x.data&&typeof x.data==='object');
+ const locked=rows.filter(x=>x.data.locked===true),opened=rows.filter(x=>x.data.locked!==true);
+ const cover=x=>{
+  const d=x.data;
+  const when=d.unlockType==='place'?'Se abre al llegar al lugar elegido':
+   (typeof d.unlockDate==='string'&&validDate(d.unlockDate)?'Disponible desde '+d.unlockDate:'Aún no disponible');
+  return '<article class="memories-v5-capsule locked" data-item-id="'+attr(x.id??'')+'"><span class="memories-v5-symbol">'+ico('lock-keyhole')+'</span><div>'+
+   '<small>Guardada para después</small><h4>'+esc(d.title||'Cápsula')+'</h4><p>'+esc(when)+'</p><small>Contenido protegido</small></div></article>';
+ };
+ const open=x=>'<details class="memories-v5-capsule opened" data-item-id="'+attr(x.id??'')+'"><summary>'+
+  '<span class="memories-v5-symbol">'+ico('gift')+'</span><span><small>Disponible para descubrir</small><b>'+esc(x.data.title||'Cápsula')+'</b></span>'+
+  ico('chevron-down')+'</summary><div class="memories-v5-shelf-detail">'+itemCard(x)+'</div></details>';
+ const section=(label,rows,render)=>rows.length?'<section class="memories-v5-shelf-section"><h4>'+label+' <small>'+rows.length+'</small></h4>'+
+  '<div class="memories-v5-shelf-list">'+rows.map(render).join('')+'</div></section>':'';
+ return '<div class="memories-v5-shelf">'+section('Por descubrir',locked,cover)+section('Cápsulas abiertas',opened,open)+
+  (rows.length?'':'<div class="empty">Guarden una cápsula para descubrirla juntos cuando llegue su momento.</div>')+'</div>';
+}
+function journeyShelf(items,{esc,attr,ico,itemCard}){
+ const journeys=(Array.isArray(items)?items:[]).filter(x=>x?.kind==='journey'&&x.data&&typeof x.data==='object');
+ const dated=journeys.filter(x=>validDate(x.data.date)).slice().sort((a,b)=>b.data.date.localeCompare(a.data.date));
+ const groups=new Map();
+ for(const x of dated){const year=x.data.date.slice(0,4);if(!groups.has(year))groups.set(year,[]);groups.get(year).push(x);}
+ const undated=journeys.filter(x=>!validDate(x.data.date));
+ if(undated.length)groups.set('Sin fecha registrada',undated);
+ const card=x=>'<details class="memories-v5-journey" data-item-id="'+attr(x.id??'')+'"><summary>'+
+  '<span class="memories-v5-symbol">'+ico('route')+'</span><span><b>'+esc(x.data.title||'Nuestro viaje')+'</b><small>'+
+  (validDate(x.data.date)?esc(x.data.date):'Sin fecha guardada')+
+  (typeof x.data.placeName==='string'&&x.data.placeName.trim()?' · '+esc(x.data.placeName.trim()):'')+
+  '</small></span>'+ico('chevron-down')+'</summary><div class="memories-v5-shelf-detail">'+itemCard(x)+'</div></details>';
+ const sections=[...groups].map(([label,group])=>'<section class="memories-v5-shelf-section"><h4>'+esc(label)+' <small>'+group.length+'</small></h4><div class="memories-v5-shelf-list">'+group.map(card).join('')+'</div></section>').join('');
+ return '<div class="memories-v5-shelf">'+(sections||'<div class="empty">Sus próximas aventuras aparecerán aquí cuando las guarden.</div>')+'</div>';
+}
+
+root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumGallery,albumViewer,musicGrouping,musicLibrary,validDate,shiftMonth,calendarMonth,eventOccurrence,eventRows,monthEvents,eventCalendar,organizedCollection,capsuleShelf,journeyShelf});
 })(window);
