@@ -1,0 +1,15 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
+import {runInNewContext} from 'node:vm';
+const dir=resolve(import.meta.dirname,'../android/app/src/main/assets/mobile'),read=name=>readFileSync(resolve(dir,name),'utf8');
+const sandbox={window:{}};runInNewContext(read('galaxy-memories-v5.js'),sandbox,{timeout:1500});
+const hub=sandbox.window.GalaxyMemoriesV5;
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ico=name=>'<i>'+esc(name)+'</i>',ui={esc,ico};
+test('P6A: three accessible doors and selected section',()=>{const h=hub.sectionsNav('collections',ui);assert.equal((h.match(/data-action="memories-section"/g)||[]).length,3);assert.match(h,/aria-current="page"/);});
+test('P6A: nine collections preserve real counts',()=>{const h=hub.collections([{kind:'memory'},{kind:'song'}],{photo:[{}],music:[]},'album',ui);assert.equal((h.match(/data-action="memories-category"/g)||[]).length,9);assert.match(h,/data-kind="album" aria-pressed="true"/);assert.match(h,/data-kind="capsule"/);});
+test('P6A: no locked capsule, private body or media preview leaks',()=>{const h=hub.discover([{id:'safe',kind:'memory',created:'2026-10-01',data:{title:'<script>x</script>',body:'PRIVATE-BODY',sourceMedia:[{url:'SECRET.jpg'}]}},{id:'locked',kind:'capsule',created:'2026-10-02',data:{title:'SECRET-CAPSULE',locked:true,body:'LOCKED-BODY'}}],{},ui);assert.match(h,/&lt;script&gt;/);for(const secret of ['<script>','PRIVATE-BODY','SECRET.jpg','SECRET-CAPSULE','LOCKED-BODY'])assert.equal(h.includes(secret),false);});
+test('P6A: escape untrusted title/id and handle empty state',()=>{const h=hub.discover([{id:'" onclick="evil',kind:'note',data:{title:'<img src=x>'}}],{},ui);assert.doesNotMatch(h,/<img/);assert.match(h,/&quot; onclick=/);assert.match(hub.discover(null,null,ui),/primeros recuerdos/);});
+test('P6A: app loads module before app and direct search opens collections',()=>{const h=read('index.html'),a=read('app.js');assert.ok(h.indexOf('galaxy-memories-v5.js')<h.indexOf('app.js'));assert.match(a,/memorySection='collections';memoryTab=item.kind/);assert.match(a,/if\(a==='memories-category'\)/);});

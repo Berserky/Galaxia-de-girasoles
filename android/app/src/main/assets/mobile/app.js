@@ -42,7 +42,7 @@ const legacySurpriseIdeas=[
  {title:'Álbum del mes',body:'Elegir juntos las mejores fotos del mes y escribir una frase para cada una.',minutes:60,budget:0,where:'casa'}
 ];
 
-let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',memoriesTabsScroll=0,media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),insightsCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
+let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',memorySection='discover',memoriesTabsScroll=0,media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),insightsCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
 let mapImmersive=false,mapHistoryVisible=6,mapPlacesVisible=6;
 // Read-only signal for deterministic Android WebView QA; never gates GPS or user actions.
 let mapStateReadsInFlight=0;
@@ -432,7 +432,7 @@ function render(){
  if(view==='home')app.innerHTML=header()+homeView();
  if(view==='map'){app.innerHTML=header()+mapView();setTimeout(()=>{drawMap();if(!mapData)refreshMap({detail:true});if(!frequentPlacesFresh())loadFrequentPlaces().catch(()=>{});},0);}
  if(view==='moments')app.innerHTML=header()+momentsView();
- if(view==='memories'){app.innerHTML=header()+memoriesView();requestAnimationFrame(()=>{const tabs=$('.memories-tabs');if(tabs)tabs.scrollLeft=memoriesTabsScroll;});if((memoryTab==='album'&&!mediaFresh('photo'))||(memoryTab==='music'&&!mediaFresh('music')))setTimeout(()=>loadMedia(memoryTab==='album'?'photo':'music').catch(e=>toast(e.message)),0);}
+ if(view==='memories'){app.innerHTML=header()+memoriesView();if(memorySection==='collections'&&((memoryTab==='album'&&!mediaFresh('photo'))||(memoryTab==='music'&&!mediaFresh('music'))))setTimeout(()=>loadMedia(memoryTab==='album'?'photo':'music').catch(e=>toast(e.message)),0);}
  if(view==='goals'){app.innerHTML=header()+goalsView();if(!goalsState)setTimeout(()=>loadGoals().catch(e=>toast(e.message)),0);}
  if(view==='ai'){app.innerHTML=header()+intelligenceHubView();if(!mapData)setTimeout(()=>refreshMap({quiet:true,detail:true}).catch(()=>{}),0);}
  if(view==='chat'){
@@ -1008,7 +1008,7 @@ async function openUniversalSearchResult(btn){
   return;
  }
  const item=cloud?.items?.find(i=>String(i.id)===id);if(!item)return;
- closeModal();memoryTab=item.kind==='song'?'music':item.kind;go('memories');
+ closeModal();memorySection='collections';memoryTab=item.kind==='song'?'music':item.kind;go('memories');
  setTimeout(()=>{
   const target=[...document.querySelectorAll('[data-item-id]')].find(el=>String(el.dataset.itemId)===id);
   if(target){target.classList.add('search-hit');target.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>target.classList.remove('search-hit'),1800);}
@@ -1116,12 +1116,13 @@ function openGoalConvert(item){
 }
 
 function memoriesView(){
- const tabs=[['memory','Recuerdos'],['album','Álbum'],['music','Música'],['event','Calendario'],['plan','Planes'],['note','Notas'],['capsule','Cápsulas'],['wish','Deseos'],['journey','Viajes']];
+ const hub=window.GalaxyMemoriesV5,context={esc,ico},all=cloud?.items||[];
+ const navigation=hub.sectionsNav(memorySection,context);
  let body='';
- if(memoryTab==='album')body=albumView();
- else if(memoryTab==='music')body=musicView();
- else body=itemList(memoryTab);
- return '<section><div class="section-head"><div><p class="eyebrow">LO QUE SOMOS</p><h2>Nuestros recuerdos</h2><p>Todo lo que vamos guardando juntos.</p></div></div><div class="chips memories-tabs">'+tabs.map(([id,label])=>'<button class="chip '+(memoryTab===id?'active':'')+'" data-tab="'+id+'">'+label+'</button>').join('')+'</div>'+body+(memoryTab==='memory'?storyTimeline()+constellationView():'')+'</section>';
+ if(memorySection==='discover')body=hub.discover(all,media,context);
+ else if(memorySection==='history')body=storyTimeline()+constellationView();
+ else {const categories=hub.collections(all,media,memoryTab,context);const content=memoryTab==='album'?albumView():memoryTab==='music'?musicView():itemList(memoryTab);body=categories+content;}
+ return '<section class="memories-v5"><div class="section-head"><div><p class="eyebrow">LO QUE SOMOS</p><h2>Nuestros recuerdos</h2><p>Todo lo que vamos guardando juntos.</p></div></div>'+navigation+body+'</section>';
 }
 function itemList(kind){
  const list=items(kind),meta=kindMeta[kind]||['sparkles','Contenido'];
@@ -1147,7 +1148,7 @@ function itemCard(i){
  return '<div class="card item" data-item-id="'+attr(i.id)+'"><div class="item-icon">'+ico(meta[0])+'</div><div class="item-main"><div class="meta">'+esc(date)+esc(done)+'</div><h3>'+esc(d.title||meta[1])+'</h3>'+((d.body||linkedDailyQuestionAnswers(i))?'<p>'+esc(d.body||linkedDailyQuestionAnswers(i)).replace(/\n/g,'<br>')+'</p>':'')+capsuleMedia+albumMedia+(voices.length?'<div class="stack" style="margin-top:10px">'+voices.map(voiceCard).join('')+'</div>':'')+'<div class="item-actions">'+(['memory','capsule','journey'].includes(i.kind)?'<button class="btn small secondary" data-action="voice-for-item" data-id="'+i.id+'">'+ico('mic')+' Añadir voz</button>':'')+(['plan','wish'].includes(i.kind)?'<button class="btn small secondary" data-action="goal-convert-item" data-id="'+i.id+'">'+ico('target')+' Convertir en objetivo</button>':'')+(['memory','plan','song','capsule','event'].includes(i.kind)?'<button class="btn small secondary" data-action="galaxy-share" data-card-type="'+({memory:'MEMORY',plan:'PLAN',song:'SONG',capsule:'CAPSULE',event:'EVENT'}[i.kind])+'" data-kind="'+attr(i.kind)+'" data-id="'+attr(i.id)+'" data-title="'+attr(d.title||meta[1])+'">'+ico('send')+' Galaxy Chat</button>':'')+'<button class="btn small secondary" data-action="item-edit" data-id="'+i.id+'">Editar</button><button class="btn small ghost" data-action="item-delete" data-id="'+i.id+'">Eliminar</button></div></div></div>';
 }
 function storyTimeline(){
- const entries=(cloud?.items||[]).filter(x=>['memory','journey','event','capsule','song'].includes(x.kind)).filter(x=>x.kind!=='capsule'||String(x.data?.date||'')<=String(cloud.today||'')).slice().sort((a,b)=>String(b.data?.date||b.created).localeCompare(String(a.data?.date||a.created))).slice(0,12);
+ const entries=(cloud?.items||[]).filter(x=>['memory','journey','event','capsule','song'].includes(x.kind)).filter(x=>x.kind!=='capsule'||(x.data?.locked!==true&&String(x.data?.date||'')<=String(cloud.today||''))).slice().sort((a,b)=>String(b.data?.date||b.created).localeCompare(String(a.data?.date||a.created))).slice(0,12);
  return '<section class="section"><div class="section-head"><div><h2>Nuestra historia</h2><p>Recuerdos, viajes, fechas, canciones y cápsulas abiertas en una sola línea del tiempo.</p></div></div><div class="timeline">'+(entries.length?entries.map(itemCard).join(''):'<div class="empty">La historia irá apareciendo aquí a medida que guarden momentos.</div>')+'</div></section>';
 }
 function driveAlbumCard(){
@@ -1159,7 +1160,7 @@ function openAlbumAdd(){
 }
 async function refreshPhotoAlbum(){
  media.photo=null;mediaLoadedAt.photo=0;await loadMedia('photo',true);
- if(view==='memories'&&memoryTab==='album')render();
+ if(view==='memories'&&memorySection==='collections'&&memoryTab==='album')render();
 }
 async function importPhotosPicker(){
  closeModal();
@@ -3207,7 +3208,7 @@ async function chooseWidgetPhoto(){
 document.addEventListener('click',async e=>{
  const btn=e.target.closest('[data-view],[data-tab],[data-action]');if(!btn)return;
  if(btn.dataset.view){go(btn.dataset.view);return;}
- if(btn.dataset.tab){memoryTab=btn.dataset.tab;render();return;}
+ if(btn.dataset.tab){memoryTab=btn.dataset.tab;memorySection='collections';render();return;}
  const a=btn.dataset.action;
  try{
   if(a==='gift-open'){if(welcomeEntering)return;welcomeEntering=true;welcomeMusic.play().catch(()=>{});const intro=document.querySelector('.gift-intro');intro?.classList.add('opening');setTimeout(()=>intro?.classList.add('entering'),900);setTimeout(()=>intro?.classList.add('blackout'),1750);setTimeout(()=>{welcomeGift=false;welcomeEntering=false;render();},2850);return;}
@@ -3429,6 +3430,9 @@ document.addEventListener('click',async e=>{
   if(a==='frequent-place-dismiss'){const s=frequentSuggestionFromButton(btn);window.GalaxyFrequentPlaces?.dismiss(s,14);render();toast('Ocultaremos esta sugerencia durante dos semanas.');return;}
   if(a==='map'){go('map');return;}
   if(a==='moments'){go('moments');return;}
+  if(a==='memories-section'){if(['discover','collections','history'].includes(btn.dataset.section)){memorySection=btn.dataset.section;render();}return;}
+  if(a==='memories-category'){if(window.GalaxyMemoriesV5.categories.some(c=>c[0]===btn.dataset.kind)){memoryTab=btn.dataset.kind;memorySection='collections';render();}return;}
+  if(a==='memories-recent'){const id=String(btn.dataset.id||''),item=cloud?.items?.find(x=>String(x.id)===id);if(!item||item.kind==='capsule'||item.kind!==btn.dataset.kind)return;memoryTab=item.kind==='song'?'music':item.kind;memorySection='collections';render();requestAnimationFrame(()=>{const target=[...document.querySelectorAll('[data-item-id]')].find(el=>String(el.dataset.itemId)===id);target?.scrollIntoView({behavior:'auto',block:'center'});});return;}
   if(a==='add-memory'){if(!mapData)await refreshMap({quiet:true,detail:false});openItemForm('memory');return;}
   if(a==='add-plan'){openItemForm('plan');return;}
   if(a==='item-new'){if(['memory','journey','event'].includes(btn.dataset.kind)&&!mapData)await refreshMap({quiet:true,detail:false});openItemForm(btn.dataset.kind);return;}
@@ -3469,7 +3473,7 @@ document.addEventListener('click',async e=>{
   if(a==='date-mode-with-question'){dateMode=dateMode||newDateModeSession();dateMode.question={id:btn.dataset.questionId,text:btn.dataset.questionText};if(btn.dataset.questionId&&!dateMode.questionIds.includes(btn.dataset.questionId))dateMode.questionIds.push(btn.dataset.questionId);openDateMode();return;}
   if(a==='date-mode-question'){const result=await api('date-engine',{operation:'question',seed:(cloud.today||'')+'|date-mode|'+(++dateQuestionNonce)});dateMode.question=result.question;if(result.question?.id&&!dateMode.questionIds.includes(result.question.id))dateMode.questionIds.push(result.question.id);openDateMode();return;}
   if(a==='date-mode-camera'){const photo=await GalaxyNative.call('capturePhoto');dateMode.photos.push(photo);if(photo.path&&!dateMode.photoPaths.includes(photo.path))dateMode.photoPaths.push(photo.path);media.photo=null;mediaLoadedAt.photo=0;openDateMode();toast('Foto añadida a esta cita y al álbum privado.');return;}
-  if(a==='date-mode-music'){rebuildMusicQueue();if(!musicQueue.length){closeModal();memoryTab='music';go('memories');toast('Añade una canción y vuelve a Modo Cita.');return;}if(musicIndex<0)playMusicAt(0);else toggleMusic();dateMode.songId=musicQueue[musicIndex]?.id||'';openDateMode();return;}
+  if(a==='date-mode-music'){rebuildMusicQueue();if(!musicQueue.length){closeModal();memorySection='collections';memoryTab='music';go('memories');toast('Añade una canción y vuelve a Modo Cita.');return;}if(musicIndex<0)playMusicAt(0);else toggleMusic();dateMode.songId=musicQueue[musicIndex]?.id||'';openDateMode();return;}
   if(a==='date-mode-plan'){await loadDateContext();openDateModePlanPicker();return;}
   if(a==='date-mode-plan-select'){dateMode.planId=String(btn.dataset.planId||'');openDateMode();return;}
   if(a==='date-mode-location'){await openDateModeLocation();return;}
@@ -3494,7 +3498,7 @@ document.addEventListener('click',async e=>{
   if(a==='music-play'){const n=Number(btn.dataset.index);if(n===musicIndex)toggleMusic();else playMusicAt(n);return;}
   if(a==='player-toggle'){toggleMusic();return;}
   if(a==='player-next'){playMusicAt(musicIndex+1);return;}
-  if(a==='player-expand'){memoryTab='music';go('memories');return;}
+  if(a==='player-expand'){memorySection='collections';memoryTab='music';go('memories');return;}
   if(a==='media-add'){await GalaxyNative.call('pickMedia',btn.dataset.kind);media[btn.dataset.kind]=null;mediaLoadedAt[btn.dataset.kind]=0;await loadMedia(btn.dataset.kind,true);toast('Archivo añadido.');return;}
   if(a==='media-delete'){if(confirm('¿Eliminar este archivo?')){await api('media-delete',{kind:btn.dataset.kind,path:btn.dataset.path});media[btn.dataset.kind]=null;mediaLoadedAt[btn.dataset.kind]=0;await loadMedia(btn.dataset.kind,true);toast('Archivo eliminado.');}return;}
   if(a==='map-places-more'){mapPlacesVisible+=6;render();document.querySelector('.journey-history-places')?.scrollIntoView({behavior:'auto',block:'start'});return;}
