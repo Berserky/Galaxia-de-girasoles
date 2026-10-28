@@ -1,0 +1,303 @@
+/* NUESTRA GALAXIA · JARDÍN VIVO / ART DIRECTION v3.0
+   All visible scenery and botany are DOM + CSS. No raster images or remote assets.
+   Animation: transform + opacity whenever possible. Battery-friendly and reduced-motion aware. */
+.ng-garden{
+ --sky-top:#9aafca;--sky-mid:#efb7ba;--sky-bottom:#f8dfb9;
+ --mountain-far:#9296b1;--mountain-near:#686d8b;--hill-back:#869c8f;--hill-front:#567d68;
+ --earth:#456955;--grass:#48725c;--highlight:#f4d17e;--scene-glow:rgba(255,227,181,.28);
+ --parallax-x:0;--parallax-y:0;
+ position:relative;display:block;isolation:isolate;contain:layout paint style;
+ width:100%;height:clamp(320px,76vw,400px);min-height:320px;overflow:hidden;
+ border-radius:24px;border:1px solid rgba(255,255,255,.16);
+ background:var(--sky-bottom);box-shadow:0 22px 38px rgba(28,46,41,.16),inset 0 1px 0 rgba(255,255,255,.3);
+ -webkit-tap-highlight-color:transparent;
+}
+.ng-garden *, .ng-garden *::before,.ng-garden *::after{box-sizing:border-box}
+.ng-garden .ng-sky{position:absolute;inset:0;background:linear-gradient(180deg,var(--sky-top) 0%,var(--sky-mid) 50%,var(--sky-bottom) 87%);transition:background 900ms ease}
+.ng-garden .ng-aurora{position:absolute;inset:-22%;pointer-events:none;background:radial-gradient(ellipse at 85% 35%,rgba(255,231,186,.45),transparent 39%),radial-gradient(ellipse at 18% 70%,rgba(255,233,222,.15),transparent 46%)}
+.ng-garden .ng-sun,.ng-garden .ng-moon{
+ position:absolute;top:15%;right:17%;width:59px;height:59px;border-radius:50%;
+ transition:opacity .8s ease, transform .8s ease;
+}
+.ng-garden .ng-sun{background:radial-gradient(circle at 36% 34%,#fffcdb,#f8dc99 78%);box-shadow:0 0 0 20px rgba(255,224,159,.10),0 0 0 43px rgba(255,225,181,.065),0 0 65px 23px rgba(255,221,147,.48)}
+.ng-garden .ng-moon{opacity:0;transform:translateY(18px);background:radial-gradient(circle at 35% 35%,#f9f7e9,#c9d6dd 94%);box-shadow:0 0 35px 14px rgba(195,216,252,.14);}
+.ng-garden .ng-moon:after{content:'';position:absolute;width:10px;height:10px;border-radius:50%;left:32%;top:24%;background:rgba(157,166,190,.15);box-shadow:13px 17px 0 4px rgba(157,166,190,.12),1px 22px 0 2px rgba(157,166,190,.12)}
+.ng-garden .ng-starfield{position:absolute;inset:0;opacity:.27;transition:opacity 900ms ease}
+.ng-garden .ng-starfield>i{position:absolute;left:var(--dx);top:var(--dy);width:2px;height:2px;border-radius:50%;background:rgba(255,250,218,.8);box-shadow:0 0 8px rgba(255,255,227,.8);animation:ng-twinkle var(--duration) ease-in-out infinite alternate;animation-delay:calc(var(--n)*-.31s)}
+.ng-garden .ng-starfield>i:nth-child(5n){width:4px;height:4px;clip-path:polygon(50% 0,61% 40%,100% 50%,61% 60%,50% 100%,39% 60%,0 50%,39% 40%)}
+.ng-garden .ng-cloud{position:absolute;height:36px;min-width:170px;opacity:.4;filter:blur(2px);background:radial-gradient(ellipse at 28% 70%,#faece5 0 28%,transparent 29%),radial-gradient(ellipse at 48% 51%,#faece5 0 34%,transparent 35%),radial-gradient(ellipse at 68% 72%,#faece5 0 26%,transparent 27%);animation:ng-cloud-drift 33s ease-in-out infinite alternate;pointer-events:none}
+.ng-garden .ng-cloud--a{left:-22px;top:22%;transform:scale(1.25);opacity:.5}
+.ng-garden .ng-cloud--b{left:42%;top:32%;transform:scale(.73);animation-delay:-13s;opacity:.26}
+.ng-garden .ng-cloud--c{left:12%;top:46%;transform:scale(1.6);animation-delay:-21s;opacity:.2}
+.ng-garden .ng-world{position:absolute;inset:0;pointer-events:none;transform:translate3d(calc(var(--parallax-x)*-5px),calc(var(--parallax-y)*-3px),0);transition:transform .35s ease-out}
+.ng-garden .ng-mountain{position:absolute;inset:18% -6% 19%;filter:drop-shadow(0 9px 10px rgba(51,61,83,.075))}
+.ng-garden .ng-mountain--far{background:linear-gradient(140deg,rgba(249,218,227,.65),var(--mountain-far) 72%);clip-path:polygon(0 80%,12% 53%,19% 64%,32% 23%,38% 34%,48% 8%,61% 57%,67% 39%,77% 73%,89% 35%,100% 69%,100% 100%,0 100%);opacity:.53;transform:translateY(14px)}
+.ng-garden .ng-mountain--near{inset:21% -10% 18%;background:linear-gradient(158deg,#f6ddd9 3%,var(--mountain-near) 80%);clip-path:polygon(0 75%,9% 64%,17% 83%,34% 24%,40% 39%,45% 11%,57% 64%,63% 48%,71% 86%,84% 45%,91% 57%,100% 38%,100% 100%,0 100%);opacity:.52}
+.ng-garden .ng-mist{position:absolute;left:-15%;right:-15%;bottom:22%;height:25%;filter:blur(12px);background:linear-gradient(transparent,rgba(255,245,226,.55) 55%,transparent);opacity:.84}
+.ng-garden .ng-hill{position:absolute;pointer-events:none;transition:background .9s ease}
+.ng-garden .ng-hill--back{left:-15%;bottom:11%;width:130%;height:32%;border-radius:55% 55% 0 0 / 62% 70% 0 0;background:linear-gradient(155deg,color-mix(in srgb,var(--hill-back) 70%,#e5d6b5),var(--hill-back));transform:rotate(-6deg)}
+.ng-garden .ng-hill--front{left:-21%;bottom:-13%;width:150%;height:48%;border-radius:50% 48% 0 0 / 48% 55% 0 0;background:linear-gradient(125deg,#9eac82,var(--hill-front) 73%,#385e51);transform:rotate(4deg);box-shadow:inset 0 16px 40px rgba(244,223,172,.21)}
+.ng-garden .ng-trees{position:absolute;inset:58% 0 19%;transform:translateZ(0)}
+.ng-garden .ng-trees>i{position:absolute;left:var(--tx);bottom:0;width:10px;height:var(--th);opacity:var(--to);background:linear-gradient(90deg,#365e54,#739080);clip-path:polygon(49% 0,76% 28%,68% 28%,90% 58%,74% 59%,99% 84%,55% 81%,55% 100%,43% 100%,43% 81%,0 84%,25% 59%,12% 58%,33% 28%,27% 28%)}
+.ng-garden .ng-stream{position:absolute;left:6%;bottom:3%;width:95%;height:22%;background:linear-gradient(180deg,rgba(215,237,221,.37),rgba(157,211,194,.26));clip-path:polygon(49% 0,55% 0,64% 35%,61% 65%,85% 100%,68% 100%,49% 75%,53% 44%);filter:blur(1px);opacity:.63}
+.ng-garden .ng-meadow{position:absolute;inset:65% 0 0;pointer-events:none}
+.ng-garden .ng-meadow-glow{position:absolute;inset:-12% -15%;background:radial-gradient(ellipse at 51% 97%,rgba(230,228,153,.28),transparent 65%)}
+.ng-garden .ng-grass,.ng-garden .ng-wildflowers{position:absolute;inset:0}
+.ng-garden .ng-grass>i{position:absolute;left:var(--gx);bottom:-4px;height:var(--gh);width:3px;border-radius:90% 0 70% 0;transform-origin:center bottom;transform:rotate(var(--ga));background:linear-gradient(90deg,#78965f,#305b47);opacity:.75;animation:ng-grass-sway 5s ease-in-out infinite alternate;animation-delay:var(--go)}
+.ng-garden .ng-wildflower{position:absolute;left:var(--wx);bottom:var(--wy);width:20px;height:21px;transform:scale(var(--ws));animation:ng-wildflower-sway 6s ease-in-out infinite alternate;animation-delay:var(--wd)}
+.ng-garden .ng-wildflower:before{content:'';position:absolute;bottom:0;left:9px;height:18px;width:2px;background:#527b59}
+.ng-garden .ng-wildflower i{position:absolute;top:0;left:7px;width:7px;height:7px;border-radius:50%;background:#f9da75;box-shadow:0 -6px 0 0 #faf1e1,0 6px 0 0 #faf1e1,-6px 0 0 #faf1e1,6px 0 0 #faf1e1,4px 4px 0 -1px #fff1e4,-4px -4px 0 -1px #fff1e4;filter:drop-shadow(0 1px 1px rgba(36,68,51,.2))}
+.ng-garden .ng-seeds{display:none;position:absolute;inset:0}
+.ng-garden .ng-seeds>span{position:absolute;left:var(--sx);bottom:38%;width:13px;height:7px;border-radius:50% 50% 40% 40%;background:#ab7041;box-shadow:0 3px 0 rgba(45,65,33,.24);transform:rotate(-23deg);animation:ng-seed-awake 3s ease-in-out infinite alternate;animation-delay:var(--sd)}
+.ng-garden[data-stage="0"] .ng-seeds{display:block}
+.ng-garden .ng-plant-field{position:absolute;z-index:5;inset:0;pointer-events:none;transform:translate3d(calc(var(--parallax-x)*7px),0,0);transition:transform .3s ease-out}
+.ng-garden .ng-plant{position:absolute;left:var(--x);bottom:4%;z-index:var(--z);width:100px;height:var(--ph);padding:0;margin:0;background:transparent;border:0;color:inherit;cursor:pointer;pointer-events:auto;transform:translateX(-50%) scale(var(--size));transform-origin:50% 100%;animation:ng-grow-in .8s cubic-bezier(.22,.86,.24,1) both;animation-delay:calc(var(--z)*.09s)}
+.ng-garden .ng-plant:focus-visible{outline:3px solid #fff4c2;outline-offset:5px;border-radius:45px}
+.ng-garden .ng-plant-sway{position:absolute;inset:0;display:block;transform-origin:center 97%;animation:ng-plant-sway calc(5.5s + var(--z)*.48s) ease-in-out infinite alternate;animation-delay:var(--delay)}
+.ng-garden .ng-stem{position:absolute;z-index:1;left:46px;top:56px;bottom:0;width:11px;border-radius:70% 40% 40% 40%;transform:rotate(var(--lean));transform-origin:bottom center;background:linear-gradient(90deg,#31583b 0,#4a7d4b 28%,#8faa67 55%,#375e3e 95%);box-shadow:inset -2px 0 4px rgba(28,65,27,.24),3px 2px 7px rgba(22,59,26,.16)}
+.ng-garden .ng-stem:after{content:'';position:absolute;left:5px;top:4%;width:1px;height:90%;background:rgba(230,248,165,.24)}
+.ng-garden .ng-leaf{position:absolute;z-index:2;width:68px;height:37px;border-radius:0 95% 5% 95% / 0 97% 3% 98%;background:linear-gradient(143deg,#b5c982 0%,#6d9d68 42%,#3e7659 100%);box-shadow:inset 2px 2px 9px rgba(238,254,182,.23),3px 5px 8px rgba(29,68,32,.23)}
+.ng-garden .ng-leaf:after{content:'';position:absolute;left:10px;top:47%;height:1px;width:78%;background:rgba(219,236,168,.56);transform:rotate(-18deg);transform-origin:left center}
+.ng-garden .ng-leaf--left{top:53%;left:-9px;transform:rotate(-25deg) scaleX(-1);transform-origin:right bottom}
+.ng-garden .ng-leaf--right{top:39%;right:-21px;transform:rotate(-24deg);transform-origin:left bottom;width:56px;height:32px}
+.ng-garden .ng-flower{position:absolute;z-index:4;left:0;top:0;width:100px;height:100px;transform-origin:50% 45%;filter:drop-shadow(2px 7px 7px rgba(58,59,27,.23));}
+.ng-garden .ng-petals{position:absolute;inset:0;display:block}
+.ng-garden .ng-petal{position:absolute;left:40px;top:2px;width:20px;height:51px;border-radius:65% 65% 42% 42% / 91% 91% 25% 25%;background:linear-gradient(105deg,#f9ad32 7%,#ffe5a2 30%,#ffca54 58%,#efa125 90%);box-shadow:inset 2px 0 3px rgba(255,247,196,.48),inset -2px -2px 4px rgba(197,98,16,.18);transform-origin:50% 48px;transform:rotate(calc(var(--i)*15deg)) scale(.99);}
+.ng-garden .ng-petal:nth-child(2n){width:21px;height:47px;top:6px;left:39.5px;filter:brightness(1.04);transform:rotate(calc(var(--i)*15deg)) scale(.96)}
+.ng-garden .ng-petal:nth-child(3n){filter:hue-rotate(var(--hue)) brightness(.97)}
+.ng-garden .ng-disc{position:absolute;top:26px;left:26px;width:48px;height:48px;z-index:3;border-radius:50%;border:5px solid #b9672a;
+ background:radial-gradient(circle at 50% 48%,transparent 0 34%,rgba(248,170,72,.4) 35% 37%,transparent 38%),repeating-conic-gradient(from 0deg,#f9be56 0deg 5deg,#703d22 5deg 9deg,#ac6b2e 9deg 12deg),radial-gradient(circle,#6f3a23,#a9652c);
+ box-shadow:inset 0 0 0 4px rgba(72,38,17,.65),0 0 0 2px #ecc35e,0 4px 10px rgba(79,44,23,.23)}
+.ng-garden .ng-disc:after{content:'';position:absolute;inset:6px;border-radius:50%;background:radial-gradient(circle at 50% 50%,transparent 0 48%,rgba(91,48,23,.23) 50% 60%,transparent 66%),repeating-radial-gradient(circle,rgba(66,31,13,.45) 0 1px,rgba(241,162,70,.35) 1px 3px,rgba(61,30,17,.25) 3px 4px);mix-blend-mode:multiply}
+.ng-garden .ng-disc-heart{position:absolute;z-index:2;left:16px;top:15px;width:7px;height:7px;transform:rotate(-45deg);background:#f9d082;border-radius:1px;opacity:.9;box-shadow:1px 1px 2px #c38a41}
+.ng-garden .ng-disc-heart:before,.ng-garden .ng-disc-heart:after{content:'';position:absolute;width:7px;height:7px;background:#f9d082;border-radius:50%}
+.ng-garden .ng-disc-heart:before{top:-3px;left:0}
+.ng-garden .ng-disc-heart:after{top:0;left:3px}
+.ng-garden .ng-bud{display:none;position:absolute;z-index:4;left:36px;top:14px;width:29px;height:36px;border-radius:52% 52% 38% 38%;background:linear-gradient(125deg,#a1c478,#3e7854);box-shadow:inset 5px 2px rgba(243,226,135,.2),2px 4px 7px rgba(34,65,36,.2)}
+.ng-garden .ng-bud:after{content:'';position:absolute;inset:6px 7px 4px;background:linear-gradient(120deg,#ffdc74,#db9540);border-radius:80% 80% 35% 35%;opacity:.9}
+.ng-garden .ng-plant--sprout .ng-flower{display:none}
+.ng-garden .ng-plant--sprout .ng-bud{display:block}
+.ng-garden .ng-plant--sprout .ng-stem{top:40px}
+.ng-garden .ng-plant--sprout .ng-leaf{width:46px;height:26px}
+.ng-garden .ng-plant--sprout .ng-leaf--right{right:0}
+.ng-garden .ng-weather{position:absolute;z-index:8;inset:0;pointer-events:none;opacity:0;transition:opacity 850ms ease}
+.ng-garden .ng-weather>i{position:absolute;left:var(--dx);top:-15%;width:5px;height:5px;border-radius:50%;background:#f8f8fa;box-shadow:0 0 7px 1px rgba(243,248,255,.9);animation:ng-snow calc(8s + var(--n)*.16s) linear infinite;animation-delay:calc(var(--n)*-.55s)}
+.ng-garden .ng-overlays{position:absolute;z-index:8;inset:0;pointer-events:none;opacity:.73}
+.ng-garden .ng-glimmer{position:absolute;width:5px;height:5px;border-radius:50%;background:#fff4c3;box-shadow:0 0 10px 2px #ffedab;animation:ng-firefly 5s ease-in-out infinite alternate}
+.ng-garden .ng-glimmer--a{top:62%;left:14%;animation-delay:-2s}.ng-garden .ng-glimmer--b{top:51%;left:79%;animation-delay:-3.2s}.ng-garden .ng-glimmer--c{top:72%;left:55%;animation-delay:-.3s}
+.ng-garden .ng-glass-sign{position:absolute;z-index:9;top:14px;left:14px;display:flex;align-items:center;gap:7px;max-width:calc(100% - 95px);padding:7px 10px 7px 8px;background:rgba(255,254,239,.29);backdrop-filter:blur(9px);border:1px solid rgba(255,255,255,.38);border-radius:20px;color:#415a5e;font:600 9px/1.15 system-ui,sans-serif;letter-spacing:.07em;text-transform:uppercase;text-shadow:0 1px 1px rgba(255,255,255,.2)}
+.ng-garden .ng-sign-star{font-size:16px;line-height:8px;color:#f5d788}
+.ng-garden .ng-ground-shadow{pointer-events:none;position:absolute;z-index:7;inset:auto 0 0;height:18%;background:linear-gradient(0deg,rgba(20,56,39,.26),transparent)}
+/* Dayparts: all gradients and shapes share the same underlying markup. */
+.ng-garden[data-daypart="morning"]{--sky-top:#9db6cf;--sky-mid:#f7bfae;--sky-bottom:#ffe2ba;--scene-glow:rgba(255,234,181,.5)}
+.ng-garden[data-daypart="day"]{--sky-top:#78b4d2;--sky-mid:#c0e2db;--sky-bottom:#ecedd1;--mountain-far:#88aebb;--mountain-near:#749da6;--hill-back:#8eae88;--hill-front:#648b67}
+.ng-garden[data-daypart="sunset"]{--sky-top:#716b9e;--sky-mid:#d49eab;--sky-bottom:#ffd4a0;--mountain-far:#a191ad;--mountain-near:#77748d;--hill-back:#8d9b87;--hill-front:#557b65}
+.ng-garden[data-daypart="night"]{--sky-top:#171f49;--sky-mid:#4b4476;--sky-bottom:#b28e9d;--mountain-far:#6b6695;--mountain-near:#4c5679;--hill-back:#4e696c;--hill-front:#385b51}
+.ng-garden[data-daypart="night"] .ng-sun{opacity:0;transform:translateY(22px)}
+.ng-garden[data-daypart="night"] .ng-moon{opacity:1;transform:translateY(0)}
+.ng-garden[data-daypart="night"] .ng-starfield{opacity:.95}
+.ng-garden[data-daypart="night"] .ng-glass-sign{color:#ecf3e1;background:rgba(23,29,62,.29)}
+.ng-garden[data-daypart="night"] .ng-glimmer{opacity:1}
+.ng-garden[data-daypart="day"] .ng-glimmer{opacity:.24}
+.ng-garden[data-daypart="night"] .ng-meadow{filter:brightness(.76)}
+.ng-garden[data-daypart="night"] .ng-plant-field{filter:brightness(.80) saturate(.82)}
+/* Seasons: Northern-hemisphere artistic calendar, including winter in Colombia by request. */
+.ng-garden[data-season="winter"]{--hill-back:#b1bdbe;--hill-front:#889ea0;--earth:#8da5a1}
+.ng-garden[data-season="winter"] .ng-hill--front{background:linear-gradient(125deg,#edf4ef,#b5d1cc 74%,#78999a);box-shadow:inset 0 20px 30px rgba(255,255,255,.33)}
+.ng-garden[data-season="winter"] .ng-hill--back{background:linear-gradient(140deg,#f4e9e8,#b5c6c5)}
+.ng-garden[data-season="winter"] .ng-weather{opacity:.86}
+.ng-garden[data-season="winter"] .ng-meadow{filter:saturate(.66) brightness(1.22)}
+.ng-garden[data-season="winter"] .ng-trees{filter:grayscale(.4) brightness(1.35)}
+.ng-garden[data-season="autumn"]{--hill-back:#b29d78;--hill-front:#8a7956}
+.ng-garden[data-season="autumn"] .ng-hill--front{background:linear-gradient(120deg,#a5a16c,#8a7956 70%,#56573e)}
+.ng-garden[data-season="autumn"] .ng-leaf{filter:hue-rotate(-35deg) saturate(1.45)}
+.ng-garden[data-season="spring"] .ng-wildflowers{filter:saturate(1.1)}
+.ng-garden[data-season="summer"] .ng-sun{box-shadow:0 0 0 23px rgba(255,224,159,.08),0 0 0 46px rgba(255,225,181,.06),0 0 75px 23px rgba(255,221,147,.59)}
+/* Theme accents avoid pulling private theme assets or network. */
+.ng-garden[data-celebration="christmas"] .ng-starfield{opacity:1}
+.ng-garden[data-celebration="christmas"] .ng-glimmer{background:#fff8e0;box-shadow:0 0 10px #ffd089}
+.ng-garden[data-celebration="halloween"] .ng-sky{filter:hue-rotate(-11deg)}
+.ng-garden[data-celebration="valentine"] .ng-glass-sign{background:rgba(255,223,229,.52)}
+.ng-garden[data-celebration="cosmic"] .ng-starfield{opacity:1}
+.ng-garden[data-celebration="easter"] .ng-wildflower i{background:#f6e9a3}
+.ng-garden[data-celebration="friendship"] .ng-glimmer{background:#fff5c3}
+@keyframes ng-twinkle{0%{transform:scale(.65);opacity:.35}100%{transform:scale(1.5);opacity:1}}
+@keyframes ng-cloud-drift{0%{margin-left:-10px;opacity:.25}100%{margin-left:30px;opacity:.53}}
+@keyframes ng-grow-in{0%{opacity:0;transform:translateX(-50%) scale(.1)}100%{opacity:1;transform:translateX(-50%) scale(var(--size))}}
+@keyframes ng-plant-sway{0%{transform:rotate(-2.5deg)}100%{transform:rotate(3deg)}}
+@keyframes ng-wildflower-sway{0%{transform:rotate(-9deg) scale(var(--ws))}100%{transform:rotate(7deg) scale(var(--ws))}}
+@keyframes ng-grass-sway{0%{transform:rotate(calc(var(--ga) - 7deg))}100%{transform:rotate(calc(var(--ga) + 5deg))}}
+@keyframes ng-firefly{0%{opacity:.15;transform:translate3d(-8px,6px,0) scale(.65)}100%{opacity:.89;transform:translate3d(9px,-8px,0) scale(1.25)}}
+@keyframes ng-snow{0%{transform:translate3d(0,-8px,0);opacity:0}12%{opacity:.8}90%{opacity:.85}100%{transform:translate3d(46px,430px,0);opacity:0}}
+@keyframes ng-seed-awake{to{transform:translateY(-4px) rotate(-23deg)}}
+.ng-garden[data-motion="reduce"] *,.ng-garden[data-motion="reduce"] *::before,.ng-garden[data-motion="reduce"] *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+@media(prefers-reduced-motion:reduce){.ng-garden *,.ng-garden *::before,.ng-garden *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+@media(max-width:359px){.ng-garden{min-height:300px;height:300px;border-radius:18px}.ng-garden .ng-glass-sign{font-size:8px;max-width:80%}.ng-garden .ng-plant{bottom:2%}.ng-garden .ng-cloud--b{display:none}.ng-garden .ng-mountain--far{opacity:.4}}
+@media(min-width:700px){.ng-garden{height:420px}.ng-garden .ng-plant-field{max-width:730px;left:50%;width:100%;right:auto;transform:translateX(-50%)}}
+
+/* Animation budget: no snow outside winter and no star flicker in bright daylight. */
+.ng-garden:not([data-season="winter"]) .ng-weather>i{animation:none}
+.ng-garden[data-daypart="day"]:not([data-celebration="cosmic"]) .ng-starfield>i{animation:none}
+/* Suspend expensive perpetual scenery animations while outside viewport / background. */
+.ng-garden[data-paused="true"] *,.ng-garden[data-paused="true"] *::before,.ng-garden[data-paused="true"] *::after{animation-play-state:paused!important}
+
+
+
+/* V3 CAMERA WORLD: ornament depth is physically beneath terrain and botany. */
+.ng-garden{--cam-scale:1;--world-width:100%;--land-height:38%;--detail-alpha:1;}
+.ng-garden .ng-sky{z-index:0}
+.ng-garden .ng-decorations{position:absolute;inset:0;z-index:1;overflow:hidden;pointer-events:none;contain:paint}
+.ng-garden .ng-decorations > div{display:none;position:absolute;inset:0}
+.ng-garden[data-celebration="christmas"] .ng-decor-ng-xmas,
+.ng-garden[data-celebration="halloween"] .ng-decor-ng-halloween,
+.ng-garden[data-celebration="valentine"] .ng-decor-ng-valentine,
+.ng-garden[data-celebration="friendship"] .ng-decor-ng-friendship,
+.ng-garden[data-celebration="cosmic"] .ng-decor-ng-cosmic,
+.ng-garden[data-celebration="easter"] .ng-decor-ng-easter{display:block}
+.ng-garden .ng-world{z-index:2}
+.ng-garden .ng-trees{display:none} /* background tree silhouettes were competing with the flowers */
+.ng-garden .ng-terrain{position:absolute;z-index:3;inset:0;pointer-events:none;overflow:hidden}
+.ng-garden .ng-terrain .ng-contour{position:absolute;left:-17%;right:-17%;bottom:-27%;height:65%;border-radius:46% 54% 0 0 / 78% 85% 0 0;background:linear-gradient(155deg,#94b893 0%,#56836d 50%,#35624f 100%);box-shadow:inset 0 24px 33px #c9dc9a33;opacity:0;transition:opacity 900ms ease}
+.ng-garden .ng-terrain .ng-contour--back{left:-21%;right:12%;bottom:8%;height:30%;border-radius:50%;background:linear-gradient(125deg,#a9c49e,#749a87);filter:blur(.8px)}
+.ng-garden .ng-terrain .ng-contour--front{right:-29%;left:0;bottom:-21%;height:49%;border-radius:52%;background:linear-gradient(165deg,#90ac84,#416f57)}
+.ng-garden .ng-terrain .ng-river{position:absolute;left:39%;bottom:-11%;height:52%;width:23%;background:linear-gradient(90deg,#badbd1,#d5e8d4 40%,#76b6bc 67%,#dcecdf);clip-path:polygon(49% 0,64% 0,79% 25%,65% 47%,49% 58%,57% 76%,98% 99%,71% 100%,32% 80%,19% 62%,37% 44%,46% 27%);filter:drop-shadow(0 0 6px #d8f0e450);opacity:0;transition:opacity 800ms}
+.ng-garden .ng-terrain .ng-path{position:absolute;bottom:-3%;left:17%;height:26%;width:37%;background:linear-gradient(#e6dab0b0,#b2a178a0);clip-path:polygon(55% 0,62% 0,57% 21%,46% 32%,65% 65%,100% 100%,76% 100%,41% 70%,29% 33%,48% 14%);opacity:0;transition:opacity 800ms}
+.ng-garden .ng-terrain .ng-map-lines{position:absolute;inset:42% -14% -12%;opacity:0;background:repeating-radial-gradient(ellipse at 47% 90%,transparent 0 27px,#f0efc821 29px 30px,transparent 32px 49px);mix-blend-mode:screen;transition:opacity 800ms}
+.ng-garden .ng-terrain .ng-garden-center{position:absolute;left:50%;bottom:6%;width:var(--plot-size,92%);height:31%;transform:translateX(-50%);border-radius:50%;background:radial-gradient(ellipse at 50% 60%,#e7d39b25,transparent 65%);border:1px solid #f4e7b70b;opacity:0;transition:opacity 800ms,width 900ms}
+.ng-garden .ng-meadow{z-index:4;opacity:1}
+.ng-garden .ng-plant-field{z-index:5;inset:0;transform:none;pointer-events:none}
+.ng-garden .ng-plant-world{position:absolute;bottom:0;left:50%;width:var(--world-width);height:100%;transform:translateX(-50%) scale(var(--cam-scale));transform-origin:50% 88%;transition:transform 1500ms cubic-bezier(.18,.72,.15,1),width 1500ms cubic-bezier(.18,.72,.15,1)}
+.ng-garden .ng-plant{bottom:var(--y,4%);z-index:var(--z,5);}
+.ng-garden .ng-plant[aria-hidden="true"]{pointer-events:none;cursor:default}
+.ng-garden .ng-mini-bloom{position:absolute;left:var(--x);bottom:var(--y);z-index:4;width:10px;height:10px;border-radius:50%;background:radial-gradient(circle,#623c25 0 30%,#e6a342 32% 48%,#f4d378 52% 80%,#ffc977 82%);box-shadow:0 0 0 4px #f6bf5272,0 1px 5px #263d2759;transform:translate(-50%,0) scale(var(--s));opacity:.96;animation:ng-mini-wind 5s ease-in-out infinite alternate;animation-delay:var(--delay)}
+.ng-garden .ng-chapter-mark{position:absolute;left:50%;bottom:9%;width:8px;height:8px;border-radius:50%;background:#ffe7b1;box-shadow:0 0 0 8px #ffe8a111,0 0 24px #ffe8a180;transform:translateX(-50%);opacity:0}
+.ng-garden[data-chapter="meadow"]{--world-width:170%;--cam-scale:.66;--plot-size:58%}
+.ng-garden[data-chapter="valley"]{--world-width:240%;--cam-scale:.48;--plot-size:38%}
+.ng-garden[data-chapter="region"]{--world-width:330%;--cam-scale:.34;--plot-size:25%}
+.ng-garden[data-chapter="planet"],.ng-garden[data-chapter="constellation"]{--world-width:410%;--cam-scale:.23}
+.ng-garden[data-chapter="meadow"] .ng-contour,
+.ng-garden[data-chapter="valley"] .ng-contour,
+.ng-garden[data-chapter="region"] .ng-contour{opacity:.8}
+.ng-garden[data-chapter="meadow"] .ng-garden-center,
+.ng-garden[data-chapter="valley"] .ng-garden-center,
+.ng-garden[data-chapter="region"] .ng-garden-center{opacity:1}
+.ng-garden[data-chapter="valley"] .ng-river,.ng-garden[data-chapter="region"] .ng-river{opacity:.84}
+.ng-garden[data-chapter="meadow"] .ng-path,.ng-garden[data-chapter="valley"] .ng-path,.ng-garden[data-chapter="region"] .ng-path{opacity:.66}
+.ng-garden[data-chapter="region"] .ng-map-lines{opacity:1}
+.ng-garden[data-chapter="meadow"] .ng-hill--front,.ng-garden[data-chapter="valley"] .ng-hill--front,.ng-garden[data-chapter="region"] .ng-hill--front{opacity:.2}
+.ng-garden[data-chapter="region"] .ng-mountain{transform:translateY(22px) scale(.78);opacity:.32}
+.ng-garden[data-chapter="region"] .ng-glass-sign{background:#203b3aa3;color:#fff4cc}
+.ng-garden .ng-planet-wrap{display:none;position:absolute;inset:0;z-index:4;pointer-events:none;place-items:center}
+.ng-garden[data-chapter="planet"] .ng-planet-wrap,.ng-garden[data-chapter="constellation"] .ng-planet-wrap{display:grid}
+.ng-garden[data-chapter="planet"] .ng-world,.ng-garden[data-chapter="planet"] .ng-terrain,.ng-garden[data-chapter="planet"] .ng-meadow,.ng-garden[data-chapter="planet"] .ng-plant-field,
+.ng-garden[data-chapter="constellation"] .ng-world,.ng-garden[data-chapter="constellation"] .ng-terrain,.ng-garden[data-chapter="constellation"] .ng-meadow,.ng-garden[data-chapter="constellation"] .ng-plant-field{display:none}
+.ng-garden[data-chapter="planet"],.ng-garden[data-chapter="constellation"]{--sky-top:#0e1837;--sky-mid:#354873;--sky-bottom:#7775a2}
+.ng-garden .ng-planet{position:relative;width:min(77%,292px);aspect-ratio:1;border-radius:50%;overflow:hidden;isolation:isolate;background:radial-gradient(circle at 27% 21%,#b7e6c9,#5fa68c 42%,#366e72 73%,#1b3c61 100%);box-shadow:inset -28px -18px 55px #0b1a4699,inset 15px 6px 36px #c7e4bf66,0 0 0 14px #d0f6cf0a,0 0 65px #8fd1d066;transform:rotate(-17deg);animation:ng-planet-breathe 10s ease-in-out infinite alternate}
+.ng-garden .ng-planet:before{content:"";position:absolute;inset:6%;border-radius:50%;background:radial-gradient(ellipse 33% 29% at 25% 35%,#b8d58e 48%,transparent 51%),radial-gradient(ellipse 25% 33% at 66% 32%,#78a67e 51%,transparent 55%),radial-gradient(ellipse 36% 29% at 52% 69%,#98bf85 55%,transparent 57%),radial-gradient(ellipse 21% 22% at 79% 73%,#d4c896 57%,transparent 60%);filter:blur(5px);opacity:.89}
+.ng-garden .ng-planet:after{content:"";position:absolute;inset:0;border-radius:50%;background:linear-gradient(115deg,#ffffff22,transparent 45%,#0d274e77);pointer-events:none}
+.ng-garden .ng-planet .ng-planet-flower{position:absolute;z-index:2;left:var(--x);top:var(--y);width:5px;height:5px;border-radius:50%;background:#fff0a1;box-shadow:0 0 0 3px #f4b64d9e,0 0 8px 1px #f9cf6e;opacity:var(--op,.9)}
+/* Eight original sunflowers retain a recognizable golden bloom in orbit.
+   These are decoration, not tiny inaccessible touch targets. */
+.ng-garden .ng-planet .ng-planet-flower[data-origin-flower]{
+ z-index:4;width:7px;height:7px;background:#654024;
+ box-shadow:0 0 0 2px #f7c24e,0 0 0 4px #ffe49b,0 0 9px 3px #fff0b2;
+ opacity:1
+}
+.ng-garden .ng-planet-label{position:absolute;bottom:11%;left:0;right:0;text-align:center;color:#ffebc3;font-size:10px;letter-spacing:.17em;text-shadow:0 2px 9px #10213c}
+.ng-garden[data-chapter="constellation"] .ng-planet{transform:rotate(-17deg) scale(.68) translateX(-16%)}
+.ng-garden[data-chapter="constellation"] .ng-planet-wrap:after{content:"";position:absolute;right:6%;top:25%;width:65px;height:65px;border-radius:50%;background:radial-gradient(circle at 36% 38%,#ffe2a6,#d8a4a4 60%,#675b91 100%);box-shadow:0 0 26px #f3bbe383}
+.ng-garden .ng-weather{z-index:7}
+.ng-garden .ng-ground-shadow{z-index:6}
+/* Decorations: only sky, never decorations over sunflower field. */
+.ng-garden[data-celebration="christmas"]{--sky-top:#527ba5;--sky-mid:#afcfcd;--sky-bottom:#e7e6d4}
+.ng-garden[data-celebration="christmas"] .ng-decorations .ng-xmas-lights{position:absolute;left:4%;right:4%;top:12%;height:19%;border-top:2px solid #314e5b99;border-radius:50%;transform:rotate(-2deg)}
+.ng-garden .ng-xmas-lights i{position:absolute;left:var(--x);top:0;width:7px;height:10px;border-radius:0 0 6px 6px;background:var(--c);box-shadow:0 0 11px 3px var(--c);animation:ng-light-flicker 3s ease-in-out infinite alternate;animation-delay:var(--d)}
+.ng-garden .ng-santa-flight{position:absolute;left:8%;top:22%;height:40px;width:165px;animation:ng-santa-fly 19s linear infinite;filter:drop-shadow(0 3px 4px #26354b88)}
+.ng-garden .ng-sleigh{position:absolute;right:0;top:10px;width:66px;height:22px;border-radius:5px 8px 45% 30%;background:#b33946;transform:skewX(-13deg);box-shadow:inset 0 -8px #7c2e47}
+.ng-garden .ng-sleigh:before{content:"";position:absolute;left:-2px;bottom:-7px;width:72px;height:7px;border-bottom:3px solid #ecd3a4;border-radius:0 0 60% 50%}
+.ng-garden .ng-santa-head{position:absolute;right:30px;top:0;width:19px;height:16px;border-radius:45%;background:#fbd5a3;box-shadow:0 -5px 0 3px #b43844}
+.ng-garden .ng-santa-head:before{content:"";position:absolute;left:1px;top:9px;width:19px;height:11px;border-radius:50%;background:#f7eee2}
+.ng-garden .ng-deer{position:absolute;left:var(--x);top:14px;width:26px;height:13px;background:#866346;border-radius:55% 45% 50% 40%;transform:scale(var(--s,1))}
+.ng-garden .ng-deer:before{content:"";position:absolute;left:18px;top:-7px;width:13px;height:12px;border-radius:40%;background:#9b7251;box-shadow:0 -6px 0 -4px #f6d6a8}
+.ng-garden .ng-deer:after{content:"";position:absolute;left:7px;top:11px;width:3px;height:11px;background:#493b35;box-shadow:10px 0 #493b35}
+.ng-garden .ng-santa-rope{position:absolute;left:77px;top:17px;width:35px;height:2px;background:#eddcb88c}
+.ng-garden[data-celebration="halloween"]{--sky-top:#312443;--sky-mid:#85506b;--sky-bottom:#e8a475}
+.ng-garden[data-celebration="halloween"] .ng-moon{opacity:1;transform:none;background:#ffe6a5;box-shadow:0 0 50px #ffe6a5aa}
+.ng-garden[data-celebration="halloween"] .ng-sun{opacity:0}
+.ng-garden .ng-bats>i{position:absolute;left:var(--x);top:var(--y);width:30px;height:13px;background:#2d2840;clip-path:polygon(0 45%,18% 6%,40% 52%,50% 20%,60% 52%,82% 6%,100% 45%,85% 85%,68% 63%,50% 82%,32% 63%,15% 85%);transform:scale(var(--s));animation:ng-bat-fly 6s ease-in-out infinite alternate;animation-delay:var(--d)}
+.ng-garden[data-celebration="valentine"]{--sky-top:#b69dc0;--sky-mid:#f3bfce;--sky-bottom:#ffe6ce}
+.ng-garden .ng-hearts>i{position:absolute;left:var(--x);top:var(--y);width:12px;height:12px;background:#ffb4cc;transform:rotate(-45deg);opacity:.85;animation:ng-heart-rise 6s ease-in-out infinite alternate;animation-delay:var(--d);box-shadow:0 0 9px #f9b5ca99}
+.ng-garden .ng-hearts>i:before,.ng-garden .ng-hearts>i:after{content:"";position:absolute;width:12px;height:12px;border-radius:50%;background:inherit}
+.ng-garden .ng-hearts>i:before{top:-6px}.ng-garden .ng-hearts>i:after{left:6px}
+.ng-garden[data-celebration="friendship"]{--sky-top:#5c89bd;--sky-mid:#aeb4d2;--sky-bottom:#f8d5b3}
+.ng-garden .ng-firework{position:absolute;left:var(--x);top:var(--y);width:4px;height:4px;animation:ng-firework-pulse 4.7s ease-out infinite;animation-delay:var(--delay)}
+.ng-garden .ng-firework i{position:absolute;left:50%;top:50%;width:3px;height:34px;border-radius:6px;background:linear-gradient(var(--c),transparent 85%);transform-origin:50% 2px;transform:rotate(calc(var(--ray)*30deg)) translateY(-24px);filter:drop-shadow(0 0 3px var(--c))}
+.ng-garden[data-celebration="cosmic"]{--sky-top:#101735;--sky-mid:#484475;--sky-bottom:#a696bd}
+.ng-garden[data-celebration="cosmic"] .ng-starfield{opacity:1}
+.ng-garden[data-celebration="cosmic"] .ng-sun,.ng-garden[data-celebration="cosmic"] .ng-moon{opacity:0}
+.ng-garden .ng-cosmic-planet{position:absolute;top:15%;right:12%;width:81px;height:81px;border-radius:50%;background:radial-gradient(circle at 25% 22%,#fbd5a2,#c68db3 50%,#7569a3 85%);box-shadow:0 0 35px 12px #bca3dc44}
+.ng-garden .ng-cosmic-planet:before{content:"";position:absolute;inset:34px -23px;border:6px solid #f0dfc5aa;border-radius:50%;transform:rotate(-22deg)}
+.ng-garden[data-celebration="easter"]{--sky-top:#a8c5d9;--sky-mid:#f3cdd9;--sky-bottom:#ffe6c2}
+.ng-garden .ng-easter-egg{position:absolute;left:var(--x);top:var(--y);width:17px;height:23px;border-radius:50% 50% 42% 42%;background:repeating-linear-gradient(160deg,#f8d7d3 0 6px,#c5d8b8 7px 11px,#ffeda3 12px 15px);border:1px solid #ffffff55;animation:ng-easter-float 6s ease-in-out infinite alternate;animation-delay:var(--d);box-shadow:0 1px 7px #fce4d988}
+/* Winter frost sits on leaves and petals without obscuring the plants. */
+.ng-garden[data-season="winter"] .ng-weather,.ng-garden[data-celebration="christmas"] .ng-weather{opacity:.93}
+.ng-garden[data-celebration="christmas"] .ng-weather>i{animation:ng-snow calc(8s + var(--n)*.16s) linear infinite;animation-delay:calc(var(--n)*-.55s)}
+.ng-garden:is([data-season="winter"],[data-celebration="christmas"]) .ng-petal:after{content:"";position:absolute;left:2px;right:2px;top:-2px;height:12px;border-radius:80% 70% 20% 20%;background:linear-gradient(180deg,#ffffffed,#e7f6fba5 60%,transparent);filter:drop-shadow(0 1px 2px #ffffff7f)}
+.ng-garden:is([data-season="winter"],[data-celebration="christmas"]) .ng-leaf:before{content:"";position:absolute;left:18%;top:0;width:64%;height:7px;border-radius:50%;background:linear-gradient(#f8ffffd6,transparent)}
+.ng-garden[data-celebration="christmas"] .ng-hill--back{background:linear-gradient(#c0d4d1,#96b8b4)}
+.ng-garden[data-celebration="christmas"] .ng-hill--front{background:linear-gradient(125deg,#f0f6ef,#aecbc6 71%,#67969b)}
+.ng-garden[data-celebration="christmas"] .ng-terrain .ng-contour{background:linear-gradient(160deg,#e9f2e8,#9bbeb3)}
+.ng-garden .ng-glass-sign{z-index:9}
+@keyframes ng-light-flicker{0%{opacity:.57}100%{opacity:1}}
+@keyframes ng-santa-fly{0%{transform:translate3d(-160%,0,0) scale(.72)}100%{transform:translate3d(180%, -10px,0) scale(.9)}}
+@keyframes ng-bat-fly{from{transform:translate(-5px,-3px) scale(var(--s))}to{transform:translate(7px,5px) scale(var(--s))}}
+@keyframes ng-heart-rise{from{translate:0 8px;opacity:.28}to{translate:5px -11px;opacity:.9}}
+@keyframes ng-firework-pulse{0%,14%{opacity:0;transform:scale(.13)}35%{opacity:1;transform:scale(1)}63%,100%{opacity:0;transform:scale(1.3)}}
+@keyframes ng-easter-float{from{translate:0 4px}to{translate:5px -8px}}
+@keyframes ng-mini-wind{to{transform:translate(-50%,-3px) scale(var(--s))}}
+@keyframes ng-planet-breathe{to{filter:brightness(1.09)}}
+@media(max-width:359px){.ng-garden .ng-santa-flight{top:20%;transform-origin:left}.ng-garden .ng-firework i{height:24px}.ng-garden .ng-cosmic-planet{transform:scale(.75);transform-origin:top right}}
+@media(prefers-reduced-motion:reduce){.ng-garden .ng-santa-flight,.ng-garden .ng-firework,.ng-garden .ng-planet,.ng-garden .ng-mini-bloom{animation:none!important}}
+
+/* P5 V3 integration with the legacy Living Moments stylesheet.
+   The old scene pseudo-elements have decorative shapes that collide with the
+   new scenery, so disable ONLY on the new scene and keep the fallback intact. */
+.living-garden-scene.ng-garden::before,
+.living-garden-scene.ng-garden::after{content:none!important;display:none!important}
+/* Avoid replaying arrival animations after unrelated whole-app re-renders. */
+.ng-garden[data-entrance="none"] .ng-plant{animation:none}
+/* Accessible descriptive label lives on the group, decorations never intercept taps. */
+.ng-garden .ng-sky,.ng-garden .ng-decorations,.ng-garden .ng-world,.ng-garden .ng-terrain,.ng-garden .ng-meadow,.ng-garden .ng-weather{pointer-events:none}
+
+/* NG-P5: keep complete accessible navigation labels at 135% zoom across 320–412px.
+   Only Momentos is affected; no font-size shrink on the rest of the app. */
+@media (max-width:480px){
+ body:not(.chat-mode):has(.living-moments) .bottom-nav .nav-btn span{
+  max-width:none;white-space:nowrap;overflow:visible;text-overflow:clip;
+  overflow-wrap:normal;text-align:center;line-height:1.14;
+  font-size:clamp(9px,2.2vw,10px);letter-spacing:-.024em;
+  transform:scaleX(.78);transform-origin:center;
+ }
+}
+
+/* V3.2 mobile tap geometry: stems/leaves cannot steal taps from adjacent
+   flowerheads. A visible head or bud receives the event and bubbles to the
+   same accessible button. Tiny stage-one bud keeps its >=44px button region. */
+.ng-garden .ng-plant[data-flower]{pointer-events:none}
+.ng-garden .ng-plant[data-flower] .ng-flower,
+.ng-garden .ng-plant[data-flower] .ng-bud{pointer-events:auto}
+.ng-garden .ng-plant--sprout[data-flower]{pointer-events:auto}
+
+/* Prefer the foreground eighth blossom where adjacent flowerheads meet. */
+.ng-garden .ng-plant[data-flower="8"]{z-index:8}
+
+/* V3.3 PERF · motion budget for visible garden on mid-range Android.
+   Keep every decorative element rendered, but sway/sparkle only sparse samples.
+   Preserve the full snow / light aesthetic; this limits independent perpetual
+   CSS timelines rather than removing flora, flowers, or festive scenery.
+   The existing [data-paused] and reduced-motion rules remain authoritative. */
+.ng-garden .ng-grass>i:not(:nth-child(3n+1)) {animation:none}
+.ng-garden .ng-wildflower:not(:nth-child(4n+1)) {animation:none}
+.ng-garden .ng-starfield>i:not(:nth-child(3n+1)) {animation:none}
+.ng-garden .ng-weather>i:not(:nth-child(2n+1)) {animation:none}
+.ng-garden .ng-xmas-lights i:not(:nth-child(3n+1)) {animation:none}

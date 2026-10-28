@@ -1,0 +1,21 @@
+/* V5-P5 ISSUE #176 — CSS CANDIDATE ONLY; NOT LOADED BY ANDROID.
+ * Preserve six complete navigation labels at native WebSettings textZoom=135%.
+ * When authorized, evaluate against shipped app.css/celestial-shell.css and
+ * the actual V5 Moments stylesheet, then certify in Android WebView.
+ * Never shrink labels with scaleX or replace them with a visual ellipsis.
+ */
+body:not(.chat-mode):has(.living-moments) .bottom-nav .nav-btn span {
+  box-sizing:border-box;
+  display:block;
+  width:100%;
+  max-width:100%;
+  white-space:normal;
+  text-overflow:clip;
+  overflow:visible;
+  overflow-wrap:anywhere;
+  word-break:normal;
+  text-align:center;
+  line-height:1.08;
+  letter-spacing:-.015em;
+  transform:none;
+}

@@ -45,6 +45,8 @@ final class QaHttpServer implements Closeable {
     private volatile NetworkMode networkMode = NetworkMode.NORMAL;
     enum EtaScenario { DEFAULT, LIVE, PARTNER_PAUSED, OWN_STALE, OFFLINE }
     private volatile EtaScenario etaScenario = EtaScenario.DEFAULT;
+    // Test-only opt-in; real application backend remains unchanged.
+    private volatile boolean qaPlaceDestinationFixture;
     private volatile boolean running;
     private ServerSocket server;
 
@@ -63,10 +65,11 @@ final class QaHttpServer implements Closeable {
         });
     }
 
-    void reset() { etaScenario = EtaScenario.DEFAULT; networkMode = NetworkMode.NORMAL; actions.clear(); sentMessages.clear(); locationRequests.clear(); sequence.set(200); }
+    void reset() { etaScenario = EtaScenario.DEFAULT; qaPlaceDestinationFixture = false; networkMode = NetworkMode.NORMAL; actions.clear(); sentMessages.clear(); locationRequests.clear(); sequence.set(200); }
     List<JSONObject> locationRequests() { return Collections.unmodifiableList(new ArrayList<>(locationRequests)); }
     void setNetworkMode(NetworkMode mode) { networkMode = mode == null ? NetworkMode.NORMAL : mode; }
     void setEtaScenario(EtaScenario scenario) { etaScenario = scenario==null?EtaScenario.DEFAULT:scenario; }
+    void setQaPlaceDestinationFixture(boolean enabled) { qaPlaceDestinationFixture = enabled; }
 
     List<String> actions() { return Collections.unmodifiableList(new ArrayList<>(actions)); }
     long sentCount() { return sentMessages.size(); }
@@ -231,14 +234,25 @@ final class QaHttpServer implements Closeable {
                 .put("mode", "eta").put("status", "active").put("label", "Casa QA")
                 .put("progress_pct", 42).put("eta_seconds", 780).put("last_distance_m", 3200).put("updated_at", Instant.now().toString())))
             .put("settings", new JSONArray()).put("events", new JSONArray()).put("suggestions", new JSONArray());
+        JSONArray destinations = etaScenario==EtaScenario.DEFAULT ? new JSONArray() : new JSONArray()
+            .put(new JSONObject().put("person",person).put("kind","person")
+                .put("target_person","0".equals(person)?"1":"0")
+                .put("active",true).put("label","Pareja QA"));
+        JSONArray places = new JSONArray().put(new JSONObject().put("id", 1)
+            .put("name", "Lugar QA").put("kind", "favorite")
+            .put("latitude", 4.7110).put("longitude", -74.0721));
+        // Preserve the P4 synthetic destination across periodic 12s map refreshes.
+        // All other Android tests retain the default response.
+        if (qaPlaceDestinationFixture) {
+            places.put(new JSONObject().put("id", 601).put("name", "Lugar sintetico")
+                .put("kind", "home").put("latitude", 4.712).put("longitude", -74.073));
+            destinations.put(new JSONObject().put("person",person).put("kind","place")
+                .put("place_id",601).put("active",true));
+        }
         return new JSONObject()
             .put("locations", locations())
-            .put("destinations", etaScenario==EtaScenario.DEFAULT?new JSONArray():new JSONArray()
-                .put(new JSONObject().put("person",person).put("kind","person")
-                    .put("target_person","0".equals(person)?"1":"0")
-                    .put("active",true).put("label","Pareja QA")))
-            .put("places", new JSONArray().put(new JSONObject().put("id", 1).put("name", "Lugar QA").put("kind", "favorite")
-                .put("latitude", 4.7110).put("longitude", -74.0721)))
+            .put("destinations", destinations)
+            .put("places", places)
             .put("tripPoints", new JSONArray())
             .put("context", context);
     }

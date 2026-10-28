@@ -137,14 +137,20 @@ jobs:
           target: google_apis
           profile: pixel_6
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader -noaudio -no-boot-anim -camera-back none -camera-front none
+          emulator-options: -no-window -gpu swiftshader_indirect -memory 1536 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash scripts/visual-evolution-p1-avd.sh
+
+      - name: Capturar diagnóstico de AVD si falla el gate
+        if: failure()
+        shell: bash
+        run: bash scripts/p8-emulator-diagnostics.sh
 
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: v5-p0-android-unpaired-avd-evidence
           path: |
+            qa-artifacts/p8-emulator-health.txt
             build/p0-avd/**
             android/app/build/outputs/androidTest-results/**
             android/app/build/reports/androidTests/**
