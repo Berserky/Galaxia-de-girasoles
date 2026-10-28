@@ -48,7 +48,7 @@ let driveSyncSnapshot=null,driveSyncInFlight=false; // session only, never store
 
 // Read-only signal for deterministic Android WebView QA; never gates GPS or user actions.
 let mapStateReadsInFlight=0;
-let toastTimer,refreshing=false,updateState={text:'La app está al día.',progress:0,busy:false},pendingVoiceDraft=null,voiceReady=false,voiceRecording=false,voiceResumeMusic=false,lastSurprise=null;
+let toastTimer,refreshing=false,updateState={text:'Todavía no se ha comprobado si hay actualizaciones.',progress:0,busy:false},pendingVoiceDraft=null,voiceReady=false,voiceRecording=false,voiceResumeMusic=false,lastSurprise=null;
 let dateContext=null,dateContextLoadedAt=0,dateQuestionNonce=0,dateMode=null,dateModeTimer=null,dateLastExperience=null;
 let goalsState=null,goalsLoadedAt=0,goalsFilter='active';
 let presenceLastSignature='',voiceTimer=null,voiceSeconds=0,intelligenceSearchNonce=0;
@@ -124,7 +124,7 @@ window.GalaxyNative={
     }
     native=data;window.GalaxyChatMotion?.setNativeReduced(data.reducedMotion);render();
    }
-   if(name==='update'){updateState=data;renderUpdateOnly();}
+   if(name==='update'){updateState={text:String(data?.text||'Sin resultado de actualización confirmado.'),progress:Number(data?.progress||0),busy:data?.busy===true};renderUpdateOnly();}
    if(name==='deep-link'){pendingDeepLink=data;if(cloud)setTimeout(()=>consumeDeepLink(),0);}
    if(name==='chat-sync'&&native.paired){consumeChatSync(String(data.entityId||'')).catch(()=>{});}
    if(name==='memory-pressure'){chatMediaEngine.memoryPressure();}
@@ -2880,7 +2880,16 @@ function moreView(){
  '</section>';
 }
 function updateMarkup(){
- return '<div class="update-line"><div><h3>Actualizaciones</h3><p>'+esc(updateState.text||'Las nuevas versiones llegan dentro de la app.')+'</p>'+(updateState.busy?'<div class="update-bar"><i style="width:'+Math.max(2,Number(updateState.progress||0))+'%"></i></div>':'')+'</div><button class="btn small secondary" data-action="update-check" '+(updateState.busy?'disabled':'')+'>Buscar</button></div>';
+ const version=String(native?.version||'').trim();
+ const raw=Number(updateState?.progress);
+ const progress=Number.isFinite(raw)?Math.min(100,Math.max(0,raw)):0;
+ const busy=updateState?.busy===true;
+ const status=String(updateState?.text||'Sin resultado de actualización confirmado.');
+ return '<div class="update-line"><div><h3>Actualizaciones</h3>'+
+  (version?'<p class="muted">Versión instalada: '+esc(version)+'</p>':'<p class="muted">Versión instalada: no informada por Android</p>')+
+  '<p role="status" aria-live="polite">'+esc(status)+'</p>'+
+  (busy?'<div class="update-bar" role="progressbar" aria-label="Progreso de actualización" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+progress+'"><i style="width:'+Math.max(2,progress)+'%"></i></div>':'')+
+  '</div><button class="btn small secondary" data-action="update-check" '+(busy?'disabled aria-disabled="true"':'')+'>'+(busy?'En curso…':'Buscar actualizaciones')+'</button></div>';
 }
 function renderUpdateOnly(){const el=$('#updateCard');if(el)el.innerHTML=updateMarkup();}
 
@@ -3673,7 +3682,13 @@ document.addEventListener('click',async e=>{
   if(a==='moment-notifications'){await GalaxyNative.call('setMomentNotifications',!native.momentNotifications);native=nativeState();render();toast(native.momentNotifications?'Notificaciones activadas. Usa “Probar ahora” para verificar Android.':'Notificaciones pausadas.');return;}
   if(a==='bond-haptics'){await GalaxyNative.call('setBondHaptics',!native.bondHaptics);native=nativeState();render();toast(native.bondHaptics?'Toques hápticos activados.':'Toques hápticos apagados.');return;}
   if(a==='moment-notification-test'){await GalaxyNative.call('testMomentNotification');native=nativeState();toast('Notificación de prueba enviada. Revisa la bandeja de Android.');return;}
-  if(a==='update-check'){await GalaxyNative.call('checkUpdate');return;}
+  if(a==='update-check'){
+   if(updateState?.busy)return;
+   updateState={text:'Solicitando comprobación a Android…',progress:0,busy:true};renderUpdateOnly();
+   try{await GalaxyNative.call('checkUpdate');}
+   catch(err){updateState={text:'No se pudo iniciar la comprobación.',progress:0,busy:false};renderUpdateOnly();throw err;}
+   return;
+  }
   if(a==='unpair'){if(confirm('¿Desvincular este teléfono de Nuestra Galaxia?')){await GalaxyNative.call('unpair');native=nativeState();cloud=null;render();}return;}
  }catch(err){toast(err.message||'No pudimos completar la acción.');}
 });
