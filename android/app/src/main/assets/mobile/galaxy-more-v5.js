@@ -77,6 +77,95 @@ function enhancePrivacy(hub){
  return true;
 }
 
+
+/* P7C: real theme palettes and read-only preview. The existing theme-set
+   buttons remain the sole way to persist a choice. */
+const THEME_PALETTES=Object.freeze({
+ daylight:{surface:'#ffffff',text:'#292638',accent:'#7254c7'},
+ cosmic:{surface:'#17172a',text:'#f4f1ff',accent:'#a78bfa'},
+ halloween:{surface:'#1b1020',text:'#fff0de',accent:'#f28c28'},
+ christmas:{surface:'#0c2119',text:'#f2fff6',accent:'#d65360'},
+ valentine:{surface:'#28101b',text:'#fff4f7',accent:'#f06f91'},
+ friendship:{surface:'#1c1433',text:'#fff8eb',accent:'#f1b84b'},
+ easter:{surface:'#19213d',text:'#f7f5ff',accent:'#b29cff'}
+});
+function themePalette(engine,choice,now=new Date()){
+ if(!engine?.resolve)return null;
+ const state=engine.resolve(choice,now),colors=THEME_PALETTES[state.active];
+ const bg=engine.COLORS?.[state.active];
+ return colors&&bg?{id:state.active,bg,...colors}:null;
+}
+function nextAutoChange(engine,now=new Date()){
+ if(!engine?.seasonal)return null;
+ const current=engine.seasonal(now);
+ const day=new Date(now.getFullYear(),now.getMonth(),now.getDate(),12);
+ for(let offset=1;offset<=370;offset++){
+  day.setDate(day.getDate()+1);
+  const next=engine.seasonal(day);
+  if(next!==current)return{date:new Date(day),theme:next};
+ }
+ return null;
+}
+function enhanceAppearance(hub,engine=root.GalaxyTheme,now=new Date()){
+ const area=hub?.querySelector?.('[data-group="appearance"] .v5-more-group-content');
+ const card=area?.querySelector?.('.theme-settings-card');
+ const grid=card?.querySelector?.('.theme-grid');
+ if(!grid||!engine?.options||grid.querySelector('.v5-theme-tile'))return false;
+ const doc=card.ownerDocument,preview=doc.createElement('section');
+ preview.className='v5-theme-live-preview';
+ preview.setAttribute('role','status');
+ preview.setAttribute('aria-live','polite');
+ const title=doc.createElement('h4'),sample=doc.createElement('div'),caption=doc.createElement('p');
+ sample.className='v5-theme-sample';
+ preview.append(title,sample,caption);
+ const show=choice=>{
+  const palette=themePalette(engine,choice,now);
+  if(!palette)return false;
+  const name=engine.LABELS?.[palette.id]||palette.id;
+  title.textContent='Vista previa: '+name;
+  sample.replaceChildren();
+  sample.style.backgroundColor=palette.bg;
+  sample.style.color=palette.text;
+  const surface=doc.createElement('span'),accent=doc.createElement('span');
+  surface.className='v5-theme-sample-surface';surface.style.backgroundColor=palette.surface;
+  surface.style.color=palette.text;surface.textContent='Superficie';
+  accent.className='v5-theme-sample-accent';accent.style.backgroundColor=palette.accent;
+  accent.textContent='Acento';
+  sample.append(surface,accent);
+  caption.textContent='Solo vista previa: no se ha cambiado ni guardado el tema.';
+  return true;
+ };
+ for(const original of [...grid.querySelectorAll('button[data-action="theme-set"]')]){
+  const choice=original.dataset.value;
+  if(!themePalette(engine,choice,now))continue;
+  const tile=doc.createElement('div');tile.className='v5-theme-tile';
+  original.setAttribute('aria-pressed',String(engine.getChoice()===choice));
+  const swatches=doc.createElement('span');swatches.className='v5-theme-swatches';
+  const palette=themePalette(engine,choice,now);
+  for(const color of [palette.bg,palette.surface,palette.accent]){
+   const dot=doc.createElement('i');dot.style.backgroundColor=color;dot.setAttribute('aria-hidden','true');swatches.append(dot);
+  }
+  original.append(swatches);
+  const tryButton=doc.createElement('button');
+  tryButton.type='button';tryButton.className='v5-theme-try';
+  tryButton.textContent='Ver sin aplicar';
+  tryButton.setAttribute('aria-label','Vista previa de '+(engine.LABELS?.[choice]||choice)+' sin cambiar el tema');
+  tryButton.addEventListener('click',event=>{event.stopPropagation();show(choice);});
+  grid.replaceChild(tile,original);
+  tile.append(original,tryButton);
+ }
+ card.append(preview);
+ show(engine.getChoice());
+ const next=nextAutoChange(engine,now);
+ if(next){
+  const note=doc.createElement('p');note.className='v5-theme-calendar';
+  const date=next.date.toLocaleDateString('es-CO',{day:'numeric',month:'long',year:'numeric'});
+  note.textContent='Automático usa la fecha local. Próximo cambio previsto: '+date+' ('+(engine.LABELS?.[next.theme]||next.theme)+'). Cada teléfono guarda su elección por separado.';
+  card.append(note);
+ }
+ return true;
+}
+
 function organize(container){
  const section=container?.querySelector?.('section');
  if(!section||section.querySelector('.v5-more-hub'))return false;
@@ -107,7 +196,8 @@ function organize(container){
  }
  section.append(hub);
  enhancePrivacy(hub);
+ enhanceAppearance(hub);
  return true;
 }
-root.GalaxyMoreV5=Object.freeze({classify,organize,enhancePrivacy,privacyAudience});
+root.GalaxyMoreV5=Object.freeze({classify,organize,enhancePrivacy,privacyAudience,themePalette,nextAutoChange,enhanceAppearance});
 })(window);
