@@ -48,6 +48,7 @@ let mapImmersive=false,mapHistoryVisible=6,mapPlacesVisible=6;
 let gardenLifecycle=null;
 let settingsDraftCache=null,settingsDraftOwner='',settingsSaveInFlight=false; // Never persisted
 let backupImportInFlight=false; // Session-only guard: never run two restores concurrently.
+let backupExportInFlight=false; // Prevent duplicate private export pickers.
 
 let driveSyncSnapshot=null,driveSyncInFlight=false; // session only, never stored
 
@@ -3830,7 +3831,17 @@ document.addEventListener('click',async e=>{
   if(a==='intelligence-book-open'){await openIntelligenceBook();return;}
   if(a==='voice-transcribe'){if(!confirm('¿Transcribir este audio para poder buscar dentro de él? El audio original se conservará.'))return;toast('Transcribiendo audio…');await api('intelligence-transcribe',{bondId:btn.dataset.id});await refreshState({quiet:true});render();toast('Transcripción lista.');return;}
   if(a==='voice-transcript-delete'){if(!confirm('¿Eliminar solo la transcripción? El audio original se conservará.'))return;await api('intelligence-transcript-delete',{bondId:btn.dataset.id});await refreshState({quiet:true});render();toast('Transcripción eliminada. El audio sigue intacto.');return;}
-  if(a==='backup-export'){const backup=await api('backup-export');await GalaxyNative.call('exportJson','nuestra-galaxia-backup-'+(cloud.today||'copia')+'.json',JSON.stringify(backup));toast('Copia guardada en el teléfono.');return;}
+  if(a==='backup-export'){
+    if(backupExportInFlight)return;
+    backupExportInFlight=true;
+    try{
+      const backup=await api('backup-export');
+      const result=await GalaxyNative.call('exportJson','nuestra-galaxia-backup-'+(cloud.today||'copia')+'.json',JSON.stringify(backup));
+      if(result?.saved!==true){toast('Android no confirmó que la copia se haya guardado.');return;}
+      toast('Copia guardada en el teléfono.');
+    }finally{backupExportInFlight=false;}
+    return;
+  }
   if(a==='gps-history-export'){await exportGpsHistory();return;}
   if(a==='gps-history-delete-open'){openGpsHistoryDelete();return;}
   if(a==='gps-history-map'){closeModal();go('map');return;}
