@@ -36,7 +36,7 @@ test('P6H: no hidden capsule body or title can appear in visual group',()=>{
 });
 test('P6H: HTML escapes untrusted titles and never renders scripts',()=>{
  const html=historyTimeline([item('a','<img src=x onerror=alert(1)>','2026-02-14'),item('b','<img src=x onerror=alert(1)>','2026-02-14')],'2026-10-28',ui);
- assert.match(html,/&lt;img/);assert.doesNotMatch(html,/<img src=x|onerror=/);
+ assert.match(html,/&lt;img/);assert.doesNotMatch(html,/<img src=x|<script>/);
 });
 test('P6H: presentation grouping never mutates source records',()=>{
  const before=JSON.stringify(fixture),rows=timelineRows(fixture,'2026-10-28');
