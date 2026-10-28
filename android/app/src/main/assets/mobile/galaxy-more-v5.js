@@ -217,6 +217,32 @@ function enhanceNotifications(hub){
  return true;
 }
 
+
+// P7E: distinguish read-only export from potentially mutating import while
+// retaining the original server validation and native file-picker handlers.
+function enhanceBackups(hub){
+ const area=hub?.querySelector?.('[data-group="backups"] .v5-more-group-content');
+ if(!area||area.querySelector('.v5-backup-zones'))return false;
+ const exportButton=area.querySelector('[data-action="backup-export"]');
+ const importButton=area.querySelector('[data-action="backup-import"]');
+ if(!exportButton||!importButton||exportButton.parentNode!==importButton.parentNode)return false;
+ const row=exportButton.parentNode;
+ if(row.children.length!==2||!row.parentNode)return false;
+ const doc=area.ownerDocument,zones=doc.createElement('div');
+ zones.className='v5-backup-zones';
+ const add=(kind,title,description,button)=>{
+  const zone=doc.createElement('section'),heading=doc.createElement('h4'),note=doc.createElement('p');
+  zone.className='v5-backup-zone v5-backup-'+kind;
+  heading.textContent=title;note.textContent=description;
+  zone.append(heading,note,button);zones.append(zone);
+ };
+ add('export','Crear una copia','Exporta un JSON con información privada. El archivo puede incluir datos personales; guárdalo en un lugar seguro. Fotos, audios y música se conservan por referencia, no como archivos multimedia.',exportButton);
+ add('restore','Restaurar una copia','La restauración añade datos según las reglas actuales del servidor. Aún no existe una vista previa del impacto del archivo: usa solo copias de confianza. Se conserva la confirmación original antes de importar.',importButton);
+ row.parentNode.insertBefore(zones,row);
+ row.remove();
+ return true;
+}
+
 function organize(container){
  const section=container?.querySelector?.('section');
  if(!section||section.querySelector('.v5-more-hub'))return false;
@@ -250,7 +276,8 @@ function organize(container){
  enhancePrivacy(hub);
  enhanceAppearance(hub);
  enhanceNotifications(hub);
+ enhanceBackups(hub);
  return true;
 }
-root.GalaxyMoreV5=Object.freeze({classify,organize,enhancePrivacy,privacyAudience,themePalette,nextAutoChange,enhanceAppearance,notificationIndicator,enhanceNotifications});
+root.GalaxyMoreV5=Object.freeze({classify,organize,enhancePrivacy,privacyAudience,themePalette,nextAutoChange,enhanceAppearance,notificationIndicator,enhanceNotifications,enhanceBackups});
 })(window);
