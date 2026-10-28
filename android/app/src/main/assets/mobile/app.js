@@ -42,7 +42,7 @@ const legacySurpriseIdeas=[
  {title:'Álbum del mes',body:'Elegir juntos las mejores fotos del mes y escribir una frase para cada una.',minutes:60,budget:0,where:'casa'}
 ];
 
-let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',memorySection='discover',memoryCalendarMode='month',memoryCalendarMonth='',memoryCalendarDate='',constellationVisible=18,memoriesTabsScroll=0,media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),insightsCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
+let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',memorySection='discover',memoryCalendarMode='month',memoryCalendarMonth='',memoryCalendarDate='',constellationVisible=18,memoryFilters={query:'',category:'',month:''},memoriesTabsScroll=0,media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),insightsCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
 let mapImmersive=false,mapHistoryVisible=6,mapPlacesVisible=6;
 // Read-only signal for deterministic Android WebView QA; never gates GPS or user actions.
 let mapStateReadsInFlight=0;
@@ -1121,11 +1121,11 @@ function memoriesView(){
  let body='';
  if(memorySection==='discover')body=hub.discover(all,media,context);
  else if(memorySection==='history')body=storyTimeline()+constellationView();
- else {const categories=hub.collections(all,media,memoryTab,context);const content=memoryTab==='album'?albumView():memoryTab==='music'?musicView():itemList(memoryTab);body=categories+content;}
+ else {const categories=hub.collections(all,media,memoryTab,context);const content=memoryTab==='album'?albumView():memoryTab==='music'?musicView():itemList(memoryTab);const filters=['memory','journey','plan','note','wish','capsule'].includes(memoryTab)?hub.filtersPanel(all.filter(x=>x?.kind===memoryTab),memoryFilters,{esc,attr,ico}):'';body=categories+filters+content;}
  return '<section class="memories-v5"><div class="section-head"><div><p class="eyebrow">LO QUE SOMOS</p><h2>Nuestros recuerdos</h2><p>Todo lo que vamos guardando juntos.</p></div></div>'+navigation+body+'</section>';
 }
 function itemList(kind){
- const list=items(kind),meta=kindMeta[kind]||['sparkles','Contenido'];
+ const source=items(kind),list=['memory','journey','plan','note','wish','capsule'].includes(kind)?window.GalaxyMemoriesV5.filterItems(source,memoryFilters):source,meta=kindMeta[kind]||['sparkles','Contenido'];
  if(kind==='capsule'||kind==='journey')return '<div class="section memories-v5-collection-detail"><div class="row between"><div><h3 style="margin:0">'+esc(meta[1])+'</h3><small class="muted">'+list.length+' '+(list.length===1?'registro':'registros')+'</small></div><button class="btn small" data-action="item-new" data-kind="'+attr(kind)+'">+ Añadir</button></div>'+(kind==='capsule'?window.GalaxyMemoriesV5.capsuleShelf(list,{esc,attr,ico,itemCard}):window.GalaxyMemoriesV5.journeyShelf(list,{esc,attr,ico,itemCard}))+'</div>';
  if(['plan','note','wish'].includes(kind))return '<div class="section memories-v5-library"><div class="row between"><div><h3 style="margin:0">'+esc(meta[1])+'</h3><small class="muted">'+list.length+' '+(list.length===1?'guardado':'guardados')+'</small></div><button class="btn small" data-action="item-new" data-kind="'+attr(kind)+'">+ Añadir</button></div>'+window.GalaxyMemoriesV5.organizedCollection(list,kind,{esc,attr,ico,itemCard})+'</div>';
  if(kind==='event')return '<div class="section memories-v5-events"><div class="row between"><div><h3 style="margin:0">Calendario</h3><small class="muted">Fechas reales de sus eventos</small></div><button class="btn small" data-action="item-new" data-kind="event">+ Añadir</button></div>'+window.GalaxyMemoriesV5.eventCalendar(list,{today:cloud?.today,month:memoryCalendarMonth,mode:memoryCalendarMode,selectedDate:memoryCalendarDate},{esc,attr,ico,itemCard})+'</div>';
@@ -3440,12 +3440,20 @@ document.addEventListener('click',async e=>{
   if(a==='map'){go('map');return;}
   if(a==='moments'){go('moments');return;}
   if(a==='memories-section'){if(['discover','collections','history'].includes(btn.dataset.section)){memorySection=btn.dataset.section;render();}return;}
-  if(a==='memories-category'){if(window.GalaxyMemoriesV5.categories.some(c=>c[0]===btn.dataset.kind)){memoryTab=btn.dataset.kind;memorySection='collections';render();}return;}
+  if(a==='memories-filter-apply'&&view==='memories'&&memorySection==='collections'){
+   const query=document.querySelector('[data-role="memories-filter-query"]')?.value||'';
+   const category=document.querySelector('[data-role="memories-filter-category"]')?.value||'';
+   const month=document.querySelector('[data-role="memories-filter-month"]')?.value||'';
+   memoryFilters={query:String(query).slice(0,100),category:String(category),month:window.GalaxyMemoriesV5.calendarMonth(month,null,[])===month?month:''};
+   render();return;
+  }
+  if(a==='memories-filter-reset'&&view==='memories'){memoryFilters={query:'',category:'',month:''};render();return;}
+  if(a==='memories-category'){if(window.GalaxyMemoriesV5.categories.some(c=>c[0]===btn.dataset.kind)){if(memoryTab!==btn.dataset.kind)memoryFilters={query:'',category:'',month:''};memoryTab=btn.dataset.kind;memorySection='collections';render();}return;}
   if(a==='memories-calendar-view'&&view==='memories'){if(['agenda','month'].includes(btn.dataset.mode)){memoryCalendarMode=btn.dataset.mode;render();}return;}
   if(a==='memories-month-shift'&&view==='memories'){const delta=Number(btn.dataset.offset),hub=window.GalaxyMemoriesV5;const old=hub.calendarMonth(memoryCalendarMonth,cloud?.today,items('event'));const next=hub.shiftMonth(old,delta);if(next){memoryCalendarMonth=next;memoryCalendarDate='';render();}return;}
   if(a==='memories-calendar-day'&&view==='memories'){const day=btn.dataset.date,hub=window.GalaxyMemoriesV5,month=hub.calendarMonth(memoryCalendarMonth,cloud?.today,items('event'));if(hub.validDate(day)&&day.slice(0,7)===month){memoryCalendarDate=day;render();}return;}
 
-  if(a==='memories-recent'){const id=String(btn.dataset.id||''),item=cloud?.items?.find(x=>String(x.id)===id);if(!item||item.kind==='capsule'||item.kind!==btn.dataset.kind)return;memoryTab=item.kind==='song'?'music':item.kind;memorySection='collections';render();requestAnimationFrame(()=>{const target=[...document.querySelectorAll('[data-item-id]')].find(el=>String(el.dataset.itemId)===id);if(target?.matches?.('details.memories-v5-note,details.memories-v5-journey,details.memories-v5-capsule.opened'))target.open=true;target?.scrollIntoView({behavior:'auto',block:'center'});});return;}
+  if(a==='memories-recent'){const id=String(btn.dataset.id||''),item=cloud?.items?.find(x=>String(x.id)===id);if(!item||item.kind==='capsule'||item.kind!==btn.dataset.kind)return;memoryTab=item.kind==='song'?'music':item.kind;memorySection='collections';memoryFilters={query:'',category:'',month:''};render();requestAnimationFrame(()=>{const target=[...document.querySelectorAll('[data-item-id]')].find(el=>String(el.dataset.itemId)===id);if(target?.matches?.('details.memories-v5-note,details.memories-v5-journey,details.memories-v5-capsule.opened'))target.open=true;target?.scrollIntoView({behavior:'auto',block:'center'});});return;}
   if(a==='add-memory'){if(!mapData)await refreshMap({quiet:true,detail:false});openItemForm('memory');return;}
   if(a==='add-plan'){openItemForm('plan');return;}
   if(a==='item-new'){if(['memory','journey','event'].includes(btn.dataset.kind)&&!mapData)await refreshMap({quiet:true,detail:false});openItemForm(btn.dataset.kind);return;}
