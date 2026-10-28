@@ -1,0 +1,19 @@
+/* P6A: read-only Memories Hub. Never render locked capsule contents. */
+(function(root){
+'use strict';
+const categories=[['memory','Recuerdos','heart'],['album','Álbum','images'],['music','Música','music'],['event','Calendario','calendar'],['plan','Planes','circle-check-big'],['note','Notas','file-text'],['capsule','Cápsulas','lock'],['wish','Deseos','star'],['journey','Viajes','route']];
+const sections=[['discover','Descubrir','sparkles'],['collections','Colecciones','library'],['history','Nuestra historia','orbit']];
+const safeItems=items=>(Array.isArray(items)?items:[]).filter(x=>x&&typeof x==='object'&&x.data&&x.kind!=='capsule'&&categories.some(c=>c[0]===x.kind)&&x.kind!=='album'&&x.kind!=='music');
+const countByKind=(items,kind)=>(Array.isArray(items)?items:[]).filter(x=>x&&x.kind===kind).length;
+function count(items,kind,media){if(kind==='album')return Array.isArray(media?.photo)?media.photo.length:null;if(kind==='music')return (Array.isArray(media?.music)?media.music.length:0)+countByKind(items,'song');return countByKind(items,kind);}
+function sectionsNav(active,{esc,ico}){return '<nav class="memories-v5-sections" aria-label="Explorar recuerdos">'+sections.map(([id,label,icon])=>'<button type="button" class="memories-v5-section'+(active===id?' active':'')+'" data-action="memories-section" data-section="'+esc(id)+'" aria-current="'+(active===id?'page':'false')+'">'+ico(icon)+'<span>'+esc(label)+'</span></button>').join('')+'</nav>';}
+function collections(items,media,selected,{esc,ico}){return '<div class="memories-v5-categories" role="group" aria-label="Tipos de recuerdos">'+categories.map(([id,label,icon])=>{const n=count(items,id,media);return '<button type="button" class="memories-v5-category'+(selected===id?' active':'')+'" data-action="memories-category" data-kind="'+esc(id)+'" aria-pressed="'+(selected===id?'true':'false')+'">'+ico(icon)+'<span>'+esc(label)+'</span><small>'+(n===null?'—':n)+'</small></button>';}).join('')+'</div>';}
+function dateKey(item){const ms=Date.parse(String(item?.data?.date||item?.created||''));return Number.isFinite(ms)?ms:0;}
+function discover(items,media,{esc,ico}){
+ const entries=safeItems(items).slice().sort((a,b)=>dateKey(b)-dateKey(a)).slice(0,4);
+ const total=safeItems(items).length;
+ const mediaCount=(Array.isArray(media?.photo)?media.photo.length:0)+(Array.isArray(media?.music)?media.music.length:0)+countByKind(items,'song');
+ return '<div class="memories-v5-discover"><div class="memories-v5-hero"><span class="memories-v5-kicker">'+ico('sparkles')+' NUESTRA HISTORIA</span><h3>Todo lo que nos hace nosotros</h3><p>Explora nuestros momentos y encuentra cada recuerdo donde lo guardamos.</p><div class="memories-v5-stats"><span>'+total+' historias y planes</span><span>'+mediaCount+' archivos y canciones</span></div><button type="button" class="btn small" data-action="memories-section" data-section="collections">Explorar colecciones '+ico('arrow-right')+'</button></div><div class="section"><div class="row between"><h3>Lo más reciente</h3><button type="button" class="btn small secondary" data-action="memories-section" data-section="history">Ver historia</button></div>'+(entries.length?'<div class="memories-v5-recent">'+entries.map(item=>{const kind=categories.find(c=>c[0]===item.kind),title=String(item.data?.title||kind?.[1]||'Recuerdo');return '<button type="button" class="memories-v5-recent-card" data-action="memories-recent" data-kind="'+esc(item.kind)+'" data-id="'+esc(String(item.id??''))+'">'+ico(kind?.[2]||'heart')+'<span><b>'+esc(title)+'</b><small>'+esc(kind?.[1]||'Recuerdo')+'</small></span>'+ico('chevron-right')+'</button>';}).join('')+'</div>':'<p class="muted">Aquí aparecerán sus primeros recuerdos cuando los guarden.</p>')+'</div></div>';
+}
+root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems});
+})(window);

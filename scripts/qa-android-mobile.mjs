@@ -94,11 +94,16 @@ assert.ok(edge.includes('validateUploadMedia')&&edge.includes('readUploadBytes')
 assert.ok(mediaValidation.includes('image/heic')&&mediaValidation.includes('image/heif')&&mediaValidation.includes('DOCX_MIME')&&mediaValidation.includes('XLSX_MIME'),'La matriz multimedia debe reconocer HEIC/HEIF y documentos Office');
 assert.ok(schema.includes("values('galaxy-chat-media','galaxy-chat-media',false,62914560,null)"),'El bucket privado de chat no debe restringir MIME a nivel Storage');
 const scriptSources=[...index.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m=>m[1]);
-assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./insights.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./eta.js','./frequent-places.js','./gps-history.js','./theme.js','./chat-perf.js','./chat-media-engine.js','./chat-motion.js','./chat-message-engine.js','./chat-scroll-engine.js','./chat-delivery-engine.js','./chat-composer.js','./chat-voice-engine.js','./celestial-shell.js','./galaxy-discovery-v5.js','./galaxy-journeys-v5.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
+assert.deepEqual(scriptSources,['./lucide.js','https://www.youtube.com/iframe_api','https://open.spotify.com/embed/iframe-api/v1','./map.js','./search.js','./insights.js','./monthly.js','./today-history.js','./encounters.js','./distance.js','./eta.js','./frequent-places.js','./gps-history.js','./theme.js','./chat-perf.js','./chat-media-engine.js','./chat-motion.js','./chat-message-engine.js','./chat-scroll-engine.js','./chat-delivery-engine.js','./chat-composer.js','./chat-voice-engine.js','./celestial-shell.js','./galaxy-discovery-v5.js','./galaxy-journeys-v5.js','./galaxy-memories-v5.js','./app.js'],'Solo se permiten scripts locales y los SDK oficiales de YouTube/Spotify, manteniendo Lucide primero');
 assert.ok(index.includes('href="./galaxy-discovery-v5.css"'),'El diseño de P3 debe estar empaquetado en Android');
 assert.ok(read('android/app/src/main/assets/mobile/galaxy-discovery-v5.js').includes('GalaxyDiscoveryV5'),'P3 debe mantener el presentador local antes de app.js');
 const journeyPresenter=read('android/app/src/main/assets/mobile/galaxy-journeys-v5.js');
 assert.ok(index.includes('href="./galaxy-journeys-v5.css"'),'P4 debe empaquetar CSS aislado en Android');
+const memoriesHub=read('android/app/src/main/assets/mobile/galaxy-memories-v5.js');
+assert.ok(index.includes('href="./galaxy-memories-v5.css"'),'P6A debe cargar su CSS móvil');
+assert.ok(memoriesHub.includes('GalaxyMemoriesV5')&&index.includes('src="./galaxy-memories-v5.js"'),'P6A debe cargar su presentador de colecciones local');
+assert.doesNotMatch(memoriesHub,/\bfetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|navigator\.geolocation|GalaxyNative/,'P6A no debe acceder por sí mismo a red, permisos o almacenamiento privado');
+
 assert.ok(journeyPresenter.includes('GalaxyJourneysV5')&&!/\bfetch\s*\(|\bGalaxyNative\b|geolocation|localStorage/.test(journeyPresenter),
  'P4 debe mantener el presentador de frescura sin red, permisos ni APIs nativas');
 assert.ok(index.includes("connect-src 'none'"),'La UI local no debe hacer fetch directo ni recibir credenciales');
