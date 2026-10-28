@@ -83,7 +83,7 @@ jobs:
           target: google_apis
           profile: pixel_6
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -memory 1536 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          emulator-options: -no-window -gpu swiftshader_indirect -memory 2048 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           # Compare against Phase5's proven APK package identity on the SAME
           # isolated API-35 emulator. Phase11's .phase11qa suffix intermittently
           # left Android DocumentsUI resumed but its renderer/a11y root stuck
