@@ -40,7 +40,7 @@ jobs:
           # Retry the original strict SDK install; no jobs or tests are skipped.
           sdk_ok=0
           for attempt in 1 2 3; do
-            if "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "platform-tools" "emulator"; then
+            if "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "platform-tools"; then
               sdk_ok=1
               break
             fi
@@ -71,8 +71,9 @@ jobs:
           arch: x86_64
           target: google_apis
           profile: pixel_6
+          emulator-build: 15261927
           disable-animations: true
-          emulator-options: -no-window -gpu swangle -memory 1536 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          emulator-options: -no-window -gpu software -memory 1536 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash scripts/qa-phase5-emulator.sh
 
       - name: Capturar diagnóstico de AVD si falla el gate

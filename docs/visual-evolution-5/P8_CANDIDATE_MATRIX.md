@@ -1,9 +1,9 @@
 # Visual Evolution V5 — P8: matriz de candidatura integrada (preflight)
 
-> **CORTE OPERATIVO 28/oct/2026 — PR #204 DRAFT.** #203 es el plan; #204 contiene la integración P5+P6+P7 con 41 rutas P5 exclusivas y tres archivos compartidos reconciliados. El snapshot `f43e584` pasó **1016 pruebas Node locales**, con 0 fallos y 5 omisiones, pero su CI oficial aún fallaba en el paso de descarga SDK de Phase5; los demás jobs estaban en curso. Se prepararon reintentos estrictos del SDK y ajustes del emulador sin desactivar sus pruebas. **El APK real, 19 escenarios completos, required checks del SHA final y aprobación visual siguen SIN CERTIFICAR.** Las evidencias históricas no se transfieren a commits nuevos. No fusionar ni promover.
+> **CORTE OPERATIVO 28/oct/2026 — PR #204 DRAFT / P8 INCOMPLETO.** Integración única de P5+P6+P7 lista en código. El commit ac05244 superó 12/15 workflows (tres gates AVD aún fallidos o en cierre); P5 Android **sí pasó localmente** con GPU host: XML JUnit 1/1 PASS y 15 PNG reales (4 anchos, 4 zoom 135%, 7 temas) en build/p8-local-avd/p5-evidence/. Se confirmó un fallo APPCRASH de qemu 37.2.12 (0xc0000005) en software; los tres AVD CI se preparan para fijar emulator 36.5.11 y deben probarse otra vez. **No certificar P8, no merge ni QA/prod hasta CI íntegra y aprobación humana.**
 
 
-**Corte:** 28-oct-2026. **Estado actual:** `P8 EN EJECUCIÓN / NO CERTIFICADO`. La matriz incluye progreso de fuente y Node, pero **no certifica APK, evidencia visual ni release**. Ver `P8_LOCAL_VALIDATION_20261028.md` y `P8_CI_FAILURE_TRIAGE_20261028.md` para logs por SHA.
+**Corte:** 28-oct-2026. **Estado actual:** `P8 EN EJECUCIÓN / NO CERTIFICADO`. Se adjunta evidencia local real de **Momentos P5 en APK Android**, junto con progresos de fuente y Node; **no certifica los 19 escenarios, una UI integrada aprobada ni release**. Ver `P8_LOCAL_VALIDATION_20261028.md` y `P8_CI_FAILURE_TRIAGE_20261028.md` para logs por SHA.
 
 ## Fuentes exactas verificadas
 
@@ -33,12 +33,12 @@
 | P8-01 | Integridad de árbol, rutas P5+P6+P7 y ausencia de conflictos | Diff y lista de assets/imports del SHA candidato | **PASS_SOURCE** en `f43e584` (solo árbol/JS; no es aceptación de APK) |
 | P8-02 | Node completo, contratos, privacidad, sintaxis y build Android | Logs y JUnit con SHA idéntico; no heredar PASS histórico | **PARTIAL**: Node local `f43e584` 1016/1021, 0 FAIL, 5 SKIP; build CI del mismo SHA aún sin certificar |
 | P8-03 | 15 workflows obligatorios / required checks sin bypass | Run IDs, conclusiones, artefactos y SHA candidato | **FAIL / IN_PROGRESS** en `f43e584`: Phase5 bloqueado por ZIP de SDK corrupto, otros checks pendientes; nunca heredar 12/15 del SHA anterior |
-| P8-04 | Inicio, Mapa, Momentos, Recuerdos y Más en APK real | Capturas framebuffer nativo, navegación ida/vuelta | NOT_EXECUTED |
-| P8-05 | 320, 360, 393 y 412 px; texto Android 135% | Portrait, landscape, teclado, insets, seis etiquetas inferiores, FAB | NOT_EXECUTED |
-| P8-06 | Siete temas reales y automático | daylight, cosmic, halloween, christmas, valentine, friendship, easter; contraste/foco | NOT_EXECUTED |
-| P8-07 | Accesibilidad | TalkBack, orden foco, 44–48dp, zoom, reduced motion | NOT_EXECUTED |
-| P8-08 | P5 Jardín V3.3 0/3/8 y crecimiento | Estados verdaderos o fixtures rotulados; screenshots y marcador físico | NOT_EXECUTED |
-| P8-09 | P5 cinco áreas inferiores | Gestos, juegos/citas, cartas/notas, rituales y voz; scroll y estados vacíos | NOT_EXECUTED |
+| P8-04 | Inicio, Mapa, Momentos, Recuerdos y Más en APK real | Capturas framebuffer nativo, navegación ida/vuelta | **PARTIAL**: Momentos P5 Android real PASS, solo un destino; Inicio/Mapa/Recuerdos/Más y flujo transversal pendientes |
+| P8-05 | 320, 360, 393 y 412 px; texto Android 135% | Portrait, landscape, teclado, insets, seis etiquetas inferiores, FAB | **PARTIAL**: P5 físico 4 tamaños + 4 zoom 135% con capturas y JUnit PASS local; landscape, teclado y otras secciones pendientes |
+| P8-06 | Siete temas reales y automático | daylight, cosmic, halloween, christmas, valentine, friendship, easter; contraste/foco | **PARTIAL**: 7 PNG reales Android P5 en temas, hashes distintos; tema automático, contraste, foco y secciones completas pendientes |
+| P8-07 | Accesibilidad | TalkBack, orden foco, 44–48dp, zoom, reduced motion | **PARTIAL**: targets 44px y WebView 135% en P5 Android PASS; TalkBack, reduced motion y orden de foco pendientes |
+| P8-08 | P5 Jardín V3.3 0/3/8 y crecimiento | Estados verdaderos o fixtures rotulados; screenshots y marcador físico | **PARTIAL**: fixture autenticado P5 etapa 3 + escena nativa y privacidad PASS local; 0/8 y crecimiento aún por integrar/certificar |
+| P8-09 | P5 cinco áreas inferiores | Gestos, juegos/citas, cartas/notas, rituales y voz; scroll y estados vacíos | **PARTIAL**: 8 acciones/3 rituales, voz duración desconocida y secretos ausentes comprobados en P5 local; interacciones y vacíos aún pendientes |
 | P8-10 | P6 álbum y multimedia | Foto/video/audio reales, carga/error/offline, navegación y privacidad | NOT_EXECUTED |
 | P8-11 | P6 Drive y recuerdos | Estado auténtico, reconexión, filtros, calendario, duplicados sin borrado | NOT_EXECUTED |
 | P8-12 | P6 cápsulas/constelación | No filtrar títulos/cuerpos/preview de cápsulas cerradas; fechas reales | NOT_EXECUTED |
