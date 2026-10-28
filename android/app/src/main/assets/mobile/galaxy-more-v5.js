@@ -411,6 +411,43 @@ function pairCodeValidity(minutes){
  * location in the navigation layer. All buttons only open existing DOM.
  */
 let expandedGroups=new Set(['privacy']);
+/* P7K: preserve keyboard focus only for the four existing identity fields.
+ * Never capture field values, passwords, tokens, GPS, or destructive controls.
+ */
+const SETTINGS_FOCUS_FIELDS=new Set(['name0','name1','startDate','albumUrl']);
+function captureSettingsFocus(container){
+ const field=container?.ownerDocument?.activeElement;
+ if(!field||!SETTINGS_FOCUS_FIELDS.has(field.name))return null;
+ const form=field.closest?.('#settingsForm');
+ if(!form||container?.contains?.(form)===false)return null;
+ let start=null,end=null;
+ try{
+  if(Number.isInteger(field.selectionStart)&&Number.isInteger(field.selectionEnd)){
+   start=field.selectionStart;end=field.selectionEnd;
+  }
+ }catch{} // Android date inputs may reject selectionStart.
+ return {name:field.name,start,end};
+}
+function restoreSettingsFocus(container,snapshot){
+ if(!snapshot||!SETTINGS_FOCUS_FIELDS.has(snapshot.name))return false;
+ const form=container?.querySelector?.('#settingsForm');
+ const field=form?.elements?.namedItem?.(snapshot.name);
+ if(!field||field.disabled||field.isConnected===false)return false;
+ const group=field.closest?.('details.v5-more-group');
+ if(group&&!group.open)return false; // Never open a closed privacy/sensitive section.
+ if(typeof field.focus!=='function')return false;
+ field.focus({preventScroll:true});
+ if(Number.isInteger(snapshot.start)&&Number.isInteger(snapshot.end)&&typeof field.setSelectionRange==='function'){
+  try{field.setSelectionRange(snapshot.start,snapshot.end);}catch{}
+ }
+ return true;
+}
+function rememberGroupToggle(details,id){
+ if(!details?.isConnected||!groups.some(group=>group[0]===id))return false;
+ if(details.open)expandedGroups.add(id);else expandedGroups.delete(id);
+ return true;
+}
+
 function navigationGroups(){
  return groups.map(([id,title])=>({id,title}));
 }
@@ -468,7 +505,7 @@ function organize(container){
   if(!slot.body.childNodes.length)slot.details.remove();
   else{
    slot.details.open=expandedGroups.has(id);
-   slot.details.addEventListener('toggle',()=>{if(slot.details.open)expandedGroups.add(id);else expandedGroups.delete(id);});
+   slot.details.addEventListener('toggle',()=>rememberGroupToggle(slot.details,id));
   }
  }
  section.append(hub);
@@ -550,5 +587,5 @@ function enhanceIdentity(hub){
  return true;
 }
 
-root.GalaxyMoreV5=Object.freeze({classify,organize,navigationGroups,captureNavigation,revealGroup,resetNavigation,enhancePrivacy,privacyAudience,themePalette,nextAutoChange,enhanceAppearance,notificationIndicator,enhanceNotifications,enhanceBackups,permissionReadings,enhanceDevices,enhanceWidgets,backupManifestPreview,deviceRevokePreview,pairCodeValidity,settingsDraft,enhanceIdentity});
+root.GalaxyMoreV5=Object.freeze({classify,organize,navigationGroups,captureNavigation,revealGroup,resetNavigation,captureSettingsFocus,restoreSettingsFocus,rememberGroupToggle,enhancePrivacy,privacyAudience,themePalette,nextAutoChange,enhanceAppearance,notificationIndicator,enhanceNotifications,enhanceBackups,permissionReadings,enhanceDevices,enhanceWidgets,backupManifestPreview,deviceRevokePreview,pairCodeValidity,settingsDraft,enhanceIdentity});
 })(window);
