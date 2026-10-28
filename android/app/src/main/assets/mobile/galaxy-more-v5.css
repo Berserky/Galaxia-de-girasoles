@@ -25,3 +25,20 @@
 .v5-gps-zone p{margin:0 0 4px;color:var(--muted);font-size:12px;line-height:1.5}
 .v5-gps-zone-delete{border-color:var(--danger,#b75e6b)}
 .v5-gps-zone-delete h4{color:var(--danger,#b75e6b)}
+
+/* P7C: theme previews use the existing theme engine and CSS palette values. */
+.v5-more-hub .theme-grid{align-items:stretch}
+.v5-theme-tile{display:grid;gap:6px;min-width:0}
+.v5-theme-tile .theme-option{position:relative;min-width:0;padding-bottom:29px}
+.v5-theme-swatches{position:absolute;left:10px;bottom:7px;display:flex;gap:4px}
+.v5-theme-swatches i{display:block;width:14px;height:14px;border:1px solid var(--border);border-radius:50%}
+.v5-theme-try{min-height:38px;border:1px solid var(--border);border-radius:11px;background:var(--surface2);color:var(--text);font-size:11px;font-weight:700}
+.v5-theme-try:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.v5-theme-live-preview{margin-top:12px;border:1px solid var(--border);border-radius:14px;padding:12px;background:var(--surface2)}
+.v5-theme-live-preview h4{margin:0 0 9px;color:var(--text);font-size:13px}
+.v5-theme-sample{display:flex;gap:10px;align-items:center;justify-content:center;min-height:82px;border:1px solid var(--border);border-radius:12px;padding:12px}
+.v5-theme-sample-surface,.v5-theme-sample-accent{display:grid;place-items:center;min-height:44px;border-radius:9px;font-size:12px;font-weight:750}
+.v5-theme-sample-surface{flex:1;border:1px solid currentColor;padding:9px}
+.v5-theme-sample-accent{width:58px}
+.v5-theme-live-preview p,.v5-theme-calendar{margin:9px 0 0;font-size:11px;line-height:1.5;color:var(--muted)}
+@media(prefers-reduced-motion:reduce){.v5-theme-tile *{transition:none!important}}
