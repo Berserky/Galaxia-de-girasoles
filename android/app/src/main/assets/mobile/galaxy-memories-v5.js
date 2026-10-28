@@ -182,5 +182,43 @@ function eventCalendar(items,{today,month,mode='month',selectedDate}={}, {esc,at
    (rows.undated.length?'<p class="muted">'+rows.undated.length+' '+(rows.undated.length===1?'evento sin fecha':'eventos sin fecha')+'. Puedes consultarlos en Agenda.</p>':'')+'</div>';
 }
 
-root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumGallery,albumViewer,musicGrouping,musicLibrary,validDate,shiftMonth,calendarMonth,eventOccurrence,eventRows,monthEvents,eventCalendar});
+
+/* P6D collections present original authenticated plan/note/wish objects.
+ * They only group visual states the user has explicitly saved.
+ * Never infer a completion state or silently update/remove source items.
+ */
+function organizedCollection(items,kind,{esc,attr,ico,itemCard}){
+ if(!['plan','note','wish'].includes(kind))return '';
+ const list=(Array.isArray(items)?items:[]).filter(x=>x&&x.kind===kind&&x.data&&typeof x.data==='object');
+ const sections=[];
+ if(kind==='plan'){
+  const active=list.filter(x=>x.data.done!==true),completed=list.filter(x=>x.data.done===true);
+  const chosen=active.filter(x=>x.data.planCategory==='this-week');
+  const later=active.filter(x=>x.data.planCategory==='someday');
+  const rest=active.filter(x=>x.data.planCategory!=='this-week'&&x.data.planCategory!=='someday');
+  sections.push(['Elegidos para esta semana',chosen,'calendar-check'],['Planes por hacer',rest,'list-todo'],['Algún día',later,'cloud-sun'],['Planes realizados',completed,'check-circle']);
+ }else if(kind==='wish'){
+  sections.push(['Deseos guardados',list.filter(x=>x.data.done!==true),'star'],['Deseos marcados como cumplidos',list.filter(x=>x.data.done===true),'sparkles']);
+ }else{
+  // Category is a user-saved label, not a generated topic or AI classification.
+  const byCategory=new Map();
+  for(const item of list){
+   const name=typeof item.data.category==='string'&&item.data.category.trim()?item.data.category.trim():'Sin categoría';
+   if(!byCategory.has(name))byCategory.set(name,[]);
+   byCategory.get(name).push(item);
+  }
+  for(const [title,group] of byCategory)sections.push([title,group,'notebook-pen']);
+ }
+ const card=(item)=>kind==='note'?
+  '<details class="memories-v5-note" data-item-id="'+attr(item.id??'')+'"><summary>'+ico('file-text')+' <span><b>'+esc(item.data.title||'Nota sin título')+'</b><small>Ver contenido y opciones de esta nota</small></span>'+ico('chevron-down')+'</summary><div class="memories-v5-note-body">'+itemCard(item)+'</div></details>':
+  '<div class="memories-v5-specialized-card">'+itemCard(item)+'</div>';
+ const groups=sections.filter(([title,rows])=>rows.length).map(([title,rows,icon])=>
+  '<section class="memories-v5-collection-group"><h4>'+ico(icon)+' '+esc(title)+' <small>'+rows.length+'</small></h4>'+
+  '<div class="memories-v5-specialized-list">'+rows.map(card).join('')+'</div></section>').join('');
+ const label=kind==='plan'?'planes':kind==='note'?'notas':'deseos';
+ return '<div class="memories-v5-organized" aria-label="Biblioteca de '+label+'">'+
+  (groups||'<div class="empty">Todavía no hay '+label+' guardados.</div>')+'</div>';
+}
+
+root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumGallery,albumViewer,musicGrouping,musicLibrary,validDate,shiftMonth,calendarMonth,eventOccurrence,eventRows,monthEvents,eventCalendar,organizedCollection});
 })(window);
