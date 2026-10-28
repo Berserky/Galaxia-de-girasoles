@@ -44,6 +44,8 @@ const legacySurpriseIdeas=[
 
 let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',memorySection='discover',memoryCalendarMode='month',memoryCalendarMonth='',memoryCalendarDate='',constellationVisible=18,memoryFilters={query:'',category:'',month:''},memoriesTabsScroll=0,media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),insightsCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
 let mapImmersive=false,mapHistoryVisible=6,mapPlacesVisible=6;
+// P5: one authenticated Moments lifecycle; never persist a garden between unpairings.
+let gardenLifecycle=null;
 let settingsDraftCache=null,settingsDraftOwner='',settingsSaveInFlight=false; // Never persisted
 
 let driveSyncSnapshot=null,driveSyncInFlight=false; // session only, never stored
@@ -270,7 +272,22 @@ function relationshipClockCard(){
 function livingMomentCard(){const m=livingMoment();return '<section class="section"><button class="card living-moment" data-action="'+m.action+'" '+(m.id?'data-id="'+m.id+'"':'')+'><span class="item-icon">'+ico(m.icon)+'</span><div><p class="eyebrow">'+esc(m.label==='SE ACERCA ALGO ESPECIAL'?'PRÓXIMA FECHA':m.label)+'</p><h3>'+esc(m.title)+'</h3><p>'+esc(m.body)+'</p></div></button></section>';}
 function surpriseNotes(){return items('note').filter(x=>x.data?.surprise);}
 function surpriseUnlocked(i){const d=i.data||{};if(d.unlockType==='date')return !d.unlockDate||d.unlockDate<=cloud.today;if(d.unlockType==='place'){const own=(cloud.locations||[]).find(l=>l.person===cloud.person&&l.sharing);if(!own)return false;const km=(a,b,c,e)=>{const R=6371,p=Math.PI/180,da=(c-a)*p,dl=(e-b)*p,q=Math.sin(da/2)**2+Math.cos(a*p)*Math.cos(c*p)*Math.sin(dl/2)**2;return 2*R*Math.asin(Math.sqrt(q));};return km(Number(own.latitude),Number(own.longitude),Number(d.latitude),Number(d.longitude))*1000<=Number(d.radius||150);}return true;}
-function surpriseNotesView(){const list=surpriseNotes();return '<section class="section"><div class="section-head"><div><h2>Notas sorpresa</h2><p>Mensajes que aparecen en el momento o lugar elegido.</p></div><button class="btn small" data-action="surprise-note-new">+ Sorpresa</button></div><div class="stack">'+(list.length?list.map(i=>{const open=surpriseUnlocked(i),d=i.data||{};return '<div class="card"><span class="badge">'+(open?'Desbloqueada':'Guardada')+'</span><h3 style="margin-top:9px">'+esc(open?d.title:'Hay algo esperando para ti')+'</h3><p>'+esc(open?(d.body||''):(d.unlockType==='date'?'Se abrirá '+fmtDate(d.unlockDate):'Se abrirá al llegar al lugar elegido.'))+'</p>'+(open&&linkedVoices(i.id).length?linkedVoices(i.id).map(voiceCard).join(''):'')+(i.author===cloud.person?'<div class="item-actions"><button class="btn small secondary" data-action="voice-for-item" data-id="'+i.id+'">'+ico('mic')+' Añadir voz</button><button class="btn small ghost" data-action="item-delete" data-id="'+i.id+'">Eliminar</button></div>':'')+'</div>';}).join(''):'<div class="empty">Dejen una nota para una fecha o un lugar especial.</div>')+'</div></section>';}
+function surpriseNotesView(){
+ const list=surpriseNotes();
+ return '<section class="section living-surprises" aria-labelledby="livingSurpriseTitle"><div class="section-head"><div><p class="eyebrow">PEQUEÑOS DETALLES</p><h2 id="livingSurpriseTitle">Notas sorpresa</h2><p>Mensajes que aparecen en el momento o lugar elegido.</p></div><button class="btn small" data-action="surprise-note-new">+ Sorpresa</button></div>'+
+ '<div class="living-surprise-list">'+(list.length?list.map(i=>{
+  const open=surpriseUnlocked(i),d=i.data||{},mine=i.author===cloud.person;
+  const title=open?esc(d.title||'Una sorpresa para ti'):'Hay algo esperando para ti';
+  const hint=open?'Momento especial':d.unlockType==='date'?'Se abrirá '+esc(fmtDate(d.unlockDate)):'Se abrirá al llegar al lugar elegido.';
+  const message=open?'<p class="living-surprise-message">'+esc(d.body||'')+'</p>':'<p class="living-surprise-sealed">El contenido permanece oculto hasta su desbloqueo.</p>';
+  const voices=open?linkedVoices(i.id):[];
+  return '<article class="card living-surprise-card '+(open?'unlocked':'sealed')+'" data-surprise-id="'+attr(i.id)+'">'+
+   '<div class="living-surprise-heading"><span class="living-surprise-emblem" aria-hidden="true">'+ico(open?'mail-open':'gift')+'</span><div><span class="badge">'+(open?'Desbloqueada':'Guardada')+'</span><h3>'+title+'</h3><small>'+hint+'</small></div></div>'+message+
+   (voices.length?'<div class="living-surprise-voices">'+voices.map(voiceCard).join('')+'</div>':'')+
+   (mine?'<details class="living-secondary-actions"><summary>Opciones de esta sorpresa</summary><div class="item-actions"><button class="btn small secondary" data-action="voice-for-item" data-id="'+attr(i.id)+'">'+ico('mic')+' Añadir voz</button><button class="btn small ghost" data-action="item-delete" data-id="'+attr(i.id)+'">Eliminar</button></div></details>':'')+
+   '</article>';
+ }).join(''):'<div class="empty">Dejen una nota para una fecha o un lugar especial.</div>')+'</div></section>';
+}
 
 function cloudRenderFingerprint(data=cloud){
  if(!data)return '';
@@ -374,8 +391,10 @@ function renderChatFab(){
  if(!chatFab)return;
  const enabled=!!(native.paired&&cloud?.capabilities?.chat&&!shouldShowAdriWelcome());
  const unread=Math.max(0,Number(cloud?.chat?.unread||0));
- chatFab.classList.toggle('hidden',!enabled||view==='chat');
- if(!enabled||view==='chat'){chatFab.innerHTML='';return;}
+ // Moments has its own Chat shortcut. Avoid overlapping the garden and its milestones.
+ const hidden=!enabled||view==='chat'||view==='moments';
+ chatFab.classList.toggle('hidden',hidden);
+ if(hidden){chatFab.innerHTML='';return;}
  chatFab.innerHTML=ico('message-circle')+(unread?'<span class="chat-fab-badge">'+(unread>99?'99+':unread)+'</span>':'');
  chatFab.classList.toggle('has-unread',unread>0);
 }
@@ -392,11 +411,11 @@ function syncChatViewportHeight(){
  if(chatEl)chatScrollEngine.afterViewportChange(chatEl);
 }
 function go(next){
- const hadMap=!!mapData,previous=view;
+ const hadMap=!!mapData,previous=view,samePage=next===previous,priorScrollY=window.scrollY;
  if(previous==='chat'&&next!=='chat'){chatRememberPosition(document.querySelector('#chatMessages'),'chat');chatMediaEngine.detach({release:true});}
  if(next==='chat'&&previous!=='chat'&&!chatInitialScroll)chatRestoreOnRender=true;
  if(next!=='map'){mapImmersive=false;document.body.classList.remove('map-immersive-open');}
- view=next;syncChatViewportHeight();render();window.scrollTo(0,0);
+ view=next;syncChatViewportHeight();render();window.scrollTo(0,samePage?priorScrollY:0);
  if(view==='map'&&hadMap)refreshMap({quiet:true,detail:false});
 }
 // V5 P2L: the existing privacy controls render synchronously inside go('more').
@@ -417,6 +436,11 @@ function syncSystemTheme(themeState){
  GalaxyNative.call('setSystemTheme',active).catch(()=>{nativeThemeSent='';});
 }
 function render(){
+ // Stop old observers when Moments closes, pairing is lost or welcome replaces the view.
+ if(typeof gardenLifecycle!=='undefined'&&typeof native!=='undefined'){
+  if(!native.paired)gardenLifecycle?.reset();
+  else if(view!=='moments'||!cloud||shouldShowAdriWelcome())gardenLifecycle?.leave();
+ }
  const previousChatEl=view==='chat'?document.querySelector('#chatMessages'):null;
  const chatRenderState=previousChatEl?chatCapturePositionState(previousChatEl,'render'):null;
  if(chatRenderState&&chatBottomRenderPending===previousChatEl)chatRenderState.atBottom=true;
@@ -437,7 +461,23 @@ function render(){
  if(!media.music&&!mediaLoadedAt.music)setTimeout(()=>loadMedia('music').then(renderGlobalPlayer).catch(()=>{}),0);
  if(view==='home')app.innerHTML=header()+homeView();
  if(view==='map'){app.innerHTML=header()+mapView();setTimeout(()=>{drawMap();if(!mapData)refreshMap({detail:true});if(!frequentPlacesFresh())loadFrequentPlaces().catch(()=>{});},0);}
- if(view==='moments')app.innerHTML=header()+momentsView();
+ if(view==='moments'){
+  app.innerHTML=header()+momentsView();
+  // A garden host can only be mounted after the Moments HTML exists in the document.
+  if(window.GalaxyMomentsGardenLifecycle?.create&&window.GalaxyGardenBondBridge?.create&&window.GalaxyGardenV5?.render){
+   const host=document.querySelector('[data-p5-garden-host]');
+   if(host){
+    try{
+     gardenLifecycle??=window.GalaxyMomentsGardenLifecycle.create();
+     // Do not invent stage or days: use the original authenticated cloud snapshot.
+     gardenLifecycle.update({host,cloud});
+    }catch{
+     gardenLifecycle?.reset();
+     host.innerHTML='<div class="ng-garden-unavailable" role="status">El progreso del jardín no está disponible por ahora.</div>';
+    }
+   }
+  }
+ }
  if(view==='memories'){app.innerHTML=header()+memoriesView();if(memorySection==='collections'&&((memoryTab==='album'&&!mediaFresh('photo'))||(memoryTab==='music'&&!mediaFresh('music'))))setTimeout(()=>loadMedia(memoryTab==='album'?'photo':'music').catch(e=>toast(e.message)),0);}
  if(view==='goals'){app.innerHTML=header()+goalsView();if(!goalsState)setTimeout(()=>loadGoals().catch(e=>toast(e.message)),0);}
  if(view==='ai'){app.innerHTML=header()+intelligenceHubView();if(!mapData)setTimeout(()=>refreshMap({quiet:true,detail:true}).catch(()=>{}),0);}
@@ -566,7 +606,7 @@ function homeView(){
 // V5 P2K: contextual labels use only already-loaded couple state; no network,
 // location details or private answers are ever embedded in shortcut HTML.
 function welcomeActionContext(action){
- const kinds={map:'EXPLORAR',moments:'CONECTAR','add-memory':'CREAR','add-plan':'PLANEAR','goals-open':'AVANZAR'};
+ const kinds={map:'EXPLORAR',moments:'CONECTAR','add-memory':'CREAR','add-plan':'PLANEAR','goals-open':'AVANZAR',surprise:'SORPRENDER','date-mode-open':'CITA','plan-roulette-open':'PLANEAR','date-planner-open':'PLANEAR','date-question-decks':'CONVERSAR','new-game':'JUGAR','new-ritual':'CONECTAR','new-voice':'ESCUCHAR'};
  const category=kinds[action]||'EXPLORAR';
  if(action==='add-plan'){
   const pending=items('plan').filter(i=>!i.data?.done).length;
@@ -1273,13 +1313,59 @@ function bondGestureCatalog(){
  ]);
  return [...builtins,...(catalog.custom||[])];
 }
+function bondGardenStage(garden){
+ const n=Number(garden?.stage);
+ return Number.isFinite(n)?Math.max(0,Math.min(8,Math.trunc(n))):0;
+}
 function bondGardenVisual(garden){
- const stage=Number(garden?.stage||0),flowers=Math.min(7,Math.max(1,stage));
- return '<div class="bond-garden-scene" data-stage="'+stage+'" aria-label="Jardín etapa '+stage+'"><span class="garden-sun">'+ico('sun')+'</span><div class="garden-ground"></div><div class="garden-flowers">'+Array.from({length:flowers},(_,i)=>'<span class="garden-flower f'+(i+1)+'">'+ico(stage<2?'sprout':'flower-2')+'</span>').join('')+'</div>'+(stage>=4?'<span class="garden-glow">'+ico('sparkles')+'</span>':'')+'</div>';
+ // Never render a fabricated zero-stage garden from a missing or malformed Bond snapshot.
+ const officialStage=garden?.stage;
+ if(typeof officialStage!=='number'||!Number.isSafeInteger(officialStage)||officialStage<0)
+  return '<div class="ng-garden-unavailable" role="status">El progreso del jardín no está disponible por ahora.</div>';
+ if(typeof window!=='undefined'&&window.GalaxyGardenV5?.render&&window.GalaxyGardenBondBridge?.create&&window.GalaxyMomentsGardenLifecycle?.create)
+  return '<div class="p5-garden-host" data-p5-garden-host><div class="ng-garden-unavailable" role="status">Preparando el jardín compartido.</div></div>';
+ const stage=bondGardenStage(garden);
+ const flowers=Math.max(1,Math.min(7,stage));
+ // Viewer-local clock and existing theme only; no location permission or network.
+ const now=new Date(),hour=now.getHours(),month=now.getMonth();
+ const daypart=hour>=5&&hour<11?'morning':hour>=11&&hour<17?'day':hour>=17&&hour<20?'sunset':'night';
+ const season=month===11||month<=1?'winter':month<=4?'spring':month<=7?'summer':'autumn';
+ const allowedThemes=new Set(['christmas','cosmic','daylight','easter','friendship','halloween','valentine']);
+ const activeTheme=(typeof document!=='undefined'?document.documentElement?.dataset?.theme:null)||(typeof window!=='undefined'?window.GalaxyTheme?.resolve?.(window.GalaxyTheme.getChoice())?.active:null)||'daylight';
+ const theme=allowedThemes.has(activeTheme)?activeTheme:'daylight';
+ const seasonLabel={winter:'invierno',spring:'primavera',summer:'verano',autumn:'otoño'}[season];
+ const daypartLabel={morning:'mañana',day:'día',sunset:'atardecer',night:'noche'}[daypart];
+ return '<div class="bond-garden-scene living-garden-scene" data-stage="'+stage+'" data-daypart="'+daypart+'" data-season="'+season+'" data-celebration="'+theme+'" role="img" aria-label="Jardín compartido, etapa '+stage+', '+seasonLabel+', '+daypartLabel+'">'+
+  (season==='winter'?'<span class="living-garden-snow" aria-hidden="true" style="position:absolute;inset:0;z-index:3;pointer-events:none;opacity:.8;background-image:radial-gradient(circle,#fff 0 2px,transparent 3px),radial-gradient(circle,#e5f3ff 0 1.5px,transparent 2.5px);background-size:48px 54px,67px 61px;background-position:5px 11px,29px 37px"></span>':'')+
+  '<span class="living-garden-atmosphere" aria-hidden="true" style="position:absolute;inset:0;z-index:0;pointer-events:none;background:'+(daypart==='night'?'linear-gradient(180deg,rgba(13,21,55,.75),rgba(45,65,99,.25))':daypart==='sunset'?'linear-gradient(180deg,rgba(236,115,91,.32),rgba(255,190,114,.12))':daypart==='morning'?'linear-gradient(180deg,rgba(255,220,166,.20),transparent)':'linear-gradient(180deg,rgba(124,200,242,.11),transparent)')+'"></span>'+
+  '<span class="living-garden-halo" aria-hidden="true"></span>'+
+  '<span class="garden-sun" aria-hidden="true">'+ico(daypart==='night'?'moon-star':'sun')+'</span>'+
+  '<svg class="living-garden-mountains" aria-hidden="true" focusable="false" viewBox="0 0 480 160" preserveAspectRatio="xMidYMax slice" style="position:absolute;left:0;right:0;bottom:48px;width:100%;height:142px;opacity:.66;pointer-events:none">'+
+   '<path d="M0 130 74 54 121 105 195 19 290 116 357 48 480 132V160H0Z" fill="#829ca2" opacity=".48"/>'+
+   '<path d="M0 151 104 81 163 130 249 52 328 136 408 85 480 139V160H0Z" fill="#668d83" opacity=".58"/>'+
+   '<path d="m175 42 20-23 23 28-22-9-10 10Z M64 65 74 54 87 70 75 65Z M348 60l9-12 14 18-13-7Z" fill="#f5f7ef" opacity=".76"/>'+
+  '</svg>'+
+  '<span class="living-garden-hill living-garden-hill-back" aria-hidden="true"></span>'+
+  '<div class="garden-ground" aria-hidden="true"></div>'+
+  '<div class="garden-flowers" aria-hidden="true">'+Array.from({length:flowers},(_,i)=>'<span class="garden-flower f'+(i+1)+'">'+ico(stage<2?'sprout':'flower-2')+'</span>').join('')+'</div>'+
+  (stage>=4?'<span class="garden-glow" aria-hidden="true">'+ico('sparkles')+'</span>':'')+'</div>';
 }
 function bondUnlockables(garden){
- const rows=garden?.unlockables||[];if(!rows.length)return'';
- return '<div class="bond-unlockables">'+rows.map(row=>'<span class="'+(row.unlocked?'unlocked':'locked')+'">'+ico(row.unlocked?'sparkles':'lock')+'<b>'+esc(row.label||'Etapa')+'</b><small>'+Number(row.days||0)+' días</small></span>').join('')+'</div>';
+ const rows=Array.isArray(garden?.milestones)&&garden.milestones.length?garden.milestones:
+  (Array.isArray(garden?.unlockables)?garden.unlockables:[]);
+ if(!rows.length)return'';
+ const allowedIcons=new Set(['sprout','leaf','flower','flower-2','footprints','armchair','sparkles','stars']);
+ const items=rows.map(row=>{
+  const unlocked=row.unlocked===true;
+  const iconName=allowedIcons.has(row.icon)?row.icon:'flower-2';
+  const days=row.days,validDays=typeof days==='number'&&Number.isSafeInteger(days)&&days>=0;
+  const badge=unlocked?'Logrado':'Por descubrir';
+  return '<span role="listitem" class="living-garden-hito '+(unlocked?'unlocked':'locked')+'" aria-label="'+attr(badge+': '+String(row.label||'Hito'))+'">'+
+   '<span class="living-garden-hito-icon" aria-hidden="true">'+ico(unlocked?iconName:'lock')+'</span>'+
+   '<b>'+esc(row.label||'Hito')+'</b>'+
+   '<small>'+esc(badge)+(validDays?' · '+days+' días':'')+'</small></span>';
+ });
+ return '<div class="bond-unlockables living-garden-milestones" role="list" aria-label="Hitos reales del jardín">'+items.join('')+'</div>';
 }
 function openBondGestureForm(gesture=null){
  const icons=['hand','hand-heart','heart','message-circle','sparkles','star','sun','flower-2','smile','music','coffee','map-pin','moon','bell','waves'];
@@ -1291,37 +1377,94 @@ function openBondGestureManager(){
  showModal('Gestos personalizados','<div class="row between"><p class="muted">Son atajos compartidos. El historial conserva el texto original aunque luego elimines un gesto.</p><button class="btn small" data-action="bond-gesture-new">+ Crear</button></div><div class="stack" style="margin-top:12px">'+(custom.length?custom.map(g=>'<div class="card bond-gesture-row"><span>'+ico(g.icon||'heart')+'</span><div><b>'+esc(g.name)+'</b><small>'+esc(g.text)+' · '+esc(g.behavior)+'</small></div><div class="row"><button class="btn small secondary" data-action="bond-gesture-edit" data-id="'+attr(g.id)+'">Editar</button>'+(String(g.created_by)===String(cloud.person)?'<button class="btn small ghost" data-action="bond-gesture-delete" data-id="'+attr(g.id)+'">Eliminar</button>':'')+'</div></div>').join(''):'<div class="empty">Todavía no han creado gestos propios.</div>')+'</div>','bond-gestures');
 }
 function momentsView(){
- const bond=cloud.bond||{entries:[],garden:{days:0,stage:0}},entries=bond.entries||[];
+ const bond=cloud.bond||{entries:[]},entries=bond.entries||[];
  const games=entries.filter(x=>x.type==='game'),rituals=entries.filter(x=>x.type==='ritual'),notes=entries.filter(x=>x.type==='sharednote'),voices=entries.filter(x=>x.type==='voice');
- const garden=bond.garden||{},total=Number(garden.totalDays??garden.days??bond.totalDays??0),current=Number(garden.currentStreak??bond.currentStreak??0),record=Number(garden.recordStreak??bond.recordStreak??0);
+ const garden=bond.garden||{},stage=typeof garden.stage==='number'&&Number.isSafeInteger(garden.stage)&&garden.stage>=0?bondGardenStage(garden):'—';
+ const verifiedCount=value=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0?value:null;
+ const showCount=value=>value===null?'—':String(value);
+ const total=showCount(verifiedCount(garden.totalDays??garden.days??bond.totalDays));
+ const current=showCount(verifiedCount(garden.currentStreak??bond.currentStreak));
+ const record=showCount(verifiedCount(garden.recordStreak??bond.recordStreak));
+ const rawProgress=garden.progressPct,progress=typeof rawProgress==='number'&&Number.isFinite(rawProgress)?Math.min(100,Math.max(0,rawProgress)):0;
+ const nextDays=verifiedCount(garden.next?.days);
+ const next=garden.next&&nextDays!==null?
+  '<p class="living-garden-next">'+ico('flag')+' Próximo hito: '+esc(garden.next.label||'Nueva etapa')+' al llegar a '+nextDays+' días compartidos.</p>':'';
  const gestures=bondGestureCatalog();
- return '<section><div class="section-head"><div><p class="eyebrow">GALAXY BOND 2.0</p><h2>Conectar</h2><p>Pequeñas cosas que nos acercan sin convertir el cariño en una obligación.</p></div></div>'+
- '<div class="card bond-garden">'+bondGardenVisual(garden)+'<div class="bond-garden-copy"><p class="eyebrow">NUESTRO JARDÍN</p><h3>Nuestro jardín · '+esc(garden.label||'Nuestro girasol')+'</h3><p>'+total+' días acumulados en los que ambos dejaron algo en la galaxia. Ese progreso nunca se reinicia.</p><div class="bond-streak-grid"><span><b>'+total+'</b><small>Días totales</small></span><span><b>'+current+'</b><small>Racha actual</small></span><span><b>'+record+'</b><small>Récord</small></span></div><div class="progress"><i style="width:'+Number(garden.progressPct||0)+'%"></i></div>'+bondUnlockables(garden)+'</div></div>'+
- '<div class="section"><div class="section-head"><div><h2>Pensé en ti</h2><p>Mensajes rápidos y toques que ustedes pueden personalizar.</p></div><button class="btn small secondary" data-action="bond-gesture-manage">'+ico('settings-2')+' Personalizar</button></div><div class="gesture-grid bond-gesture-grid">'+gestures.map(g=>'<button class="gesture" data-action="bond-send-gesture" data-gesture-id="'+attr(g.id)+'"><span>'+ico(g.icon||'heart')+'</span><b>'+esc(g.name||'Gesto')+'</b><small>'+esc(g.behavior==='haptic'?'Toque háptico':g.behavior==='message_haptic'?'Mensaje + toque':'Mensaje')+'</small></button>').join('')+'</div></div>'+
- '<div class="section"><div class="grid">'+actionCard('sparkles','Cita sorpresa 2.0','Tiempo, presupuesto y contexto real','surprise')+actionCard('timer','Modo Cita','Música, preguntas, fotos y recap','date-mode-open')+actionCard('dices','Ruleta de planes','Elegir entre planes pendientes','plan-roulette-open')+actionCard('list-ordered','Planificar una cita','Armar una secuencia con tiempo y presupuesto','date-planner-open')+actionCard('layers-3','Barajas de preguntas','Elegir un tema para conversar','date-question-decks')+actionCard('gamepad-2','Juego de nosotros','Adivinar lo que elegiría el otro','new-game')+actionCard('notebook-pen','Ritual semanal','Agradecer, pedir y planear','new-ritual')+actionCard('mic','Mensaje de voz','Dejar una voz para el otro','new-voice')+'</div></div>'+
+ const chatAvailable=!!cloud?.capabilities?.chat,rawChatUnread=Number(cloud?.chat?.unread||0),chatUnread=Number.isFinite(rawChatUnread)?Math.max(0,Math.floor(rawChatUnread)):0;
+ const chatShortcut=chatAvailable?'<button type="button" class="living-moments-symbol living-moments-chat" data-action="chat-open" aria-label="'+attr(chatUnread?'Abrir nuestro chat, '+chatUnread+' mensajes sin leer':'Abrir nuestro chat')+'">'+ico('message-circle')+(chatUnread?'<span class="chat-fab-badge" aria-hidden="true">'+(chatUnread>99?'99+':chatUnread)+'</span>':'')+'</button>':'<span class="living-moments-symbol" aria-hidden="true">'+ico('heart-handshake')+'</span>';
+ return '<section class="living-moments"><div class="living-moments-intro"><div><p class="eyebrow">MOMENTOS COMPARTIDOS</p><h2>Nuestros momentos</h2><p>Pequeñas cosas que nos acercan sin convertir el cariño en una obligación.</p></div>'+chatShortcut+'</div>'+
+ '<div class="card bond-garden living-garden">'+bondGardenVisual(garden)+'<div class="bond-garden-copy"><p class="eyebrow">NUESTRO JARDÍN</p><h3>Nuestro jardín · '+esc(garden.label||'Nuestro girasol')+'</h3><p>'+total+' días acumulados en los que ambos dejaron algo en la galaxia. Ese progreso nunca se reinicia.</p><div class="bond-streak-grid"><span><b>'+total+'</b><small>Días totales</small></span><span><b>'+current+'</b><small>Racha actual</small></span><span><b>'+record+'</b><small>Récord</small></span></div><div class="progress living-garden-progress" role="progressbar" aria-label="Avance de la etapa del jardín" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+progress+'"><i style="width:'+progress+'%"></i></div><p class="living-garden-caption">Etapa '+stage+' · '+progress+'% de avance de esta etapa</p>'+next+bondUnlockables(garden)+'</div></div>'+
+ '<section class="section living-gestures" aria-labelledby="livingGesturesTitle"><div class="section-head"><div><p class="eyebrow">UN GESTO PARA HOY</p><h2 id="livingGesturesTitle">Pensé en ti</h2><p>Mensajes rápidos y toques que ustedes pueden personalizar.</p></div><button class="btn small secondary" data-action="bond-gesture-manage">'+ico('settings-2')+' Personalizar</button></div><div class="gesture-grid bond-gesture-grid">'+gestures.map(g=>'<button class="gesture" data-action="bond-send-gesture" data-gesture-id="'+attr(g.id)+'"><span>'+ico(g.icon||'heart')+'</span><b>'+esc(g.name||'Gesto')+'</b><small>'+esc(g.behavior==='haptic'?'Toque háptico':g.behavior==='message_haptic'?'Mensaje + toque':'Mensaje')+'</small></button>').join('')+'</div></section>'+
+ '<section class="section living-activity-section" aria-labelledby="livingActivitiesTitle"><div class="section-head"><div><p class="eyebrow">TIEMPO JUNTOS</p><h2 id="livingActivitiesTitle">¿Qué hacemos hoy?</h2><p>Elijan una experiencia según las ganas que tengan de compartir.</p></div></div><div class="living-activity-clusters">'+
+ '<div class="living-activity-cluster"><h3>'+ico('calendar-heart')+' Para una cita</h3><div class="grid living-activity-grid">'+actionCard('sparkles','Cita sorpresa','Tiempo, presupuesto y contexto real','surprise')+actionCard('timer','Modo Cita','Música, preguntas, fotos y recap','date-mode-open')+actionCard('dices','Ruleta de planes','Elegir entre planes pendientes','plan-roulette-open')+actionCard('list-ordered','Planificar una cita','Armar una secuencia con tiempo y presupuesto','date-planner-open')+'</div></div>'+
+ '<div class="living-activity-cluster"><h3>'+ico('messages-square')+' Para conectar</h3><div class="grid living-activity-grid">'+actionCard('layers-3','Barajas de preguntas','Elegir un tema para conversar','date-question-decks')+actionCard('gamepad-2','Juego de nosotros','Adivinar lo que elegiría el otro','new-game')+actionCard('notebook-pen','Ritual semanal','Agradecer, pedir y planear','new-ritual')+actionCard('mic','Mensaje de voz','Dejar una voz para el otro','new-voice')+'</div></div></div></section>'+
  surpriseNotesView()+
- momentSection('Juego de nosotros',games,gameCard,'No hay preguntas pendientes todavía.')+
+ gameMomentsSection(games)+
  momentSection('Ritual semanal',rituals,ritualCard,'El primer ritual puede empezar esta semana.')+
  '<section class="section"><div class="section-head"><div><h2>Notas compartidas</h2><p>Los dos pueden editarlas.</p></div><button class="btn small" data-action="new-sharednote">+ Nota</button></div><div class="stack">'+(notes.length?notes.map(sharedNoteCard).join(''):'<div class="empty">Una lista, una idea, una promesa o cualquier cosa de los dos.</div>')+'</div></section>'+
  '<section class="section"><div class="section-head"><div><h2>Mensajes de voz</h2><p>Audios privados dentro de la galaxia.</p></div><button class="btn small" data-action="new-voice">+ Voz</button></div><div class="stack">'+(voices.length?voices.map(voiceCard).join(''):'<div class="empty">Todavía no hay mensajes de voz.</div>')+'</div></section>'+
  '</section>';
 }
 function momentSection(title,list,renderer,empty){return '<section class="section"><div class="section-head"><div><h2>'+esc(title)+'</h2></div></div><div class="stack">'+(list.length?list.map(renderer).join(''):'<div class="empty">'+esc(empty)+'</div>')+'</div></section>';}
+function gameMomentsSection(games){
+ if(!games.length)return momentSection('Juego de nosotros',[],gameCard,'No hay preguntas pendientes todavía.');
+ const incoming=games.filter(e=>e.author!==cloud.person&&!Object.hasOwn(e.data||{},'guess'));
+ const waiting=games.filter(e=>e.author===cloud.person&&!Object.hasOwn(e.data||{},'guess'));
+ const played=games.filter(e=>Object.hasOwn(e.data||{},'guess'));
+ return '<div class="living-game-groups">'+
+  (incoming.length?momentSection('Te toca responder',incoming,gameCard,''):'')+
+  (waiting.length?momentSection('Esperando respuesta',waiting,gameCard,''):'')+
+  (played.length?momentSection('Partidas jugadas',played,gameCard,''):'')+
+  '</div>';
+}
 function gameCard(e){
- const q=gameQuestions[e.data?.questionId]||{label:'Pregunta',options:[]},mine=e.author===cloud.person,guessed=Object.hasOwn(e.data||{},'guess');
- let body='<p>'+esc(q.label)+'</p>';
- if(mine)body+='<p class="muted" style="margin-top:8px">'+(guessed?'Respuesta: '+esc(e.data.answer)+' · '+(e.data.correct?'¡Acertó!':'No acertó esta vez'):'Tu respuesta está guardada hasta que '+esc(partnerName())+' juegue.')+'</p>';
- else if(guessed)body+='<p style="margin-top:8px"><b>Respuesta:</b> '+esc(e.data.answer)+'<br><span class="muted">Tu elección: '+esc(e.data.guess)+' · '+(e.data.correct?'Acertaste':'Esta vez no')+'</span></p>';
- else body+='<div class="chips" style="margin-top:10px">'+q.options.map(o=>'<button class="chip" data-action="game-guess" data-id="'+e.id+'" data-guess="'+attr(o)+'">'+esc(o)+'</button>').join('')+'</div>';
- return '<div class="card"><span class="badge">'+(mine?'Tu pregunta':esc(partnerName()))+'</span><h3 style="margin-top:9px">Juego de nosotros</h3>'+body+(mine?'<div class="item-actions"><button class="btn small ghost" data-action="bond-delete" data-id="'+e.id+'">Eliminar</button></div>':'')+'</div>';
+ const d=e.data||{},q=gameQuestions[d.questionId]||{label:'Pregunta',options:[]},mine=e.author===cloud.person,guessed=Object.hasOwn(d,'guess');
+ const status=guessed?'Completada':mine?'Esperando respuesta':'Tu turno';
+ let body='<p class="living-game-question">'+esc(q.label)+'</p>';
+ if(mine){
+  body+='<p class="living-game-response">'+(guessed?'Respuesta: '+esc(d.answer)+' · '+(d.correct?'¡Acertó!':'No acertó esta vez'):'Tu respuesta está guardada hasta que '+esc(partnerName())+' juegue.')+'</p>';
+ }else if(guessed){
+  body+='<p class="living-game-response"><b>Respuesta:</b> '+esc(d.answer)+'<span class="living-game-choice">Tu elección: '+esc(d.guess)+' · '+(d.correct?'Acertaste':'Esta vez no')+'</span></p>';
+ }else{
+  body+='<div class="living-game-options" role="group" aria-label="Elige una respuesta">'+
+   q.options.map(o=>'<button class="chip" data-action="game-guess" data-id="'+attr(e.id)+'" data-guess="'+attr(o)+'">'+esc(o)+'</button>').join('')+'</div>';
+ }
+ return '<article class="card living-game-card '+(guessed?'played':'pending')+'"><div class="living-game-top"><span class="badge">'+(mine?'Tu pregunta':esc(partnerName()))+'</span><span class="living-game-status">'+ico(guessed?'check-circle':mine?'hourglass':'help-circle')+' '+status+'</span></div>'+
+  '<h3>Juego de nosotros</h3>'+body+
+  (mine?'<details class="living-secondary-actions"><summary>Opciones de la partida</summary><div class="item-actions"><button class="btn small ghost" data-action="bond-delete" data-id="'+attr(e.id)+'">Eliminar</button></div></details>':'')+
+  '</article>';
+}
+function livingEntryMeta(e){
+ const parts=[];
+ if(e.author!==undefined&&e.author!==null&&e.author!==''){
+  parts.push('<span>'+esc(e.author===cloud.person?'Tú':partnerName())+'</span>');
+ }
+ if(typeof e.created==='string'&&e.created.trim()){
+  const created=new Date(e.created);
+  if(Number.isFinite(created.getTime())){
+   const label=new Intl.DateTimeFormat('es-CO',{day:'numeric',month:'short',year:'numeric'}).format(created);
+   parts.push('<time datetime="'+attr(created.toISOString())+'">'+esc(label)+'</time>');
+  }
+ }
+ if(Number.isSafeInteger(e.version)&&e.version>0)parts.push('<span>v'+e.version+'</span>');
+ return parts.length?'<div class="living-entry-meta" aria-label="Información del momento">'+parts.join('<span aria-hidden="true">·</span>')+'</div>':'';
 }
 function ritualCard(e){
  const mine=e.author===cloud.person,d=e.data||{};
- return '<div class="card"><span class="badge">'+(mine?'Tu ritual':esc(partnerName()))+' · '+esc(fmtDate(d.week))+'</span><h3 style="margin-top:9px">Gracias</h3><p>'+esc(d.gratitude)+'</p><h3 style="margin-top:12px">Necesito</h3><p>'+esc(d.need)+'</p><h3 style="margin-top:12px">Próximo plan</h3><p>'+esc(d.plan)+'</p>'+(mine?'<div class="item-actions"><button class="btn small secondary" data-action="ritual-edit" data-id="'+e.id+'">Editar</button><button class="btn small ghost" data-action="bond-delete" data-id="'+e.id+'">Eliminar</button></div>':'')+'</div>';
+ const steps=[['Gracias',d.gratitude],['Necesito',d.need],['Próximo plan',d.plan]];
+ return '<article class="card living-ritual-card"><div class="living-entry-heading"><span class="badge">'+(mine?'Tu ritual':esc(partnerName()))+'</span>'+livingEntryMeta(e)+'</div>'+
+  '<h3>Ritual semanal</h3>'+(d.week?'<p class="living-ritual-week">Semana del '+esc(fmtDate(d.week))+'</p>':'')+
+  '<div class="living-ritual-moments">'+steps.map(([label,value])=>'<section class="living-ritual-step"><h4>'+label+'</h4><p>'+esc(value??'')+'</p></section>').join('')+'</div>'+
+  (mine?'<details class="living-secondary-actions"><summary>Opciones del ritual</summary><div class="item-actions"><button class="btn small secondary" data-action="ritual-edit" data-id="'+attr(e.id)+'">Editar</button><button class="btn small ghost" data-action="bond-delete" data-id="'+attr(e.id)+'">Eliminar</button></div></details>':'')+'</article>';
 }
 function sharedNoteCard(e){
- const d=e.data||{};
- return '<div class="card"><span class="badge">Compartida · v'+Number(e.version||1)+'</span><h3 style="margin-top:9px">'+esc(d.title)+'</h3><p>'+esc(d.body||'')+'</p><div class="item-actions"><button class="btn small secondary" data-action="sharednote-edit" data-id="'+e.id+'">Editar</button><button class="btn small ghost" data-action="bond-delete" data-id="'+e.id+'">Eliminar</button></div></div>';
+ const d=e.data||{},title=String(d.title??''),body=String(d.body??''),long=body.length>220;
+ const excerpt=long?body.slice(0,180).trimEnd()+'…':body;
+ return '<article class="card living-note-card"><div class="living-entry-heading"><span class="badge">Nota compartida</span>'+livingEntryMeta(e)+'</div>'+
+  '<h3>'+esc(title||'Nota sin título')+'</h3>'+
+  (long?'<p class="living-note-summary">'+esc(excerpt)+'</p><details class="living-note-full"><summary>Leer nota completa</summary><p class="living-note-body">'+esc(body)+'</p></details>':
+   '<p class="living-note-body">'+esc(body)+'</p>')+
+  '<details class="living-secondary-actions"><summary>Opciones de la nota</summary><div class="item-actions"><button class="btn small secondary" data-action="sharednote-edit" data-id="'+attr(e.id)+'">Editar</button><button class="btn small ghost" data-action="bond-delete" data-id="'+attr(e.id)+'">Eliminar</button></div></details></article>';
 }
 function voiceTimestamp(seconds){
  const s=Math.max(0,Number(seconds)||0),m=Math.floor(s/60),r=Math.floor(s%60);return m+':'+String(r).padStart(2,'0');
@@ -1333,7 +1476,25 @@ function voiceTranscriptMarkup(transcript){
 }
 function voiceCard(e){
  const d=e.data||{},mine=e.author===cloud.person,transcript=d.transcript||null;
- return '<div class="card audio-card" data-voice-id="'+attr(e.id)+'"><span class="badge">'+(mine?'Tu voz':esc(partnerName()))+'</span><h3 style="margin-top:9px">'+esc(d.title)+'</h3>'+(d.body?'<p>'+esc(d.body)+'</p>':'')+(d.audioUrl?'<audio controls preload="none" src="'+attr(d.audioUrl)+'"></audio>':'<p>El enlace de este audio necesita actualizarse.</p>')+voiceTranscriptMarkup(transcript)+(mine?'<div class="item-actions">'+(transcript?'<button class="btn small secondary" data-action="voice-transcript-delete" data-id="'+attr(e.id)+'">'+ico('captions-off')+' Eliminar transcripción</button>':'<button class="btn small secondary" data-action="voice-transcribe" data-id="'+attr(e.id)+'">'+ico('captions')+' Transcribir</button>')+'<button class="btn small ghost" data-action="bond-delete" data-id="'+attr(e.id)+'">Eliminar audio</button></div>':'')+(mine?'<p class="muted voice-ai-note">Transcribir es opcional. El audio original se mantiene aunque elimines su transcripción.</p>':'')+'</div>';
+ const player=d.audioUrl?
+  '<div class="living-voice-player">'+
+   '<div class="living-voice-transport"><button type="button" class="living-voice-toggle" data-playing="false" aria-label="Reproducir mensaje de voz" aria-pressed="false">'+
+    '<span class="living-voice-play-icon" aria-hidden="true">'+ico('play')+'</span>'+
+    '<span class="living-voice-pause-icon" aria-hidden="true">'+ico('pause')+'</span></button>'+
+    '<div class="living-voice-controls"><span class="living-voice-wave" aria-hidden="true">'+
+     Array.from({length:13},(_,i)=>'<i style="--peak:'+([11,19,28,16,34,22,31,15,25,33,17,24,12][i])+'px"></i>').join('')+
+     '</span><input type="range" class="living-voice-seek" min="0" max="100" step="1" value="0" disabled aria-label="Avanzar audio" aria-valuetext="Duración todavía no disponible"/>'+
+     '<span class="living-voice-time" aria-label="Tiempo de reproducción">0:00 / --:--</span></div></div>'+
+   '<p class="living-voice-status" role="status" aria-live="polite">Duración aún no disponible</p>'+
+   '<audio class="living-voice-audio" preload="none" src="'+attr(d.audioUrl)+'"></audio></div>':
+   '<div class="living-voice-unavailable" role="status">'+ico('audio-lines')+' Este mensaje de voz no está disponible. Actualiza su enlace.</div>';
+ return '<article class="card audio-card living-voice-card" data-voice-id="'+attr(e.id)+'"><div class="living-entry-heading"><span class="badge">'+(mine?'Tu voz':esc(partnerName()))+'</span>'+livingEntryMeta(e)+'</div>'+
+  '<h3>'+esc(d.title||'Mensaje de voz')+'</h3>'+(d.body?'<p class="living-voice-description">'+esc(d.body)+'</p>':'')+player+voiceTranscriptMarkup(transcript)+
+  (mine?'<details class="living-secondary-actions"><summary>Opciones de esta voz</summary><div class="item-actions">'+
+    (transcript?'<button class="btn small secondary" data-action="voice-transcript-delete" data-id="'+attr(e.id)+'">'+ico('captions-off')+' Eliminar transcripción</button>':
+    '<button class="btn small secondary" data-action="voice-transcribe" data-id="'+attr(e.id)+'">'+ico('captions')+' Transcribir</button>')+
+    '<button class="btn small ghost" data-action="bond-delete" data-id="'+attr(e.id)+'">Eliminar audio</button></div></details>':'')+
+  (mine?'<p class="muted voice-ai-note">Transcribir es opcional. El audio original se mantiene aunque elimines su transcripción.</p>':'')+'</article>';
 }
 
 function contextSettings(){
@@ -3560,7 +3721,14 @@ document.addEventListener('click',async e=>{
   if(a==='item-delete'){await deleteItem(btn.dataset.id);return;}
   if(a==='mood'){await busy(()=>saveDaily('mood',btn.dataset.value),'Estado guardado.');return;}
   if(a==='gesture'){await busy(()=>sendGesture(btn.dataset.gesture));return;}
-  if(a==='bond-send-gesture'){await busy(()=>sendGesture(btn.dataset.gestureId));return;}
+  if(a==='bond-send-gesture'){
+   if(btn.disabled)return;
+   btn.disabled=true;btn.setAttribute('aria-busy','true');
+   try{await sendGesture(btn.dataset.gestureId);}
+   catch(error){toast(error.message||'No se pudo enviar el gesto.');}
+   finally{if(btn.isConnected){btn.disabled=false;btn.removeAttribute('aria-busy');}}
+   return;
+  }
   if(a==='bond-gesture-manage'){openBondGestureManager();return;}
   if(a==='bond-gesture-new'){openBondGestureForm();return;}
   if(a==='bond-gesture-edit'){const gesture=cloud?.bond?.gestures?.custom?.find(g=>String(g.id)===String(btn.dataset.id));if(gesture)openBondGestureForm(gesture);return;}
@@ -3738,7 +3906,7 @@ document.addEventListener('click',async e=>{
    catch(err){updateState={text:'No se pudo iniciar la comprobación.',progress:0,busy:false};renderUpdateOnly();throw err;}
    return;
   }
-  if(a==='unpair'){if(confirm('¿Desvincular este teléfono de Nuestra Galaxia?')){await GalaxyNative.call('unpair');native=nativeState();cloud=null;render();}return;}
+  if(a==='unpair'){if(confirm('¿Desvincular este teléfono de Nuestra Galaxia?')){await GalaxyNative.call('unpair');gardenLifecycle?.reset();native=nativeState();cloud=null;render();}return;}
  }catch(err){toast(err.message||'No pudimos completar la acción.');}
 });
 
