@@ -87,3 +87,12 @@
 .v5-widget-zone p{flex-basis:100%;margin:0 0 4px;font-size:12px;line-height:1.5;color:var(--muted)}
 .v5-widget-zone .btn{min-height:40px;max-width:100%;white-space:normal}
 @media(max-width:360px){.v5-device-code-option .btn,.v5-widget-zone .btn{width:100%}}
+
+/* P7I — pair identity input / save feedback, no data persisted before save. */
+.v5-settings-helper{font-size:12px;line-height:1.5;color:var(--muted);margin:0 0 9px}
+.v5-settings-status{font-size:12px;line-height:1.5;margin:8px 0 0;padding:10px;border-radius:11px;background:var(--surface2);color:var(--muted)}
+.v5-settings-status.invalid{border:1px solid var(--danger,#b75e6b);color:var(--text)}
+#settingsForm [data-role="settings-save"]{min-height:44px}
+#settingsForm [data-role="settings-save"]:disabled{opacity:.55;cursor:not-allowed}
+#settingsForm input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+@media(max-width:360px){#settingsForm .grid{grid-template-columns:1fr}}

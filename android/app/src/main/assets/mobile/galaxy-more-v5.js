@@ -443,7 +443,61 @@ function organize(container){
  enhanceBackups(hub);
  enhanceDevices(hub);
  enhanceWidgets(hub);
+ enhanceIdentity(hub);
  return true;
 }
-root.GalaxyMoreV5=Object.freeze({classify,organize,enhancePrivacy,privacyAudience,themePalette,nextAutoChange,enhanceAppearance,notificationIndicator,enhanceNotifications,enhanceBackups,permissionReadings,enhanceDevices,enhanceWidgets,backupManifestPreview,deviceRevokePreview,pairCodeValidity});
+
+/* P7I: local draft validation only; the authenticated server remains
+ * authoritative for version conflicts, permissions and stored settings.
+ * No draft is persisted or sent before an explicit successful submission.
+ */
+function settingsDraft(original={},draft={}){
+ const trim=value=>String(value??'').trim();
+ const values=value=>Array.isArray(value)?value:[];
+ const originalNames=values(original.names),draftNames=values(draft.names);
+ const previous={names:[trim(originalNames[0]),trim(originalNames[1])],
+  startDate:trim(original.startDate),albumUrl:trim(original.albumUrl)};
+ const data={names:[trim(draftNames[0]),trim(draftNames[1])],
+  startDate:trim(draft.startDate),albumUrl:trim(draft.albumUrl)};
+ const changed=data.names.some((s,i)=>s!==previous.names[i])||
+  data.startDate!==previous.startDate||data.albumUrl!==previous.albumUrl;
+ let reason='';
+ if(data.names.some(name=>!name||name.length>80))reason='Escribe los dos nombres (máximo 80 caracteres cada uno).';
+ if(!reason&&data.startDate){
+  const raw=data.startDate,valid=/^\d{4}-\d{2}-\d{2}$/.test(raw),year=Number(raw.slice(0,4)),
+   month=Number(raw.slice(5,7)),day=Number(raw.slice(8,10));
+  if(!valid||year<1900||year>2199||month<1||month>12||day<1||day>31||
+     new Date(Date.UTC(year,month-1,day)).toISOString().slice(0,10)!==raw)
+   reason='La fecha de inicio no es válida.';
+ }
+ if(!reason&&data.albumUrl){
+  if(data.albumUrl.length>2048||!/^https:\/\/[^/?#@\s]+(?:[/?#][^\s]*)?$/i.test(data.albumUrl))
+   reason='El enlace del álbum debe ser una URL HTTPS válida.';
+ }
+ return {data,changed,valid:!reason,reason};
+}
+function enhanceIdentity(hub){
+ const area=hub?.querySelector?.('[data-group="profiles"] .v5-more-group-content');
+ const form=area?.querySelector?.('#settingsForm');
+ if(!form||form.querySelector('[data-settings-status]'))return false;
+ const labels=[['name0','Primera persona'],['name1','Segunda persona'],['startDate','Fecha en que comenzó nuestra historia'],['albumUrl','Enlace privado del álbum (opcional)']];
+ for(const [field,title] of labels){
+  const input=form.querySelector('[name="'+field+'"]');
+  const label=input?.closest?.('.field')?.querySelector?.('label');
+  if(label)label.textContent=title;
+ }
+ const doc=form.ownerDocument,help=doc.createElement('p');
+ help.className='v5-settings-helper';
+ help.textContent='Los nombres y fechas que guardes formarán parte de su espacio compartido. Los cambios se envían solo cuando presionas Guardar.';
+ form.insertBefore(help,form.firstChild);
+ const status=doc.createElement('p');status.className='v5-settings-status';
+ status.dataset.settingsStatus='true';status.setAttribute('role','status');status.setAttribute('aria-live','polite');
+ status.textContent='Sin cambios pendientes.';
+ const button=form.querySelector('button[type="submit"]');
+ if(button){button.dataset.role='settings-save';button.disabled=true;}
+ form.append(status);
+ return true;
+}
+
+root.GalaxyMoreV5=Object.freeze({classify,organize,enhancePrivacy,privacyAudience,themePalette,nextAutoChange,enhanceAppearance,notificationIndicator,enhanceNotifications,enhanceBackups,permissionReadings,enhanceDevices,enhanceWidgets,backupManifestPreview,deviceRevokePreview,pairCodeValidity,settingsDraft,enhanceIdentity});
 })(window);
