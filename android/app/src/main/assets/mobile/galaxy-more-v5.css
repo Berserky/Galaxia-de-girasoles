@@ -53,3 +53,12 @@
 .v5-notification-overview p,.v5-haptics-zone p,.v5-notification-test-help{margin:10px 0 0;color:var(--muted);font-size:12px;line-height:1.55}
 .v5-haptics-zone [data-action="bond-haptics"]{margin-top:10px}
 @media(max-width:360px){.v5-notification-readings>div{display:grid}}
+
+/* P7E: keep destructive/import actions visually distinct from safe export. */
+.v5-backup-zones{display:grid;gap:13px;margin-top:14px}
+.v5-backup-zone{display:grid;justify-items:start;gap:8px;border:1px solid var(--border);border-radius:13px;padding:12px;min-width:0}
+.v5-backup-zone h4{margin:0;font-size:14px;color:var(--text)}
+.v5-backup-zone p{margin:0 0 4px;font-size:12px;line-height:1.55;color:var(--muted)}
+.v5-backup-restore{border-color:var(--danger,#b75e6b)}
+.v5-backup-restore h4{color:var(--danger,#b75e6b)}
+.v5-backup-zone .btn{min-height:40px}
