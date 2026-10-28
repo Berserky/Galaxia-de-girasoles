@@ -42,3 +42,14 @@
 .v5-theme-sample-accent{width:58px}
 .v5-theme-live-preview p,.v5-theme-calendar{margin:9px 0 0;font-size:11px;line-height:1.5;color:var(--muted)}
 @media(prefers-reduced-motion:reduce){.v5-theme-tile *{transition:none!important}}
+
+/* P7D: truthful read-only notification diagnostics and separate haptics. */
+.v5-notification-overview,.v5-haptics-zone{border:1px solid var(--border);border-radius:13px;padding:12px;min-width:0;background:var(--surface2)}
+.v5-notification-overview h4,.v5-haptics-zone h4{margin:0 0 9px;color:var(--text);font-size:14px}
+.v5-notification-readings{display:grid;gap:8px;margin:0}
+.v5-notification-readings>div{display:flex;flex-wrap:wrap;justify-content:space-between;gap:5px 12px;border-bottom:1px solid var(--border);padding:4px 0 8px}
+.v5-notification-readings dt{font-size:12px;color:var(--muted)}
+.v5-notification-readings dd{margin:0;font-size:12px;font-weight:650;color:var(--text);overflow-wrap:anywhere}
+.v5-notification-overview p,.v5-haptics-zone p,.v5-notification-test-help{margin:10px 0 0;color:var(--muted);font-size:12px;line-height:1.55}
+.v5-haptics-zone [data-action="bond-haptics"]{margin-top:10px}
+@media(max-width:360px){.v5-notification-readings>div{display:grid}}

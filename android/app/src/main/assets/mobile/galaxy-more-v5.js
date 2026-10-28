@@ -13,7 +13,7 @@ function classify(meta={}){
  if(has('unpair'))return 'sensitive';
  if(meta.id==='presencePrivacySettings'||classes.includes('gps-history-card')||has('gps-history-export'))return 'privacy';
  if(classes.includes('theme-settings-card')||has('theme-set'))return 'appearance';
- if(has('moment-notifications')||has('galaxy-notifications-enable'))return 'notifications';
+ if(meta.notificationHealth||has('moment-notifications')||has('galaxy-notifications-enable'))return 'notifications';
  if(has('backup-export')||has('backup-import'))return 'backups';
  if(has('widget-add')||has('widget-photo'))return 'widgets';
  if(forms.includes('settingsForm')||has('pair-code-self')||has('pair-code-partner')||has('device-revoke')||has('welcome-replay'))return 'profiles';
@@ -166,6 +166,57 @@ function enhanceAppearance(hub,engine=root.GalaxyTheme,now=new Date()){
  return true;
 }
 
+
+// P7D: read only the native-derived labels already rendered by the settings
+// screen. Permission, FCM setup and local test requests do NOT prove delivery.
+function notificationIndicator(node,fallback='Estado no disponible'){
+ const label=node?.textContent?.replace(/\s+/g,' ').trim();
+ return label||fallback;
+}
+function enhanceNotifications(hub){
+ const area=hub?.querySelector?.('[data-group="notifications"] .v5-more-group-content');
+ if(!area||area.querySelector('.v5-notification-overview'))return false;
+ const cards=[...area.querySelectorAll('.card')];
+ const activity=cards.find(card=>card.querySelector('.eyebrow')?.textContent?.trim()==='NOTIFICACIONES');
+ const moments=cards.find(card=>card.querySelector('[data-action="moment-notifications"]'));
+ if(!activity||!moments)return false;
+ const activityIndicators=activity.querySelectorAll('.notification-health span');
+ const momentIndicators=moments.querySelectorAll('.notification-health span');
+ const readings=[
+  ['Permiso Android',notificationIndicator(activityIndicators[0])],
+  ['Configuración push',notificationIndicator(activityIndicators[1])],
+  ['Notificaciones del sistema',notificationIndicator(momentIndicators[1])],
+  ['Recordatorios de gestos',notificationIndicator(moments.querySelector('.badge'))]
+ ];
+ const doc=area.ownerDocument,overview=doc.createElement('section');
+ overview.className='v5-notification-overview';
+ overview.setAttribute('aria-label','Estado de notificaciones informado por el dispositivo');
+ const title=doc.createElement('h4');title.textContent='Estado de este teléfono';
+ const list=doc.createElement('dl');list.className='v5-notification-readings';
+ for(const [label,value] of readings){
+  const row=doc.createElement('div'),dt=doc.createElement('dt'),dd=doc.createElement('dd');
+  dt.textContent=label;dd.textContent=value;row.append(dt,dd);list.append(row);
+ }
+ const caution=doc.createElement('p');
+ caution.textContent='Permiso concedido y push configurado no confirman entrega. Comprueba la recepción en la bandeja de Android; aquí no hay un acuse de entrega verificado.';
+ overview.append(title,list,caution);
+ area.insertBefore(overview,area.firstChild);
+ const haptics=moments.querySelector('[data-action="bond-haptics"]');
+ if(haptics){
+  const zone=doc.createElement('section');zone.className='v5-haptics-zone';
+  const heading=doc.createElement('h4');heading.textContent='Respuesta háptica';
+  const help=doc.createElement('p');help.textContent='La vibración es independiente de las notificaciones. Se conserva el control original de este dispositivo.';
+  zone.append(heading,help,haptics);area.append(zone);
+ }
+ const test=moments.querySelector('[data-action="moment-notification-test"]');
+ if(test){
+  const help=doc.createElement('p');help.className='v5-notification-test-help';
+  help.textContent='Probar ahora solicita una notificación local; confirma visualmente si aparece en Android. No verifica la entrega push remota.';
+  test.parentNode?.append(help);
+ }
+ return true;
+}
+
 function organize(container){
  const section=container?.querySelector?.('section');
  if(!section||section.querySelector('.v5-more-hub'))return false;
@@ -187,7 +238,8 @@ function organize(container){
  for(const el of blocks){
   const meta={id:el.id,classes:[...el.classList],
    actions:[...el.querySelectorAll('[data-action]')].map(x=>x.dataset.action),
-   forms:[...el.querySelectorAll('form[id]')].map(x=>x.id)};
+   forms:[...el.querySelectorAll('form[id]')].map(x=>x.id),
+   notificationHealth:!!el.querySelector('.notification-health')};
   slots.get(classify(meta)).body.append(el);
  }
  for(const [id,slot] of slots){
@@ -197,7 +249,8 @@ function organize(container){
  section.append(hub);
  enhancePrivacy(hub);
  enhanceAppearance(hub);
+ enhanceNotifications(hub);
  return true;
 }
-root.GalaxyMoreV5=Object.freeze({classify,organize,enhancePrivacy,privacyAudience,themePalette,nextAutoChange,enhanceAppearance});
+root.GalaxyMoreV5=Object.freeze({classify,organize,enhancePrivacy,privacyAudience,themePalette,nextAutoChange,enhanceAppearance,notificationIndicator,enhanceNotifications});
 })(window);
