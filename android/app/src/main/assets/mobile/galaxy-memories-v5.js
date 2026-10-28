@@ -20,16 +20,37 @@ function discover(items,media,{esc,ico}){
  * The presentational module never makes a request, stores identifiers or changes media.
  */
 const usablePhoto=photo=>photo&&typeof photo.url==='string'&&/^https?:\/\/[^\s]+$/i.test(photo.url);
+/* VE-164/166: Storage media-list supplies 'created' (upload timestamp).
+ * This is an incorporation date, never the original camera capture date.
+ * Keep original array indices for the viewer and never merge/remove photos. */
+function albumDateGroups(photos){
+ const groups=new Map();
+ (Array.isArray(photos)?photos:[]).forEach((photo,index)=>{
+  const raw=photo?.created;
+  const date=typeof raw==='string'&&/^\d{4}-\d{2}-\d{2}T/.test(raw)&&
+   validDate(raw.slice(0,10))&&Number.isFinite(Date.parse(raw))?raw.slice(0,10):null;
+  const key=date||'';
+  if(!groups.has(key))groups.set(key,[]);
+  groups.get(key).push({photo,index});
+ });
+ return [...groups].sort(([a],[b])=>a===b?0:!a?1:!b?-1:b.localeCompare(a))
+  .map(([date,entries])=>({date,entries}));
+}
 function albumGallery(photos,{attr,ico}){
  const items=Array.isArray(photos)?photos:[];
- return '<div class="memories-v5-photo-grid" role="list" aria-label="Fotos del álbum privado">'+items.map((photo,index)=>{
+ const photoCard=({photo,index})=>{
   const label='Ver foto '+(index+1)+' de '+items.length;
   return '<div class="memories-v5-photo-card" role="listitem">'+(usablePhoto(photo)?
    '<button type="button" class="memories-v5-photo-open" data-action="album-photo-view" data-index="'+index+'" aria-label="'+attr(label)+'">'+
    '<img loading="lazy" decoding="async" src="'+attr(photo.url)+'" alt="Foto '+(index+1)+' del álbum privado">'+
    '<span class="memories-v5-photo-hint" aria-hidden="true">'+ico('expand')+'</span></button>':
    '<span class="memories-v5-photo-missing" role="status">Imagen no disponible</span>')+'</div>';
- }).join('')+'</div>';
+ };
+ return '<div class="memories-v5-photo-grid" role="list" aria-label="Fotos del álbum privado">'+
+  albumDateGroups(items).map(({date,entries})=>
+   '<section class="memories-v5-photo-date-group"><h4>'+ico('calendar-days')+' '+
+   (date?'Incorporadas el '+date:'Sin fecha de incorporación')+' <small>'+entries.length+'</small></h4>'+
+   '<div class="memories-v5-photo-date-grid">'+entries.map(photoCard).join('')+'</div></section>').join('')+'</div>';
 }
 function albumViewer(photos,at,{attr,ico}){
  const entries=Array.isArray(photos)?photos:[];
@@ -441,5 +462,5 @@ function filtersPanel(items,filter={}, {esc,attr,ico}){
   '<p class="muted">Solo se consultan los títulos, categorías y fechas que ya guardaron. No se buscan contenidos de cápsulas cerradas.</p></div>';
 }
 
-root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumGallery,albumViewer,musicGrouping,musicLibrary,validDate,shiftMonth,calendarMonth,eventOccurrence,eventRows,monthEvents,eventCalendar,organizedCollection,capsuleShelf,journeyShelf,timelineRows,historyVisualGroups,historyTimeline,constellationModel,constellationPreview,constellationView,filterItems,filtersPanel});
+root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumDateGroups,albumGallery,albumViewer,musicGrouping,musicLibrary,validDate,shiftMonth,calendarMonth,eventOccurrence,eventRows,monthEvents,eventCalendar,organizedCollection,capsuleShelf,journeyShelf,timelineRows,historyVisualGroups,historyTimeline,constellationModel,constellationPreview,constellationView,filterItems,filtersPanel});
 })(window);
