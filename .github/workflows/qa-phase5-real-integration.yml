@@ -61,8 +61,13 @@ jobs:
           target: google_apis
           profile: pixel_6
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader -noaudio -no-boot-anim -camera-back none -camera-front none
+          emulator-options: -no-window -gpu swiftshader -memory 3072 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash scripts/qa-phase5-emulator.sh
+
+      - name: Capturar diagnóstico de AVD si falla el gate
+        if: failure()
+        shell: bash
+        run: bash scripts/p8-emulator-diagnostics.sh
 
       - name: Publicar resultados device closure
         if: always()

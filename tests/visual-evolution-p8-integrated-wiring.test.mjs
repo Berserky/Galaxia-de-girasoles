@@ -80,3 +80,28 @@ test('P8 security: backup and device revocation remain fail-closed and server-ve
  assert.match(app,/if\(!context\?\.ok\)\{toast\(/);
  assert.match(app,/if\(!confirm\(context\.message\)\)return;/);
 });
+
+test('P8 Android instrumentation retains the authentic Chat affordance and real framebuffer gate',()=>{
+ const java=readFileSync(resolve(root,'android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyDeviceClosureTest.java'),'utf8');
+ const chat=java.slice(java.indexOf('private void launchChat()'),java.indexOf('private void sendChat('));
+ assert.ok(chat.includes("document.querySelector('#chatFab')?.click()"));
+ assert.ok(chat.includes("view==='chat'"));
+ assert.doesNotMatch(chat,/\bgo\('chat'\);/,'never bypass broken Chat UI through a direct route');
+ assert.ok(java.includes('fabHidden:'),'capture privacy-safe route diagnostics');
+ const capture=java.slice(java.indexOf('private void awaitV5QaPainted('),java.indexOf('private static double v5ColorContrast(',java.indexOf('private void awaitV5QaPainted(')));
+ for(const required of ['15_000','matched>=20','consecutive>=2','SystemClock.sleep(500)','throw new AssertionError("V5 P1 screenshot rejected:'])
+  assert.ok(capture.includes(required),'do not weaken the native painted-frame gate: '+required);
+});
+
+test('P8 emulator CI captures device health without hiding failed instrumented jobs',()=>{
+ for(const name of ['qa-phase5-real-integration.yml','chat-4-phase11-torture.yml','visual-evolution-p0.yml']){
+  const ci=readFileSync(resolve(root,'.github/workflows',name),'utf8');
+  assert.ok(ci.includes('-memory 3072 -no-snapshot'),name+' lacks bounded emulator RAM');
+  assert.ok(ci.includes('if: failure()')&&ci.includes('bash scripts/p8-emulator-diagnostics.sh'),name+' lacks failed-run diagnosis');
+  assert.ok(ci.includes('actions/upload-artifact@v7'),name+' lacks evidence');
+  assert.ok(!ci.includes('continue-on-error: true'),name+' must retain a hard failure');
+ }
+ const diagnostic=readFileSync(resolve(root,'scripts/p8-emulator-diagnostics.sh'),'utf8');
+ assert.ok(diagnostic.includes('qa-artifacts/p8-emulator-health.txt'));
+ assert.doesNotMatch(diagnostic,/secrets\.|token|credential|authorization/i);
+});

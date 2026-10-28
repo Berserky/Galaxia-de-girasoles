@@ -2072,8 +2072,11 @@ public class GalaxyDeviceClosureTest {
 
     private void launchChat() {
         if (scenario == null) launch();
+        // Require the authentic authenticated Chat affordance: never jump to
+        // Chat by calling go('chat') as that would conceal a broken action.
+        awaitJs("!!document.querySelector('#chatFab') && !!cloud?.capabilities?.chat");
         runJs("document.querySelector('#chatFab')?.click()");
-        awaitJs("!!document.querySelector('.chat-shell')");
+        awaitJs("view==='chat' && !!document.querySelector('.chat-shell')");
         awaitCondition(() -> backend.actions().contains("chat-state"), UI_TIMEOUT_MS);
         runJs("document.activeElement?.blur();");
         scenario.onActivity(activity -> ((android.view.inputmethod.InputMethodManager)activity.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(activity.getWindow().getDecorView().getWindowToken(),0));
@@ -2097,7 +2100,11 @@ public class GalaxyDeviceClosureTest {
                 + "const form=document.querySelector('#chatForm'),button=form?.querySelector('.chat-send'),"
                 + "composer=typeof ensureChatComposer==='function'?ensureChatComposer().snapshot():null,"
                 + "delivery=typeof chatDeliveryEngine==='undefined'||!chatDeliveryEngine?null:chatDeliveryEngine.snapshot();"
-                + "return {chat:typeof view!=='undefined'&&view==='chat',form:!!form,"
+                + "const fab=document.querySelector('#chatFab');"
+                + "return {chat:typeof view!=='undefined'&&view==='chat',"
+                + "route:typeof view==='string'&&['home','map','moments','memories','more','chat'].includes(view)?view:'other',"
+                + "fabPresent:!!fab,fabHidden:!!fab?.classList.contains('hidden'),"
+                + "chatEnabled:!!cloud?.capabilities?.chat,form:!!form,"
                 + "buttonType:button?.type||null,buttonDisabled:!!button?.disabled,"
                 + "composerHasText:!!composer?.text?.trim(),composerDisabled:!!composer?.disabled,"
                 + "composerSending:!!composer?.sending,paired:typeof native!=='undefined'&&!!native?.paired,"
@@ -2406,7 +2413,10 @@ public class GalaxyDeviceClosureTest {
                 }else consecutive=0;
             } catch(RuntimeException ignored) { consecutive=0; }
             finally {if(shot!=null)shot.recycle();}
-            SystemClock.sleep(200);
+            // Native takeScreenshot is a full-frame GPU readback. Avoid
+            // saturating a headless AVD with up to 75 reads in 15 seconds.
+            // Keep the same 15s deadline and two positive real frames.
+            SystemClock.sleep(500);
         }
         throw new AssertionError("V5 P1 screenshot rejected: real Android display has no QA home paint marker for "+theme);
     }
