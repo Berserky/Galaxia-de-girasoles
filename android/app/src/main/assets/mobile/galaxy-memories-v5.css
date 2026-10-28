@@ -165,3 +165,39 @@
 .memories-v5-history-detail>.card{margin:0}
 @media(max-width:360px){.memories-v5-history-card>summary{padding:9px}}
 @media(prefers-reduced-motion:reduce){.memories-v5-history-card{transition:none!important}}
+
+/* P6F: grounded, accessible star map (not simulated relationships). */
+.memories-v5-constellation{min-width:0;padding-bottom:calc(110px + env(safe-area-inset-bottom))}
+.memories-v5-star-guide{display:flex;align-items:center;gap:8px;line-height:1.45;color:var(--muted);font-size:12px}
+.memories-v5-star-guide .ui-icon{width:17px;height:17px;flex:0 0 auto}
+.memories-v5-star-counter{color:var(--muted);font-size:11px;letter-spacing:.02em}
+.memories-v5-star-groups{display:grid;gap:17px;min-width:0}
+.memories-v5-star-group{min-width:0}
+.memories-v5-star-group>h4{margin:0 0 8px;font-size:14px;color:var(--text)}
+.memories-v5-star-group>h4 small{margin-left:6px;font-size:11px;font-weight:500;color:var(--muted)}
+.memories-v5-star-field{position:relative;height:var(--star-field-height);border:1px solid rgba(195,159,255,.25);border-radius:22px;overflow:hidden;background:radial-gradient(ellipse at 22% 22%,rgba(126,78,214,.30),transparent 48%),radial-gradient(ellipse at 83% 83%,rgba(255,155,193,.17),transparent 45%),#151226;color:#fff}
+.memories-v5-star-field:before{content:"";position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(circle,rgba(255,255,255,.6) 0 1px,transparent 1.6px);background-size:37px 33px;opacity:.26}
+.memories-v5-star-lines{position:absolute;inset:0;width:100%;height:100%;fill:none;stroke:#cbb7fa;stroke-width:2.2;stroke-opacity:.65;pointer-events:none}
+.memories-v5-star{position:absolute;z-index:1;left:var(--star-x);top:var(--star-y);display:grid;place-items:center;transform:translate(-50%,-50%);width:46px;height:46px;padding:0;border:1px solid rgba(255,255,255,.28);border-radius:50%;background:rgba(54,39,97,.74);color:white;cursor:pointer}
+.memories-v5-star-orb{position:absolute;inset:12px;border-radius:50%;background:#f9edff;box-shadow:0 0 8px #e6c3ff,0 0 24px rgba(188,140,255,.9)}
+.memories-v5-star-kind{position:relative;z-index:1;display:grid;place-items:center;opacity:0;transition:opacity .18s ease}
+.memories-v5-star-kind .ui-icon{width:19px;height:19px}
+.memories-v5-star:focus-visible{outline:3px solid #ffefff;outline-offset:3px;background:rgba(134,91,207,.9)}
+.memories-v5-star:focus-visible .memories-v5-star-kind,.memories-v5-star:hover .memories-v5-star-kind{opacity:1}
+.memories-v5-star:focus-visible .memories-v5-star-orb,.memories-v5-star:hover .memories-v5-star-orb{opacity:.36}
+.memories-v5-star-preview-host{display:grid;gap:10px;min-width:0;margin:14px 0;padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--surface2)}
+.memories-v5-star-preview{display:flex;align-items:flex-start;gap:11px;min-width:0}
+.memories-v5-star-preview-icon{display:grid;place-items:center;flex:0 0 40px;width:40px;height:40px;border-radius:12px;background:var(--surface);color:var(--accent)}
+.memories-v5-star-preview-icon .ui-icon{width:20px;height:20px}
+.memories-v5-star-preview-copy{min-width:0;flex:1}
+.memories-v5-star-preview-copy small{font-size:11px;color:var(--muted)}
+.memories-v5-star-preview-copy h4{margin:5px 0;font-size:15px;overflow-wrap:anywhere}
+.memories-v5-star-preview-copy p{margin:7px 0 0;font-size:12px;line-height:1.55;color:var(--muted);white-space:pre-line;overflow-wrap:anywhere}
+.memories-v5-star-toolbar{display:flex;flex-wrap:wrap;gap:9px}
+.memories-v5-star-toolbar .btn{min-height:44px}
+#modal.memories-v5-constellation-modal{width:min(96vw,960px);max-height:94dvh;border-radius:20px}
+#modal.memories-v5-constellation-modal .modal-inner{max-height:94dvh;overflow-y:auto;padding:16px}
+#modal.memories-v5-constellation-modal .memories-v5-constellation{padding-bottom:28px}
+#modal.memories-v5-constellation-modal .memories-v5-star-field{border-color:rgba(218,194,255,.3)}
+@media(max-width:360px){.memories-v5-star{height:44px;width:44px}.memories-v5-star-toolbar{display:grid;grid-template-columns:1fr}.memories-v5-star-toolbar button{width:100%}}
+@media(prefers-reduced-motion:reduce){.memories-v5-star-kind{transition:none}}

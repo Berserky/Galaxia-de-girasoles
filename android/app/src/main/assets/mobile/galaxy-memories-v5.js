@@ -309,5 +309,80 @@ function historyTimeline(items,today,{esc,attr,ico,itemCard}){
   (!known.length&&!undated.length?'<div class="empty">Nuestra historia crecerá a medida que guardemos recuerdos juntos.</div>':'')+'</section>';
 }
 
-root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumGallery,albumViewer,musicGrouping,musicLibrary,validDate,shiftMonth,calendarMonth,eventOccurrence,eventRows,monthEvents,eventCalendar,organizedCollection,capsuleShelf,journeyShelf,timelineRows,historyTimeline});
+
+/* P6F constellation: nodes come from authenticated saved items. We draw a line
+ * ONLY between neighbouring entries with explicit dates in the SAME year.
+ * The path means chronological order, not a social/causal or location link.
+ * Never include locked capsules, or infer dates from created timestamps.
+ */
+const constellationKinds=new Set(['memory','journey','song','event']);
+const constellationLabels={memory:['Recuerdo','heart'],journey:['Viaje','route'],song:['Canción','music'],event:['Fecha especial','calendar']};
+function constellationModel(items){
+ const seen=new Set(),dated=[],undated=[];
+ for(const item of Array.isArray(items)?items:[]){
+  if(!item||!constellationKinds.has(item.kind)||!item.data||typeof item.data!=='object')continue;
+  if(typeof item.id!=='string'&&typeof item.id!=='number')continue;
+  const id=String(item.id);
+  if(!id||seen.has(id))continue;
+  seen.add(id);
+  const date=validDate(item.data.date)?item.data.date:null;
+  const node={item,id,date,year:date?date.slice(0,4):null};
+  (date?dated:undated).push(node);
+ }
+ dated.sort((a,b)=>b.date.localeCompare(a.date)||a.id.localeCompare(b.id));
+ undated.sort((a,b)=>a.id.localeCompare(b.id));
+ return [...dated,...undated];
+}
+function constellationPreview(item,{esc,ico}){
+ if(!item||!constellationKinds.has(item.kind)||!item.data||typeof item.data!=='object')return '';
+ const name=constellationLabels[item.kind]||['Recuerdo','star'];
+ const title=String(item.data.title||name[0]),date=validDate(item.data.date)?item.data.date:null;
+ const created=typeof item.created==='string'&&validDate(item.created.slice(0,10))?item.created.slice(0,10):null;
+ const subtitle=date?'Vivido el '+date:created?'Guardado el '+created:'Sin fecha de vivencia';
+ const excerpt=typeof item.data.body==='string'?item.data.body.slice(0,240).trim():'';
+ return '<div class="memories-v5-star-preview"><span class="memories-v5-star-preview-icon">'+ico(name[1])+'</span>'+
+  '<div class="memories-v5-star-preview-copy"><small>'+esc(name[0])+' · '+esc(subtitle)+'</small><h4>'+esc(title)+'</h4>'+
+  (excerpt?'<p>'+esc(excerpt)+'</p>':'')+'</div></div>';
+}
+function constellationView(items,{limit=18,expanded=false}={}, {esc,attr,ico}){
+ const model=constellationModel(items),shown=expanded?model:model.slice(0,Math.max(1,Math.min(model.length,Number.isSafeInteger(limit)?limit:18)));
+ if(!model.length)return '<section class="section memories-v5-constellation-section"><h2>Constelación de recuerdos</h2><p class="muted">Cuando guarden experiencias, sus estrellas aparecerán aquí.</p></section>';
+ const groups=new Map();
+ for(const node of shown){
+  const key=node.year||'Sin fecha de vivencia';
+  if(!groups.has(key))groups.set(key,[]);
+  groups.get(key).push(node);
+ }
+ const boards=[...groups].map(([period,group])=>{
+  const year=period!=='Sin fecha de vivencia',height=Math.max(188,110+Math.ceil(group.length/4)*87);
+  const pos=group.map((node,i)=>({node,x:15+(i%4)*23.3,y:54+Math.floor(i/4)*87}));
+  // Both endpoints have an explicit saved date, and belong to the same calendar year.
+  const lines=year?pos.slice(1).map((p,i)=>'<line x1="'+(pos[i].x*10)+'" y1="'+pos[i].y+
+   '" x2="'+(p.x*10)+'" y2="'+p.y+'" />').join(''):'';
+  return '<section class="memories-v5-star-group" aria-label="'+attr(year?'Recuerdos de '+period:'Recuerdos sin fecha')+'">'+
+   '<h4>'+esc(period)+' <small>'+group.length+' '+(group.length===1?'estrella':'estrellas')+'</small></h4>'+
+   '<div class="memories-v5-star-field" style="--star-field-height:'+height+'px">'+
+   '<svg class="memories-v5-star-lines" viewBox="0 0 1000 '+height+'" preserveAspectRatio="none" aria-hidden="true" focusable="false">'+lines+'</svg>'+
+   pos.map(({node,x,y},i)=>{const name=constellationLabels[node.item.kind]||['Recuerdo','star'];
+    return '<button type="button" class="memories-v5-star" style="--star-x:'+x.toFixed(1)+'%;--star-y:'+y+'px" '+
+     'data-action="constellation-item" data-id="'+attr(node.id)+'" aria-label="'+attr(name[0]+': '+String(node.item.data.title||name[0])+
+      (node.date?', '+node.date:', sin fecha registrada'))+'">'+
+     '<span class="memories-v5-star-orb" aria-hidden="true"></span>'+
+     '<span class="memories-v5-star-kind" aria-hidden="true">'+ico(name[1])+'</span></button>';
+   }).join('')+'</div></section>';
+ }).join('');
+ const hidden=model.length-shown.length;
+ const toolbar=expanded?'':('<div class="memories-v5-star-toolbar"><button type="button" class="btn small secondary" data-action="constellation-expand">'+ico('maximize-2')+
+  ' Ampliar constelación</button>'+(hidden?'<button type="button" class="btn small secondary" data-action="constellation-more">'+ico('plus')+
+  ' Mostrar más ('+hidden+')</button>':'')+'</div>');
+ return '<section class="section memories-v5-constellation'+(expanded?' expanded':'')+'" aria-label="Constelación de recuerdos">'+
+  '<div class="section-head"><div><h2>Constelación de recuerdos</h2><p>Estrellas de historias guardadas. Las líneas unen fechas consecutivas del mismo año; no representan vínculos inventados.</p></div></div>'+
+  '<p class="memories-v5-star-guide">'+ico('info')+' Selecciona una estrella para leer su historia. Usa Ampliar para recorrer todas las épocas.</p>'+
+  '<p class="memories-v5-star-counter">Mostrando '+shown.length+' de '+model.length+' recuerdos</p>'+
+  '<div class="memories-v5-star-groups">'+boards+'</div>'+
+  '<div class="memories-v5-star-preview-host" data-constellation-preview role="status" aria-live="polite"><p class="muted">Elige una estrella para ver sus detalles.</p></div>'+
+  toolbar+'</section>';
+}
+
+root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumGallery,albumViewer,musicGrouping,musicLibrary,validDate,shiftMonth,calendarMonth,eventOccurrence,eventRows,monthEvents,eventCalendar,organizedCollection,capsuleShelf,journeyShelf,timelineRows,historyTimeline,constellationModel,constellationPreview,constellationView});
 })(window);
