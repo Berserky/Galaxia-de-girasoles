@@ -42,7 +42,7 @@ const legacySurpriseIdeas=[
  {title:'Álbum del mes',body:'Elegir juntos las mejores fotos del mes y escribir una frase para cada una.',minutes:60,budget:0,where:'casa'}
 ];
 
-let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',memorySection='discover',memoryCalendarMode='month',memoryCalendarMonth='',memoryCalendarDate='',memoriesTabsScroll=0,media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),insightsCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
+let native={paired:false,version:''},cloud=null,mapData=null,view='home',memoryTab='memory',memorySection='discover',memoryCalendarMode='month',memoryCalendarMonth='',memoryCalendarDate='',constellationVisible=18,memoriesTabsScroll=0,media={photo:null,music:null},mediaLoadedAt={photo:0,music:0},map=null,monthlyCache=new Map(),insightsCache=new Map(),todayHistoryCache=new Map(),todayHistoryItems=new Map(),encounterStatsCache=null,encounterStatsLoading=false,frequentPlacesData=null,frequentPlacesLoadedAt=0,frequentPlacesLoading=false;
 let mapImmersive=false,mapHistoryVisible=6,mapPlacesVisible=6;
 // Read-only signal for deterministic Android WebView QA; never gates GPS or user actions.
 let mapStateReadsInFlight=0;
@@ -1132,11 +1132,7 @@ function itemList(kind){
  return '<div class="section"><div class="row between"><div><h3 style="margin:0">'+meta[1]+'</h3><small class="muted">'+list.length+' guardados</small></div><button class="btn small" data-action="item-new" data-kind="'+kind+'">+ Añadir</button></div><div class="'+(kind==='memory'||kind==='journey'?'timeline':'stack')+'" style="margin-top:12px">'+(list.length?list.map(itemCard).join(''):'<div class="empty"><span class="big">'+ico(meta[0])+'</span>Aquí aparecerá lo que vayan guardando.</div>')+'</div></div>';
 }
 function linkedVoices(id){return (cloud?.bond?.entries||[]).filter(x=>x.type==='voice'&&x.data?.referenceId===id);}
-function constellationView(){
- const nodes=(cloud?.items||[]).filter(x=>['memory','journey','song','event'].includes(x.kind)).slice().sort((a,b)=>String(a.data?.date||a.created).localeCompare(String(b.data?.date||b.created))).slice(-18);
- if(!nodes.length)return '';
- return '<section class="section"><div class="section-head"><div><h2>Constelación de recuerdos</h2><p>Cada estrella es una parte de su historia. Las líneas siguen el orden en que la vivieron.</p></div></div><div class="constellation" aria-label="Constelación de recuerdos">'+nodes.map((i,n)=>{const x=10+((n*37)%80),y=12+((n*53)%72),size=8+(n%4)*2;return '<button class="constellation-star" style="--x:'+x+'%;--y:'+y+'%;--s:'+size+'px" data-action="constellation-item" data-id="'+i.id+'" aria-label="'+attr(i.data?.title||'Recuerdo')+'"><i></i><span>'+esc(i.data?.title||'Recuerdo')+'</span></button>';}).join('')+'</div></section>';
-}
+function constellationView(){return window.GalaxyMemoriesV5.constellationView(cloud?.items||[],{limit:constellationVisible},{esc,attr,ico});}
 function linkedDailyQuestionAnswers(i){
  const source=i?.data?.source;if(i?.kind!=='memory'||source?.type!=='daily-question'||!source.day)return'';
  const rows=(cloud?.daily||[]).filter(row=>String(row.day)===String(source.day)&&row.answer).sort((a,b)=>String(a.person).localeCompare(String(b.person)));
@@ -2938,7 +2934,7 @@ function closeModal(){
   if(form==='chat-attach-sheet'||form==='chat-message-menu')window.GalaxyChatMotion?.depart(modal.querySelector('.modal-inner'));
   modal.close();
  }
- modal.classList.remove('chat-bottom-sheet','chat-surface');
+ modal.classList.remove('chat-bottom-sheet','chat-surface','memories-v5-constellation-modal');
  window.GalaxyCelestialShell?.afterClose?.(wasChat);
  delete modal.dataset.editId;delete modal.dataset.version;delete modal.dataset.kind;delete modal.dataset.form;
 }
@@ -3470,7 +3466,34 @@ document.addEventListener('click',async e=>{
   if(a==='new-voice'){openVoice();return;}
   if(a==='voice-for-item'){openVoice(btn.dataset.id);return;}
   if(a==='anniversary-open'){await openInsights('anniversary','');return;}
-  if(a==='constellation-item'){const i=cloud.items.find(x=>x.id===btn.dataset.id);if(i)showModal(i.data?.title||'Recuerdo','<div class="card" style="margin-top:16px"><span class="badge">'+esc(kindMeta[i.kind]?.[1]||'Historia')+'</span><p style="margin-top:10px">'+esc(i.data?.body||fmtDate(i.data?.date)||'Parte de nuestra historia.')+'</p>'+(linkedVoices(i.id).length?linkedVoices(i.id).map(voiceCard).join(''):'')+'</div>');return;}
+  if(a==='constellation-more'&&view==='memories'){constellationVisible=Math.min((cloud?.items||[]).length,constellationVisible+18);render();return;}
+  if(a==='constellation-expand'&&view==='memories'&&native.paired&&cloud){
+   showModal('Constelación de recuerdos',window.GalaxyMemoriesV5.constellationView(cloud.items,{expanded:true},{esc,attr,ico}),'memories-constellation');
+   modal.classList.add('memories-v5-constellation-modal');return;
+  }
+  if(a==='constellation-item'){
+   if(!native.paired||!cloud)return;
+   const item=(cloud.items||[]).find(x=>String(x.id)===String(btn.dataset.id));
+   // Do not show locked capsules or private note bodies through shortcuts.
+   if(!item||!['memory','journey','song','event'].includes(item.kind)||item.data?.locked===true)return;
+   const preview=window.GalaxyMemoriesV5.constellationPreview(item,{esc,ico});
+   const chart=btn.closest('.memories-v5-constellation');
+   if(chart){const host=chart.querySelector('[data-constellation-preview]');if(host){host.innerHTML=preview+
+    '<button type="button" class="btn small secondary" data-action="constellation-open" data-id="'+attr(item.id)+'">'+ico('arrow-up-right')+' Abrir colección</button>';
+    host.scrollIntoView({block:'nearest',behavior:'auto'});refreshIcons();}}
+   else showModal(item.data?.title||'Recuerdo',preview+'<button type="button" class="btn small" data-action="constellation-open" data-id="'+attr(item.id)+'">Abrir colección</button>','constellation-preview');
+   return;
+  }
+  if(a==='constellation-open'&&native.paired&&view==='memories'&&cloud){
+   const item=(cloud.items||[]).find(x=>String(x.id)===String(btn.dataset.id));
+   if(!item||!['memory','journey','song','event'].includes(item.kind)||item.data?.locked===true)return;
+   if(modal.open)closeModal();
+   memorySection='collections';memoryTab=item.kind==='song'?'music':item.kind;render();
+   requestAnimationFrame(()=>{const found=[...document.querySelectorAll('[data-item-id]')].find(el=>String(el.dataset.itemId)===String(item.id));
+    if(found?.tagName==='DETAILS')found.open=true;
+    found?.scrollIntoView({block:'center',behavior:'auto'});});
+   return;
+  }
   if(a==='voice-record-start'){voiceResumeMusic=musicPlaying;if(musicPlaying)toggleMusic();await GalaxyNative.call('startVoiceRecording');voiceRecording=true;voiceReady=false;startVoiceTimer();modal.querySelector('[data-role="voice-status"]').textContent='Grabando… 0 s / 60 s';btn.hidden=true;modal.querySelector('[data-action="voice-record-stop"]').hidden=false;return;}
   if(a==='voice-record-stop'){const info=await GalaxyNative.call('stopVoiceRecording');stopVoiceTimer();voiceRecording=false;voiceReady=true;modal.querySelector('[data-role="voice-status"]').textContent='Grabación lista · '+Math.max(1,Math.round((info.durationMs||0)/1000))+' s. Escúchala antes de guardar.';btn.hidden=true;modal.querySelector('[data-action="voice-record-start"]').hidden=false;modal.querySelector('[data-action="voice-preview"]').hidden=false;modal.querySelector('[data-action="voice-discard"]').hidden=false;if(voiceResumeMusic){toggleMusic();voiceResumeMusic=false;}return;}
   if(a==='voice-preview'){voiceResumeMusic=musicPlaying;if(musicPlaying)toggleMusic();await GalaxyNative.call('playVoiceRecording');return;}
