@@ -212,3 +212,24 @@
 .memories-v5-filters>p{grid-column:1/-1;font-size:11px;line-height:1.4;margin:0}
 .memories-v5-filters :is(input,select,button):focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 @media(max-width:360px){.memories-v5-filters{grid-template-columns:1fr}.memories-v5-filters label:first-child,.memories-v5-filter-buttons,.memories-v5-filters>p{grid-column:1}}
+
+/* P6H: responsive, type-aware cards with accessible secondary actions. */
+.memories-v5-card{min-width:0;overflow-wrap:anywhere;border-left:3px solid var(--accent)}
+.memories-v5-card--memory{border-left-width:4px}
+.memories-v5-card--journey .item-icon,.memories-v5-card--event .item-icon{background:var(--surface2);color:var(--accent)}
+.memories-v5-card-type{font-weight:800;color:var(--accent)}
+.memories-v5-card-copy{line-height:1.55;overflow-wrap:anywhere}
+.memories-v5-card-copy p{margin:8px 0}
+.memories-v5-card-full{margin-top:8px;min-width:0}
+.memories-v5-card-full>summary{min-height:44px;display:flex;align-items:center;color:var(--accent);font-size:12px;font-weight:750;cursor:pointer}
+.memories-v5-card-media{margin:12px 0;min-width:0;overflow:hidden}
+.memories-v5-card-media img,.memories-v5-card-media video{display:block;max-width:100%;max-height:230px;object-fit:contain;border-radius:12px}
+.memories-v5-card-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.memories-v5-card-more{min-width:0}
+.memories-v5-card-more>summary{display:flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:8px 12px;border:1px solid var(--border);border-radius:12px;background:var(--surface2);color:var(--text);font-size:12px;font-weight:700;cursor:pointer;list-style:none}
+.memories-v5-card-more>summary .ui-icon{width:16px;height:16px}
+.memories-v5-card-more-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.memories-v5-card-more-actions button{min-height:44px}
+.memories-v5-card-more>summary:focus-visible,.memories-v5-card-full>summary:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+@media(max-width:360px){.memories-v5-card-actions{align-items:stretch}.memories-v5-card-more[open]{width:100%}.memories-v5-card-more-actions{flex-direction:column}}
+@media(prefers-reduced-motion:reduce){.memories-v5-card,.memories-v5-card-more{transition:none!important}}
