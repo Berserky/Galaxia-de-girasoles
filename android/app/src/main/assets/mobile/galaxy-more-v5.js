@@ -349,6 +349,41 @@ function enhanceWidgets(hub){
  return true;
 }
 
+
+/* P7F: local read-only manifest preview; backend alone validates the payload. */
+function backupManifestPreview(backup){
+ const invalid=reason=>({ok:false,reason});
+ if(!backup||typeof backup!=='object'||Array.isArray(backup)||backup.format!=='nuestra-galaxia-backup'||Number(backup.version)!==5)
+  return invalid('El archivo no es una copia v5 compatible.');
+ const manifest=backup.manifest,counts=manifest?.counts;
+ if(!/^[0-9a-f-]{36}$/i.test(String(backup.backupId||''))||manifest?.schemaVersion!=='20261005011401')
+  return invalid('Identificador o esquema inválido.');
+ const required=['settings','items','places','bond','chatMessages','locationHistory','tripHistory'];
+ if(!counts||typeof counts!=='object'||Array.isArray(counts)||!required.every(k=>Object.hasOwn(counts,k)))
+  return invalid('Faltan conteos en el manifiesto.');
+ const values=Object.values(counts);
+ if(!values.length||!values.every(n=>Number.isSafeInteger(n)&&n>=0&&n<=100000))
+  return invalid('Conteos inválidos en el manifiesto.');
+ const mediaCount=manifest?.media?.count,pointer=manifest?.payload;
+ if(!Number.isSafeInteger(mediaCount)||mediaCount<0||mediaCount>10000
+    ||pointer?.bucket!=='galaxy-backups'||typeof pointer.path!=='string'
+    ||!pointer.path.endsWith('/'+backup.backupId+'.json')
+    ||!Number.isSafeInteger(pointer.sizeBytes)||pointer.sizeBytes<1||pointer.sizeBytes>60*1024*1024
+    ||!/^[0-9a-f]{64}$/i.test(String(pointer.sha256||'')))
+  return invalid('Referencia de integridad inválida.');
+ return {ok:true,message:
+  'VISTA PREVIA DEL MANIFIESTO (cantidades declaradas)\n\n'
+  +'Registros: '+values.reduce((sum,n)=>sum+n,0)+'\n'
+  +'Contenidos: '+counts.items+'\nLugares: '+counts.places
+  +'\nMomentos: '+counts.bond+'\nMensajes: '+counts.chatMessages
+  +'\nMultimedia referenciada: '+mediaCount+'\n\n'
+  +'No es una comparación con los datos actuales ni una garantía de restauración. '
+  +'El teléfono NO verifica el contenido ni su hash: el servidor debe comprobar integridad SHA-256, '
+  +'permisos, archivos y compatibilidad antes de aplicar cambios. '
+  +'Puede haber conflictos; restaurar no se limita necesariamente a añadir registros.\n\n'
+  +'¿Enviar esta copia para verificación y posible restauración?'};
+}
+
 function organize(container){
  const section=container?.querySelector?.('section');
  if(!section||section.querySelector('.v5-more-hub'))return false;
@@ -388,5 +423,5 @@ function organize(container){
  enhanceWidgets(hub);
  return true;
 }
-root.GalaxyMoreV5=Object.freeze({classify,organize,enhancePrivacy,privacyAudience,themePalette,nextAutoChange,enhanceAppearance,notificationIndicator,enhanceNotifications,enhanceBackups,permissionReadings,enhanceDevices,enhanceWidgets});
+root.GalaxyMoreV5=Object.freeze({classify,organize,enhancePrivacy,privacyAudience,themePalette,nextAutoChange,enhanceAppearance,notificationIndicator,enhanceNotifications,enhanceBackups,permissionReadings,enhanceDevices,enhanceWidgets,backupManifestPreview});
 })(window);
