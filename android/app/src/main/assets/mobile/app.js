@@ -47,6 +47,7 @@ let mapImmersive=false,mapHistoryVisible=6,mapPlacesVisible=6;
 // P5: one authenticated Moments lifecycle; never persist a garden between unpairings.
 let gardenLifecycle=null;
 let settingsDraftCache=null,settingsDraftOwner='',settingsSaveInFlight=false; // Never persisted
+let backupImportInFlight=false; // Session-only guard: never run two restores concurrently.
 
 let driveSyncSnapshot=null,driveSyncInFlight=false; // session only, never stored
 
@@ -3835,19 +3836,36 @@ document.addEventListener('click',async e=>{
   if(a==='gps-history-map'){closeModal();go('map');return;}
   if(a==='theme-set'){const state=window.GalaxyTheme?.applyTheme(btn.dataset.value);render();toast(state?.selected==='auto'?'Tema automático · ahora '+window.GalaxyTheme.LABELS[state.active]+'.':'Tema '+window.GalaxyTheme.LABELS[state?.active]+' activado.');return;}
   if(a==='backup-import'){
-    const file=await GalaxyNative.call('importJson');
-    if(typeof file?.json!=='string'||!file.json)return;
-    let backup;
-    try{backup=JSON.parse(file.json);}catch{toast('El archivo no contiene un JSON válido.');return;}
-    const preview=window.GalaxyMoreV5?.backupManifestPreview?.(backup);
-    if(!preview?.ok){toast(preview?.reason||'No se pudo revisar el manifiesto del respaldo.');return;}
-    if(!confirm(preview.message))return;
-    const result=await api('backup-import',{backup});
-    if(result?.verified!==true){toast('El servidor no confirmó la verificación. Revisa los datos antes de volver a intentar.');return;}
-    await refreshState({quiet:true});await refreshMap({quiet:true,detail:true});render();
-    const r=result.restored||{};
-    toast('Copia verificada y restaurada: '+Number(r.items||0)+' contenidos, '+Number(r.places||0)+' lugares y '+Number(r.bond||0)+' momentos.');
-    return;
+    if(backupImportInFlight)return; // Prevent duplicate pickers and concurrent server mutations.
+    backupImportInFlight=true;
+    try{
+      const file=await GalaxyNative.call('importJson');
+      if(typeof file?.json!=='string'||!file.json)return;
+      let backup;
+      try{backup=JSON.parse(file.json);}catch{toast('El archivo no contiene un JSON válido.');return;}
+      const preview=window.GalaxyMoreV5?.backupManifestPreview?.(backup);
+      if(!preview?.ok){toast(preview?.reason||'No se pudo revisar el manifiesto del respaldo.');return;}
+      if(!confirm(preview.message))return;
+      const result=await api('backup-import',{backup});
+      if(result?.verified!==true){toast('El servidor no confirmó la verificación. Revisa los datos antes de volver a intentar.');return;}
+      const r=result.restored||{};
+      let refreshed=true;
+      try{
+        await refreshState({quiet:true});
+        await refreshMap({quiet:true,detail:true});
+        render();
+      }catch{
+        refreshed=false; // The server already confirmed restore; a UI refresh error must not invite re-import.
+      }
+      if(!refreshed){
+        toast('Restauración verificada en el servidor, pero la pantalla no se actualizó. Reabre la aplicación para consultar los datos; no vuelvas a importar la misma copia.');
+        return;
+      }
+      toast('Copia verificada y restaurada: '+Number(r.items||0)+' contenidos, '+Number(r.places||0)+' lugares y '+Number(r.bond||0)+' momentos.');
+      return;
+    }finally{
+      backupImportInFlight=false;
+    }
   }
   if(a==='context-near-toggle'){const s=contextSettings(),next=!s.near_enabled;const result=await api('context-settings',{operation:'save',nearEnabled:next});await GalaxyNative.call('setContextPushPrefs',!!result.settings.near_enabled,!!result.settings.arrived_safe_enabled);await refreshMap({detail:true});toast(next?'Avisos de cercanía activados.':'Avisos de cercanía apagados.');return;}
   if(a==='context-arrived-toggle'){const s=contextSettings(),next=!s.arrived_safe_enabled;const result=await api('context-settings',{operation:'save',arrivedSafeEnabled:next});await GalaxyNative.call('setContextPushPrefs',!!result.settings.near_enabled,!!result.settings.arrived_safe_enabled);await refreshMap({detail:true});toast(next?'Llegué bien automático activado.':'Llegué bien automático apagado.');return;}
