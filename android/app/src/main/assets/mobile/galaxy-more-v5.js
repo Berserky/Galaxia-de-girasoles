@@ -238,7 +238,7 @@ function enhanceBackups(hub){
   zone.append(heading,note,button);zones.append(zone);
  };
  add('export','Crear una copia','Exporta un JSON con información privada. El archivo puede incluir datos personales; guárdalo en un lugar seguro. Fotos, audios y música se conservan por referencia, no como archivos multimedia.',exportButton);
- add('restore','Restaurar una copia','La restauración añade datos según las reglas actuales del servidor. Aún no existe una vista previa del impacto del archivo: usa solo copias de confianza. Se conserva la confirmación original antes de importar.',importButton);
+ add('restore','Restaurar una copia','Antes de restaurar verás el manifiesto con cantidades declaradas, no una comparación con los datos actuales. El servidor debe verificar integridad y compatibilidad; puede haber conflictos o sustituciones. Usa solo copias de confianza y revisa la confirmación antes de importar.',importButton);
  row.parentNode.insertBefore(zones,row);
  row.remove();
  return true;
