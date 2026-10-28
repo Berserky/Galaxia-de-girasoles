@@ -62,3 +62,28 @@
 .v5-backup-restore{border-color:var(--danger,#b75e6b)}
 .v5-backup-restore h4{color:var(--danger,#b75e6b)}
 .v5-backup-zone .btn{min-height:40px}
+
+/* P7E: device actions stay attached to the original authenticated handlers. */
+.v5-device-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);padding:12px 0!important;min-width:0}
+.v5-device-row>span{flex:1;min-width:0;overflow-wrap:anywhere}
+.v5-device-current{background:var(--surface2);border-radius:10px;padding-inline:8px!important}
+.v5-device-code-options{display:grid;gap:10px;margin-top:14px}
+.v5-device-code-option,.v5-device-recovery{min-width:0;border:1px solid var(--border);border-radius:12px;padding:12px}
+.v5-device-code-option h4{font-size:13px;margin:0 0 6px;color:var(--text)}
+.v5-device-code-option p,.v5-device-recovery p,.v5-device-safety,.v5-permission-help{font-size:12px;line-height:1.55;color:var(--muted)}
+.v5-device-code-option p{margin:0 0 10px}
+.v5-device-code-option .btn{max-width:100%;white-space:normal;text-align:left}
+.v5-device-recovery{margin-top:12px;border-color:var(--danger,#b75e6b)}
+.v5-device-recovery summary{cursor:pointer;font-weight:700;color:var(--danger,#b75e6b)}
+.v5-device-recovery .btn{margin-top:8px;max-width:100%;white-space:normal}
+.v5-device-safety{margin:12px 0 0}
+.v5-permission-list{display:grid;gap:8px;margin:12px 0}
+.v5-permission-list>div{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;border-bottom:1px solid var(--border);padding:7px 0}
+.v5-permission-list dt{font-size:12px;color:var(--muted)}
+.v5-permission-list dd{margin:0;font-size:12px;font-weight:700;color:var(--text)}
+.v5-widget-zones{display:grid;gap:12px;margin-top:14px}
+.v5-widget-zone{border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-width:0}
+.v5-widget-zone h4{flex-basis:100%;margin:0;font-size:14px;color:var(--text)}
+.v5-widget-zone p{flex-basis:100%;margin:0 0 4px;font-size:12px;line-height:1.5;color:var(--muted)}
+.v5-widget-zone .btn{min-height:40px;max-width:100%;white-space:normal}
+@media(max-width:360px){.v5-device-code-option .btn,.v5-widget-zone .btn{width:100%}}
