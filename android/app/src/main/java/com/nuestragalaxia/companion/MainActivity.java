@@ -903,7 +903,11 @@ public final class MainActivity extends FragmentActivity {
                     reject(request,"La sesión cambió durante la exportación; descarta el archivo generado.");
                     return;
                 }
-                resolve(request,new JSONObject().put("saved",true));
+                try{
+                    resolve(request,new JSONObject().put("saved",true));
+                }catch(org.json.JSONException e){
+                    reject(request,"No pudimos confirmar la exportación del archivo.");
+                }
             });
             return;
         }
