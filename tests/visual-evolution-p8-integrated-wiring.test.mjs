@@ -64,3 +64,19 @@ test('P8 integrated: shared app source parses as a classic WebView script',()=>{
  assert.doesNotThrow(()=>new Function(app));
  assert.doesNotMatch(app,/^(?:<<<<<<<|=======|>>>>>>>)/m);
 });
+
+test('P8 security: unpair clears P5 garden and transient P7 settings/navigation',()=>{
+ assert.match(app,/if\(a==='unpair'\)[\s\S]*?gardenLifecycle\?\.reset\(\)/);
+ assert.match(app,/if\(!native\.paired\)\{settingsDraftCache=null;settingsDraftOwner='';window\.GalaxyMoreV5\?\.resetNavigation\(\)/);
+ assert.match(app,/if\(!native\.paired\)gardenLifecycle\?\.reset\(\)/);
+});
+
+test('P8 security: backup and device revocation remain fail-closed and server-verified',()=>{
+ assert.match(app,/const preview=window\.GalaxyMoreV5\?\.backupManifestPreview\?\.\(backup\)/);
+ assert.match(app,/if\(!preview\?\.ok\)\{toast\(/);
+ assert.match(app,/if\(!confirm\(preview\.message\)\)return;/);
+ assert.match(app,/if\(result\?\.verified!==true\)/);
+ assert.match(app,/const context=window\.GalaxyMoreV5\?\.deviceRevokePreview\?\.\(cloud\?\.devices,cloud\?\.device\?\.id,id,names\(\)\)/);
+ assert.match(app,/if\(!context\?\.ok\)\{toast\(/);
+ assert.match(app,/if\(!confirm\(context\.message\)\)return;/);
+});

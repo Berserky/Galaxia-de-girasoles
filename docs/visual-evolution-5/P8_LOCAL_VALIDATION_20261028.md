@@ -13,6 +13,7 @@
 | `node --test` focalizado P5/P6/P7/P8 (5 archivos) | 50/50 PASS |
 | `npm.cmd test` antes de reconciliar tests | 1.008 tests: 995 PASS, 9 FAIL, 4 SKIP |
 | `npm.cmd test` después de reconciliar tests | 1.013 tests: 1.008 PASS, 0 FAIL, 5 SKIP |
+| `npm.cmd test` con guardas P8 de desvinculación, respaldo y revocación | **1.015 tests: 1.010 PASS, 0 FAIL, 5 SKIP** |
 | `node scripts/qa-android-mobile.mjs` inicialmente | FAIL: referencia obsoleta al scroll de pestañas eliminadas en P6 |
 | `node scripts/qa-android-mobile.mjs` corregido | PASS: «QA móvil Nuestra Galaxia: OK» |
 
