@@ -96,7 +96,7 @@ test('P8 Android instrumentation retains the authentic Chat affordance and real 
 test('P8 emulator CI captures device health without hiding failed instrumented jobs',()=>{
  for(const name of ['qa-phase5-real-integration.yml','chat-4-phase11-torture.yml','visual-evolution-p0.yml']){
   const ci=readFileSync(resolve(root,'.github/workflows',name),'utf8');
-  assert.ok(ci.includes('-memory 1536 -no-snapshot'),name+' lacks bounded emulator RAM');
+  assert.ok(ci.includes('-memory 2048 -no-snapshot'),name+' lacks bounded emulator RAM');
   assert.ok(ci.includes('if: failure()')&&ci.includes('bash scripts/p8-emulator-diagnostics.sh'),name+' lacks failed-run diagnosis');
   assert.ok(ci.includes('actions/upload-artifact@v7'),name+' lacks evidence');
   assert.ok(!ci.includes('continue-on-error: true'),name+' must retain a hard failure');
@@ -114,6 +114,6 @@ test('P8 failed-download recovery retries SDK without bypassing Android instrume
  }
  for(const name of ['qa-phase5-real-integration.yml','chat-4-phase11-torture.yml','visual-evolution-p0.yml']){
   const ci=readFileSync(resolve(root,'.github/workflows',name),'utf8');
-  assert.ok(ci.includes('-gpu swiftshader_indirect -memory 1536 -no-snapshot'),name+' must use the bounded AVD software graphics profile');
+  assert.ok(ci.includes('-gpu swiftshader_indirect -memory 2048 -no-snapshot'),name+' must use the bounded AVD software graphics profile');
  }
 });
