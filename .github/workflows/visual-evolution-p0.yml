@@ -137,7 +137,7 @@ jobs:
           target: google_apis
           profile: pixel_6
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -memory 1536 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          emulator-options: -no-window -gpu swangle -memory 1536 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash scripts/visual-evolution-p1-avd.sh
 
       - name: Capturar diagnóstico de AVD si falla el gate
