@@ -84,6 +84,7 @@ public final class MainActivity extends FragmentActivity {
     private String pendingVoiceStartRequest;
     private String pendingBackupExportRequest;
     private String pendingBackupJson;
+    private String pendingBackupExportToken; // Bind the pending private JSON to the authenticated device session.
     private String pendingBackupImportRequest;
     private String pendingDriveFolderRequest;
     private String pendingPhotoPickerRequest;
@@ -876,19 +877,33 @@ public final class MainActivity extends FragmentActivity {
             return;
         }
         if(requestCode==REQ_BACKUP_EXPORT){
-            String request=pendingBackupExportRequest,json=pendingBackupJson;
-            pendingBackupExportRequest=null;pendingBackupJson=null;
+            String request=pendingBackupExportRequest,json=pendingBackupJson,sessionToken=pendingBackupExportToken;
+            pendingBackupExportRequest=null;pendingBackupJson=null;pendingBackupExportToken=null;
             if(request==null)return;
             if(resultCode!=RESULT_OK||data==null||data.getData()==null){reject(request,"Exportación cancelada.");return;}
             Uri uri=data.getData();
             io.execute(()->{
+                // A picker may outlive unpair/re-pair. Never export the previous couple's JSON in a new session.
+                if(sessionToken==null||!sessionToken.equals(store.token())){
+                    reject(request,"La sesión cambió; vuelve a solicitar la copia desde tu perfil actual.");
+                    return;
+                }
                 try(OutputStream out=getContentResolver().openOutputStream(uri,"w")){
                     if(out==null)throw new IOException("No se pudo abrir el archivo.");
                     byte[] bytes=(json==null?"{}":json).getBytes(java.nio.charset.StandardCharsets.UTF_8);
                     if(bytes.length>2*1024*1024)throw new IOException("La copia supera el tamaño permitido.");
                     out.write(bytes);
-                    resolve(request,new JSONObject().put("saved",true));
-                }catch(Exception e){reject(request,e.getMessage()==null?"No pudimos guardar la copia.":e.getMessage());}
+                    out.flush();
+                }catch(Exception e){
+                    reject(request,e.getMessage()==null?"No pudimos guardar la copia.":e.getMessage());
+                    return;
+                }
+                // A successful write is not a verified export until the stream has closed without error.
+                if(!sessionToken.equals(store.token())){
+                    reject(request,"La sesión cambió durante la exportación; descarta el archivo generado.");
+                    return;
+                }
+                resolve(request,new JSONObject().put("saved",true));
             });
             return;
         }
@@ -917,13 +932,15 @@ public final class MainActivity extends FragmentActivity {
         if(!store.pairedFast()){reject(requestId,"Vincula este teléfono primero.");return;}
         runOnUiThread(()->{
             if(pendingBackupExportRequest!=null){reject(requestId,"Ya hay una exportación abierta.");return;}
-            pendingBackupExportRequest=requestId;pendingBackupJson=json==null?"{}":json;
+            String sessionToken=store.token();
+            if(sessionToken==null){reject(requestId,"El vínculo del dispositivo ya no es válido.");return;}
+            pendingBackupExportRequest=requestId;pendingBackupJson=json==null?"{}":json;pendingBackupExportToken=sessionToken;
             Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);
             intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.setType("application/json");
             intent.putExtra(Intent.EXTRA_TITLE,(fileName==null||fileName.trim().isEmpty())?"nuestra-galaxia-backup.json":fileName);
             try{startActivityForResult(intent,REQ_BACKUP_EXPORT);}
-            catch(Exception e){pendingBackupExportRequest=null;pendingBackupJson=null;reject(requestId,"Android no pudo abrir el selector para guardar la copia.");}
+            catch(Exception e){pendingBackupExportRequest=null;pendingBackupJson=null;pendingBackupExportToken=null;reject(requestId,"Android no pudo abrir el selector para guardar la copia.");}
         });
     }
 
