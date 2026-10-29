@@ -92,8 +92,14 @@ for css,path in zip(viewports,responsive):
     width,height=struct.unpack('>II',blob[16:24])
     assert width<height, f'Responsive viewport expected portrait: {path}: {width}x{height}'
     dimensions[css]=(width,height)
-assert all(dimensions[a][0]<dimensions[b][0] for a,b in zip(viewports,viewports[1:])), f'Viewport capture widths not increasing: {dimensions}'
-print(f'P1 Android physical viewport matrix PASS: {dimensions}')
+# Android density changes the REAL 320/360/393/412 CSS layout while the
+# emulator framebuffer retains its native resolution. CSS widths are asserted
+# on-device by JUnit; require full-resolution physical screenshots for all four
+# distinct layouts, never substitute browser previews or DOM-only evidence.
+assert len(set(dimensions.values()))==1, f'Native framebuffer was resized between density variants: {dimensions}'
+assert dimensions[320][0]>=720, f'Android physical screenshots suspiciously downscaled: {dimensions}'
+assert len({hashlib.sha256(p.read_bytes()).hexdigest() for p in responsive})==4, 'P1 density viewport captures must contain four distinct real Android frames'
+print(f'P1 Android density-based CSS viewport matrix PASS: {dimensions}')
 bottom=[Path('build/p0-avd/p2-bottom-viewports')/f'{w}.png' for w in viewports]
 assert all(p.is_file() for p in bottom), f'Missing P2 scroll-bottom screenshot: {[str(p) for p in bottom if not p.is_file()]}'
 for css,path in zip(viewports,bottom):

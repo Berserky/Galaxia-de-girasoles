@@ -462,7 +462,7 @@ public class GalaxyDeviceClosureTest {
         initialFrame.recycle();
         final int baselineCssWidth=Integer.parseInt(js("String(Math.round(innerWidth))"));
         assertTrue("Bad CSS/native viewport scale",baselineCssWidth>200 && displayWidthPx>300);
-        final double deviceScale=(double)displayWidthPx/baselineCssWidth;
+        // Physical framebuffer stays constant; vary native density to measure real CSS widths.
         JSONArray responsive=new JSONArray();
         runV5Js("const m=document.createElement('div');m.id='v5-qa-paint-marker';"
             + "m.setAttribute('aria-hidden','true');"
@@ -471,10 +471,12 @@ public class GalaxyDeviceClosureTest {
             + "document.body.appendChild(m)");
         try {
             for (int targetCss : new int[]{320,360,393,412}) {
-                int displayTargetPx=(int)Math.round(targetCss*deviceScale);
-                String resizeResult=shell("wm size "+displayTargetPx+"x"+displayHeightPx);
-                assertFalse("Android virtual screen resize was rejected: "+resizeResult,
-                    resizeResult.toLowerCase(java.util.Locale.ROOT).contains("error"));
+                // wm size reallocates emulator graphics buffers while WebView renders;
+                // density changes viewport CSS width without resizing the hardware framebuffer.
+                int targetDensityDpi=(int)Math.round(160d*displayWidthPx/targetCss);
+                String densityResult=shell("wm density "+targetDensityDpi);
+                assertFalse("Android display density was rejected: "+densityResult,
+                    densityResult.toLowerCase(java.util.Locale.ROOT).contains("error"));
                 awaitCondition(() -> {
                     String size=js("String(Math.round(innerWidth))");
                     return Math.abs(Integer.parseInt(size)-targetCss)<=5;
@@ -968,7 +970,7 @@ public class GalaxyDeviceClosureTest {
             }
         } finally {
             backend.setQaPlaceDestinationFixture(false);
-            shell("wm size reset");
+            shell("wm density reset");
             runV5Js("document.getElementById('v5-qa-paint-marker')?.remove()");
             awaitCondition(() -> Math.abs(Integer.parseInt(js(
                 "String(Math.round(innerWidth))"))-baselineCssWidth)<=5,UI_TIMEOUT_MS);
@@ -994,8 +996,7 @@ public class GalaxyDeviceClosureTest {
         final int realWidth=before.getWidth(),realHeight=before.getHeight();
         before.recycle();
         final int cssBaseline=Integer.parseInt(js("String(Math.round(innerWidth))"));
-        final double scale=(double)realWidth/cssBaseline;
-        assertTrue("P5 invalid native/CSS scale",scale>0.3d&&scale<6d);
+        assertTrue("P5 invalid native/CSS scale",realWidth>300&&cssBaseline>200&&cssBaseline<600);
 
         // No backend writes, personal coordinates, voice binaries or actual user records.
         runV5Js("""
@@ -1045,8 +1046,12 @@ public class GalaxyDeviceClosureTest {
             +"document.body.appendChild(marker)");
         try {
             for(int css : new int[]{320,360,393,412}) {
-                int w=(int)Math.round(css*scale);
-                shell("wm size "+w+"x"+realHeight);
+                // Preserve the native display's resolution and GPU buffers.
+                // Android's actual density controls WebView CSS viewport width.
+                int targetDensityDpi=(int)Math.round(160d*realWidth/css);
+                String densityResult=shell("wm density "+targetDensityDpi);
+                assertFalse("P5 native display density rejected: "+densityResult,
+                    densityResult.toLowerCase(java.util.Locale.ROOT).contains("error"));
                 awaitCondition(() -> Math.abs(Integer.parseInt(
                     js("String(Math.round(innerWidth))"))-css)<=5,UI_TIMEOUT_MS);
                 awaitJs("view==='moments' && !!document.querySelector('.living-garden')"
@@ -1113,7 +1118,7 @@ public class GalaxyDeviceClosureTest {
                 }
             }
         } finally {
-            shell("wm size reset");
+            shell("wm density reset");
             runV5Js("document.getElementById('v5-qa-paint-marker')?.remove()");
         }
     }
