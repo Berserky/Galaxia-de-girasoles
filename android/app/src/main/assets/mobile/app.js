@@ -3494,10 +3494,10 @@ document.addEventListener('click',async e=>{
     if(native.chatLockEnabled&&!chatUnlockedSession){
      await GalaxyNative.call('unlockChat');chatUnlockedSession=true;
     }
-    // Allow the WebView's native click/evaluateJavascript callback to finish
-    // before mounting the full chat. Retain the real authenticated FAB action.
+    // Give Android's evaluateJavascript callback its own turn before heavy Chat
+    // render; keep the native-click path, pairing checks and unlock unchanged.
     const originView=view;
-    await new Promise(resolve=>setTimeout(resolve,16));
+    await new Promise(resolve=>setTimeout(resolve,160));
     if(view!==originView||!native.paired||!cloud?.capabilities?.chat)return;
     window.GalaxyChatPerf?.beginOpen?.(chatState?'warm':'cold');
     chatScrollEngine.clearMemory();chatRestoreOnRender=false;chatState=null;chatInitialScroll=true;

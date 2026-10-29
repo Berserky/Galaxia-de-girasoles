@@ -11,7 +11,7 @@ assert.ok(begin>0&&end>begin,'The authenticated Chat action must be extractable'
 const branch=app.slice(begin,end);
 
 function harness({locked=false,unlockError=null}={}){
- const calls=[],timers=[],state={
+ const calls=[],timers=[],delays=[],state={
   a:'chat-open',chatOpenPending:false,chatUnlockedSession:false,
   native:{paired:true,chatLockEnabled:locked},view:'more',
   cloud:{capabilities:{chat:true}},
@@ -20,7 +20,7 @@ function harness({locked=false,unlockError=null}={}){
   chatScrollEngine:{clearMemory:()=>calls.push(['clear'])},
   chatRestoreOnRender:false,chatInitialScroll:false,
   GalaxyNative:{call:async name=>{calls.push(['native',name]);if(unlockError)throw unlockError;}},
-  setTimeout:(callback)=>{timers.push(callback);return timers.length;},
+  setTimeout:(callback,ms)=>{timers.push(callback);delays.push(ms);return timers.length;},
   go:view=>calls.push(['go',view]),
   setChatPresence:value=>calls.push(['presence',value]),
   loadChat:async opts=>{calls.push(['load',opts.force]);},
@@ -28,7 +28,7 @@ function harness({locked=false,unlockError=null}={}){
  };
  const context=vm.createContext(state);
  const action=vm.runInContext('(async function(){'+branch+'})',context);
- return {calls,timers,state,action};
+ return {calls,timers,delays,state,action};
 }
 
 test('P8 Chat FAB leaves the native click stack before rendering once',async()=>{
@@ -38,6 +38,7 @@ test('P8 Chat FAB leaves the native click stack before rendering once',async()=>
  assert.equal(h.calls.length,0,'the real click must not synchronously run heavyweight rendering');
  await h.action();
  assert.equal(h.timers.length,1,'double clicks must not queue duplicate chat mounts');
+ assert.ok(h.delays[0]>=120&&h.delays[0]<=250,'Native callback must finish before heavy Chat rendering with bounded delay');
  assert.equal(h.calls.length,0);
  h.timers.shift()();
  await first;

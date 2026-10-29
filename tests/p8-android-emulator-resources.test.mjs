@@ -20,7 +20,7 @@ for (const {file,expectedScript} of workflows) {
       file+': missing required clean AVD session');
     for(const [,opts] of launches){
       assert.match(opts,/-memory 2048(?:\s|$)/);
-      assert.match(opts,/-gpu software/);
+      assert.match(opts,/-gpu swiftshader -feature -Vulkan/);
       assert.doesNotMatch(opts,/-gpu swiftshader_indirect/);
       assert.match(opts,/-no-snapshot/);
     }

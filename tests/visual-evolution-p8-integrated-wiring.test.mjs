@@ -120,6 +120,6 @@ test('P8 failed-download recovery retries SDK without bypassing Android instrume
  }
  for(const name of ['qa-phase5-real-integration.yml','chat-4-phase11-torture.yml','visual-evolution-p0.yml']){
   const ci=readFileSync(resolve(root,'.github/workflows',name),'utf8');
-  assert.ok(ci.includes('-gpu software -memory 2048 -no-snapshot'),name+' must use the bounded AVD software graphics profile');
+  assert.ok(ci.includes('-gpu swiftshader -feature -Vulkan -memory 2048 -no-snapshot'),name+' must use the bounded AVD software graphics profile');
  }
 });

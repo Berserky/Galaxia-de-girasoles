@@ -84,7 +84,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           force-avd-creation: true
-          emulator-options: -no-window -gpu software -memory 2048 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          emulator-options: -no-window -gpu swiftshader -feature -Vulkan -memory 2048 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash scripts/p8-phase11-run-shard.sh garden
 
       - name: Closure shard 0 - fresh AVD
@@ -96,7 +96,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           force-avd-creation: true
-          emulator-options: -no-window -gpu software -memory 2048 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          emulator-options: -no-window -gpu swiftshader -feature -Vulkan -memory 2048 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash scripts/p8-phase11-run-shard.sh closure-0
 
       - name: Closure shard 1 - fresh AVD
@@ -108,7 +108,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           force-avd-creation: true
-          emulator-options: -no-window -gpu software -memory 2048 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          emulator-options: -no-window -gpu swiftshader -feature -Vulkan -memory 2048 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash scripts/p8-phase11-run-shard.sh closure-1
 
       - name: Media and voice - fresh AVD
@@ -120,7 +120,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           force-avd-creation: true
-          emulator-options: -no-window -gpu software -memory 2048 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          emulator-options: -no-window -gpu swiftshader -feature -Vulkan -memory 2048 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash scripts/p8-phase11-run-shard.sh media
 
       - name: Verify exact Android JUnit coverage (no missing, duplicate, failed or skipped tests)
