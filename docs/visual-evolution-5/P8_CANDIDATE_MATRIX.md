@@ -30,25 +30,25 @@
 
 | ID | Escenario y criterio verificable | Variantes / evidencias requeridas | Estado |
 | --- | --- | --- | --- |
-| P8-01 | Integridad de árbol, rutas P5+P6+P7 y ausencia de conflictos | Diff y lista de assets/imports del SHA candidato | **PASS_SOURCE** en `f43e584` (solo árbol/JS; no es aceptación de APK) |
-| P8-02 | Node completo, contratos, privacidad, sintaxis y build Android | Logs y JUnit con SHA idéntico; no heredar PASS histórico | **PARTIAL**: Node local `f43e584` 1016/1021, 0 FAIL, 5 SKIP; build CI del mismo SHA aún sin certificar |
-| P8-03 | 15 workflows obligatorios / required checks sin bypass | Run IDs, conclusiones, artefactos y SHA candidato | **FAIL / IN_PROGRESS** en `f43e584`: Phase5 bloqueado por ZIP de SDK corrupto, otros checks pendientes; nunca heredar 12/15 del SHA anterior |
-| P8-04 | Inicio, Mapa, Momentos, Recuerdos y Más en APK real | Capturas framebuffer nativo, navegación ida/vuelta | **PARTIAL**: Momentos P5 Android real PASS, solo un destino; Inicio/Mapa/Recuerdos/Más y flujo transversal pendientes |
+| P8-01 | Integridad de árbol, rutas P5+P6+P7 y ausencia de conflictos | Diff y lista de assets/imports del SHA candidato | **PASS_SOURCE**: integración P5/P6/P7 verificada en árbol 68b49d1; no equivale a QA funcional |
+| P8-02 | Node completo, contratos, privacidad, sintaxis y build Android | Logs y JUnit con SHA idéntico; no heredar PASS histórico | **PARTIAL**: Node 1029 (1024 PASS, 0 FAIL, 5 SKIP), Android local P5 1/1 + navegación 4/4 + P6/P7 1/1; SHA final y JUnit total pendientes |
+| P8-03 | 15 workflows obligatorios / required checks sin bypass | Run IDs, conclusiones, artefactos y SHA candidato | **FAIL**: CI 68b49d1 terminó 11/15 SUCCESS y 4 FAILURE (Phase8 SDK ZIP; Phase5/Phase11/P0 AVD); los PASS locales no sustituyen required checks |
+| P8-04 | Inicio, Mapa, Momentos, Recuerdos y Más en APK real | Capturas framebuffer nativo, navegación ida/vuelta | **PARTIAL**: recorrido Mapa/Momentos/Recuerdos/Más y capturas Android P5 + P6/P7; validación transversal completa pendiente |
 | P8-05 | 320, 360, 393 y 412 px; texto Android 135% | Portrait, landscape, teclado, insets, seis etiquetas inferiores, FAB | **PARTIAL**: P5 físico 4 tamaños + 4 zoom 135% con capturas y JUnit PASS local; landscape, teclado y otras secciones pendientes |
 | P8-06 | Siete temas reales y automático | daylight, cosmic, halloween, christmas, valentine, friendship, easter; contraste/foco | **PARTIAL**: 7 PNG reales Android P5 en temas, hashes distintos; tema automático, contraste, foco y secciones completas pendientes |
 | P8-07 | Accesibilidad | TalkBack, orden foco, 44–48dp, zoom, reduced motion | **PARTIAL**: targets 44px y WebView 135% en P5 Android PASS; TalkBack, reduced motion y orden de foco pendientes |
 | P8-08 | P5 Jardín V3.3 0/3/8 y crecimiento | Estados verdaderos o fixtures rotulados; screenshots y marcador físico | **PARTIAL**: fixture autenticado P5 etapa 3 + escena nativa y privacidad PASS local; 0/8 y crecimiento aún por integrar/certificar |
 | P8-09 | P5 cinco áreas inferiores | Gestos, juegos/citas, cartas/notas, rituales y voz; scroll y estados vacíos | **PARTIAL**: 8 acciones/3 rituales, voz duración desconocida y secretos ausentes comprobados en P5 local; interacciones y vacíos aún pendientes |
-| P8-10 | P6 álbum y multimedia | Foto/video/audio reales, carga/error/offline, navegación y privacidad | NOT_EXECUTED |
-| P8-11 | P6 Drive y recuerdos | Estado auténtico, reconexión, filtros, calendario, duplicados sin borrado | NOT_EXECUTED |
-| P8-12 | P6 cápsulas/constelación | No filtrar títulos/cuerpos/preview de cápsulas cerradas; fechas reales | NOT_EXECUTED |
-| P8-13 | P7 privacidad y GPS | Batería/música por perfil; GPS activo/pausado; exportar y BORRAR con confirmación | NOT_EXECUTED |
-| P8-14 | P7 identidad, re-render y deep links | Borrador, foco/caret, versión de servidor, cambio perfil, unpair y accesos rápidos | NOT_EXECUTED |
-| P8-15 | P7 dispositivos y respaldos | Revocar solo otro dispositivo; restauración con manifiesto y confirmación | NOT_EXECUTED |
-| P8-16 | P7 temas, push, permisos, widget y actualización | No confundir permiso con entrega; callback nativo y estados reales | NOT_EXECUTED |
-| P8-17 | Regresión transversal | Chat, GPS/ETA, FCM, auth, arranque, permisos, offline, foreground/background | NOT_EXECUTED |
-| P8-18 | Riesgos antiguos #173–#177 | Clasificar framebuffer/ADB vs defecto real con logs y artefactos | **PARTIAL**: errores funcionales de Chat vs caída AVD y ZIP corrupto distinguidos en reporte forense; captura real y fix definitivo no certificados |
-| P8-19 | Aprobación visual humana independiente | Evidencia sanitizada del APK integrada, firma de aceptación | NOT_EXECUTED |
+| P8-10 | P6 álbum y multimedia | Foto/video/audio reales, carga/error/offline, navegación y privacidad | NOT_EXECUTED: álbum multimedia real, offline y permisos pendientes; hub Recuerdos no sustituye prueba de multimedia |
+| P8-11 | P6 Drive y recuerdos | Estado auténtico, reconexión, filtros, calendario, duplicados sin borrado | **PARTIAL**: Recuerdos Descubrir/Colecciones/Historia y datos de calendario QA en Android con tres capturas; Drive/sincronización real pendientes |
+| P8-12 | P6 cápsulas/constelación | No filtrar títulos/cuerpos/preview de cápsulas cerradas; fechas reales | **PARTIAL**: cápsula QA sellada accesible en test transversal y secretos P5 ausentes en DOM; constelación y fechas reales pendientes |
+| P8-13 | P7 privacidad y GPS | Batería/música por perfil; GPS activo/pausado; exportar y BORRAR con confirmación | **PARTIAL**: panel Privacidad P7 real visible, compartir batería/escucha/GPS sin cambios al navegar; GPS y borrado efectivo pendientes |
+| P8-14 | P7 identidad, re-render y deep links | Borrador, foco/caret, versión de servidor, cambio perfil, unpair y accesos rápidos | **PARTIAL**: deep link a privacidad y foco Android PASS; perfiles, borradores y unpair completos pendientes |
+| P8-15 | P7 dispositivos y respaldos | Revocar solo otro dispositivo; restauración con manifiesto y confirmación | **PARTIAL**: panel Respaldos real y exportación/restauración hermética QA PASS; revocación y restauración productiva pendientes |
+| P8-16 | P7 temas, push, permisos, widget y actualización | No confundir permiso con entrega; callback nativo y estados reales | **PARTIAL**: 7 temas P5 físicos, permisos y Sistema/Actualizar P7 visibles; entrega push, widget y actualización efectiva pendientes |
+| P8-17 | Regresión transversal | Chat, GPS/ETA, FCM, auth, arranque, permisos, offline, foreground/background | **PARTIAL**: 4 tests Android de regresión PASS, P5 + prueba P6/P7 nativa PASS; campaña completa de 24 métodos pendiente |
+| P8-18 | Riesgos antiguos #173–#177 | Clasificar framebuffer/ADB vs defecto real con logs y artefactos | **PARTIAL**: crash QEMU Windows 0xc0000005 confirmado en GPU software, P5 host GPU PASS, CI Linux aún falla; ver triage |
+| P8-19 | Aprobación visual humana independiente | Evidencia sanitizada del APK integrada, firma de aceptación | NOT_EXECUTED: 21 capturas QA reales disponibles en PC, aprobación visual humana independiente pendiente |
 
 ## Reglas de evidencias y bloqueo
 

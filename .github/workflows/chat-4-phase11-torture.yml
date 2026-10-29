@@ -75,7 +75,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - run: cp musica.mp3 android/app/src/main/assets/musica.mp3
       - run: gradle -p android --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
-      # Run all 23 closure tests exactly once across two FRESH Android
+      # Run all 24 closure tests exactly once across two FRESH Android
       # emulators, avoiding cumulative graphics pressure after test ~16.
       # Keep native screenshots, focus, privacy and lifecycle assertions strict.
       - name: Torture instrumentation - fresh AVD shard 0/2

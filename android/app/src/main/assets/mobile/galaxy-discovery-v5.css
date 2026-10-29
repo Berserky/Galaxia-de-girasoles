@@ -79,7 +79,9 @@ dialog.modal[data-form="v5-p3-search"] .v5-search-results{
 }
 .v5-notification-filter{
  display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;
- min-height:44px;padding:9px 12px;border-radius:14px;
+ /* 48px stays above the 44px real-touch gate even while the global
+    button:active feedback scales the hit rectangle to 98.5%. */
+ min-height:48px;padding:9px 12px;border-radius:14px;
  background:var(--surface2);color:var(--text);border:1px solid var(--border);
  font-weight:700;font-size:12px;
 }

@@ -173,3 +173,57 @@ test('P8 Android CI pins proven stable-era emulator rather than blindly installi
   assert.ok(ci.includes('connectedDebugAndroidTest')||ci.includes('scripts/qa-phase5-emulator.sh')||ci.includes('scripts/visual-evolution-p1-avd.sh'),name+' must retain physical instrumentation');
  }
 });
+
+test('P8 Motion CI retries incomplete SDK downloads without skipping instrumented Motion tests',()=>{
+ const ci=readFileSync(resolve(root,'.github/workflows/chat-4-phase8-motion.yml'),'utf8');
+ assert.ok(ci.includes('for attempt in 1 2 3'));
+ assert.ok(ci.includes('test "$sdk_ok" -eq 1'));
+ assert.ok(ci.includes('chatPhase8Motion_realWebViewEventsReducedMotionAnd20k'));
+ assert.ok(ci.includes('chatMotionBenchmark20k_device'));
+ assert.ok(!ci.includes('continue-on-error: true'));
+});
+
+test('P8 Android P6/P7 capture gate requires six real painted, targeted screens and unchanged sharing',()=>{
+ const java=readFileSync(resolve(root,'android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyDeviceClosureTest.java'),'utf8');
+ const start=java.indexOf('@Test public void visualEvolutionP8_realMemoriesMoreScreens_andPrivateControls()');
+ const end=java.indexOf('@Test public void galaxyChat_renders13Cards_',start);
+ assert.ok(start>=0&&end>start,'New Android instrumentation must be in the suite');
+ const m=java.slice(start,end);
+ for(const label of ['memories-discover','memories-collections','memories-history','more-privacy','more-backups','more-system']){
+  assert.ok(m.includes('awaitV5QaPainted("p8-'+label+'")'),'Native paint gate required: '+label);
+  assert.ok(m.includes('shell("screencap -p /sdcard/Download/V5-P8-'+label+'.png")'),'Real device PNG required: '+label);
+ }
+ assert.equal((m.match(/awaitV5QaPainted\("p8-/g)||[]).length,6,'Exactly six native framebuffer checks');
+ assert.match(m,/go\('memories'\)/);
+ assert.match(m,/go\('more'\)/);
+ assert.match(m,/memories-v5-category/);
+ for(const group of ['privacy','backups','system']){
+  assert.ok(m.includes("GalaxyMoreV5.revealGroup(app,'"+group+"')"));
+  assert.ok(m.includes("v5-more-group") && m.includes("data-group"),"Visible details must be asserted");
+  assert.ok(m.includes("getBoundingClientRect()"),'Require on-screen target visibility');
+ }
+ assert.match(m,/Opening privacy controls must not change sharing/);
+ assert.ok(!m.includes('backup-import({'),'UI proof must never restore data');
+ assert.ok(m.includes("v5-qa-paint-marker"),'Native framebuffer marker mandatory');
+});
+
+test('P8 native floating controls reposition without a transient bottom animation collision',()=>{
+ const css=readFileSync(resolve(root,'android/app/src/main/assets/mobile/celestial-shell.css'),'utf8');
+ assert.match(css,/body:not\(\.chat-mode\) #app:has\(\.floating-add:not\(\.hidden\)\) ~ #chatFab:not\(\.hidden\)/);
+ assert.match(css,/transition:transform var\(--v5-motion-fast\),box-shadow var\(--v5-motion-standard\)/);
+ assert.ok(!css.includes('transition:bottom var(--v5-motion-standard)'),
+  'The FAB/add must not overlap while CSS transitions its vertical position');
+ const java=readFileSync(resolve(root,'android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyDeviceClosureTest.java'),'utf8');
+ assert.match(java,/FAB\/add collide with Android nav/);
+ assert.match(java,/nav:coords\(nav\),fab:coords\(fab\),add:coords\(add\)/);
+});
+
+test('P8 notification filters stay touch-safe while pressed on narrow screens',()=>{
+ const css=readFileSync(resolve(root,'android/app/src/main/assets/mobile/galaxy-discovery-v5.css'),'utf8');
+ assert.match(css,/\.v5-notification-filter\s*\{[^}]*min-height:48px/s);
+ const generic=read('app.css');
+ assert.match(generic,/button:active:not\(:disabled\)[^{]*\{transform:scale\(\.985\)/);
+ assert.ok(48*.985 >= 44,'Pressed 48px CTA must retain 44px physical hit size');
+ const java=readFileSync(resolve(root,'android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyDeviceClosureTest.java'),'utf8');
+ assert.match(java,/P3 filter touch target below 44px/);
+});

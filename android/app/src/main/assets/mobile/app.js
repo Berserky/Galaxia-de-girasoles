@@ -56,7 +56,7 @@ let toastTimer,refreshing=false,updateState={text:'Todavía no se ha comprobado 
 let dateContext=null,dateContextLoadedAt=0,dateQuestionNonce=0,dateMode=null,dateModeTimer=null,dateLastExperience=null;
 let goalsState=null,goalsLoadedAt=0,goalsFilter='active';
 let presenceLastSignature='',voiceTimer=null,voiceSeconds=0,intelligenceSearchNonce=0;
-let chatState=null,chatLoading=false,chatQueuedLoad=null,chatStateSignature='',chatPreferencesState=null,chatUnlockedSession=false,chatOpenPending=false,notificationState=null,pendingDeepLink=null;
+let chatState=null,chatLoading=false,chatQueuedLoad=null,chatStateSignature='',chatPreferencesState=null,chatUnlockedSession=false,chatOpenPending=false,chatOpenPhase='idle',notificationState=null,pendingDeepLink=null;
 const chatMessageEngine=window.GalaxyMessageEngine.create({pageSize:60,maxCache:420,windowSize:84,windowStep:28,estimatedHeight:92});
 const chatScrollEngine=window.GalaxyScrollEngine.create({bottomTolerance:110,memoryKey:'galaxy.chat.scroll.position.v1'});
 const chatMediaEngine=window.GalaxyChatMedia.create({maxEntries:96,maxConcurrent:4,preloadMargin:720});
@@ -3472,6 +3472,35 @@ async function chooseWidgetPhoto(){
  showModal('Foto del widget','<div class="gallery" style="margin-top:16px">'+photos.map(x=>'<button class="photo" style="border:0;padding:0" data-action="widget-photo-select" data-path="'+attr(x.path)+'"><img src="'+attr(x.url)+'" alt="Elegir foto"></button>').join('')+'</div>');
 }
 
+// The persistent Chat FAB is outside #app and must not depend on unrelated
+// delegated click handlers. Every entry point uses this one gated flow.
+async function openGalaxyChat(){
+ if(chatOpenPending||!native.paired||!cloud?.capabilities?.chat)return;
+ chatOpenPending=true;chatOpenPhase='unlock';
+ try{
+  if(native.chatLockEnabled&&!chatUnlockedSession){
+   await GalaxyNative.call('unlockChat');chatUnlockedSession=true;
+  }
+  chatOpenPhase='deferred';
+  const originView=view;
+  await new Promise(resolve=>setTimeout(resolve,16));
+  if(view!==originView||!native.paired||!cloud?.capabilities?.chat){
+   chatOpenPhase='cancelled';return;
+  }
+  chatOpenPhase='rendering';
+  window.GalaxyChatPerf?.beginOpen?.(chatState?'warm':'cold');
+  chatScrollEngine.clearMemory();chatRestoreOnRender=false;chatState=null;chatInitialScroll=true;
+  go('chat');chatOpenPhase='loading';setChatPresence('ONLINE');
+  await loadChat({quiet:true,force:true});
+  flushChatOutbox({retryFailed:true}).catch(()=>{});
+  chatOpenPhase='ready';
+ }catch(error){chatOpenPhase='error';throw error;}
+ finally{chatOpenPending=false;}
+}
+chatFab?.addEventListener('click',event=>{
+ event.stopPropagation();
+ openGalaxyChat().catch(error=>toast(error.message||'No pudimos abrir el chat.'));
+});
 document.addEventListener('click',async e=>{
  const btn=e.target.closest('[data-view],[data-tab],[data-action]');if(!btn)return;
  if(btn.dataset.view){go(btn.dataset.view);return;}
@@ -3485,26 +3514,7 @@ document.addEventListener('click',async e=>{
   if(a==='welcome-skip'){finishAdriWelcome();return;}
   if(a==='welcome-replay'){welcomePreview=true;welcomeStep=0;welcomeGift=true;welcomeEntering=false;tourStep=-1;render();window.scrollTo(0,0);return;}
   if(a==='modal-close'){closeModal();return;}
-  if(a==='chat-open'){
-   if(chatOpenPending||!native.paired||!cloud?.capabilities?.chat)return;
-   chatOpenPending=true;
-   try{
-    if(native.chatLockEnabled&&!chatUnlockedSession){
-     await GalaxyNative.call('unlockChat');chatUnlockedSession=true;
-    }
-    // Allow the WebView's native click/evaluateJavascript callback to finish
-    // before mounting the full chat. Retain the real authenticated FAB action.
-    const originView=view;
-    await new Promise(resolve=>setTimeout(resolve,16));
-    if(view!==originView||!native.paired||!cloud?.capabilities?.chat)return;
-    window.GalaxyChatPerf?.beginOpen?.(chatState?'warm':'cold');
-    chatScrollEngine.clearMemory();chatRestoreOnRender=false;chatState=null;chatInitialScroll=true;
-    go('chat');setChatPresence('ONLINE');
-    await loadChat({quiet:true,force:true});
-    flushChatOutbox({retryFailed:true}).catch(()=>{});
-   }finally{chatOpenPending=false;}
-   return;
-  }
+  if(a==='chat-open'){await openGalaxyChat();return;}
   if(a==='chat-close'){ensureChatComposer().cancelReply();chatResizeObserver?.disconnect();chatResizeObserver=null;setChatPresence('OFFLINE');go('home');return;}
   if(a==='chat-load-more'){await loadChat({older:true});return;}
   if(a==='chat-reply'){const id=btn.dataset.id,m=(chatState?.messages||[]).find(x=>String(x.id)===String(id))||null;if(m)ensureChatComposer().setReply(m);closeModal();chatRenderComposer({focus:true});return;}
