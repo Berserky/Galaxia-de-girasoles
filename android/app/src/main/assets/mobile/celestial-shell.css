@@ -86,7 +86,9 @@ body:not(.chat-mode) #app .floating-add {
   width:52px;height:52px;min-width:48px;min-height:48px;
   background:var(--v5-action);color:var(--v5-on-action);
   box-shadow:var(--v5-elevation-overlay);
-  transition:bottom var(--v5-motion-standard) var(--v5-ease),transform var(--v5-motion-fast);
+  /* Do not animate bottom across a newly mounted action/player: intermediate
+     positions overlap the nav/FAB on Android even when final layout is safe. */
+  transition:transform var(--v5-motion-fast),box-shadow var(--v5-motion-standard);
 }
 body:not(.chat-mode) .chat-fab {bottom:calc(100px + var(--v5-bottom-inset))}
 body:not(.chat-mode) #app .floating-add {bottom:calc(100px + var(--v5-bottom-inset))}

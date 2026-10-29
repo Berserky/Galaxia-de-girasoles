@@ -426,7 +426,10 @@ public class GalaxyDeviceClosureTest {
             + "player.classList.add('visible');"
             + "const withPlayer=!overlap(nav,fab)&&!overlap(nav,add)&&!overlap(nav,player)"
             + "&&!overlap(fab,add)&&!overlap(fab,player)&&!overlap(add,player);"
-            + "const dims={width:innerWidth,height:innerHeight,navCount:nav.children.length};"
+            + "const coords=el=>{const r=el.getBoundingClientRect();"
+            + "return {x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)}};"
+            + "const dims={width:innerWidth,height:innerHeight,navCount:nav.children.length,"
+            + "nav:coords(nav),fab:coords(fab),add:coords(add),player:coords(player)};"
             + "player.className=oldClass;add.remove();"
             + "return {...dims,withoutPlayer,withPlayer}})())");
         JSONObject rail = new JSONObject(railJson);
@@ -870,6 +873,8 @@ public class GalaxyDeviceClosureTest {
                             // could be overwritten during the 135% text screenshots.
                             // Reapply ONLY synthetic QA presentation data after the
                             // read and prior to the place action, without backend writes.
+                            // Keep the synthetic destination stable across periodic QA map refreshes.
+                            backend.setQaPlaceDestinationFixture(true);
                             // Wait for pending map-state reads before injecting the QA fixture.
                             awaitJs("view==='map' && !!map && mapStateReadsInFlight===0");
                             runV5Js("mapData={...(mapData||{}),"
@@ -965,6 +970,7 @@ public class GalaxyDeviceClosureTest {
                 }
             }
         } finally {
+            backend.setQaPlaceDestinationFixture(false);
             shell("wm size reset");
             runV5Js("document.getElementById('v5-qa-paint-marker')?.remove()");
             awaitCondition(() -> Math.abs(Integer.parseInt(js(
@@ -977,6 +983,358 @@ public class GalaxyDeviceClosureTest {
             .put("rail",rail)
             .put("nonChatModalFocusRestore",true)
             .put("responsiveViewports",responsive));
+    }
+
+    /**
+     * P8: an explicit server-owned bloomTotal unlocks the real wider land;
+     * stage eight continues to mean eight legacy milestones. No demo mode,
+     * local-day extrapolation, network calls, or backend mutations.
+     */
+    @Test public void visualEvolutionP8_realAuthenticatedGardenExpansionAfterEight() throws Exception {
+        launch();
+        awaitJs("!!cloud?.bond && !!document.querySelector('#bottomNav [data-view=moments]')");
+        runV5Js("const marker=document.createElement('div');"
+            +"marker.id='v5-qa-paint-marker';marker.setAttribute('aria-hidden','true');"
+            +"marker.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;"
+            +"background:#07e1f7;z-index:2147483647;pointer-events:none';"
+            +"document.body.appendChild(marker)");
+        try{
+            for(int bloom : new int[]{8,9,22,23}){
+                String chapter=bloom<=8?"garden":bloom<=22?"meadow":"valley";
+                int days=bloom==8?365:365+(bloom-8)*30;
+                runV5Js("go('home');cloud.bond={...(cloud.bond||{}),garden:{stage:8,"
+                    +"bloomTotal:"+bloom+",days:"+days+",totalDays:"+days+"}};"
+                    +"go('moments');window.scrollTo(0,0)");
+                awaitJs("view==='moments' && document.querySelector('.ng-garden')?.dataset.stage==='"
+                    +bloom+"' && document.querySelector('.ng-garden')?.dataset.chapter==='"
+                    +chapter+"' && document.querySelector('.ng-garden')?.dataset.officialStage==='8'"
+                    +" && document.querySelector('.ng-garden')?.dataset.demo==='false'");
+                if(bloom>8) {
+                    assertEquals("P8 official extended flower label "+bloom,"true",
+                        js("document.querySelector('.bond-garden-copy [role=status]')?"
+                            +".innerText.includes('"+bloom+" girasoles')"));
+                }else{
+                    assertEquals("P8 no speculative counter at eight","false",
+                        js("!!document.querySelector('.bond-garden-copy [role=status]')"));
+                }
+                int primary=Math.min(bloom,22),extra=bloom-primary;
+                assertEquals("P8 actual sunflower count "+bloom,String.valueOf(primary),
+                    js("String(document.querySelectorAll('.ng-garden .ng-plant').length)"));
+                assertEquals("P8 extended flowers "+bloom,String.valueOf(extra),
+                    js("String(document.querySelectorAll('.ng-garden .ng-mini-bloom').length)"));
+                awaitV5QaPainted("p8-official-expansion-"+bloom);
+                shell("screencap -p /sdcard/Download/V5-P8-official-expansion-"+bloom+".png");
+            }
+            // Tampered counts or old payloads must never create new flowers.
+            runV5Js("go('home');cloud.bond={...(cloud.bond||{}),garden:{"
+                +"stage:8,bloomTotal:'23',totalDays:2000}};go('moments')");
+            awaitJs("document.querySelector('.ng-garden')?.dataset.stage==='8'"
+                +" && document.querySelector('.ng-garden')?.dataset.demo==='false'");
+        }finally{
+            runV5Js("document.getElementById('v5-qa-paint-marker')?.remove()");
+        }
+    }
+
+    /**
+     * P8: authenticate the real Bond garden transitions at the two untested
+     * boundaries. QA values are device-local; no server writes or demo mode.
+     * Physical PNG checks remain strict via the existing cyan paint marker.
+     */
+    @Test public void visualEvolutionP8_realBondGardenZeroAndEightStages() throws Exception {
+        launch();
+        awaitJs("!!cloud?.bond && !!document.querySelector('#bottomNav [data-view=moments]')");
+        runV5Js("const marker=document.createElement('div');"
+            +"marker.id='v5-qa-paint-marker';marker.setAttribute('aria-hidden','true');"
+            +"marker.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;"
+            +"background:#07e1f7;z-index:2147483647;pointer-events:none';"
+            +"document.body.appendChild(marker)");
+        try {
+            for(int stage : new int[]{0,8}){
+                final String step=String.valueOf(stage);
+                runV5Js("go('home');cloud.bond={...(cloud.bond||{}),"
+                    +"garden:{stage:"+stage+",totalDays:"+ (stage==0?0:240)
+                    +",days:"+ (stage==0?0:240)+",progressPct:0,"
+                    +"currentStreak:0,recordStreak:0}};go('moments');window.scrollTo(0,0)");
+                awaitJs("view==='moments' && document.querySelector('.ng-garden')?.dataset.officialStage==='"
+                    +step+"' && document.querySelector('.ng-garden')?.dataset.demo==='false'");
+                assertEquals("P8 garden stage "+stage+" physical flower count",step,
+                    js("String(document.querySelectorAll('.ng-garden .ng-plant').length)"));
+                assertEquals("P8 garden official stage "+stage,step,
+                    js("document.querySelector('.ng-garden').dataset.stage"));
+                assertEquals("P8 stage "+stage+" must have accurate public title","true",
+                    js("document.querySelector('.bond-garden-copy h3')?.innerText.includes('"
+                      +(stage==0?"El comienzo":"Ocho girasoles")+"')"));
+                awaitV5QaPainted("p8-garden-stage-"+stage);
+                shell("screencap -p /sdcard/Download/V5-P8-garden-stage-"+stage+".png");
+            }
+        }finally{
+            runV5Js("document.getElementById('v5-qa-paint-marker')?.remove()");
+        }
+    }
+
+    /**
+     * P5: actual packaged Android WebView with synthetic-only Bond entries.
+     * Screenshots are from the physical emulator framebuffer, not Chrome/mock HTML.
+     */
+    @Test public void visualEvolutionP5_realMomentsAndroidScreens_andPrivacy() throws Exception {
+        android.util.Log.i("NG_P8_VISUAL","P5_START");
+        launch();
+        awaitJs("!!document.querySelector('#bottomNav [data-view=\"moments\"]') && !!cloud.bond");
+        android.graphics.Bitmap before=instrumentation.getUiAutomation().takeScreenshot();
+        assertNotNull("P5 baseline native framebuffer missing",before);
+        final int realWidth=before.getWidth(),realHeight=before.getHeight();
+        before.recycle();
+        final int cssBaseline=Integer.parseInt(js("String(Math.round(innerWidth))"));
+        final double scale=(double)realWidth/cssBaseline;
+        assertTrue("P5 invalid native/CSS scale",scale>0.3d&&scale<6d);
+
+        // No backend writes, personal coordinates, voice binaries or actual user records.
+        runV5Js("""
+            const who=String(cloud.person);
+            const other=who==='0'?'1':'0';
+            const question=Object.keys(gameQuestions)[0];
+            const options=gameQuestions[question]?.options||[];
+            cloud.bond={...(cloud.bond||{}),
+             garden:{stage:3,label:'Primer botón',days:18,totalDays:18,
+              progressPct:25,currentStreak:4,recordStreak:6,
+              next:{label:'Girasol',days:30},
+              milestones:[{label:'Primer brote',days:1,icon:'sprout',unlocked:true},
+               {label:'Girasol',days:30,icon:'flower-2',unlocked:false}]},
+             entries:[
+              {id:'p5-game',author:other,type:'game',data:{
+               questionId:question,answer:'P5_SECRET_ANSWER',correct:false}},
+              {id:'p5-ritual',author:who,type:'ritual',version:2,
+               created:'2026-10-15T16:00:00Z',
+               data:{week:'2026-10-12',gratitude:'Gracias por existir',
+                need:'Necesito escucharte',plan:'Nuestro próximo paseo'}},
+              {id:'p5-note',author:other,type:'sharednote',version:3,
+               created:'2026-10-15T16:00:00Z',
+               data:{title:'Nota de QA',body:'Recuerdo seguro '+('x'.repeat(290))}},
+              {id:'p5-audio',author:who,type:'voice',version:1,
+               data:{title:'Voz de QA',audioUrl:'https://example.invalid/qa-only.m4a'}}
+             ]};
+            cloud.items=[...(cloud.items||[]),
+             {id:'p5-surprise',kind:'note',author:other,
+              data:{surprise:true,title:'P5_SECRET_TITLE',
+               body:'P5_SECRET_MESSAGE',unlockType:'date',unlockDate:'2099-12-31'}}];
+            go('moments');window.scrollTo(0,0);
+            """);
+        awaitJs("view==='moments' && !!document.querySelector('.living-moments')"
+            +" && document.querySelectorAll('.living-ritual-step').length===3"
+            +" && !!document.querySelector('.living-voice-player')"
+            +" && !!document.querySelector('.living-note-full')"
+            +" && !!document.querySelector('.living-surprise-card.sealed')"
+            +" && !!document.querySelector('.living-game-card')");
+        android.util.Log.i("NG_P8_VISUAL","P5_MOMENTS_DOM_READY");
+        assertEquals("P5 synthetic secret must not appear in DOM","false",
+            js("document.documentElement.innerHTML.includes('P5_SECRET_TITLE')"
+                +"||document.documentElement.innerHTML.includes('P5_SECRET_MESSAGE')"
+                +"||document.documentElement.innerHTML.includes('P5_SECRET_ANSWER')"));
+        runV5Js("const marker=document.createElement('div');"
+            +"marker.id='v5-qa-paint-marker';marker.setAttribute('aria-hidden','true');"
+            +"marker.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;"
+            +"background:#07e1f7;z-index:2147483647;pointer-events:none';"
+            +"document.body.appendChild(marker)");
+        try {
+            for(int css : new int[]{320,360,393,412}) {
+                android.util.Log.i("NG_P8_VISUAL","P5_VIEWPORT_START_"+css);
+                // Resize the real Android display *outside* the animated
+                // garden. CI's software renderer was saturated while changing
+                // display metrics with the full Moments scene still mounted.
+                // Re-enter Moments after resizing; test the identical real
+                // framebuffer, source content, focus, privacy and touch gates.
+                runV5Js("go('home')");
+                awaitJs("view==='home' && !document.querySelector('.living-moments')");
+                int w=(int)Math.round(css*scale);
+                shell("wm size "+w+"x"+realHeight);
+                android.util.Log.i("NG_P8_VISUAL","P5_VIEWPORT_RESIZE_RETURNED_"+css);
+                awaitCondition(() -> Math.abs(Integer.parseInt(
+                    js("String(Math.round(innerWidth))"))-css)<=5,UI_TIMEOUT_MS);
+                runV5Js("go('moments');window.scrollTo(0,0)");
+                awaitJs("view==='moments' && !!document.querySelector('.living-garden')"
+                    +"&&document.querySelectorAll('.living-activity-grid .action-card').length===8"
+                    +"&&document.querySelectorAll('.living-ritual-step').length===3");
+                String state=jsWithDeadline("JSON.stringify((()=>{"
+                    +"const root=document.querySelector('.living-moments'),"
+                    +"seek=document.querySelector('.living-voice-seek'),"
+                    +"play=document.querySelector('.living-voice-toggle'),"
+                    +"note=document.querySelector('.living-note-full summary'),"
+                    +"gesture=document.querySelector('.living-gestures .gesture'),"
+                    +"intro=document.querySelector('.living-moments-intro').getBoundingClientRect();"
+                    +"const btns=[play,note,gesture];"
+                    +"return {visible:!!root,activities:root.querySelectorAll('.living-activity-grid .action-card').length,"
+                    +"rituals:root.querySelectorAll('.living-ritual-step').length,"
+                    +"noOverflow:document.documentElement.scrollWidth<=innerWidth+3,"
+                    +"introInside:intro.left>=-2&&intro.right<=innerWidth+2,"
+                    +"touch:btns.every(b=>!!b&&b.getBoundingClientRect().height>=44),"
+                    +"audioUnknown:seek.disabled&&document.querySelector('.living-voice-time').textContent.includes('--:--'),"
+                    +"secretAbsent:!document.documentElement.innerHTML.includes('P5_SECRET_MESSAGE')"
+                    +"&&!document.documentElement.innerHTML.includes('P5_SECRET_ANSWER')};})())",20);
+                JSONObject proof=new JSONObject(state);
+                assertEquals("P5 lost activities at "+css,8,proof.getInt("activities"));
+                assertEquals("P5 lost 3 ritual moments at "+css,3,proof.getInt("rituals"));
+                assertTrue("P5 horizontal overflow at "+css+": "+state,proof.getBoolean("noOverflow"));
+                assertTrue("P5 intro cropped at "+css+": "+state,proof.getBoolean("introInside"));
+                assertTrue("P5 touch targets below 44px at "+css+": "+state,proof.getBoolean("touch"));
+                assertTrue("P5 unknown audio duration fabricated at "+css,proof.getBoolean("audioUnknown"));
+                assertTrue("P5 secret leaked at "+css,proof.getBoolean("secretAbsent"));
+                runV5Js("window.scrollTo(0,0)");
+                awaitV5QaPainted("p5-moments-"+css);
+                android.util.Log.i("NG_P8_VISUAL","P5_VIEWPORT_PAINTED_"+css);
+                shell("screencap -p /sdcard/Download/V5-P5-moments-"+css+".png");
+                System.out.println("V5_P5_ANDROID_MOMENTS=css:"+css
+                    +";activities:8;ritualSteps:3;privacy:true;seekUnknown:true");
+
+                // Device WebView text zoom, not CSS font-size simulation.
+                try {
+                    scenario.onActivity(activity -> {
+                        WebView web=activity.findViewById(R.id.webView);
+                        assertNotNull("P5 requires actual Android WebView",web);
+                        web.getSettings().setTextZoom(135);
+                    });
+                    awaitJs("view==='moments' && !!document.querySelector('.living-moments')");
+                    assertEquals("P5 135% text horizontal overflow","true",
+                        js("document.documentElement.scrollWidth<=innerWidth+3"));
+                    awaitV5QaPainted("p5-text-zoom-"+css);
+                    shell("screencap -p /sdcard/Download/V5-P5-text-zoom-"+css+".png");
+                } finally {
+                    scenario.onActivity(activity -> {
+                        WebView web=activity.findViewById(R.id.webView);
+                        if(web!=null)web.getSettings().setTextZoom(100);
+                    });
+                }
+                if(css==393) {
+                    for(String theme : new String[]{"daylight","cosmic","halloween","christmas",
+                          "valentine","friendship","easter"}) {
+                        runV5Js("GalaxyTheme.applyTheme('"+theme+"');window.scrollTo(0,0)");
+                        awaitJs("document.documentElement.dataset.theme==='"+theme+"'"
+                            +" && !!document.querySelector('.living-moments')");
+                        assertEquals("P5 themed page overflow "+theme,"true",
+                            js("document.documentElement.scrollWidth<=innerWidth+3"));
+                        awaitV5QaPainted("p5-theme-"+theme);
+                        shell("screencap -p /sdcard/Download/V5-P5-theme-"+theme+".png");
+                    }
+                }
+            }
+        } finally {
+            shell("wm size reset");
+            runV5Js("document.getElementById('v5-qa-paint-marker')?.remove()");
+        }
+    }
+
+    /** P8 P6: actual packaged WebView handles expired private thumbnails
+     * and viewer photos with real image load errors, never real user data.
+     * It must retain the image viewer navigation and privacy boundaries.
+     */
+    @Test public void visualEvolutionP8_realAlbumExpiredPhotoNativeFallback() throws Exception {
+        launch();
+        runV5Js("const marker=document.createElement('div');"
+            +"marker.id='v5-qa-paint-marker';marker.setAttribute('aria-hidden','true');"
+            +"marker.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;"
+            +"background:#07e1f7;z-index:2147483647;pointer-events:none';"
+            +"document.body.appendChild(marker)");
+        try {
+            runV5Js("go('home');memorySection='collections';memoryTab='album';"
+                +"media.photo=[{url:'https://127.0.0.1:1/qa-expired-private-photo.png',"
+                +"path:'qa-fixture-private-path-not-real',created:'2026-10-29T10:00:00Z'},"
+                +"{url:'https://127.0.0.1:1/qa-expired-private-second.png',"
+                +"path:'qa-second-private-path-not-real',created:'2026-10-29T11:00:00Z'}];"
+                +"mediaLoadedAt.photo=Date.now();go('memories');window.scrollTo(0,0)");
+            // A real WebView can replace an expired thumbnail between two
+            // evaluateJavascript calls. Await visible fallback AND accessible
+            // status atomically rather than read a stale DOM node twice.
+            awaitJs("view==='memories' && !!document.querySelector('.memories-v5-photo-grid')"
+                +" && [...document.querySelectorAll('.memories-v5-photo-card .memories-v5-photo-missing')]"
+                +".some(el=>el.getAttribute('role')==='status' && el.textContent.includes('Foto no disponible'))");
+            assertEquals("P6 unavailable photo must not print private path","false",
+                js("document.body.innerText.includes('qa-fixture-private-path-not-real')"));
+            awaitV5QaPainted("p8-album-expired-thumb");
+            shell("screencap -p /sdcard/Download/V5-P8-album-expired-thumb.png");
+            runV5Js("openAlbumViewer(0)");
+            // HTML <dialog> occupies the browser top layer; the strict cyan
+            // physical-paint marker must be mounted inside that top layer.
+            runV5Js("modal.appendChild(document.getElementById('v5-qa-paint-marker'))");
+            // Both the private-photo error and its a11y state must be
+            // present in one actual WebView DOM snapshot. Keep navigation.
+            awaitJs("modal.open===true && !!document.querySelector('.memories-v5-photo-viewer')"
+                +" && !![...document.querySelectorAll('.memories-v5-photo-viewer .memories-v5-photo-missing')]"
+                +".find(el=>el.getAttribute('role')==='status' && el.textContent.includes('Foto no disponible'))"
+                +" && document.querySelectorAll('.memories-v5-photo-toolbar button').length===2");
+            assertEquals("P6 offline viewer exposed signed URL or path","false",
+                js("document.querySelector('.memories-v5-photo-viewer')?.innerText.includes('qa-fixture-private-path-not-real')"
+                    +" || document.querySelector('.memories-v5-photo-viewer')?.innerText.includes('127.0.0.1')"));
+            awaitV5QaPainted("p8-album-expired-viewer");
+            shell("screencap -p /sdcard/Download/V5-P8-album-expired-viewer.png");
+        } finally {
+            runV5Js("closeModal();media.photo=null;mediaLoadedAt.photo=0;"
+                +"document.getElementById('v5-qa-paint-marker')?.remove();go('home')");
+        }
+    }
+
+    @Test public void visualEvolutionP8_realMemoriesMoreScreens_andPrivateControls() throws Exception {
+        launch();
+        // A synthetic cyan pixel marker is required in the *real* native
+        // framebuffer, not merely the DOM, before each P6/P7 screenshot.
+        runV5Js("const m=document.createElement('div');m.id='v5-qa-paint-marker';"
+            +"m.setAttribute('aria-hidden','true');"
+            +"m.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;"
+            +"background:#07e1f7;z-index:2147483647;pointer-events:none';"
+            +"document.body.appendChild(m)");
+        // Synthetic QA pairing only. Real UI/navigation and real Android
+        // framebuffers: no personal media, exports, revocations or GPS writes.
+        runV5Js("go('memories');window.scrollTo(0,0)");
+        awaitJs("view==='memories' && !!document.querySelector('.memories-v5-sections')"
+            + " && document.querySelector('#bottomNav .nav-btn.active')?.dataset.view==='memories'");
+        awaitV5QaPainted("p8-memories-discover");
+        shell("screencap -p /sdcard/Download/V5-P8-memories-discover.png");
+
+        runV5Js("document.querySelector('[data-action=\"memories-section\"][data-section=\"collections\"]')?.click()");
+        awaitJs("view==='memories' && !!document.querySelector('.memories-v5-section.active[data-section=\"collections\"]')"
+            + " && document.querySelectorAll('.memories-v5-category').length===9");
+        awaitV5QaPainted("p8-memories-collections");
+        shell("screencap -p /sdcard/Download/V5-P8-memories-collections.png");
+
+        runV5Js("document.querySelector('[data-action=\"memories-section\"][data-section=\"history\"]')?.click()");
+        awaitJs("view==='memories' && !!document.querySelector('.memories-v5-section.active[data-section=\"history\"]')");
+        awaitV5QaPainted("p8-memories-history");
+        shell("screencap -p /sdcard/Download/V5-P8-memories-history.png");
+
+        runV5Js("go('more');window.scrollTo(0,0)");
+        awaitJs("view==='more' && document.querySelectorAll('.v5-more-group').length>=7"
+            + " && document.querySelector('#bottomNav .nav-btn.active')?.dataset.view==='more'");
+        String sharingBefore=js("JSON.stringify({battery:ownPresence().shareBattery===true,"
+            + "listening:ownPresence().shareListening===true,tracking:!!native.tracking})");
+        runV5Js("GalaxyMoreV5.revealGroup(app,'privacy')");
+        awaitJs("document.querySelector('.v5-more-group[data-group=\"privacy\"]')?.open===true"
+            + " && !!document.getElementById('presencePrivacySettings')");
+        runV5Js("document.querySelector('.v5-more-group[data-group=\"privacy\"]')?.scrollIntoView({block:'start',behavior:'instant'})");
+        awaitJs("(()=>{const r=document.querySelector('.v5-more-group[data-group=\"privacy\"]').getBoundingClientRect();"
+            + "return r.top<innerHeight/2 && r.bottom>innerHeight/4})()");
+        awaitV5QaPainted("p8-more-privacy");
+        shell("screencap -p /sdcard/Download/V5-P8-more-privacy.png");
+        String sharingAfter=js("JSON.stringify({battery:ownPresence().shareBattery===true,"
+            + "listening:ownPresence().shareListening===true,tracking:!!native.tracking})");
+        assertEquals("Opening privacy controls must not change sharing",sharingBefore,sharingAfter);
+
+        runV5Js("GalaxyMoreV5.revealGroup(app,'backups')");
+        awaitJs("document.querySelector('.v5-more-group[data-group=\"backups\"]')?.open===true"
+            + " && !!document.querySelector('[data-action=\"backup-export\"]')");
+        runV5Js("document.querySelector('.v5-more-group[data-group=\"backups\"]')?.scrollIntoView({block:'start',behavior:'instant'})");
+        awaitJs("(()=>{const r=document.querySelector('.v5-more-group[data-group=\"backups\"]').getBoundingClientRect();"
+            + "return r.top<innerHeight/2 && r.bottom>innerHeight/4})()");
+        awaitV5QaPainted("p8-more-backups");
+        shell("screencap -p /sdcard/Download/V5-P8-more-backups.png");
+        assertEquals("true",js("!!document.querySelector('[data-action=\"backup-import\"]')"));
+
+        runV5Js("GalaxyMoreV5.revealGroup(app,'system')");
+        awaitJs("document.querySelector('.v5-more-group[data-group=\"system\"]')?.open===true"
+            + " && !!document.querySelector('[data-action=\"update-check\"]')");
+        runV5Js("document.querySelector('.v5-more-group[data-group=\"system\"]')?.scrollIntoView({block:'start',behavior:'instant'})");
+        awaitJs("(()=>{const r=document.querySelector('.v5-more-group[data-group=\"system\"]').getBoundingClientRect();"
+            + "return r.top<innerHeight/2 && r.bottom>innerHeight/4})()");
+        awaitV5QaPainted("p8-more-system");
+        shell("screencap -p /sdcard/Download/V5-P8-more-system.png");
+        runV5Js("document.getElementById('v5-qa-paint-marker')?.remove()");
     }
 
     @Test public void galaxyChat_renders13Cards_pollChecklistAndSend() throws Exception {
@@ -1017,7 +1375,7 @@ public class GalaxyDeviceClosureTest {
         long pssBefore = android.os.Debug.getPss();
         long cpuBefore = android.os.Process.getElapsedCpuTime();
         long openStarted = SystemClock.elapsedRealtime();
-        runJs("document.querySelector('#chatFab')?.click()");
+        launchChat(); // Original authenticated FAB, with diagnostic and real delivery.
         awaitJs("!!document.querySelector('.chat-shell') && document.querySelectorAll('.chat-message').length>0");
         long openMs = SystemClock.elapsedRealtime() - openStarted;
 
@@ -1059,7 +1417,7 @@ public class GalaxyDeviceClosureTest {
 
         runJs("document.querySelector('[data-action=\"chat-close\"]')?.click()");
         awaitJs("!document.querySelector('.chat-shell')");
-        runJs("document.querySelector('#chatFab')?.click()");
+        launchChat(); // Verify the same native FAB after lifecycle and close.
         awaitJs("!!document.querySelector('.chat-shell') && document.querySelectorAll('.chat-message').length>0");
 
         long pssAfter = android.os.Debug.getPss();
@@ -1500,9 +1858,20 @@ public class GalaxyDeviceClosureTest {
         assertTrue(restored.getBoolean("restored"));
 
         runJs("go('more')");
-        awaitJs("document.body.innerText.includes('Copia de nuestra galaxia')");
-        assertTrue(js("document.body.innerText").contains("Actualizaciones"));
-        assertTrue(js("!!document.querySelector('[data-action=\"update-check\"]')").equals("true"));
+        // V5-P7 groups existing controls in real <details> sections. Text inside
+        // a closed group is not in innerText: open the actual authenticated
+        // backups/system sections before asserting that their controls work.
+        awaitJs("document.querySelector('.nav-btn.active')?.dataset.view==='more'");
+        awaitJs("!!document.querySelector('.v5-more-group[data-group=\"backups\"]')"
+            + " && !!document.querySelector('.v5-more-group[data-group=\"system\"]')");
+        runJs("GalaxyMoreV5.revealGroup(app,'backups')");
+        awaitJs("document.querySelector('.v5-more-group[data-group=\"backups\"]')?.open===true"
+            + " && document.body.innerText.includes('Copia de nuestra galaxia')");
+        assertEquals("true",js("!!document.querySelector('[data-action=\"backup-export\"]')"));
+        runJs("GalaxyMoreV5.revealGroup(app,'system')");
+        awaitJs("document.querySelector('.v5-more-group[data-group=\"system\"]')?.open===true"
+            + " && document.body.innerText.includes('Actualizaciones')");
+        assertEquals("true",js("!!document.querySelector('[data-action=\"update-check\"]')"));
 
         launchChat();
         awaitJs("document.querySelector('#chatMessages')?.innerText.includes('CÁPSULA BLOQUEADA')");
@@ -1666,7 +2035,10 @@ public class GalaxyDeviceClosureTest {
         scenario = ActivityScenario.launch(intent);
         awaitJs("view==='chat' && !!document.querySelector('.chat-shell')");
         awaitCondition(() -> backend.actions().contains("chat-state"), UI_TIMEOUT_MS);
-        runJs("document.activeElement?.blur();");
+        // Execute keyboard blur without waiting for an overloaded WebView
+        // action callback; the real focus-state read remains mandatory.
+        runJsNoWait("document.activeElement?.blur()");
+        awaitJs("document.activeElement!==document.querySelector('#chatForm textarea')");
         scenario.onActivity(activity -> ((android.view.inputmethod.InputMethodManager)activity.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(activity.getWindow().getDecorView().getWindowToken(),0));
         SystemClock.sleep(300);
     }
@@ -1933,10 +2305,25 @@ public class GalaxyDeviceClosureTest {
 
     private void launchChat() {
         if (scenario == null) launch();
+        // Require the authentic authenticated Chat affordance: never jump to
+        // Chat by calling go('chat') as that would conceal a broken action.
+        awaitJs("!!document.querySelector('#chatFab') && !!cloud?.capabilities?.chat");
         runJs("document.querySelector('#chatFab')?.click()");
-        awaitJs("!!document.querySelector('.chat-shell')");
+        // Privacy-safe probe to distinguish ignored native clicks, auth rejection,
+        // and renderer restart. No message content, tokens or user identifiers.
+        String immediateProbe=js("JSON.stringify({"
+            + "phase:String(chatOpenPhase),pending:chatOpenPending,"
+            + "fabDisabled:!!chatFab?.disabled,fabConnected:!!chatFab?.isConnected,"
+            + "fabSame:chatFab===document.querySelector('#chatFab'),"
+            + "fabAction:chatFab?.dataset.action,route:view})");
+        assertTrue("Native Chat FAB click ignored: "+immediateProbe,
+            !immediateProbe.contains("\"phase\":\"idle\""));
+        awaitJs("view==='chat' && !!document.querySelector('.chat-shell')");
         awaitCondition(() -> backend.actions().contains("chat-state"), UI_TIMEOUT_MS);
-        runJs("document.activeElement?.blur();");
+        // A one-way blur prevents asynchronous keyboard dismissal from
+        // blocking native Chat opening. Verify focus afterwards.
+        runJsNoWait("document.activeElement?.blur()");
+        awaitJs("document.activeElement!==document.querySelector('#chatForm textarea')");
         scenario.onActivity(activity -> ((android.view.inputmethod.InputMethodManager)activity.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(activity.getWindow().getDecorView().getWindowToken(),0));
         SystemClock.sleep(300);
     }
@@ -1958,7 +2345,13 @@ public class GalaxyDeviceClosureTest {
                 + "const form=document.querySelector('#chatForm'),button=form?.querySelector('.chat-send'),"
                 + "composer=typeof ensureChatComposer==='function'?ensureChatComposer().snapshot():null,"
                 + "delivery=typeof chatDeliveryEngine==='undefined'||!chatDeliveryEngine?null:chatDeliveryEngine.snapshot();"
-                + "return {chat:typeof view!=='undefined'&&view==='chat',form:!!form,"
+                + "const fab=document.querySelector('#chatFab');"
+                + "return {chat:typeof view!=='undefined'&&view==='chat',"
+                + "route:typeof view==='string'&&['home','map','moments','memories','more','chat'].includes(view)?view:'other',"
+                + "fabPresent:!!fab,fabHidden:!!fab?.classList.contains('hidden'),"
+                + "chatEnabled:!!cloud?.capabilities?.chat,"
+                + "chatOpenPending:!!chatOpenPending,chatOpenPhase:String(chatOpenPhase||'unknown'),"
+                + "chatLockEnabled:!!native.chatLockEnabled,form:!!form,"
                 + "buttonType:button?.type||null,buttonDisabled:!!button?.disabled,"
                 + "composerHasText:!!composer?.text?.trim(),composerDisabled:!!composer?.disabled,"
                 + "composerSending:!!composer?.sending,paired:typeof native!=='undefined'&&!!native?.paired,"
@@ -2267,7 +2660,10 @@ public class GalaxyDeviceClosureTest {
                 }else consecutive=0;
             } catch(RuntimeException ignored) { consecutive=0; }
             finally {if(shot!=null)shot.recycle();}
-            SystemClock.sleep(200);
+            // Native takeScreenshot is a full-frame GPU readback. Avoid
+            // saturating a headless AVD with up to 75 reads in 15 seconds.
+            // Keep the same 15s deadline and two positive real frames.
+            SystemClock.sleep(500);
         }
         throw new AssertionError("V5 P1 screenshot rejected: real Android display has no QA home paint marker for "+theme);
     }

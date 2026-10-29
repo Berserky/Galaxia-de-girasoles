@@ -1,0 +1,131 @@
+
+/* P7A: group real settings without changing handlers. */
+.v5-more-hub{display:grid;gap:10px;min-width:0;margin-bottom:calc(96px + env(safe-area-inset-bottom))}
+.v5-more-intro{padding:10px 4px}
+.v5-more-intro h3{margin:0 0 5px;font-size:22px}
+.v5-more-intro p{margin:0;color:var(--muted);font-size:12px;line-height:1.5}
+.v5-more-group{min-width:0;border:1px solid var(--border);border-radius:17px;background:var(--surface2)}
+.v5-more-group>summary{display:flex;align-items:center;min-height:62px;padding:13px 16px;color:var(--text);font-size:14px;font-weight:750;cursor:pointer}
+.v5-more-group>summary:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
+.v5-more-group-content{display:grid;gap:11px;min-width:0;padding:10px;border-top:1px solid var(--border)}
+.v5-more-group-content>.card{margin:0;min-width:0}
+.v5-more-group[data-group="sensitive"]{border-color:var(--danger,#b75e6b)}
+.v5-more-group[data-group="sensitive"]>summary{color:var(--danger,#b75e6b)}
+@media(max-width:360px){.v5-more-group-content{padding:7px}}
+
+/* P7B: clear switch vs GPS navigation and isolated irreversible action. */
+.v5-privacy-audience{margin:12px 0 0;color:var(--muted);font-size:12px;line-height:1.55}
+.v5-more-hub .privacy-toggle[role="switch"]{cursor:pointer}
+.v5-more-hub .privacy-toggle[role="switch"]:focus-visible,
+.v5-more-hub .v5-gps-navigation:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.v5-more-hub .v5-gps-navigation{border-style:dashed}
+.v5-gps-actions{display:grid;gap:14px;margin-top:14px}
+.v5-gps-zone{display:grid;justify-items:start;gap:7px;padding:12px;border:1px solid var(--border);border-radius:12px;min-width:0}
+.v5-gps-zone h4{margin:0;color:var(--text);font-size:14px}
+.v5-gps-zone p{margin:0 0 4px;color:var(--muted);font-size:12px;line-height:1.5}
+.v5-gps-zone-delete{border-color:var(--danger,#b75e6b)}
+.v5-gps-zone-delete h4{color:var(--danger,#b75e6b)}
+
+/* P7C: theme previews use the existing theme engine and CSS palette values. */
+.v5-more-hub .theme-grid{align-items:stretch}
+.v5-theme-tile{display:grid;gap:6px;min-width:0}
+.v5-theme-tile .theme-option{position:relative;min-width:0;padding-bottom:29px}
+.v5-theme-swatches{position:absolute;left:10px;bottom:7px;display:flex;gap:4px}
+.v5-theme-swatches i{display:block;width:14px;height:14px;border:1px solid var(--border);border-radius:50%}
+.v5-theme-try{min-height:38px;border:1px solid var(--border);border-radius:11px;background:var(--surface2);color:var(--text);font-size:11px;font-weight:700}
+.v5-theme-try:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.v5-theme-live-preview{margin-top:12px;border:1px solid var(--border);border-radius:14px;padding:12px;background:var(--surface2)}
+.v5-theme-live-preview h4{margin:0 0 9px;color:var(--text);font-size:13px}
+.v5-theme-sample{display:flex;gap:10px;align-items:center;justify-content:center;min-height:82px;border:1px solid var(--border);border-radius:12px;padding:12px}
+.v5-theme-sample-surface,.v5-theme-sample-accent{display:grid;place-items:center;min-height:44px;border-radius:9px;font-size:12px;font-weight:750}
+.v5-theme-sample-surface{flex:1;border:1px solid currentColor;padding:9px}
+.v5-theme-sample-accent{width:58px}
+.v5-theme-live-preview p,.v5-theme-calendar{margin:9px 0 0;font-size:11px;line-height:1.5;color:var(--muted)}
+@media(prefers-reduced-motion:reduce){.v5-theme-tile *{transition:none!important}}
+
+/* P7D: truthful read-only notification diagnostics and separate haptics. */
+.v5-notification-overview,.v5-haptics-zone{border:1px solid var(--border);border-radius:13px;padding:12px;min-width:0;background:var(--surface2)}
+.v5-notification-overview h4,.v5-haptics-zone h4{margin:0 0 9px;color:var(--text);font-size:14px}
+.v5-notification-readings{display:grid;gap:8px;margin:0}
+.v5-notification-readings>div{display:flex;flex-wrap:wrap;justify-content:space-between;gap:5px 12px;border-bottom:1px solid var(--border);padding:4px 0 8px}
+.v5-notification-readings dt{font-size:12px;color:var(--muted)}
+.v5-notification-readings dd{margin:0;font-size:12px;font-weight:650;color:var(--text);overflow-wrap:anywhere}
+.v5-notification-overview p,.v5-haptics-zone p,.v5-notification-test-help{margin:10px 0 0;color:var(--muted);font-size:12px;line-height:1.55}
+.v5-haptics-zone [data-action="bond-haptics"]{margin-top:10px}
+@media(max-width:360px){.v5-notification-readings>div{display:grid}}
+
+/* P7E: keep destructive/import actions visually distinct from safe export. */
+.v5-backup-zones{display:grid;gap:13px;margin-top:14px}
+.v5-backup-zone{display:grid;justify-items:start;gap:8px;border:1px solid var(--border);border-radius:13px;padding:12px;min-width:0}
+.v5-backup-zone h4{margin:0;font-size:14px;color:var(--text)}
+.v5-backup-zone p{margin:0 0 4px;font-size:12px;line-height:1.55;color:var(--muted)}
+.v5-backup-restore{border-color:var(--danger,#b75e6b)}
+.v5-backup-restore h4{color:var(--danger,#b75e6b)}
+.v5-backup-zone .btn{min-height:40px}
+
+/* P7E: device actions stay attached to the original authenticated handlers. */
+.v5-device-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);padding:12px 0!important;min-width:0}
+.v5-device-row>span{flex:1;min-width:0;overflow-wrap:anywhere}
+.v5-device-current{background:var(--surface2);border-radius:10px;padding-inline:8px!important}
+.v5-device-code-options{display:grid;gap:10px;margin-top:14px}
+.v5-device-code-option,.v5-device-recovery{min-width:0;border:1px solid var(--border);border-radius:12px;padding:12px}
+.v5-device-code-option h4{font-size:13px;margin:0 0 6px;color:var(--text)}
+.v5-device-code-option p,.v5-device-recovery p,.v5-device-safety,.v5-permission-help{font-size:12px;line-height:1.55;color:var(--muted)}
+.v5-device-code-option p{margin:0 0 10px}
+.v5-device-code-option .btn{max-width:100%;white-space:normal;text-align:left}
+.v5-device-recovery{margin-top:12px;border-color:var(--danger,#b75e6b)}
+.v5-device-recovery summary{cursor:pointer;font-weight:700;color:var(--danger,#b75e6b)}
+.v5-device-recovery .btn{margin-top:8px;max-width:100%;white-space:normal}
+.v5-device-safety{margin:12px 0 0}
+.v5-permission-list{display:grid;gap:8px;margin:12px 0}
+.v5-permission-list>div{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;border-bottom:1px solid var(--border);padding:7px 0}
+.v5-permission-list dt{font-size:12px;color:var(--muted)}
+.v5-permission-list dd{margin:0;font-size:12px;font-weight:700;color:var(--text)}
+.v5-widget-zones{display:grid;gap:12px;margin-top:14px}
+.v5-widget-zone{border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-width:0}
+.v5-widget-zone h4{flex-basis:100%;margin:0;font-size:14px;color:var(--text)}
+.v5-widget-zone p{flex-basis:100%;margin:0 0 4px;font-size:12px;line-height:1.5;color:var(--muted)}
+.v5-widget-zone .btn{min-height:40px;max-width:100%;white-space:normal}
+@media(max-width:360px){.v5-device-code-option .btn,.v5-widget-zone .btn{width:100%}}
+
+/* P7I — pair identity input / save feedback, no data persisted before save. */
+.v5-settings-helper{font-size:12px;line-height:1.5;color:var(--muted);margin:0 0 9px}
+.v5-settings-status{font-size:12px;line-height:1.5;margin:8px 0 0;padding:10px;border-radius:11px;background:var(--surface2);color:var(--muted)}
+.v5-settings-status.invalid{border:1px solid var(--danger,#b75e6b);color:var(--text)}
+#settingsForm [data-role="settings-save"]{min-height:44px}
+#settingsForm [data-role="settings-save"]:disabled{opacity:.55;cursor:not-allowed}
+#settingsForm input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+@media(max-width:360px){#settingsForm .grid{grid-template-columns:1fr}}
+
+/* P7J: shortcut navigation, compact header and responsive text zoom.
+ * Keep 44px primary touch targets; never conceal privacy action buttons.
+ */
+#app.v5-more-route>.header{margin-bottom:11px;gap:8px}
+#app.v5-more-route .brand{min-width:0;gap:8px}
+#app.v5-more-route .brand-mark{flex:0 0 36px;width:36px;height:36px;border-radius:12px}
+#app.v5-more-route .brand strong{font-size:14px;overflow-wrap:anywhere}
+#app.v5-more-route .brand small{font-size:11px;line-height:1.25}
+#app.v5-more-route .header-actions{gap:5px}
+#app.v5-more-route .header-search{min-width:44px;min-height:44px}
+#app.v5-more-route>section>.section-head{display:none!important}
+.v5-more-hub>.v5-more-intro{padding:5px 4px 8px}
+.v5-more-intro h3{font-size:20px}
+.v5-more-quick{display:grid;gap:7px;min-width:0;margin:0 0 8px}
+.v5-more-quick-caption{font-size:11px;letter-spacing:.05em;color:var(--muted);font-weight:750;margin:0 3px}
+.v5-more-quick-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;min-width:0}
+.v5-more-quick-link{min-width:0;min-height:48px;overflow-wrap:anywhere;hyphens:auto;padding:9px 10px;text-align:left;border:1px solid var(--border);border-radius:12px;background:var(--surface2);color:var(--text);font:inherit;font-size:12px;font-weight:700;line-height:1.35;cursor:pointer}
+.v5-more-quick-link:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.v5-more-group>summary{min-height:56px;overflow-wrap:anywhere;line-height:1.4;scroll-margin-top:12px}
+.v5-more-group-content{min-width:0;overflow-wrap:anywhere}
+.v5-more-group-content :is(button,input,select,textarea){max-width:100%}
+@media(max-width:390px){
+ #app.v5-more-route .header{gap:4px}
+ #app.v5-more-route .avatar{display:none}
+ .v5-more-quick-grid{gap:6px}
+ .v5-more-quick-link{padding:9px;font-size:12px}
+}
+@media(max-width:335px){
+ .v5-more-quick-grid{grid-template-columns:1fr 1fr}
+ .v5-more-quick-link{font-size:11px}
+}
+@media(prefers-reduced-motion:reduce){.v5-more-quick-link,.v5-more-group>summary{transition:none!important}}
