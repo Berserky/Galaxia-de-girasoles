@@ -1222,6 +1222,53 @@ public class GalaxyDeviceClosureTest {
         }
     }
 
+    /** P8 P6: actual packaged WebView handles expired private thumbnails
+     * and viewer photos with real image load errors, never real user data.
+     * It must retain the image viewer navigation and privacy boundaries.
+     */
+    @Test public void visualEvolutionP8_realAlbumExpiredPhotoNativeFallback() throws Exception {
+        launch();
+        runV5Js("const marker=document.createElement('div');"
+            +"marker.id='v5-qa-paint-marker';marker.setAttribute('aria-hidden','true');"
+            +"marker.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;"
+            +"background:#07e1f7;z-index:2147483647;pointer-events:none';"
+            +"document.body.appendChild(marker)");
+        try {
+            runV5Js("go('home');memorySection='collections';memoryTab='album';"
+                +"media.photo=[{url:'https://127.0.0.1:1/qa-expired-private-photo.png',"
+                +"path:'qa-fixture-private-path-not-real',created:'2026-10-29T10:00:00Z'},"
+                +"{url:'https://127.0.0.1:1/qa-expired-private-second.png',"
+                +"path:'qa-second-private-path-not-real',created:'2026-10-29T11:00:00Z'}];"
+                +"mediaLoadedAt.photo=Date.now();go('memories');window.scrollTo(0,0)");
+            awaitJs("view==='memories' && !!document.querySelector('.memories-v5-photo-grid')"
+                +" && !!document.querySelector('.memories-v5-photo-card .memories-v5-photo-missing')");
+            assertEquals("P6 failed thumbnail not accessible","true",
+                js("document.querySelector('.memories-v5-photo-card .memories-v5-photo-missing')?.getAttribute('role')==='status'"));
+            assertEquals("P6 unavailable photo must not print private path","false",
+                js("document.body.innerText.includes('qa-fixture-private-path-not-real')"));
+            awaitV5QaPainted("p8-album-expired-thumb");
+            shell("screencap -p /sdcard/Download/V5-P8-album-expired-thumb.png");
+            runV5Js("openAlbumViewer(0)");
+            // HTML <dialog> occupies the browser top layer; the strict cyan
+            // physical-paint marker must be mounted inside that top layer.
+            runV5Js("modal.appendChild(document.getElementById('v5-qa-paint-marker'))");
+            awaitJs("modal.open===true && !!document.querySelector('.memories-v5-photo-viewer')"
+                +" && !!document.querySelector('.memories-v5-photo-viewer .memories-v5-photo-missing')");
+            assertEquals("P6 viewer lost navigation on failed photo","2",
+                js("String(document.querySelectorAll('.memories-v5-photo-toolbar button').length)"));
+            assertEquals("P6 viewer failed photo not accessible","true",
+                js("document.querySelector('.memories-v5-photo-viewer .memories-v5-photo-missing')?.getAttribute('role')==='status'"));
+            assertEquals("P6 offline viewer exposed signed URL or path","false",
+                js("document.querySelector('.memories-v5-photo-viewer')?.innerText.includes('qa-fixture-private-path-not-real')"
+                    +" || document.querySelector('.memories-v5-photo-viewer')?.innerText.includes('127.0.0.1')"));
+            awaitV5QaPainted("p8-album-expired-viewer");
+            shell("screencap -p /sdcard/Download/V5-P8-album-expired-viewer.png");
+        } finally {
+            runV5Js("closeModal();media.photo=null;mediaLoadedAt.photo=0;"
+                +"document.getElementById('v5-qa-paint-marker')?.remove();go('home')");
+        }
+    }
+
     @Test public void visualEvolutionP8_realMemoriesMoreScreens_andPrivateControls() throws Exception {
         launch();
         // A synthetic cyan pixel marker is required in the *real* native
