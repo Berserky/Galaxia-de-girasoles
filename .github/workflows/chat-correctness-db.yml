@@ -52,13 +52,20 @@ jobs:
           if [ ! -f supabase/config.toml ]; then
             supabase init
           fi
+          # GitHub-hosted runners may already have port 54322 bound.
+          # Allocate a free host port for this isolated database; all SQL gates
+          # below must address the same endpoint. Never skip DB verification.
+          QA_DB_PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
+          sed -i "s/^port = 54322$/port = ${QA_DB_PORT}/" supabase/config.toml
+          grep -q "^port = ${QA_DB_PORT}$" supabase/config.toml
+          echo "QA_DB_URL=postgresql://postgres:postgres@127.0.0.1:${QA_DB_PORT}/postgres" >> "$GITHUB_ENV"
           supabase start
 
       - name: Validate deep search and deterministic mutations
-        run: psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -v ON_ERROR_STOP=1 -f tests/chat-correctness-db.sql
+        run: psql "$QA_DB_URL" -v ON_ERROR_STOP=1 -f tests/chat-correctness-db.sql
 
       - name: Validate concurrency and idempotency
-        run: DB_URL='postgresql://postgres:postgres@127.0.0.1:54322/postgres' bash tests/chat-correctness-concurrency.sh
+        run: DB_URL="$QA_DB_URL" bash tests/chat-correctness-concurrency.sh
 
       - name: Typecheck Android companion Edge Function
         run: deno check --node-modules-dir=auto supabase/functions/android-companion/index.ts
@@ -68,7 +75,7 @@ jobs:
 
       - name: Validate Phase 2 rollback and re-apply
         run: |
-          DB='postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+          DB="$QA_DB_URL"
           psql "$DB" -v ON_ERROR_STOP=1 -f supabase/rollbacks/20261005023031_qa_phase2_chat_correctness_rollback.sql
           test "$(psql "$DB" -Atqc "select to_regprocedure('public.galaxy_chat_search_page(text,text,text,text,date,bigint,integer)') is null")" = "t"
           test "$(psql "$DB" -Atqc "select to_regprocedure('public.galaxy_chat_poll_mutate(uuid,text,text,uuid,boolean)') is null")" = "t"

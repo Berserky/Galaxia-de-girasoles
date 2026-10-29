@@ -250,3 +250,18 @@ test('P8 Bond garden 0/8 has stage-accurate public labels without fabricated ser
  assert.ok(java.includes('P8 stage "+stage+" must have accurate public title'));
  assert.ok(java.includes('stage==0?"El comienzo":"Ocho girasoles"'));
 });
+
+test('P8 database CI avoids host-port collisions while retaining every SQL gate',()=>{
+ const ci=readFileSync(resolve(root,'.github/workflows/chat-correctness-db.yml'),'utf8');
+ assert.ok(ci.includes('QA_DB_PORT="$(python3 -c'), 'CI must allocate a free port on the isolated runner');
+ assert.ok(ci.includes('sed -i "s/^port = 54322$/port = ${QA_DB_PORT}/" supabase/config.toml'));
+ assert.ok(ci.includes('grep -q "^port = ${QA_DB_PORT}$" supabase/config.toml'));
+ assert.ok(ci.includes('QA_DB_URL=postgresql://postgres:postgres@127.0.0.1:${QA_DB_PORT}/postgres'));
+ assert.ok(ci.includes('run: psql "$QA_DB_URL" -v ON_ERROR_STOP=1 -f tests/chat-correctness-db.sql'));
+ assert.ok(ci.includes('run: DB_URL="$QA_DB_URL" bash tests/chat-correctness-concurrency.sh'));
+ assert.ok(ci.includes('DB="$QA_DB_URL"'));
+ assert.ok(ci.includes('deno check --node-modules-dir=auto supabase/functions/android-companion/index.ts'));
+ assert.ok(ci.includes('supabase/rollbacks/20261005023031_qa_phase2_chat_correctness_rollback.sql'));
+ assert.ok(ci.includes('supabase stop --no-backup'));
+ assert.ok(!ci.includes('continue-on-error: true'),'dynamic port may not bypass any real database failures');
+});
