@@ -73,7 +73,7 @@ jobs:
           profile: pixel_6
           emulator-build: 15261927
           disable-animations: true
-          emulator-options: -no-window -gpu software -memory 1536 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          emulator-options: -no-window -gpu host -memory 1536 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash scripts/qa-phase5-emulator.sh
 
       - name: Capturar diagnóstico de AVD si falla el gate

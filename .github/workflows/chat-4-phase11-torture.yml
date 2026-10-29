@@ -87,7 +87,7 @@ jobs:
           profile: pixel_6
           emulator-build: 15261927
           disable-animations: true
-          emulator-options: -no-window -gpu software -memory 1536 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          emulator-options: -no-window -gpu host -memory 1536 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: |
             gradle -p android --no-daemon connectedDebugAndroidTest -PQA_EDGE_URL=http://127.0.0.1:18765 -PQA_SUPABASE_PUBLISHABLE_KEY=qa_phase11 '-Pandroid.testInstrumentationRunnerArguments.phase10SoakMs=120000' '-Pandroid.testInstrumentationRunnerArguments.numShards=2' '-Pandroid.testInstrumentationRunnerArguments.shardIndex=0' '-Pandroid.testInstrumentationRunnerArguments.class=com.nuestragalaxia.companion.GalaxyDeviceClosureTest'
             mkdir -p qa-artifacts/phase11-shards/closure-0
@@ -101,7 +101,7 @@ jobs:
           profile: pixel_6
           emulator-build: 15261927
           disable-animations: true
-          emulator-options: -no-window -gpu software -memory 1536 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          emulator-options: -no-window -gpu host -memory 1536 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: |
             gradle -p android --no-daemon connectedDebugAndroidTest -PQA_EDGE_URL=http://127.0.0.1:18765 -PQA_SUPABASE_PUBLISHABLE_KEY=qa_phase11 '-Pandroid.testInstrumentationRunnerArguments.phase10SoakMs=120000' '-Pandroid.testInstrumentationRunnerArguments.numShards=2' '-Pandroid.testInstrumentationRunnerArguments.shardIndex=1' '-Pandroid.testInstrumentationRunnerArguments.class=com.nuestragalaxia.companion.GalaxyDeviceClosureTest'
             mkdir -p qa-artifacts/phase11-shards/closure-1
