@@ -75,7 +75,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - run: cp musica.mp3 android/app/src/main/assets/musica.mp3
       - run: gradle -p android --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
-      - name: Torture instrumentation
+      - name: Closure shard 0 - fresh AVD
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -83,16 +83,37 @@ jobs:
           target: google_apis
           profile: pixel_6
           disable-animations: true
+          force-avd-creation: true
           emulator-options: -no-window -gpu swiftshader_indirect -memory 2048 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
-          # Compare against Phase5's proven APK package identity on the SAME
-          # isolated API-35 emulator. Phase11's .phase11qa suffix intermittently
-          # left Android DocumentsUI resumed but its renderer/a11y root stuck
-          # on the system package, with zero framebuffer transition.
-          # The debug build still points strictly to localhost QA Edge and QA
-          # Supabase; no stable app/data exists on this disposable emulator.
-          script: |
-            gradle -p android --no-daemon connectedDebugAndroidTest -PQA_EDGE_URL=http://127.0.0.1:18765 -PQA_SUPABASE_PUBLISHABLE_KEY=qa_phase11 '-Pandroid.testInstrumentationRunnerArguments.phase10SoakMs=120000' '-Pandroid.testInstrumentationRunnerArguments.class=com.nuestragalaxia.companion.GalaxyDeviceClosureTest'
-            gradle -p android --no-daemon connectedDebugAndroidTest -PQA_EDGE_URL=http://127.0.0.1:18765 -PQA_SUPABASE_PUBLISHABLE_KEY=qa_phase11 '-Pandroid.testInstrumentationRunnerArguments.class=com.nuestragalaxia.companion.GalaxyMediaExperienceTest,com.nuestragalaxia.companion.GalaxyVoiceMessagesDeviceTest'
+          script: bash scripts/p8-phase11-run-shard.sh closure-0
+
+      - name: Closure shard 1 - fresh AVD
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          force-avd-creation: true
+          emulator-options: -no-window -gpu swiftshader_indirect -memory 2048 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: bash scripts/p8-phase11-run-shard.sh closure-1
+
+      - name: Media and voice - fresh AVD
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          force-avd-creation: true
+          emulator-options: -no-window -gpu swiftshader_indirect -memory 2048 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: bash scripts/p8-phase11-run-shard.sh media
+
+      - name: Verify exact Android JUnit coverage (no missing, duplicate, failed or skipped tests)
+        run: node scripts/p8-verify-phase11-shards.mjs qa-artifacts/phase11-shards
+
       - name: Capturar diagnóstico de AVD si falla el gate
         if: failure()
         shell: bash
@@ -104,6 +125,7 @@ jobs:
           name: phase11-android-stress
           path: |
             qa-artifacts/p8-emulator-health.txt
+            qa-artifacts/phase11-shards/**
             android/app/build/outputs/androidTest-results/**
             android/app/build/reports/androidTests/**
             android/app/build/reports/lint-results-debug.html
