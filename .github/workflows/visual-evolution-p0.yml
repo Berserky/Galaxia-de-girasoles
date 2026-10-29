@@ -159,7 +159,7 @@ jobs:
           profile: pixel_6
           emulator-build: 15261927
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader -memory 1536 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          emulator-options: -no-window -gpu swiftshader -memory 1536 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none -feature -Vulkan
           script: bash scripts/visual-evolution-p1-avd.sh
 
       - name: Capturar diagnóstico de AVD si falla el gate
