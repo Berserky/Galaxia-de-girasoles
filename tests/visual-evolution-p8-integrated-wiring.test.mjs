@@ -110,7 +110,13 @@ test('P8 failed-download recovery retries SDK without bypassing Android instrume
  for(const name of ['qa-phase5-real-integration.yml','chat-4-phase11-torture.yml','chat-4-phase9-media-performance.yml']){
   const ci=readFileSync(resolve(root,'.github/workflows',name),'utf8');
   assert.ok(ci.includes('sdk_ok=0')&&ci.includes('for attempt in 1 2 3')&&ci.includes('test "$sdk_ok" -eq 1'),name+' must fail closed after bounded SDK retries');
-  assert.ok(ci.includes('connectedDebugAndroidTest')||ci.includes('scripts/qa-phase5-emulator.sh'),name+' must execute native instrumentation');
+  const direct=ci.includes('connectedDebugAndroidTest')||ci.includes('scripts/qa-phase5-emulator.sh');
+  const phase11Shards=name==='chat-4-phase11-torture.yml'
+   && ['closure-0','closure-1','media'].every(shard=>ci.includes('script: bash scripts/p8-phase11-run-shard.sh '+shard))
+   && ci.includes('node scripts/p8-verify-phase11-shards.mjs qa-artifacts/phase11-shards')
+   && readFileSync(resolve(root,'scripts/p8-phase11-run-shard.sh'),'utf8')
+      .includes('gradle -p android --no-daemon connectedDebugAndroidTest');
+  assert.ok(direct||phase11Shards,name+' must execute all native Android instrumentation with strict JUnit coverage');
  }
  for(const name of ['qa-phase5-real-integration.yml','chat-4-phase11-torture.yml','visual-evolution-p0.yml']){
   const ci=readFileSync(resolve(root,'.github/workflows',name),'utf8');
