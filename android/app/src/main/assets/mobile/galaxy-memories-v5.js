@@ -52,6 +52,25 @@ function albumGallery(photos,{attr,ico}){
    (date?'Incorporadas el '+date:'Sin fecha de incorporación')+' <small>'+entries.length+'</small></h4>'+
    '<div class="memories-v5-photo-date-grid">'+entries.map(photoCard).join('')+'</div></section>').join('')+'</div>';
 }
+/* P8: a signed URL can expire or a device can go offline *after*
+ * media-list succeeds. Replace only the failed private photo surface with
+ * an accessible status. Do not expose signed URLs, storage paths or errors,
+ * and do not affect unrelated Chat images or the music player. */
+function albumImageFallback(image){
+ if(!image||typeof image.closest!=='function')return false;
+ const thumb=image.closest('.memories-v5-photo-open');
+ const viewer=!thumb&&image.closest('.memories-v5-photo-viewer');
+ if(!thumb&&!viewer)return false;
+ const target=thumb||image;
+ const parent=target.parentNode,doc=target.ownerDocument;
+ if(!parent||typeof parent.replaceChild!=='function'||!doc?.createElement)return false;
+ const status=doc.createElement('span');
+ status.className='memories-v5-photo-missing';
+ status.setAttribute('role','status');
+ status.textContent='Foto no disponible. Revisa tu conexión y vuelve a abrir el álbum.';
+ parent.replaceChild(status,target);
+ return true;
+}
 function albumViewer(photos,at,{attr,ico}){
  const entries=Array.isArray(photos)?photos:[];
  if(!Number.isSafeInteger(at)||at<0||at>=entries.length||!usablePhoto(entries[at]))return '';
@@ -477,5 +496,5 @@ function driveSyncFeedback(state,{esc,ico}){
   '<p>'+imported+' nuevas · '+skipped+' ya existentes · '+failed+' con error</p><small>'+stamp+'</small></div>';
 }
 
-root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumDateGroups,albumGallery,albumViewer,musicGrouping,musicLibrary,validDate,shiftMonth,calendarMonth,eventOccurrence,eventRows,monthEvents,eventCalendar,organizedCollection,capsuleShelf,journeyShelf,timelineRows,historyVisualGroups,historyTimeline,constellationModel,constellationPreview,constellationView,filterItems,filtersPanel,driveSyncFeedback});
+root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumDateGroups,albumGallery,albumViewer,albumImageFallback,musicGrouping,musicLibrary,validDate,shiftMonth,calendarMonth,eventOccurrence,eventRows,monthEvents,eventCalendar,organizedCollection,capsuleShelf,journeyShelf,timelineRows,historyVisualGroups,historyTimeline,constellationModel,constellationPreview,constellationView,filterItems,filtersPanel,driveSyncFeedback});
 })(window);

@@ -3940,6 +3940,11 @@ document.addEventListener('click',async e=>{
  }catch(err){toast(err.message||'No pudimos completar la acción.');}
 });
 
+// P6 album: image error does not bubble. Real expired signed URLs and offline
+// downloads receive an accessible placeholder, never a private URL or path.
+document.addEventListener('error',e=>{
+ if(e.target?.tagName==='IMG')window.GalaxyMemoriesV5?.albumImageFallback?.(e.target);
+},true);
 document.addEventListener('input',e=>{
  if(e.target.closest?.('#settingsForm'))settingsFormFeedback(e.target.form);
  if(e.target.id==='universalSearchInput')renderUniversalSearchResults(e.target.value);

@@ -114,7 +114,7 @@ test('P8 failed-download recovery retries SDK without bypassing Android instrume
  }
  for(const name of ['qa-phase5-real-integration.yml','chat-4-phase11-torture.yml','visual-evolution-p0.yml']){
   const ci=readFileSync(resolve(root,'.github/workflows',name),'utf8');
-  assert.ok(ci.includes('-gpu host -memory 1536 -no-snapshot'),name+' must use the GPU host profile proven by native local Android evidence');
+  assert.ok(ci.includes('-gpu swiftshader -memory 1536 -no-snapshot'),name+' must use the supported headless Linux renderer');
  }
 });
 
@@ -168,7 +168,7 @@ test('P8 Android CI pins proven stable-era emulator rather than blindly installi
   const ci=readFileSync(resolve(root,'.github/workflows',name),'utf8');
   const pin=(ci.match(/emulator-build: 15261927/g)||[]).length;
   assert.equal(pin,instances,name+' must pin every isolated AVD to Emulator 36.5.11');
-  assert.equal((ci.match(/-gpu host -memory 1536 -no-snapshot/g)||[]).length,instances);
+  assert.equal((ci.match(/-gpu swiftshader -memory 1536 -no-snapshot/g)||[]).length,instances);
   assert.ok(!ci.includes('"platform-tools" "emulator"'),name+' must not waste SDK bandwidth installing the newest crashing QEMU before the pin');
   assert.ok(ci.includes('connectedDebugAndroidTest')||ci.includes('scripts/qa-phase5-emulator.sh')||ci.includes('scripts/visual-evolution-p1-avd.sh'),name+' must retain physical instrumentation');
  }
