@@ -227,3 +227,26 @@ test('P8 notification filters stay touch-safe while pressed on narrow screens',(
  const java=readFileSync(resolve(root,'android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyDeviceClosureTest.java'),'utf8');
  assert.match(java,/P3 filter touch target below 44px/);
 });
+
+test('P8 physical Android covers real authenticated garden zero and eight without demo or losing PNG gate',()=>{
+ const java=readFileSync(resolve(root,'android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyDeviceClosureTest.java'),'utf8');
+ const start=java.indexOf('void visualEvolutionP8_realBondGardenZeroAndEightStages()');
+ const end=java.indexOf('@Test public void visualEvolutionP5_realMomentsAndroidScreens_andPrivacy()',start);
+ assert.ok(start>0 && end>start,'Android test must verify both authenticated garden boundaries');
+ const segment=java.slice(start,end);
+ assert.ok(segment.includes('new int[]{0,8}'));
+ assert.ok(segment.includes("dataset.officialStage"));
+ assert.ok(segment.includes("dataset.demo==='false'"));
+ assert.ok(segment.includes("document.querySelectorAll('.ng-garden .ng-plant').length"));
+ assert.ok(segment.includes('awaitV5QaPainted("p8-garden-stage-"+stage)'));
+ assert.ok(segment.includes('screencap -p /sdcard/Download/V5-P8-garden-stage-'));
+ assert.ok(!segment.includes('previewBloomTotal'),'Official Bond test must never use demo growth');
+});
+
+test('P8 Bond garden 0/8 has stage-accurate public labels without fabricated server labels',()=>{
+ const app=read('app.js');
+ assert.ok(app.includes("garden.label||(stage===0?'El comienzo':stage===8?'Ocho girasoles':'Nuestros girasoles')"));
+ const java=readFileSync(resolve(root,'android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyDeviceClosureTest.java'),'utf8');
+ assert.ok(java.includes('P8 stage "+stage+" must have accurate public title'));
+ assert.ok(java.includes('stage==0?"El comienzo":"Ocho girasoles"'));
+});

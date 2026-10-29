@@ -986,6 +986,43 @@ public class GalaxyDeviceClosureTest {
     }
 
     /**
+     * P8: authenticate the real Bond garden transitions at the two untested
+     * boundaries. QA values are device-local; no server writes or demo mode.
+     * Physical PNG checks remain strict via the existing cyan paint marker.
+     */
+    @Test public void visualEvolutionP8_realBondGardenZeroAndEightStages() throws Exception {
+        launch();
+        awaitJs("!!cloud?.bond && !!document.querySelector('#bottomNav [data-view=moments]')");
+        runV5Js("const marker=document.createElement('div');"
+            +"marker.id='v5-qa-paint-marker';marker.setAttribute('aria-hidden','true');"
+            +"marker.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;"
+            +"background:#07e1f7;z-index:2147483647;pointer-events:none';"
+            +"document.body.appendChild(marker)");
+        try {
+            for(int stage : new int[]{0,8}){
+                final String step=String.valueOf(stage);
+                runV5Js("go('home');cloud.bond={...(cloud.bond||{}),"
+                    +"garden:{stage:"+stage+",totalDays:"+ (stage==0?0:240)
+                    +",days:"+ (stage==0?0:240)+",progressPct:0,"
+                    +"currentStreak:0,recordStreak:0}};go('moments');window.scrollTo(0,0)");
+                awaitJs("view==='moments' && document.querySelector('.ng-garden')?.dataset.officialStage==='"
+                    +step+"' && document.querySelector('.ng-garden')?.dataset.demo==='false'");
+                assertEquals("P8 garden stage "+stage+" physical flower count",step,
+                    js("String(document.querySelectorAll('.ng-garden .ng-plant').length)"));
+                assertEquals("P8 garden official stage "+stage,step,
+                    js("document.querySelector('.ng-garden').dataset.stage"));
+                assertEquals("P8 stage "+stage+" must have accurate public title","true",
+                    js("document.querySelector('.bond-garden-copy h3')?.innerText.includes('"
+                      +(stage==0?"El comienzo":"Ocho girasoles")+"')"));
+                awaitV5QaPainted("p8-garden-stage-"+stage);
+                shell("screencap -p /sdcard/Download/V5-P8-garden-stage-"+stage+".png");
+            }
+        }finally{
+            runV5Js("document.getElementById('v5-qa-paint-marker')?.remove()");
+        }
+    }
+
+    /**
      * P5: actual packaged Android WebView with synthetic-only Bond entries.
      * Screenshots are from the physical emulator framebuffer, not Chrome/mock HTML.
      */
