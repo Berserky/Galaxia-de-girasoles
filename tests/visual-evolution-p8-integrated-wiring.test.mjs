@@ -265,3 +265,14 @@ test('P8 database CI avoids host-port collisions while retaining every SQL gate'
  assert.ok(ci.includes('supabase stop --no-backup'));
  assert.ok(!ci.includes('continue-on-error: true'),'dynamic port may not bypass any real database failures');
 });
+
+test('P8 P0 transient Maven 429 does not bypass the debug APK build or device screenshot gates',()=>{
+ const ci=readFileSync(resolve(root,'.github/workflows/visual-evolution-p0.yml'),'utf8');
+ assert.match(ci,/for attempt in 1 2 3; do\s+if gradle -p android --no-daemon --max-workers=2 assembleDebug 2>&1 \| tee/);
+ assert.match(ci,/test "\$built" -eq 1/);
+ assert.ok(ci.includes("Received status code (429|502|503)"),'Only transient repository HTTP failures may retry');
+ assert.ok(ci.includes('non-transient reason; refusing blind retries'),'Java or build errors fail without repeated expensive work');
+ assert.match(ci,/script: bash scripts\/visual-evolution-p1-avd.sh/);
+ assert.match(ci,/if: failure\(\)/);
+ assert.doesNotMatch(ci,/continue-on-error: true/);
+});

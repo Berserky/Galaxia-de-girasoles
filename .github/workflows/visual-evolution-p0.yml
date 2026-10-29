@@ -128,7 +128,28 @@ jobs:
       - name: Empaquetar audio y compilar QA debug (sin firma productiva)
         run: |
           cp musica.mp3 android/app/src/main/assets/musica.mp3
-          gradle -p android --no-daemon assembleDebug
+          # Maven Central may throttle concurrent ephemeral GitHub runners
+          # with 429 responses before the APK is compiled. Retry the SAME
+          # strict Gradle build with capped concurrency; no test is bypassed.
+          set -o pipefail
+          built=0
+          build_log="$(mktemp)"
+          for attempt in 1 2 3; do
+            if gradle -p android --no-daemon --max-workers=2 assembleDebug 2>&1 | tee "$build_log"; then
+              built=1
+              break
+            fi
+            # Stop immediately on Java/Gradle errors that are NOT a transient
+            # dependency mirror outage, rather than wasting two more builds.
+            if ! grep -Eiq 'Received status code (429|502|503)|Too Many Requests|Read timed out|Connection reset' "$build_log"; then
+              echo "::error::Android build failed for a non-transient reason; refusing blind retries"
+              break
+            fi
+            echo "::warning::Maven dependency mirror transient error (attempt $attempt/3)"
+            if [ "$attempt" -lt 3 ]; then sleep $((attempt * 30)); fi
+          done
+          rm -f "$build_log"
+          test "$built" -eq 1
       - name: AVD limpio, sin vincular, métricas y capturas
         uses: reactivecircus/android-emulator-runner@v2
         with:

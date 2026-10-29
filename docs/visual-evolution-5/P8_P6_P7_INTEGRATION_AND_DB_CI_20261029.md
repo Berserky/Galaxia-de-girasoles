@@ -25,3 +25,13 @@ Se añadió `tests/visual-evolution-p8-p6-p7-integrated-privacy.test.mjs` con **
 La ejecución nativa anterior del SHA `28b82ae` probó **30/30 Android, 0 errores, 0 skips**; informe y XML local en `build/p8-local-avd/p8-final30-same-sha/`. La CI oficial terminó **14/18 verdes y cuatro fallos**: Chat Correctness DB (puerto ocupado), P0/Phase11/Phase5 (emulador `emulator-5554` perdido, incluyendo marcadores de framebuffer rechazados). El nuevo SHA cambiará sólo workflow/contratos/documentación y requiere nueva CI; no se hereda automáticamente el PASS de un SHA anterior.
 
 Quedan sin certificar los escenarios P6/P7 que dependen de servicios externos (Drive auténtico, push, GPS, permisos específicos, borrado restauración efectivos), TalkBack completo y revisión humana visual. **P8 continúa abierto**.
+
+## P0: corrección de descarga Maven, sin bypass (29/oct/2026)
+
+El commit anterior `78c748e` completó el workflow **Chat Correctness DB** con todos sus pasos SUCCESS, incluida la recuperación de puerto, ejecución SQL, concurrencia, `deno check` y rollback/reapply.
+
+El workflow P0 `40838264708` terminó FAIL **antes de ejecutar Android** al descargar Maven desde `repo.maven.apache.org`: numerosos archivos POM devolvieron `HTTP 429 Too Many Requests`; `org.apache.httpcomponents:httpmime:4.5.6` fue la primera evidencia causal. No debe confundirse con pérdida del emulador ni con defecto de la app. `Node 24` y las 9 capturas de prototipo sintético sí pasaron; el job APK P0 no llegó a compilar.
+
+Se actualizó **únicamente** `.github/workflows/visual-evolution-p0.yml`: la tarea original `assembleDebug` sigue siendo obligatoria, ahora ejecutada con `--max-workers=2` y hasta tres intentos espaciados (30/60 s) **solo si el log identifica errores transitorios de espejo (429/502/503, timeout o conexión reiniciada)**. Fallas normales de compilación salen inmediatamente sin repetirlas. `test "$built" -eq 1` mantiene el gate estricto si no se consigue APK. No se cambia la instrumentación real, PNG, `emulator-build` ni se agrega `continue-on-error`. El test contractual `P8 P0 transient Maven 429...` verifica que la compilación y el shell de capturas permanecen presentes.
+
+**Estado:** contrato Node PASS, la eficacia de la recuperación Maven en Linux depende de nueva CI. Los fallos Android de Phase5 y Phase11 siguen sin ocultarse ni reinterpretarse.
