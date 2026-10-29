@@ -1,4 +1,5 @@
-/* V3: Offline CSS garden. Only previewBloomTotal in explicitly opted-in demo can exceed official stage 8. */
+/* V3: CSS garden. An authenticated backend bloomTotal extends official stage 8;
+   previewBloomTotal remains strictly demo-only and never grants progress. */
 (function(global){
 'use strict';
 const THEMES=['daylight','cosmic','christmas','halloween','valentine','friendship','easter'];
@@ -25,7 +26,9 @@ function ambient(date=new Date()){
 function chapterFor(total){return CHAPTERS.find((c,i)=>total<=(i===0?c.end:c.end) )||CHAPTERS[CHAPTERS.length-1]}
 function normalize(garden={},options={}){
  const officialStage=stageOf(garden),simulated=options.demo===true;
- const total=simulated?Math.min(MAX_DEMO,wholeNumber(options.previewBloomTotal)??officialStage):officialStage;
+ const verified=typeof garden?.bloomTotal==='number'&&Number.isSafeInteger(garden.bloomTotal) ? garden.bloomTotal : null;
+ const authorized=officialStage===8&&verified!==null&&verified>=8&&verified<=MAX_DEMO?verified:officialStage;
+ const total=simulated?Math.min(MAX_DEMO,wholeNumber(options.previewBloomTotal)??officialStage):authorized;
  const chapter=chapterFor(total),first=chapter.id==='garden'?0:chapter.start;
  const base=ambient(options.date);
  return {officialStage,total,simulated,chapter:chapter.id,chapterName:chapter.name,scale:chapter.scale,

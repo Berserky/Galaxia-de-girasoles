@@ -16,6 +16,11 @@
   const n=garden?.stage;
   if(typeof n!=='number'||!Number.isSafeInteger(n)||n<0)return Object.freeze({ready:false,reason:'NO_AUTHENTIC_STAGE'});
   const stage=Math.min(8,n);
+  // A bloom above eight must be explicit, verified and sourced from Bond.
+  // Never derive it from a local clock, demo flag or client-side totalDays.
+  const candidate=garden?.bloomTotal;
+  const bloomTotal=stage===8&&typeof candidate==='number'&&Number.isSafeInteger(candidate)
+    &&candidate>=8&&candidate<=186?candidate:stage;
   // Match the current mobile theme when a presenter does not supply an override.
   // No storage, network, or user-permission access is needed.
   const appTheme=global.document?.documentElement?.dataset?.theme;
@@ -24,18 +29,18 @@
   const season=allowed(prefs.season,ALLOWED_SEASONS,null);
   const daypart=allowed(prefs.daypart,ALLOWED_DAYPARTS,null);
   const motion=prefs.motion==='reduce'?'reduce':'full';
-  return Object.freeze({ready:true,stage,capped:n>8,theme,season,daypart,motion,autoDaypart:daypart===null});
+  return Object.freeze({ready:true,stage,bloomTotal,capped:n>8,theme,season,daypart,motion,autoDaypart:daypart===null});
  }
  function create({engine=global.GalaxyGardenV5,host,onFlowerTap,initialEntrance='grow'}={}){
   if(!engine||typeof engine.render!=='function'||typeof engine.attach!=='function'||typeof engine.normalize!=='function')
    throw new Error('P5_BRIDGE_BLOCKED: canonical garden engine is required');
   if(!host||typeof host.querySelector!=='function')throw new Error('P5_BRIDGE_BLOCKED: valid host required');
   const firstEntrance=initialEntrance==='none'?'none':'grow';
-  let node=null,stage=null,stop=()=>{},last=null,attachedMode=null,disposed=false,generation=0;
+  let node=null,stage=null,bloomCount=null,stop=()=>{},last=null,attachedMode=null,disposed=false,generation=0;
   const modeOf=state=>String(state.autoDaypart)+':'+String(state.season===null);
   const annotate=()=>{
    if(!node||!last)return;
-   const state=engine.normalize({stage:last.stage},{theme:last.theme,season:last.season||undefined,daypart:node.dataset.daypart,motion:last.motion});
+   const state=engine.normalize({stage:last.stage,bloomTotal:last.bloomTotal},{theme:last.theme,season:last.season||undefined,daypart:node.dataset.daypart,motion:last.motion});
    node.setAttribute('aria-label',`Jardín compartido; etapa oficial ${state.officialStage}; ${state.chapterName}; ${CLIMATE[state.season]}, ${CLIMATE[state.daypart]}`);
   };
   function mount(){
@@ -56,30 +61,30 @@
   function update(garden,preferences={}){
    if(disposed)throw new Error('P5_BRIDGE_DISPOSED');
    const state=plan(garden,preferences);
-   if(!state.ready){generation++;stop();stop=()=>{};node=null;stage=null;last=null;attachedMode=null;host.innerHTML=fallBack;return state;}
+   if(!state.ready){generation++;stop();stop=()=>{};node=null;stage=null;bloomCount=null;last=null;attachedMode=null;host.innerHTML=fallBack;return state;}
    last=state;
    // If host was replaced by a parent render, treat this as a new mount.
    const current=host.querySelector('.ng-garden');
-   const replace=!node||current!==node||stage!==state.stage;
+   const replace=!node||current!==node||stage!==state.stage||bloomCount!==state.bloomTotal;
    if(replace){
     generation++;stop();stop=()=>{};
     const options={theme:state.theme,motion:state.motion,entrance:stage===null?firstEntrance:'none'};
     if(state.season)options.season=state.season;
     if(state.daypart)options.daypart=state.daypart;
-    // Explicitly avoid the experimental world parameters. Only official stages render.
+    // Only the server-verified bloomTotal may unlock new terrain; no demo fields.
     // A renderer or observer failure must not leave the previous pair's flowers
     // visible on a reused host. Drop both the scene and stale callbacks before
     // propagating the error to the authorized Moments integration.
     try{
-     host.innerHTML=engine.render({stage:state.stage},options);
+     host.innerHTML=engine.render({stage:state.stage,bloomTotal:state.bloomTotal},options);
      node=host.querySelector('.ng-garden');
      if(!node)throw new Error('P5_BRIDGE_BLOCKED: renderer did not mount scene');
-     stage=state.stage;
+     stage=state.stage;bloomCount=state.bloomTotal;
      mount();
     }catch(error){
      generation++;
      try{stop();}catch{}
-     stop=()=>{};node=null;stage=null;last=null;attachedMode=null;
+     stop=()=>{};node=null;stage=null;bloomCount=null;last=null;attachedMode=null;
      host.innerHTML=fallBack;
      throw error;
     }

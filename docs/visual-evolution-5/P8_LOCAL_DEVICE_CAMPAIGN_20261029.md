@@ -62,3 +62,9 @@
 - **No afirmar 29/29 JUnit del mismo binario**: la batería previa 28/28 fue sobre el árbol previo a la adición del método 29, mientras el nuevo método 0/8 pasó focalmente sobre el árbol actualizado. El nuevo SHA debe cumplir la campaña consolidada y el cierre global P8.
 - **CI histórica SHA 244148f:** 12/15 SUCCESS, 3 FAIL (Phase5/Phase11/V5 P0 con pérdida del AVD). No anular required checks por el éxito Android local.
 - **Validación de código tras la corrección de rótulos:** `npm test` **1036 total / 1031 PASS / 0 FAIL / 5 SKIP**; `node scripts/qa-android-mobile.mjs` **PASS**, `node --check` y `git diff --check` **PASS**.
+
+## Expansión oficial de Bond, prueba local
+
+El 29/oct se desarrolló el contrato aditivo `bloomTotal` en `bond-engine.ts` y su lectura validada por puente/renderer Android. La expansión **9/22/23** conserva el esquema oficial de nueve hitos, es reproducible sin red y no habilita modo demo. Las capturas `V5-P8-official-expansion-8/9/22/23.png`, más el XML JUnit de **1/1 PASS** y cero omisiones, están en `build/p8-local-avd/p8-authenticated-expansion-evidence/`. Se verificó que la etiqueta accesible de expansión tiene el número real de flores; fallback del payload antiguo continúa en ocho. Los cuatro tests Node de progresión pasan y la suite local completa terminó **1035 PASS / 0 FAIL / 5 SKIP**. Véase `P8_BOND_GARDEN_EXPANSION_20261029.md`.
+
+**P8 continúa NO CERTIFICADO** hasta CI del SHA nuevo, 30 casos Android sobre ese mismo SHA y aceptación visual más pendientes funcionales P6/P7.

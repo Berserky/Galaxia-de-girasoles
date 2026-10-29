@@ -51,7 +51,12 @@ export function gardenState(totalDays:unknown){
  const milestones=stages.slice(1).map(stage=>({...stage,unlocked:days>=stage.days}));
  const unlockables=milestones.filter(stage=>stage.unlocked);
  const progressPct=next?Math.max(0,Math.min(100,Math.round((days-current.days)/Math.max(1,next.days-current.days)*100))):100;
- return {totalDays:days,days,stage:current.stage,label:current.label,icon:current.icon,next,progressPct,unlockables,milestones};
+ // Additive server-owned visual progression. Existing 0..8 milestone semantics,
+ // unlockables and accumulated days are unchanged. Beyond day 365 each 30
+ // verified shared participation days grants one more bloom; never a clock
+ // estimate or a client-side demo count.
+ const bloomTotal=current.stage===8?Math.min(186,8+Math.floor((days-365)/30)):current.stage;
+ return {totalDays:days,days,stage:current.stage,bloomTotal,label:current.label,icon:current.icon,next,progressPct,unlockables,milestones};
 }
 
 export function computeBondProgress(rows:any[]=[],now:unknown=new Date()){

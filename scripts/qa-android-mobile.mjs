@@ -109,7 +109,7 @@ const p5Lifecycle=read('android/app/src/main/assets/mobile/p5-moments-garden-lif
 assert.ok(p5Garden.includes('GalaxyGardenV5')&&p5Bond.includes('GalaxyGardenBondBridge')&&p5Lifecycle.includes('GalaxyMomentsGardenLifecycle'),'Canonical V3.3 engine, bridge and lifecycle required');
 for(const src of [p5Garden,p5Bond,p5Lifecycle])assert.doesNotMatch(src,/\bfetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|navigator\.geolocation/,'P5 presentation must never fetch or access private storage');
 assert.match(p5Garden,/simulated=options\.demo===true/,'The canonical engine requires an explicit demo opt-in');
-assert.match(p5Bond,/engine\.render\(\{stage:state\.stage\},options\)/,'Authenticated Bond bridge must supply official stages only');
+assert.match(p5Bond,/engine\.render\(\{stage:state\.stage,bloomTotal:state\.bloomTotal\},options\)/,'Authenticated Bond bridge must forward server-verified bloom count only');
 for(const src of [p5Bond,p5Lifecycle])assert.doesNotMatch(src,/previewBloomTotal|demo:true/,'Production bridge and lifecycle cannot enable synthetic world counts');
 
 const journeyPresenter=read('android/app/src/main/assets/mobile/galaxy-journeys-v5.js');

@@ -18,7 +18,7 @@ test('P8 Phase11 JUnit closure matches exactly-once coverage across two fresh AV
  const dir=mkdtempSync(join(tmpdir(),'p8-shards-'));
  try{
   const names=testNames(classes[0]),med=classes.slice(1).flatMap(n=>testNames(n).map(t=>[n,t]));
-  assert.equal(names.length,25,'P8 closure source count must be explicit');
+  assert.equal(names.length,26,'P8 closure source count must be explicit');
   make(dir,'closure-0',names.filter((_,i)=>i%2===0).map(n=>[classes[0],n]));
   make(dir,'closure-1',names.filter((_,i)=>i%2===1).map(n=>[classes[0],n]));
   make(dir,'media',med);

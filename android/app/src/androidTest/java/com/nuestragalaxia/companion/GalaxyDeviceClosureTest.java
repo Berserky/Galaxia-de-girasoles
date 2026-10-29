@@ -986,6 +986,56 @@ public class GalaxyDeviceClosureTest {
     }
 
     /**
+     * P8: an explicit server-owned bloomTotal unlocks the real wider land;
+     * stage eight continues to mean eight legacy milestones. No demo mode,
+     * local-day extrapolation, network calls, or backend mutations.
+     */
+    @Test public void visualEvolutionP8_realAuthenticatedGardenExpansionAfterEight() throws Exception {
+        launch();
+        awaitJs("!!cloud?.bond && !!document.querySelector('#bottomNav [data-view=moments]')");
+        runV5Js("const marker=document.createElement('div');"
+            +"marker.id='v5-qa-paint-marker';marker.setAttribute('aria-hidden','true');"
+            +"marker.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;"
+            +"background:#07e1f7;z-index:2147483647;pointer-events:none';"
+            +"document.body.appendChild(marker)");
+        try{
+            for(int bloom : new int[]{8,9,22,23}){
+                String chapter=bloom<=8?"garden":bloom<=22?"meadow":"valley";
+                int days=bloom==8?365:365+(bloom-8)*30;
+                runV5Js("go('home');cloud.bond={...(cloud.bond||{}),garden:{stage:8,"
+                    +"bloomTotal:"+bloom+",days:"+days+",totalDays:"+days+"}};"
+                    +"go('moments');window.scrollTo(0,0)");
+                awaitJs("view==='moments' && document.querySelector('.ng-garden')?.dataset.stage==='"
+                    +bloom+"' && document.querySelector('.ng-garden')?.dataset.chapter==='"
+                    +chapter+"' && document.querySelector('.ng-garden')?.dataset.officialStage==='8'"
+                    +" && document.querySelector('.ng-garden')?.dataset.demo==='false'");
+                if(bloom>8) {
+                    assertEquals("P8 official extended flower label "+bloom,"true",
+                        js("document.querySelector('.bond-garden-copy [role=status]')?"
+                            +".innerText.includes('"+bloom+" girasoles')"));
+                }else{
+                    assertEquals("P8 no speculative counter at eight","false",
+                        js("!!document.querySelector('.bond-garden-copy [role=status]')"));
+                }
+                int primary=Math.min(bloom,22),extra=bloom-primary;
+                assertEquals("P8 actual sunflower count "+bloom,String.valueOf(primary),
+                    js("String(document.querySelectorAll('.ng-garden .ng-plant').length)"));
+                assertEquals("P8 extended flowers "+bloom,String.valueOf(extra),
+                    js("String(document.querySelectorAll('.ng-garden .ng-mini-bloom').length)"));
+                awaitV5QaPainted("p8-official-expansion-"+bloom);
+                shell("screencap -p /sdcard/Download/V5-P8-official-expansion-"+bloom+".png");
+            }
+            // Tampered counts or old payloads must never create new flowers.
+            runV5Js("go('home');cloud.bond={...(cloud.bond||{}),garden:{"
+                +"stage:8,bloomTotal:'23',totalDays:2000}};go('moments')");
+            awaitJs("document.querySelector('.ng-garden')?.dataset.stage==='8'"
+                +" && document.querySelector('.ng-garden')?.dataset.demo==='false'");
+        }finally{
+            runV5Js("document.getElementById('v5-qa-paint-marker')?.remove()");
+        }
+    }
+
+    /**
      * P8: authenticate the real Bond garden transitions at the two untested
      * boundaries. QA values are device-local; no server writes or demo mode.
      * Physical PNG checks remain strict via the existing cyan paint marker.
