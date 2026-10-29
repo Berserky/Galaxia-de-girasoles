@@ -1240,10 +1240,12 @@ public class GalaxyDeviceClosureTest {
                 +"{url:'https://127.0.0.1:1/qa-expired-private-second.png',"
                 +"path:'qa-second-private-path-not-real',created:'2026-10-29T11:00:00Z'}];"
                 +"mediaLoadedAt.photo=Date.now();go('memories');window.scrollTo(0,0)");
+            // A real WebView can replace an expired thumbnail between two
+            // evaluateJavascript calls. Await visible fallback AND accessible
+            // status atomically rather than read a stale DOM node twice.
             awaitJs("view==='memories' && !!document.querySelector('.memories-v5-photo-grid')"
-                +" && !!document.querySelector('.memories-v5-photo-card .memories-v5-photo-missing')");
-            assertEquals("P6 failed thumbnail not accessible","true",
-                js("document.querySelector('.memories-v5-photo-card .memories-v5-photo-missing')?.getAttribute('role')==='status'"));
+                +" && [...document.querySelectorAll('.memories-v5-photo-card .memories-v5-photo-missing')]"
+                +".some(el=>el.getAttribute('role')==='status' && el.textContent.includes('Foto no disponible'))");
             assertEquals("P6 unavailable photo must not print private path","false",
                 js("document.body.innerText.includes('qa-fixture-private-path-not-real')"));
             awaitV5QaPainted("p8-album-expired-thumb");
@@ -1252,12 +1254,12 @@ public class GalaxyDeviceClosureTest {
             // HTML <dialog> occupies the browser top layer; the strict cyan
             // physical-paint marker must be mounted inside that top layer.
             runV5Js("modal.appendChild(document.getElementById('v5-qa-paint-marker'))");
+            // Both the private-photo error and its a11y state must be
+            // present in one actual WebView DOM snapshot. Keep navigation.
             awaitJs("modal.open===true && !!document.querySelector('.memories-v5-photo-viewer')"
-                +" && !!document.querySelector('.memories-v5-photo-viewer .memories-v5-photo-missing')");
-            assertEquals("P6 viewer lost navigation on failed photo","2",
-                js("String(document.querySelectorAll('.memories-v5-photo-toolbar button').length)"));
-            assertEquals("P6 viewer failed photo not accessible","true",
-                js("document.querySelector('.memories-v5-photo-viewer .memories-v5-photo-missing')?.getAttribute('role')==='status'"));
+                +" && !![...document.querySelectorAll('.memories-v5-photo-viewer .memories-v5-photo-missing')]"
+                +".find(el=>el.getAttribute('role')==='status' && el.textContent.includes('Foto no disponible'))"
+                +" && document.querySelectorAll('.memories-v5-photo-toolbar button').length===2");
             assertEquals("P6 offline viewer exposed signed URL or path","false",
                 js("document.querySelector('.memories-v5-photo-viewer')?.innerText.includes('qa-fixture-private-path-not-real')"
                     +" || document.querySelector('.memories-v5-photo-viewer')?.innerText.includes('127.0.0.1')"));
