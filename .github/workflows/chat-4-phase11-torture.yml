@@ -84,6 +84,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           force-avd-creation: true
+          pre-emulator-launch-script: bash scripts/p8-configure-native-avd.sh
           emulator-options: -no-window -gpu swiftshader -feature -Vulkan -memory 2048 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash scripts/p8-phase11-run-shard.sh garden
 
@@ -96,6 +97,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           force-avd-creation: true
+          pre-emulator-launch-script: bash scripts/p8-configure-native-avd.sh
           emulator-options: -no-window -gpu swiftshader -feature -Vulkan -memory 2048 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash scripts/p8-phase11-run-shard.sh closure-0
 
@@ -108,6 +110,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           force-avd-creation: true
+          pre-emulator-launch-script: bash scripts/p8-configure-native-avd.sh
           emulator-options: -no-window -gpu swiftshader -feature -Vulkan -memory 2048 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash scripts/p8-phase11-run-shard.sh closure-1
 
@@ -120,6 +123,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           force-avd-creation: true
+          pre-emulator-launch-script: bash scripts/p8-configure-native-avd.sh
           emulator-options: -no-window -gpu swiftshader -feature -Vulkan -memory 2048 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash scripts/p8-phase11-run-shard.sh media
 

@@ -71,6 +71,7 @@ jobs:
           target: google_apis
           profile: pixel_6
           disable-animations: true
+          pre-emulator-launch-script: bash scripts/p8-configure-native-avd.sh
           emulator-options: -no-window -gpu swiftshader -feature -Vulkan -memory 2048 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: |
             gradle -p android --no-daemon connectedDebugAndroidTest -PQA_EDGE_URL=http://127.0.0.1:18765 -PQA_SUPABASE_PUBLISHABLE_KEY=qa_phase10 -PQA_APPLICATION_SUFFIX=.phase10qa '-Pandroid.testInstrumentationRunnerArguments.class=com.nuestragalaxia.companion.GalaxyDeviceClosureTest#chatPhase10ProcessRecreation_restoresDraftOutboxAndAttachments'
