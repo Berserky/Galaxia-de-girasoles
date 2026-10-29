@@ -75,6 +75,18 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - run: cp musica.mp3 android/app/src/main/assets/musica.mp3
       - run: gradle -p android --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+      - name: P5 garden heavy visual - dedicated fresh AVD
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          force-avd-creation: true
+          emulator-options: -no-window -gpu swiftshader_indirect -memory 2048 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: bash scripts/p8-phase11-run-shard.sh garden
+
       - name: Closure shard 0 - fresh AVD
         uses: reactivecircus/android-emulator-runner@v2
         with:

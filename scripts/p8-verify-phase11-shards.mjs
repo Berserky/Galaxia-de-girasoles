@@ -43,14 +43,22 @@ function readShard(shard){
  return records;
 }
 const rows={
+ 'garden':readShard('garden'),
  'closure-0':readShard('closure-0'),
  'closure-1':readShard('closure-1'),
  'media':readShard('media')
 };
+assert.equal(rows.garden.length,1,'Dedicated garden AVD must execute exactly one real Android testcase');
 const seen=new Set();
 for(const [shard,records] of Object.entries(rows)){
  for(const {className,name} of records){
-  if(shard.startsWith('closure-'))assert.equal(className,'GalaxyDeviceClosureTest','Wrong shard class');
+  if(shard==='garden'){
+   assert.equal(className,'GalaxyDeviceClosureTest','Dedicated garden must run real Android Closure class');
+   assert.equal(name,'visualEvolutionP5_realMomentsAndroidScreens_andPrivacy','Dedicated garden must run the full native visual test');
+  }else if(shard.startsWith('closure-')){
+   assert.equal(className,'GalaxyDeviceClosureTest','Wrong Closure shard class');
+   assert.notEqual(name,'visualEvolutionP5_realMomentsAndroidScreens_andPrivacy','Garden test must not run twice');
+  }
   else assert.notEqual(className,'GalaxyDeviceClosureTest','Closure test duplicated in media shard');
   const key=className+'.'+name;
   assert.ok(!seen.has(key),'Duplicate Android JUnit case: '+key);

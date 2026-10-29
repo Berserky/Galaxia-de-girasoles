@@ -16,7 +16,7 @@ for (const {file,expectedScript} of workflows) {
     assert.match(yaml,/api-level:\s*35/);
     assert.ok(yaml.includes(expectedScript),file+': real instrumentation script must remain');
     const launches=[...yaml.matchAll(/emulator-options: ([^\n]+)/g)];
-    assert.equal(launches.length,file==='chat-4-phase11-torture.yml'?3:1,
+    assert.equal(launches.length,file==='chat-4-phase11-torture.yml'?4:1,
       file+': missing required clean AVD session');
     for(const [,opts] of launches){
       assert.match(opts,/-memory 2048(?:\s|$)/);
@@ -24,19 +24,22 @@ for (const {file,expectedScript} of workflows) {
       assert.match(opts,/-no-snapshot/);
     }
     if(file==='chat-4-phase11-torture.yml'){
-      for(const shard of ['closure-0','closure-1','media']){
+      for(const shard of ['garden','closure-0','closure-1','media']){
         assert.ok(yaml.includes('script: bash scripts/p8-phase11-run-shard.sh '+shard),
           'Missing distinct Phase11 real AVD run: '+shard);
       }
-      assert.equal((yaml.match(/force-avd-creation: true/g)||[]).length,3);
+      assert.equal((yaml.match(/force-avd-creation: true/g)||[]).length,4);
       assert.match(yaml,/node scripts\/p8-verify-phase11-shards\.mjs qa-artifacts\/phase11-shards/);
       const helper=readFileSync(new URL('../scripts/p8-phase11-run-shard.sh',import.meta.url),'utf8');
       assert.match(helper,/gradle -p android --no-daemon connectedDebugAndroidTest/);
       assert.match(helper,/numShards=2/);
+      assert.match(helper,/notClass=com\.nuestragalaxia\.companion\.GalaxyDeviceClosureTest#visualEvolutionP5_realMomentsAndroidScreens_andPrivacy/);
+      assert.match(helper,/class=com\.nuestragalaxia\.companion\.GalaxyDeviceClosureTest#visualEvolutionP5_realMomentsAndroidScreens_andPrivacy/);
       assert.match(helper,/shardIndex=\$shard_index/);
       assert.match(helper,/if \(\( status != 0 \)\)/);
       const receipt=readFileSync(new URL('../scripts/p8-verify-phase11-shards.mjs',import.meta.url),'utf8');
       assert.match(receipt,/EXACTLY_ONCE/);
+      assert.match(receipt,/rows\.garden\.length,1/);
       assert.match(receipt,/Duplicate Android JUnit case/);
       assert.match(receipt,/Unexecuted Android tests/);
     }
