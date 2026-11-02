@@ -1853,6 +1853,24 @@ public class GalaxyDeviceClosureTest {
                 + "'background:#07e1f7;z-index:2147483647;pointer-events:none';"
                 + "document.body.appendChild(el)");
             awaitJs("!!document.getElementById('v5-qa-paint-marker')");
+            // DOM visibility is not native visibility. Confirm MainActivity is
+            // foreground and Chromium has committed a visual state before
+            // comparing screenshots against the real system document picker.
+            awaitCondition(() -> isResumedPackage(pkg), UI_TIMEOUT_MS);
+            CountDownLatch pickerFrameReady = new CountDownLatch(1);
+            scenario.onActivity(activity -> {
+                WebView web = activity.findViewById(R.id.webView);
+                assertNotNull("QA picker needs actual Android WebView", web);
+                web.postVisualStateCallback(SystemClock.uptimeMillis(), new WebView.VisualStateCallback() {
+                    @Override public void onComplete(long requestId) {
+                        web.invalidate();
+                        pickerFrameReady.countDown();
+                    }
+                });
+                web.invalidate();
+            });
+            assertTrue("QA picker baseline WebView was not composited",
+                pickerFrameReady.await(10, TimeUnit.SECONDS));
             awaitV5QaPainted("before-real-system-document-picker");
             System.out.println("GALAXY_PICKER_APP_FRAMEBASE=real-Android-frame-confirmed");
         }

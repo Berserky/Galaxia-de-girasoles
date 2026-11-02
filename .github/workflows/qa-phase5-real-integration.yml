@@ -73,7 +73,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           pre-emulator-launch-script: bash scripts/p8-configure-native-avd.sh
-          emulator-options: -no-window -gpu swiftshader -feature -Vulkan -memory 2048 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          emulator-options: -no-window -gpu swiftshader -feature -Vulkan -memory 4096 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash scripts/qa-phase5-emulator.sh
 
       - name: Capturar diagnóstico de AVD si falla el gate
