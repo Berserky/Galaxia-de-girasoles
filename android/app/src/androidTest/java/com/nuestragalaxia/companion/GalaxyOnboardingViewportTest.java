@@ -10,6 +10,7 @@ import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.os.ParcelFileDescriptor;
 import android.os.SystemClock;
+import android.graphics.Bitmap;
 import android.webkit.WebView;
 
 import androidx.test.core.app.ActivityScenario;
@@ -63,8 +64,7 @@ public class GalaxyOnboardingViewportTest {
         assertTrue("Pairing input label is not associated", portrait.getBoolean("labelLinked"));
         assertTrue("Pairing code must be required", portrait.getBoolean("required"));
         assertFalse("Portrait viewport must not have horizontal overflow", portrait.getBoolean("horizontalOverflow"));
-        SystemClock.sleep(1400); // Allow WebView to paint before capturing pixels.
-        screenshot("portrait");
+        awaitPaintedScreenshot("portrait");
 
         // Orientation change exercises the real WebView, not an artificial CSS viewport.
         scenario.onActivity(a -> a.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE));
@@ -82,8 +82,7 @@ public class GalaxyOnboardingViewportTest {
             landscape.getBoolean("ctaVisibleFirstViewport"));
         assertTrue("Pairing CTA target is too small: " + landscape,
             landscape.getDouble("ctaHeight") >= 40.0);
-        SystemClock.sleep(1400); // A DOM-ready state is not sufficient for visual evidence.
-        screenshot("landscape");
+        awaitPaintedScreenshot("landscape");
 
         // Verify it is a usable real input after rotation. No token is entered/sent.
         assertTrue("Pairing code could not receive focus",
@@ -149,9 +148,66 @@ public class GalaxyOnboardingViewportTest {
         return decoded == JSONObject.NULL ? "" : String.valueOf(decoded);
     }
 
-    private void screenshot(String orientation) throws Exception {
-        // Only the blank, unpaired screen is captured; never a token or private chat.
-        shell("screencap -p /sdcard/Download/NG-AUD-003-onboarding-" + orientation + ".png");
+    /**
+     * DOM readiness is not equivalent to Android SurfaceFlinger/WebView paint.
+     * After the initial portrait launch the headless emulator may briefly render
+     * only a white surface even though #pairForm exists in the DOM. Demand two
+     * consecutive genuine compositor frames with visible painted content.
+     * This is a bounded wait, not a bypass: Python validates the saved PNG too.
+     */
+    private void awaitPaintedScreenshot(String orientation) throws Exception {
+        long deadline = SystemClock.elapsedRealtime() + 30_000;
+        int consecutive = 0;
+        double latest = 0d;
+        while (SystemClock.elapsedRealtime() < deadline) {
+            Bitmap frame = null;
+            try {
+                CountDownLatch visual = new CountDownLatch(1);
+                scenario.onActivity(a -> {
+                    WebView web = a.findViewById(R.id.webView);
+                    if (web != null && web.isShown()) {
+                        web.postVisualStateCallback(SystemClock.uptimeMillis(), requestId -> {
+                            web.invalidate();
+                            visual.countDown();
+                        });
+                        web.invalidate();
+                    }
+                });
+                visual.await(2, TimeUnit.SECONDS);
+                frame = instrumentation.getUiAutomation().takeScreenshot();
+                if (frame != null) {
+                    int w = frame.getWidth(), h = frame.getHeight();
+                    int dark = 0, total = 0;
+                    for (int y = (int)(h * .15); y < (int)(h * .85); y += Math.max(1, h / 180)) {
+                        for (int x = (int)(w * .08); x < (int)(w * .92); x += Math.max(1, w / 180)) {
+                            int pixel = frame.getPixel(x,y);
+                            double luminance = .2126 * android.graphics.Color.red(pixel)
+                                + .7152 * android.graphics.Color.green(pixel)
+                                + .0722 * android.graphics.Color.blue(pixel);
+                            if (luminance < 165d) dark++;
+                            total++;
+                        }
+                    }
+                    latest = (double)dark / Math.max(1,total);
+                    consecutive = latest >= .01d ? consecutive + 1 : 0;
+                    if (consecutive >= 2) {
+                        // Independent native capture; the Python gate still
+                        // rejects white/unpainted or incorrect-orientation PNGs.
+                        shell("screencap -p /sdcard/Download/NG-AUD-003-onboarding-"
+                            + orientation + ".png");
+                        System.out.println("NG_AUD_003_NATIVE_PAINTED=" + orientation + ";fraction=" + latest);
+                        return;
+                    }
+                } else consecutive = 0;
+            } catch (RuntimeException retryableGraphicsReadback) {
+                consecutive = 0;
+            } finally {
+                if (frame != null) frame.recycle();
+            }
+            SystemClock.sleep(700);
+        }
+        throw new AssertionError("NG-AUD-003 " + orientation
+            + " native WebView never painted; last dark fraction=" + latest);
     }
 
     private String shell(String command) throws Exception {
