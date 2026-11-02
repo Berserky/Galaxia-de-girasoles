@@ -16,7 +16,8 @@ test('P8 native CI AVD boots at physically bounded 768x1280 with real Android sc
   const yaml=read('.github/workflows/'+name);
   assert.equal((yaml.match(/pre-emulator-launch-script: bash scripts\/p8-configure-native-avd\.sh/g)||[]).length,count,
    name+' must physically configure every real AVD, without altering coverage');
-  assert.equal((yaml.match(/-gpu swiftshader -feature -Vulkan -memory 2048 -no-snapshot/g)||[]).length,count);
+  const guestRam = name==='chat-4-phase10-android-performance.yml' ? 2048 : 4096;
+  assert.equal((yaml.match(new RegExp('-gpu swiftshader -feature -Vulkan -memory '+guestRam+' -no-snapshot','g'))||[]).length,count);
   assert.match(yaml,/connectedDebugAndroidTest|scripts\/p8-phase11-run-shard\.sh|scripts\/qa-phase5-emulator\.sh|scripts\/visual-evolution-p1-avd\.sh/);
   assert.doesNotMatch(yaml,/continue-on-error:\s*true/);
  }
