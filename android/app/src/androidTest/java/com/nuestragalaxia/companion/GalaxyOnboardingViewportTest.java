@@ -166,9 +166,11 @@ public class GalaxyOnboardingViewportTest {
                 scenario.onActivity(a -> {
                     WebView web = a.findViewById(R.id.webView);
                     if (web != null && web.isShown()) {
-                        web.postVisualStateCallback(SystemClock.uptimeMillis(), requestId -> {
-                            web.invalidate();
-                            visual.countDown();
+                        web.postVisualStateCallback(SystemClock.uptimeMillis(), new WebView.VisualStateCallback() {
+                            @Override public void onComplete(long requestId) {
+                                web.invalidate();
+                                visual.countDown();
+                            }
                         });
                         web.invalidate();
                     }

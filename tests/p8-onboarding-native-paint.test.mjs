@@ -7,6 +7,9 @@ test('P8 NG-AUD-003 waits for two actual Android painted frames in both orientat
  assert.match(java,/awaitPaintedScreenshot\("portrait"\)/);
  assert.match(java,/awaitPaintedScreenshot\("landscape"\)/);
  assert.match(java,/postVisualStateCallback\(/);
+ assert.match(java,/new WebView\.VisualStateCallback\(\)/);
+ assert.match(java,/@Override public void onComplete\(long requestId\)/);
+ assert.doesNotMatch(java,/postVisualStateCallback\([^;]*requestId\s*->/);
  assert.match(java,/getUiAutomation\(\)\.takeScreenshot\(\)/);
  assert.match(java,/consecutive >= 2/);
  assert.match(java,/30_000/);
