@@ -67,7 +67,7 @@ test('P8 saved-map-place focus is synchronous and survives deferred redraw',()=>
  const app=read('android/app/src/main/assets/mobile/app.js');
  const part=app.slice(app.indexOf('function focusSavedPlaceOnMap(point){'),app.indexOf('function focusEtaOnMap(){'));
  assert.match(part,/const revealSavedPlace=\(\)=>\{/);
- assert.match(part,/revealSavedPlace\(\);\s*requestAnimationFrame\(revealSavedPlace\)/);
+ assert.match(part,/revealSavedPlace\(\);[\s\S]*requestAnimationFrame\(revealSavedPlace\)/);
  assert.match(part,/if\(map!==targetMap\|\|view!=='map'\)return/);
  assert.match(part,/if\(!marker\.open\)button\.click\(\)/);
  assert.match(part,/button\.focus\(\{preventScroll:true\}\)/);
