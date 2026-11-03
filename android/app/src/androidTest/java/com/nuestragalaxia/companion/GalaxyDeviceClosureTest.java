@@ -1079,6 +1079,19 @@ public class GalaxyDeviceClosureTest {
                 // A density recreation rebuilds WebView: verify packaged CSS
                 // and a REAL painted frame before inspecting touch geometry.
                 awaitJs("document.readyState==='complete' && [...document.querySelectorAll('link')].some(l=>l.getAttribute('href')==='./galaxy-moments-v5.css'&&!!l.sheet)");
+                // Recreate QA's visible native-paint marker after CSS and route
+                // have fully mounted. Density changes may rebuild WebView and
+                // late home rerenders can detach the earlier fixture marker.
+                // Keep the evidence tied to REAL Android framebuffer pixels.
+                runV5Js("document.getElementById('v5-qa-paint-marker')?.remove();"
+                    +"const m=document.createElement('div');"
+                    +"m.id='v5-qa-paint-marker';m.setAttribute('aria-hidden','true');"
+                    +"m.style.cssText='position:fixed;top:48px;left:24px;width:96px;height:18px;"
+                    +"background:#07e1f7;z-index:2147483647;pointer-events:none';"
+                    +"document.body.appendChild(m)");
+                awaitJs("(()=>{const m=document.getElementById('v5-qa-paint-marker');"
+                    +"if(!m)return false;const b=m.getBoundingClientRect();"
+                    +"return b.width>=96&&b.height>=18&&b.top>=0&&b.right<=innerWidth})()");
                 awaitV5QaPainted("p5-moments-premeasure-"+css);
                 String state=jsWithDeadline("JSON.stringify((()=>{"
                     +"const root=document.querySelector('.living-moments'),"

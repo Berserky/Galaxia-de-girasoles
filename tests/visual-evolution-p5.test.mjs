@@ -301,7 +301,7 @@ test('P5D: existing version-aware delete and edit contracts are not weakened',()
  assert.match(app,/await api\('bond-delete',\{id,version:e.version\}\)/);
  assert.match(app,/modal.dataset.editId=entry\?\.id\|\|'';modal.dataset.version=entry\?\.version\|\|''/);
  assert.match(css,/\.living-note-full>summary:focus-visible/);
- assert.match(css,/\.living-note-full>summary\{[^}]*min-height:44px/);
+ assert.match(css,/\.living-note-full>summary\{[^}]*min-height:48px/);
  assert.match(css,/@media\(prefers-reduced-motion:reduce\)\{\.living-ritual-card/);
 });
 

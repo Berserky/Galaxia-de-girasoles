@@ -8,7 +8,7 @@ const java=read('android/app/src/androidTest/java/com/nuestragalaxia/companion/G
 test('P8 real 320px header controls remain larger than 44px during active scaling',()=>{
  assert.match(shell,/@media\(max-width:360px\)[\s\S]*#app \.header \.header-actions > button\.header-search\s*\{[\s\S]*flex:0 0 48px;width:48px;min-width:48px;/);
  assert.match(shell,/height:48px;min-height:48px;/);
- assert.match(shell,/#app \.header \.brand \{min-width:0\}/);
+ assert.match(shell,/#app \.brand \{min-width:0\}/);
 });
 test('P8 Moments real voice, note and gesture controls retain accessibility gates',()=>{
  assert.match(moments,/\.living-voice-toggle\{width:48px;min-width:48px;height:48px;min-height:48px;/);

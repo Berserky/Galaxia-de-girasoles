@@ -16,7 +16,7 @@ test('P8 P5 regenerates private fixture AFTER each real density change recreates
  const marker=p5.indexOf('seedP5MomentsVisualFixture();');
  const validate=p5.indexOf('awaitJs("view===\'moments\' && !!document.querySelector(\'.living-garden\')"');
  assert.ok(density>=0 && marker>density && validate>marker,'Rehydrate only after device density is applied and before native screenshot asserts');
- assert.match(p5,/awaitV5QaPainted\("p5-moments-"\+css\)/);
+ assert.match(p5,/awaitV5QaPainted\("p5-moments-premeasure-"\+css\)/);
  assert.match(p5,/WebView web=activity\.findViewById/);
  assert.match(p5,/wm density reset/);
  assert.doesNotMatch(p5,/shell\("wm size/);
