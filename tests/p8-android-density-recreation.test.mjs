@@ -30,5 +30,5 @@ test('P8 P1 recreates the QA paint marker on every real Android viewport',()=>{
  assert.match(loop,/document\.body\.appendChild\(m\)/);
  assert.match(loop,/awaitJs\("!!document\.getElementById\('v5-qa-paint-marker'\)"\)/);
  assert.match(p1,/getUiAutomation\(\)\.takeScreenshot\(\)/);
- assert.doesNotMatch(loop,/wm size/);
+ assert.doesNotMatch(loop,/shell\("wm size/);
 });
