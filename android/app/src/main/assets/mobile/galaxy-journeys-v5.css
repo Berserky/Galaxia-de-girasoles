@@ -4,7 +4,7 @@
 .map-immersive-toggle{
  position:absolute;z-index:560;top:12px;right:12px;
  display:inline-flex;align-items:center;justify-content:center;gap:8px;
- min-width:44px;min-height:44px;padding:10px 13px;border:1px solid var(--border);
+ box-sizing:border-box;min-width:52px;min-height:52px;padding:12px 14px;border:1px solid var(--border);
  border-radius:14px;color:var(--text);background:var(--control-glass);
  font-size:12px;font-weight:750;box-shadow:var(--shadow);touch-action:manipulation;
 }

@@ -1040,9 +1040,9 @@ public class GalaxyDeviceClosureTest {
             +" && !!document.querySelector('.living-surprise-card.sealed')"
             +" && !!document.querySelector('.living-game-card')");
         assertEquals("P5 synthetic secret must not appear in DOM","false",
-            js("document.documentElement.innerHTML.includes('P5_SECRET_TITLE')"
+            jsWithDeadline("document.documentElement.innerHTML.includes('P5_SECRET_TITLE')"
                 +"||document.documentElement.innerHTML.includes('P5_SECRET_MESSAGE')"
-                +"||document.documentElement.innerHTML.includes('P5_SECRET_ANSWER')"));
+                +"||document.documentElement.innerHTML.includes('P5_SECRET_ANSWER')",20));
         runV5Js("document.getElementById('v5-qa-paint-marker')?.remove();const marker=document.createElement('div');"
             +"marker.id='v5-qa-paint-marker';marker.setAttribute('aria-hidden','true');"
             +"marker.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;"
@@ -1074,8 +1074,13 @@ public class GalaxyDeviceClosureTest {
                 // emulator: re-seed transient QA moments and physical marker for
                 // EACH viewport, then demand the full screen/8 actions again.
                 seedP5MomentsVisualFixture();
-                awaitJs("view==='moments' && !!document.querySelector('.living-garden')"
-                    +"&&document.querySelectorAll('.living-activity-grid .action-card').length===8");
+                // Android AOSP WebView may defer visual JavaScript callbacks when
+                // recreating a 320px viewport. Preserve the 30s readiness gate,
+                // but use the same bounded 20s per-callback budget as visual QA.
+                // The full native 8-action assertion is still mandatory.
+                awaitCondition(() -> "true".equals(jsWithDeadline(
+                    "view==='moments' && !!document.querySelector('.living-garden')"
+                    +"&&document.querySelectorAll('.living-activity-grid .action-card').length===8",20)),UI_TIMEOUT_MS);
                 // A density recreation rebuilds WebView: verify packaged CSS
                 // and a REAL painted frame before inspecting touch geometry.
                 awaitJs("document.readyState==='complete' && [...document.querySelectorAll('link')].some(l=>l.getAttribute('href')==='./galaxy-moments-v5.css'&&!!l.sheet)");
@@ -1089,9 +1094,12 @@ public class GalaxyDeviceClosureTest {
                     +"m.style.cssText='position:fixed;top:48px;left:24px;width:96px;height:18px;"
                     +"background:#07e1f7;z-index:2147483647;pointer-events:none';"
                     +"document.body.appendChild(m)");
-                awaitJs("(()=>{const m=document.getElementById('v5-qa-paint-marker');"
+                // Keep native paint required; only the visual instrumentation
+                // callback gets 20s, not the Chat latency contract (still 5s).
+                awaitCondition(() -> "true".equals(jsWithDeadline(
+                    "(()=>{const m=document.getElementById('v5-qa-paint-marker');"
                     +"if(!m)return false;const b=m.getBoundingClientRect();"
-                    +"return b.width>=96&&b.height>=18&&b.top>=0&&b.right<=innerWidth})()");
+                    +"return b.width>=96&&b.height>=18&&b.top>=0&&b.right<=innerWidth})()",20)),UI_TIMEOUT_MS);
                 awaitV5QaPainted("p5-moments-premeasure-"+css);
                 String state=jsWithDeadline("JSON.stringify((()=>{"
                     +"const root=document.querySelector('.living-moments'),"
