@@ -950,18 +950,21 @@ function focusSavedPlaceOnMap(point){
  const index=places.findIndex(marker=>Math.abs(marker.lat-lat)<1e-6&&Math.abs(marker.lon-lon)<1e-6);
  if(index<0)return false;
  targetMap.setView([lat,lon],16);
- requestAnimationFrame(()=>{
+ // Immediate user interaction must not depend on a deferred animation frame,
+ // which can be paused by Android while a nested map is settling.
+ const revealSavedPlace=()=>{
   if(map!==targetMap||view!=='map')return;
-  // A ResizeObserver or deferred frame may have replaced the marker DOM.
-  // Rebuild synchronously at the requested center; GalaxyMap now preserves
-  // popup/focus state through subsequent render frames.
   targetMap.render();
   const buttons=[...document.querySelectorAll('#map .gmap-marker.place button')];
   const button=buttons[index],marker=places[index];
   if(!button)return;
   if(!marker.open)button.click();
   button.focus({preventScroll:true});
- });
+ };
+ revealSavedPlace();
+ // A pending ResizeObserver/animation frame can replace the marker DOM; keep
+ // popup and focus on the SAME real saved place, never toggle it closed.
+ requestAnimationFrame(revealSavedPlace);
  return true;
 }
 function focusEtaOnMap(){

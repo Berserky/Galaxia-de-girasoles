@@ -57,3 +57,18 @@ test('P8 native map focus and physical P5 paint remain strict after CSS fraction
  assert.match(java,/P5 native paint QA marker geometry/);
  assert.match(java,/awaitV5QaPainted\("p5-moments-premeasure-"\+css\)/);
 });
+
+test('P8 rounded 361px viewport retains accessible header buttons',()=>{
+ assert.match(shell,/@media\(min-width:360px\) and \(max-width:375px\)/);
+ assert.match(shell,/#app \.header \.header-actions > button\.header-search\s*\{[^}]*flex:0 0 48px;width:48px;min-width:48px;/);
+ assert.match(java,/Header search actions narrower than 44px/);
+});
+test('P8 saved-map-place focus is synchronous and survives deferred redraw',()=>{
+ const app=read('android/app/src/main/assets/mobile/app.js');
+ const part=app.slice(app.indexOf('function focusSavedPlaceOnMap(point){'),app.indexOf('function focusEtaOnMap(){'));
+ assert.match(part,/const revealSavedPlace=\(\)=>\{/);
+ assert.match(part,/revealSavedPlace\(\);\s*requestAnimationFrame\(revealSavedPlace\)/);
+ assert.match(part,/if\(map!==targetMap\|\|view!=='map'\)return/);
+ assert.match(part,/if\(!marker\.open\)button\.click\(\)/);
+ assert.match(part,/button\.focus\(\{preventScroll:true\}\)/);
+});
