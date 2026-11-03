@@ -1076,6 +1076,10 @@ public class GalaxyDeviceClosureTest {
                 seedP5MomentsVisualFixture();
                 awaitJs("view==='moments' && !!document.querySelector('.living-garden')"
                     +"&&document.querySelectorAll('.living-activity-grid .action-card').length===8");
+                // A density recreation rebuilds WebView: verify packaged CSS
+                // and a REAL painted frame before inspecting touch geometry.
+                awaitJs("document.readyState==='complete' && [...document.querySelectorAll('link')].some(l=>l.getAttribute('href')==='./galaxy-moments-v5.css'&&!!l.sheet)");
+                awaitV5QaPainted("p5-moments-premeasure-"+css);
                 String state=jsWithDeadline("JSON.stringify((()=>{"
                     +"const root=document.querySelector('.living-moments'),"
                     +"seek=document.querySelector('.living-voice-seek'),"
@@ -1089,6 +1093,7 @@ public class GalaxyDeviceClosureTest {
                     +"noOverflow:document.documentElement.scrollWidth<=innerWidth+3,"
                     +"introInside:intro.left>=-2&&intro.right<=innerWidth+2,"
                     +"touch:btns.every(b=>!!b&&b.getBoundingClientRect().height>=44),"
+                    +"touchHeights:btns.map(b=>b?Math.round(b.getBoundingClientRect().height*100)/100:null),"
                     +"audioUnknown:seek.disabled&&document.querySelector('.living-voice-time').textContent.includes('--:--'),"
                     +"secretAbsent:!document.documentElement.innerHTML.includes('P5_SECRET_MESSAGE')"
                     +"&&!document.documentElement.innerHTML.includes('P5_SECRET_ANSWER')};})())",20);
@@ -1101,7 +1106,7 @@ public class GalaxyDeviceClosureTest {
                 assertTrue("P5 unknown audio duration fabricated at "+css,proof.getBoolean("audioUnknown"));
                 assertTrue("P5 secret leaked at "+css,proof.getBoolean("secretAbsent"));
                 runV5Js("window.scrollTo(0,0)");
-                awaitV5QaPainted("p5-moments-"+css);
+                // The exact native frame was already verified before touch metrics.
                 shell("screencap -p /sdcard/Download/V5-P5-moments-"+css+".png");
                 System.out.println("V5_P5_ANDROID_MOMENTS=css:"+css
                     +";activities:8;ritualSteps:3;privacy:true;seekUnknown:true");
@@ -1181,7 +1186,8 @@ public class GalaxyDeviceClosureTest {
         long pssBefore = android.os.Debug.getPss();
         long cpuBefore = android.os.Process.getElapsedCpuTime();
         long openStarted = SystemClock.elapsedRealtime();
-        runJs("document.querySelector('#chatFab')?.click()");
+        // Launch via the real FAB, waiting for native WebView state and backend.
+        launchChat();
         awaitJs("!!document.querySelector('.chat-shell') && document.querySelectorAll('.chat-message').length>0");
         long openMs = SystemClock.elapsedRealtime() - openStarted;
 
