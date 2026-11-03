@@ -482,6 +482,15 @@ public class GalaxyDeviceClosureTest {
                     return Math.abs(Integer.parseInt(size)-targetCss)<=5;
                 },UI_TIMEOUT_MS);
                 awaitJs("document.querySelector('#bottomNav .nav-btn.active')?.dataset.view==='home'");
+                // Density transitions recreate WebView; the old QA paint marker
+                // belongs to its destroyed DOM and cannot prove this frame.
+                runV5Js("document.getElementById('v5-qa-paint-marker')?.remove();"
+                    + "const m=document.createElement('div');m.id='v5-qa-paint-marker';"
+                    + "m.setAttribute('aria-hidden','true');"
+                    + "m.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;"
+                    + "background:#07e1f7;z-index:2147483647;pointer-events:none';"
+                    + "document.body.appendChild(m)");
+                awaitJs("!!document.getElementById('v5-qa-paint-marker')");
                 awaitV5QaPainted("viewport-"+targetCss);
                 String measured=jsWithDeadline("JSON.stringify((()=>{"
                     + "const nav=document.getElementById('bottomNav'),fab=document.getElementById('chatFab'),"
@@ -988,16 +997,11 @@ public class GalaxyDeviceClosureTest {
      * P5: actual packaged Android WebView with synthetic-only Bond entries.
      * Screenshots are from the physical emulator framebuffer, not Chrome/mock HTML.
      */
-    @Test public void visualEvolutionP5_realMomentsAndroidScreens_andPrivacy() throws Exception {
-        launch();
+    /** Rehydrate synthetic, private P5 QA data after Android density recreation.
+     * Density changes may destroy the WebView and reset transient cloud state;
+     * never mask this with a DOM-only screenshot or a permanent test bypass. */
+    private void seedP5MomentsVisualFixture() {
         awaitJs("!!document.querySelector('#bottomNav [data-view=\"moments\"]') && !!cloud.bond");
-        android.graphics.Bitmap before=instrumentation.getUiAutomation().takeScreenshot();
-        assertNotNull("P5 baseline native framebuffer missing",before);
-        final int realWidth=before.getWidth(),realHeight=before.getHeight();
-        before.recycle();
-        final int cssBaseline=Integer.parseInt(js("String(Math.round(innerWidth))"));
-        assertTrue("P5 invalid native/CSS scale",realWidth>300&&cssBaseline>200&&cssBaseline<600);
-
         // No backend writes, personal coordinates, voice binaries or actual user records.
         runV5Js("""
             const who=String(cloud.person);
@@ -1023,7 +1027,7 @@ public class GalaxyDeviceClosureTest {
               {id:'p5-audio',author:who,type:'voice',version:1,
                data:{title:'Voz de QA',audioUrl:'https://example.invalid/qa-only.m4a'}}
              ]};
-            cloud.items=[...(cloud.items||[]),
+            cloud.items=[...(cloud.items||[]).filter(i=>i.id!=='p5-surprise'),
              {id:'p5-surprise',kind:'note',author:other,
               data:{surprise:true,title:'P5_SECRET_TITLE',
                body:'P5_SECRET_MESSAGE',unlockType:'date',unlockDate:'2099-12-31'}}];
@@ -1039,11 +1043,23 @@ public class GalaxyDeviceClosureTest {
             js("document.documentElement.innerHTML.includes('P5_SECRET_TITLE')"
                 +"||document.documentElement.innerHTML.includes('P5_SECRET_MESSAGE')"
                 +"||document.documentElement.innerHTML.includes('P5_SECRET_ANSWER')"));
-        runV5Js("const marker=document.createElement('div');"
+        runV5Js("document.getElementById('v5-qa-paint-marker')?.remove();const marker=document.createElement('div');"
             +"marker.id='v5-qa-paint-marker';marker.setAttribute('aria-hidden','true');"
             +"marker.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;"
             +"background:#07e1f7;z-index:2147483647;pointer-events:none';"
             +"document.body.appendChild(marker)");
+    }
+
+    @Test public void visualEvolutionP5_realMomentsAndroidScreens_andPrivacy() throws Exception {
+        launch();
+        awaitJs("!!document.querySelector('#bottomNav [data-view=\"moments\"]') && !!cloud.bond");
+        android.graphics.Bitmap before=instrumentation.getUiAutomation().takeScreenshot();
+        assertNotNull("P5 baseline native framebuffer missing",before);
+        final int realWidth=before.getWidth(),realHeight=before.getHeight();
+        before.recycle();
+        final int cssBaseline=Integer.parseInt(js("String(Math.round(innerWidth))"));
+        assertTrue("P5 invalid native/CSS scale",realWidth>300&&cssBaseline>200&&cssBaseline<600);
+
         try {
             for(int css : new int[]{320,360,393,412}) {
                 // Preserve the native display's resolution and GPU buffers.
@@ -1054,6 +1070,10 @@ public class GalaxyDeviceClosureTest {
                     densityResult.toLowerCase(java.util.Locale.ROOT).contains("error"));
                 awaitCondition(() -> Math.abs(Integer.parseInt(
                     js("String(Math.round(innerWidth))"))-css)<=5,UI_TIMEOUT_MS);
+                // wm density recreates MainActivity/WebView on the API35 AOSP
+                // emulator: re-seed transient QA moments and physical marker for
+                // EACH viewport, then demand the full screen/8 actions again.
+                seedP5MomentsVisualFixture();
                 awaitJs("view==='moments' && !!document.querySelector('.living-garden')"
                     +"&&document.querySelectorAll('.living-activity-grid .action-card').length===8");
                 String state=jsWithDeadline("JSON.stringify((()=>{"
