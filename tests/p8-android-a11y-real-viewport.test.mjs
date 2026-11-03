@@ -34,16 +34,16 @@ test('P8 Phase1 opens authentic Chat FAB with real lifecycle and still asserts m
 
 test('P8 P4 map expansion remains at least 44px even with active scale',()=>{
  const map=read('android/app/src/main/assets/mobile/galaxy-journeys-v5.css');
- assert.match(map,/\\.map-immersive-toggle\\s*\\{[^}]*min-width:52px;min-height:52px;/);
+ assert.match(map,/\.map-immersive-toggle\s*\{[^}]*min-width:52px;min-height:52px;/);
  assert.match(map,/box-sizing:border-box/);
  assert.match(java,/P4 map expansion button too small/);
- assert.match(java,/touch:b\\.width>=44&&b\\.height>=44/);
+ assert.match(java,/touch:b\.width>=44&&b\.height>=44/);
 });
 test('P8 slow visual AOSP callbacks do not weaken Chat 5-second limit or native-paint checks',()=>{
  const p5=java.slice(java.indexOf('public void visualEvolutionP5_realMomentsAndroidScreens_andPrivacy()'),java.indexOf('@Test public void galaxyChat_renders13Cards_pollChecklistAndSend()'));
- assert.match(java,/jsWithDeadline\\("document\\.documentElement\\.innerHTML\\.includes\\('P5_SECRET_TITLE'\\)/);
- assert.match(p5,/\\.action-card'\\)\\.length===8",20\\)/);
- assert.match(p5,/return b\\.width>=96&&b\\.height>=18&&b\\.top>=0&&b\\.right<=innerWidth\\}\\)\\(\\)",20\\)/);
- assert.match(p5,/awaitV5QaPainted\\("p5-moments-premeasure-"\\+css\\)/);
- assert.match(java,/private String js\\(String expression\\) \\{ return jsWithDeadline\\(expression,5\\); \\}/);
+ assert.match(java,/jsWithDeadline\("document\.documentElement\.innerHTML\.includes\('P5_SECRET_TITLE'\)/);
+ assert.match(p5,/\.action-card'\)\.length===8",20\)/);
+ assert.match(p5,/return b\.width>=96&&b\.height>=18&&b\.top>=0&&b\.right<=innerWidth\}\)\(\)",20\)/);
+ assert.match(p5,/awaitV5QaPainted\("p5-moments-premeasure-"\+css\)/);
+ assert.match(java,/private String js\(String expression\) \{ return jsWithDeadline\(expression,5\); \}/);
 });
