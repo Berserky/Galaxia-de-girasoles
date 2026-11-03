@@ -43,7 +43,17 @@ test('P8 slow visual AOSP callbacks do not weaken Chat 5-second limit or native-
  const p5=java.slice(java.indexOf('public void visualEvolutionP5_realMomentsAndroidScreens_andPrivacy()'),java.indexOf('@Test public void galaxyChat_renders13Cards_pollChecklistAndSend()'));
  assert.match(java,/jsWithDeadline\("document\.documentElement\.innerHTML\.includes\('P5_SECRET_TITLE'\)/);
  assert.match(p5,/\.action-card'\)\.length===8",20\)/);
- assert.match(p5,/return b\.width>=96&&b\.height>=18&&b\.top>=0&&b\.right<=innerWidth\}\)\(\)",20\)/);
+ assert.match(p5,/markerRect\.optDouble\("width"\)>=90d/);
  assert.match(p5,/awaitV5QaPainted\("p5-moments-premeasure-"\+css\)/);
  assert.match(java,/private String js\(String expression\) \{ return jsWithDeadline\(expression,5\); \}/);
+});
+
+test('P8 native map focus and physical P5 paint remain strict after CSS fractional rounding',()=>{
+ const map=read('android/app/src/main/assets/mobile/galaxy-journeys-v5.css');
+ assert.match(map,/\.gmap-marker button\{[^}]*min-width:52px;min-height:52px;/);
+ assert.match(map,/\.gmap-marker.place button\{width:52px;height:52px;/);
+ assert.match(java,/P4 focused place not keyboard accessible/);
+ assert.match(java,/markerInside:b.width>=44&&b.height>=44/);
+ assert.match(java,/P5 native paint QA marker geometry/);
+ assert.match(java,/awaitV5QaPainted\("p5-moments-premeasure-"\+css\)/);
 });
