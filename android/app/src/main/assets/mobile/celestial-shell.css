@@ -134,6 +134,11 @@ body.v5-input-focused:not(.chat-mode) #app .floating-add {
   body:not(.chat-mode) #app .header .avatar {display:none}
   body:not(.chat-mode) #app .header .header-actions {flex:0 0 auto}
   body:not(.chat-mode) #app .header .brand {flex:1 1 auto}
+  /* Every compact width, including 393/412, must keep 44px after active scale(.96). */
+  body:not(.chat-mode) #app .header .header-actions > button.header-search {
+    box-sizing:border-box;flex:0 0 48px;width:48px;min-width:48px;
+    height:48px;min-height:48px;
+  }
 }
 @media(max-width:360px){
   body:not(.chat-mode) #app .header-actions {gap:4px}
