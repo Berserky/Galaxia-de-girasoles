@@ -824,11 +824,18 @@ public class GalaxyDeviceClosureTest {
                             compactEvidence.getInt("presence"));
                         assertTrue("P4 must show paused partner without GPS",compactEvidence.getBoolean("privacy"));
                         assertEquals("false",compactEvidence.getString("expanded"));
-                        runV5Js("const mark=document.createElement('div');"
+                        runV5Js("document.getElementById('journeyMapWrap')"
+                            + ".scrollIntoView({behavior:'auto',block:'center'})");
+                        // As with themed maps, keep the marker over the map on
+                        // document.body so a QA state refresh cannot detach it.
+                        runV5Js("const rect=document.getElementById('journeyMapWrap').getBoundingClientRect();"
+                            + "const mark=document.createElement('div');"
                             + "mark.id='p4-real-frame-marker';mark.setAttribute('aria-hidden','true');"
-                            + "mark.style.cssText='position:fixed;top:42px;left:22px;'+"
+                            + "const y=Math.min(innerHeight-56,Math.max(22,rect.top+16));"
+                            + "const x=Math.max(16,Math.min(innerWidth-100,rect.left+18));"
+                            + "mark.style.cssText='position:fixed;top:'+y+'px;left:'+x+'px;'+"
                             + "'width:74px;height:22px;background:#c142f0;z-index:2147483647;pointer-events:none';"
-                            + "document.getElementById('journeyMapWrap').append(mark)");
+                            + "document.body.append(mark)");
                         awaitV5P3ModalPainted(beforeP4,targetCss,"p4-compact-map",193,66,240);
                         shell("screencap -p /sdcard/Download/V5-P4-map-compact-"+targetCss+".png");
                         android.graphics.Bitmap compactFrame=instrumentation.getUiAutomation().takeScreenshot();
@@ -991,7 +998,7 @@ public class GalaxyDeviceClosureTest {
                         } finally {compactFrame.recycle();}
                     } finally {
                         beforeP4.recycle();
-                        runV5Js("go('home')");
+                        runV5Js("document.getElementById('p4-real-frame-marker')?.remove();go('home')");
                         awaitJs("view==='home' && !document.body.classList.contains('map-immersive-open')");
                         awaitV5QaPainted("p4-home-restored-"+targetCss);
                     }
@@ -1003,7 +1010,8 @@ public class GalaxyDeviceClosureTest {
             }
         } finally {
             backend.setQaPlaceDestinationFixture(false);
-            shell(originalDensity == null ? "wm density reset" : "wm density "+originalDensity);
+            if (originalDensity == null) shell("wm density reset");
+            else shell("wm density "+originalDensity);
             runV5Js("document.getElementById('v5-qa-paint-marker')?.remove()");
             awaitCondition(() -> Math.abs(Integer.parseInt(js(
                 "String(Math.round(innerWidth))"))-baselineCssWidth)<=5,UI_TIMEOUT_MS);
@@ -1200,7 +1208,8 @@ public class GalaxyDeviceClosureTest {
                 }
             }
         } finally {
-            shell(originalDensity == null ? "wm density reset" : "wm density "+originalDensity);
+            if (originalDensity == null) shell("wm density reset");
+            else shell("wm density "+originalDensity);
             runV5Js("document.getElementById('v5-qa-paint-marker')?.remove()");
         }
     }
