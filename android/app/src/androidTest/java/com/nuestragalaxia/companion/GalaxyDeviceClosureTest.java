@@ -415,24 +415,42 @@ public class GalaxyDeviceClosureTest {
 
         // Measure real layout rectangles; the extra add FAB and player are synthetic
         // UI-only fixtures and are removed before leaving this test.
-        String railJson = js("JSON.stringify((()=>{"
+        String addRailFixture = "const add=document.createElement('button');add.id='v5-qa-floating-add';"
+            + "add.className='floating-add';add.setAttribute('aria-label','Accion QA sintetica');"
+            + "document.getElementById('app').append(add)";
+        runV5Js(addRailFixture);
+        String railSettled = "['chatFab','v5-qa-floating-add'].every(id=>{"
+            + "const element=document.getElementById(id);if(!element)return false;"
+            + "element.getBoundingClientRect();return element.getAnimations().every(animation=>"
+            + "!animation.pending&&animation.playState!=='running')})";
+        String railGeometry = "JSON.stringify((()=>{"
             + "const nav=document.getElementById('bottomNav'),fab=document.getElementById('chatFab'),"
-            + "player=document.getElementById('globalPlayer'),oldClass=player.className;"
-            + "const add=document.createElement('button');add.className='floating-add';"
-            + "add.setAttribute('aria-label','Accion QA sintetica');document.getElementById('app').append(add);"
+            + "player=document.getElementById('globalPlayer'),add=document.getElementById('v5-qa-floating-add');"
             + "function overlap(a,b){const x=a.getBoundingClientRect(),y=b.getBoundingClientRect();"
             + "return x.left<y.right-1&&x.right>y.left+1&&x.top<y.bottom-1&&x.bottom>y.top+1}"
-            + "const withoutPlayer=!overlap(nav,fab)&&!overlap(nav,add)&&!overlap(fab,add);"
-            + "player.classList.add('visible');"
-            + "const withPlayer=!overlap(nav,fab)&&!overlap(nav,add)&&!overlap(nav,player)"
-            + "&&!overlap(fab,add)&&!overlap(fab,player)&&!overlap(add,player);"
-            + "const dims={width:innerWidth,height:innerHeight,navCount:nav.children.length};"
-            + "player.className=oldClass;add.remove();"
-            + "return {...dims,withoutPlayer,withPlayer}})())");
-        JSONObject rail = new JSONObject(railJson);
-        assertEquals("The bottom rail must keep all six controls", 6, rail.getInt("navCount"));
-        assertTrue("FAB/add collide with Android nav: " + rail, rail.getBoolean("withoutPlayer"));
-        assertTrue("FAB/add/player collide on real WebView: " + rail, rail.getBoolean("withPlayer"));
+            + "const separated=!overlap(nav,fab)&&!overlap(nav,add)&&!overlap(fab,add);"
+            + "const playerSeparated=!overlap(nav,player)&&!overlap(fab,player)&&!overlap(add,player);"
+            + "return {width:innerWidth,height:innerHeight,navCount:nav.children.length,"
+            + "separated,playerSeparated}})())";
+        boolean playerWasVisible = "true".equals(js("document.getElementById('globalPlayer').classList.contains('visible')"));
+        JSONObject rail;
+        try {
+            runV5Js("document.getElementById('globalPlayer').classList.remove('visible')");
+            awaitJs(railSettled);
+            rail = new JSONObject(js(railGeometry));
+            assertEquals("The bottom rail must keep all six controls", 6, rail.getInt("navCount"));
+            assertTrue("FAB/add collide with Android nav: " + rail, rail.getBoolean("separated"));
+            runV5Js("document.getElementById('globalPlayer').classList.add('visible')");
+            awaitJs(railSettled);
+            JSONObject railWithPlayer = new JSONObject(js(railGeometry));
+            assertTrue("FAB/add/player collide on real WebView: " + railWithPlayer,
+                railWithPlayer.getBoolean("separated") && railWithPlayer.getBoolean("playerSeparated"));
+            rail.put("withoutPlayer",rail.getBoolean("separated"));
+            rail.put("withPlayer",railWithPlayer.getBoolean("separated") && railWithPlayer.getBoolean("playerSeparated"));
+        } finally {
+            runV5Js("document.getElementById('globalPlayer').classList.toggle('visible',"+playerWasVisible+");"
+                + "document.getElementById('v5-qa-floating-add')?.remove()");
+        }
 
         for (String id : new String[]{"map","moments","ai","memories","more","home"}) {
             runV5Js("document.querySelector('[data-view=\"" + id + "\"]').click()");
@@ -461,6 +479,7 @@ public class GalaxyDeviceClosureTest {
         final int displayHeightPx=initialFrame.getHeight();
         initialFrame.recycle();
         final int baselineCssWidth=Integer.parseInt(js("String(Math.round(innerWidth))"));
+        final String originalDensity = densityRestoreValue();
         assertTrue("Bad CSS/native viewport scale",baselineCssWidth>200 && displayWidthPx>300);
         // Physical framebuffer stays constant; vary native density to measure real CSS widths.
         JSONArray responsive=new JSONArray();
@@ -492,13 +511,15 @@ public class GalaxyDeviceClosureTest {
                     + "document.body.appendChild(m)");
                 awaitJs("!!document.getElementById('v5-qa-paint-marker')");
                 awaitV5QaPainted("viewport-"+targetCss);
-                String measured=jsWithDeadline("JSON.stringify((()=>{"
+                boolean responsivePlayerWasVisible = "true".equals(js(
+                    "document.getElementById('globalPlayer').classList.contains('visible')"));
+                runV5Js(addRailFixture+";document.getElementById('globalPlayer').classList.add('visible')");
+                String measured;
+                try {
+                    awaitJs(railSettled);
+                    measured=jsWithDeadline("JSON.stringify((()=>{"
                     + "const nav=document.getElementById('bottomNav'),fab=document.getElementById('chatFab'),"
-                    + "player=document.getElementById('globalPlayer');"
-                    + "const original=player.className;player.classList.add('visible');"
-                    + "const add=document.createElement('button');add.className='floating-add';"
-                    + "add.setAttribute('aria-label','Accion QA sintetica');"
-                    + "document.getElementById('app').append(add);"
+                    + "player=document.getElementById('globalPlayer'),add=document.getElementById('v5-qa-floating-add');"
                     + "function intersects(a,b){const x=a.getBoundingClientRect(),y=b.getBoundingClientRect();"
                     + "return x.left<y.right-1&&x.right>y.left+1&&x.top<y.bottom-1&&x.bottom>y.top+1}"
                     + "const n=nav.getBoundingClientRect(),f=fab.getBoundingClientRect(),"
@@ -523,10 +544,13 @@ public class GalaxyDeviceClosureTest {
                     + "const bentoFits=cards.length===5&&cards.every(el=>{"
                     + "const r=el.getBoundingClientRect();return r.left>=-1&&r.right<=innerWidth+1});"
                     + "const noHorizontalOverflow=document.documentElement.scrollWidth<=innerWidth+2;"
-                    + "add.remove();player.className=original;"
                     + "return {cssWidth:innerWidth,navCount:heights.length,minTouch:Math.min(...heights),"
                     + "noOverlap,withinScreen,headerFits,headerTouch,avatarHidden,"
                     + "heroFits,bentoFits,noHorizontalOverflow}})())",20);
+                } finally {
+                    runV5Js("document.getElementById('globalPlayer').classList.toggle('visible',"
+                        +responsivePlayerWasVisible+");document.getElementById('v5-qa-floating-add')?.remove()");
+                }
                 assertTrue("Responsive metrics are not JSON at CSS "+targetCss+": "+measured,
                     measured.startsWith("{"));
                 JSONObject row=new JSONObject(measured);
@@ -979,7 +1003,7 @@ public class GalaxyDeviceClosureTest {
             }
         } finally {
             backend.setQaPlaceDestinationFixture(false);
-            shell("wm density reset");
+            shell(originalDensity == null ? "wm density reset" : "wm density "+originalDensity);
             runV5Js("document.getElementById('v5-qa-paint-marker')?.remove()");
             awaitCondition(() -> Math.abs(Integer.parseInt(js(
                 "String(Math.round(innerWidth))"))-baselineCssWidth)<=5,UI_TIMEOUT_MS);
@@ -1058,6 +1082,7 @@ public class GalaxyDeviceClosureTest {
         final int realWidth=before.getWidth(),realHeight=before.getHeight();
         before.recycle();
         final int cssBaseline=Integer.parseInt(js("String(Math.round(innerWidth))"));
+        final String originalDensity = densityRestoreValue();
         assertTrue("P5 invalid native/CSS scale",realWidth>300&&cssBaseline>200&&cssBaseline<600);
 
         try {
@@ -1175,7 +1200,7 @@ public class GalaxyDeviceClosureTest {
                 }
             }
         } finally {
-            shell("wm density reset");
+            shell(originalDensity == null ? "wm density reset" : "wm density "+originalDensity);
             runV5Js("document.getElementById('v5-qa-paint-marker')?.remove()");
         }
     }
@@ -2472,7 +2497,25 @@ public class GalaxyDeviceClosureTest {
         return total>0?(double)changed/total:0d;
     }
 
-    private void awaitV5QaPainted(String theme) {
+    private String densityRestoreValue() throws Exception {
+        java.util.regex.Matcher override = java.util.regex.Pattern.compile(
+            "(?m)^Override density: (\\d+)\\s*$").matcher(shell("wm density"));
+        return override.find() ? override.group(1) : null;
+    }
+
+    private void awaitV5QaPainted(String theme) throws Exception {
+        JSONObject geometry = new JSONObject(jsWithDeadline("JSON.stringify((()=>{"
+            + "const marker=document.getElementById('v5-qa-paint-marker');"
+            + "if(!marker)return null;const rect=marker.getBoundingClientRect();"
+            + "return {left:rect.left,top:rect.top,right:rect.right,bottom:rect.bottom,"
+            + "scale:devicePixelRatio*(window.visualViewport?.scale||1)};})())",20));
+        int[] origin = new int[2];
+        scenario.onActivity(activity -> activity.findViewById(R.id.webView).getLocationOnScreen(origin));
+        double scale = geometry.getDouble("scale");
+        int left = origin[0] + (int) Math.ceil(geometry.getDouble("left") * scale);
+        int top = origin[1] + (int) Math.ceil(geometry.getDouble("top") * scale);
+        int right = origin[0] + (int) Math.floor(geometry.getDouble("right") * scale);
+        int bottom = origin[1] + (int) Math.floor(geometry.getDouble("bottom") * scale);
         long deadline=SystemClock.elapsedRealtime()+15_000;
         int consecutive=0;
         while (SystemClock.elapsedRealtime()<deadline) {
@@ -2481,10 +2524,10 @@ public class GalaxyDeviceClosureTest {
                 shot=instrumentation.getUiAutomation().takeScreenshot();
                 int matched=0;
                 if(shot!=null){
-                    int maxX=Math.min(shot.getWidth(),260);
-                    int maxY=Math.min(shot.getHeight(),260);
-                    for(int y=20;y<maxY;y+=4){
-                        for(int x=4;x<maxX;x+=4){
+                    int maxX=Math.min(shot.getWidth(),right);
+                    int maxY=Math.min(shot.getHeight(),bottom);
+                    for(int y=Math.max(0,top);y<maxY;y+=4){
+                        for(int x=Math.max(0,left);x<maxX;x+=4){
                             int pixel=shot.getPixel(x,y);
                             if(Math.abs(android.graphics.Color.red(pixel)-7)<=2
                                 && Math.abs(android.graphics.Color.green(pixel)-225)<=2
@@ -2508,7 +2551,8 @@ public class GalaxyDeviceClosureTest {
             // Keep the same 15s deadline and two positive real frames.
             SystemClock.sleep(500);
         }
-        throw new AssertionError("V5 P1 screenshot rejected: real Android display has no QA home paint marker for "+theme);
+        throw new AssertionError("V5 P1 screenshot rejected: real Android display has no QA home paint marker for "
+            +theme+";screenBounds:["+left+","+top+","+right+","+bottom+"]");
     }
 
     // WCAG contrast of computed RGB colors, calculated on Android's Java side
