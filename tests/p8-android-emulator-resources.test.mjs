@@ -30,6 +30,8 @@ for (const {file,expectedScript} of workflows) {
           'Missing distinct Phase11 real AVD run: '+shard);
       }
       assert.equal((yaml.match(/force-avd-creation: true/g)||[]).length,4);
+      assert.match(launches[3][1], /-camera-back emulated -camera-front emulated(?:\s|$)/,
+        'The media AVD needs both cameras to execute the mandatory CameraX cases');
       assert.match(yaml,/node scripts\/p8-verify-phase11-shards\.mjs qa-artifacts\/phase11-shards/);
       const helper=readFileSync(new URL('../scripts/p8-phase11-run-shard.sh',import.meta.url),'utf8');
       assert.match(helper,/gradle -p android --no-daemon connectedDebugAndroidTest/);

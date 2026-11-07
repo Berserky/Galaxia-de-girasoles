@@ -124,7 +124,7 @@ jobs:
           disable-animations: true
           force-avd-creation: true
           pre-emulator-launch-script: bash scripts/p8-configure-native-avd.sh
-          emulator-options: -no-window -gpu swiftshader -feature -Vulkan -memory 4096 -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          emulator-options: -no-window -gpu swiftshader -feature -Vulkan -memory 4096 -no-snapshot -noaudio -no-boot-anim -camera-back emulated -camera-front emulated
           script: bash scripts/p8-phase11-run-shard.sh media
 
       - name: Verify exact Android JUnit coverage (no missing, duplicate, failed or skipped tests)
