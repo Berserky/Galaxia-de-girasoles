@@ -134,13 +134,31 @@ body.v5-input-focused:not(.chat-mode) #app .floating-add {
   body:not(.chat-mode) #app .header .avatar {display:none}
   body:not(.chat-mode) #app .header .header-actions {flex:0 0 auto}
   body:not(.chat-mode) #app .header .brand {flex:1 1 auto}
+  /* Every compact width, including 393/412, must keep 44px after active scale(.96). */
+  body:not(.chat-mode) #app .header .header-actions > button.header-search {
+    box-sizing:border-box;flex:0 0 48px;width:48px;min-width:48px;
+    height:48px;min-height:48px;
+  }
 }
 @media(max-width:360px){
   body:not(.chat-mode) #app .header-actions {gap:4px}
+  /* Maintain 44px visible targets through the .96 pressed animation. */
+  body:not(.chat-mode) #app .header .header-actions > button.header-search {
+    box-sizing:border-box;flex:0 0 48px;width:48px;min-width:48px;
+    height:48px;min-height:48px;
+  }
   body:not(.chat-mode) #app .brand-mark {width:36px;height:36px;border-radius:13px}
   body:not(.chat-mode) #app .avatar {display:none}
   body:not(.chat-mode) #app .brand small {max-width:115px}
   body:not(.chat-mode) .bottom-nav {left:7px;right:7px;padding:5px}
+}
+/* A 360px device-density viewport may report 361px after rounding.
+   Protect header hit areas despite the .96 pressed-state transform. */
+@media(min-width:360px) and (max-width:375px){
+  body:not(.chat-mode) #app .header .header-actions > button.header-search {
+    box-sizing:border-box;flex:0 0 48px;width:48px;min-width:48px;
+    height:48px;min-height:48px;
+  }
 }
 @media(orientation:landscape) and (max-height:560px){
   #modal:not(.chat-surface) {max-height:calc(100dvh - 8px)}

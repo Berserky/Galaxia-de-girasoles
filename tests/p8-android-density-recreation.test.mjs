@@ -1,0 +1,34 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const s=readFileSync(new URL('../android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyDeviceClosureTest.java',import.meta.url),'utf8');
+const p1=s.slice(s.indexOf('public void visualEvolutionP1_realWebViewThemesFloatingRailAndModalFocus_areSafe()'),s.indexOf('public void visualEvolutionP5_realMomentsAndroidScreens_andPrivacy()'));
+const p5=s.slice(s.indexOf('public void visualEvolutionP5_realMomentsAndroidScreens_andPrivacy()'),s.indexOf('@Test public void galaxyChat_renders13Cards_pollChecklistAndSend()'));
+test('P8 P5 regenerates private fixture AFTER each real density change recreates WebView',()=>{
+ const seed=s.slice(s.indexOf('private void seedP5MomentsVisualFixture()'),s.indexOf('@Test public void visualEvolutionP5_realMomentsAndroidScreens_andPrivacy()'));
+ assert.match(seed,/go\('moments'\)/);
+ assert.match(seed,/P5_SECRET_MESSAGE/);
+ assert.match(seed,/cloud\.bond=/);
+ assert.match(seed,/filter\(i=>i\.id!=='p5-surprise'\)/);
+ assert.match(seed,/getElementById\('v5-qa-paint-marker'\)\?\.remove\(\)/);
+ assert.match(seed,/awaitJs\("view==='moments'/);
+ const density=p5.indexOf('shell("wm density "+targetDensityDpi)');
+ const marker=p5.indexOf('seedP5MomentsVisualFixture();');
+ const validate=p5.indexOf("view==='moments' && !!document.querySelector('.living-garden')",marker);
+ assert.ok(density>=0 && marker>density && validate>marker,'Rehydrate only after device density is applied and before native screenshot asserts');
+ assert.match(p5,/awaitV5QaPainted\("p5-moments-premeasure-"\+css\)/);
+ assert.match(p5,/WebView web=activity\.findViewById/);
+ assert.match(p5,/wm density reset/);
+ assert.doesNotMatch(p5,/shell\("wm size/);
+});
+test('P8 P1 recreates the QA paint marker on every real Android viewport',()=>{
+ const start=p1.indexOf('for (int targetCss : new int[]{320,360,393,412})');
+ const end=p1.indexOf('awaitV5QaPainted("viewport-"+targetCss)',start);
+ const loop=p1.slice(start,end);
+ assert.match(loop,/shell\("wm density "\+targetDensityDpi\)/);
+ assert.match(loop,/document\.getElementById\('v5-qa-paint-marker'\)\?\.remove\(\)/);
+ assert.match(loop,/document\.body\.appendChild\(m\)/);
+ assert.match(loop,/awaitJs\("!!document\.getElementById\('v5-qa-paint-marker'\)"\)/);
+ assert.match(p1,/getUiAutomation\(\)\.takeScreenshot\(\)/);
+ assert.doesNotMatch(loop,/shell\("wm size/);
+});

@@ -1,0 +1,481 @@
+/* P6A: read-only Memories Hub. Never render locked capsule contents. */
+(function(root){
+'use strict';
+const categories=[['memory','Recuerdos','heart'],['album','Álbum','images'],['music','Música','music'],['event','Calendario','calendar'],['plan','Planes','circle-check-big'],['note','Notas','file-text'],['capsule','Cápsulas','lock'],['wish','Deseos','star'],['journey','Viajes','route']];
+const sections=[['discover','Descubrir','sparkles'],['collections','Colecciones','library'],['history','Nuestra historia','orbit']];
+const safeItems=items=>(Array.isArray(items)?items:[]).filter(x=>x&&typeof x==='object'&&x.data&&x.kind!=='capsule'&&categories.some(c=>c[0]===x.kind)&&x.kind!=='album'&&x.kind!=='music');
+const countByKind=(items,kind)=>(Array.isArray(items)?items:[]).filter(x=>x&&x.kind===kind).length;
+function count(items,kind,media){if(kind==='album')return Array.isArray(media?.photo)?media.photo.length:null;if(kind==='music')return (Array.isArray(media?.music)?media.music.length:0)+countByKind(items,'song');return countByKind(items,kind);}
+function sectionsNav(active,{esc,ico}){return '<nav class="memories-v5-sections" aria-label="Explorar recuerdos">'+sections.map(([id,label,icon])=>'<button type="button" class="memories-v5-section'+(active===id?' active':'')+'" data-action="memories-section" data-section="'+esc(id)+'" aria-current="'+(active===id?'page':'false')+'">'+ico(icon)+'<span>'+esc(label)+'</span></button>').join('')+'</nav>';}
+function collections(items,media,selected,{esc,ico}){return '<div class="memories-v5-categories" role="group" aria-label="Tipos de recuerdos">'+categories.map(([id,label,icon])=>{const n=count(items,id,media);return '<button type="button" class="memories-v5-category'+(selected===id?' active':'')+'" data-action="memories-category" data-kind="'+esc(id)+'" aria-pressed="'+(selected===id?'true':'false')+'">'+ico(icon)+'<span>'+esc(label)+'</span><small>'+(n===null?'—':n)+'</small></button>';}).join('')+'</div>';}
+function dateKey(item){const ms=Date.parse(String(item?.data?.date||item?.created||''));return Number.isFinite(ms)?ms:0;}
+function discover(items,media,{esc,ico}){
+ const entries=safeItems(items).slice().sort((a,b)=>dateKey(b)-dateKey(a)).slice(0,4);
+ const total=safeItems(items).length;
+ const mediaCount=(Array.isArray(media?.photo)?media.photo.length:0)+(Array.isArray(media?.music)?media.music.length:0)+countByKind(items,'song');
+ return '<div class="memories-v5-discover"><div class="memories-v5-hero"><span class="memories-v5-kicker">'+ico('sparkles')+' NUESTRA HISTORIA</span><h3>Todo lo que nos hace nosotros</h3><p>Explora nuestros momentos y encuentra cada recuerdo donde lo guardamos.</p><div class="memories-v5-stats"><span>'+total+' historias y planes</span><span>'+mediaCount+' archivos y canciones</span></div><button type="button" class="btn small" data-action="memories-section" data-section="collections">Explorar colecciones '+ico('arrow-right')+'</button></div><div class="section"><div class="row between"><h3>Lo más reciente</h3><button type="button" class="btn small secondary" data-action="memories-section" data-section="history">Ver historia</button></div>'+(entries.length?'<div class="memories-v5-recent">'+entries.map(item=>{const kind=categories.find(c=>c[0]===item.kind),title=String(item.data?.title||kind?.[1]||'Recuerdo');return '<button type="button" class="memories-v5-recent-card" data-action="memories-recent" data-kind="'+esc(item.kind)+'" data-id="'+esc(String(item.id??''))+'">'+ico(kind?.[2]||'heart')+'<span><b>'+esc(title)+'</b><small>'+esc(kind?.[1]||'Recuerdo')+'</small></span>'+ico('chevron-right')+'</button>';}).join('')+'</div>':'<p class="muted">Aquí aparecerán sus primeros recuerdos cuando los guarden.</p>')+'</div></div>';
+}
+
+/* P6B: private gallery uses only signed URLs already supplied by the app.
+ * The presentational module never makes a request, stores identifiers or changes media.
+ */
+const usablePhoto=photo=>photo&&typeof photo.url==='string'&&/^https?:\/\/[^\s]+$/i.test(photo.url);
+/* VE-164/166: Storage media-list supplies 'created' (upload timestamp).
+ * This is an incorporation date, never the original camera capture date.
+ * Keep original array indices for the viewer and never merge/remove photos. */
+function albumDateGroups(photos){
+ const groups=new Map();
+ (Array.isArray(photos)?photos:[]).forEach((photo,index)=>{
+  const raw=photo?.created;
+  const date=typeof raw==='string'&&/^\d{4}-\d{2}-\d{2}T/.test(raw)&&
+   validDate(raw.slice(0,10))&&Number.isFinite(Date.parse(raw))?raw.slice(0,10):null;
+  const key=date||'';
+  if(!groups.has(key))groups.set(key,[]);
+  groups.get(key).push({photo,index});
+ });
+ return [...groups].sort(([a],[b])=>a===b?0:!a?1:!b?-1:b.localeCompare(a))
+  .map(([date,entries])=>({date,entries}));
+}
+function albumGallery(photos,{attr,ico}){
+ const items=Array.isArray(photos)?photos:[];
+ const photoCard=({photo,index})=>{
+  const label='Ver foto '+(index+1)+' de '+items.length;
+  return '<div class="memories-v5-photo-card" role="listitem">'+(usablePhoto(photo)?
+   '<button type="button" class="memories-v5-photo-open" data-action="album-photo-view" data-index="'+index+'" aria-label="'+attr(label)+'">'+
+   '<img loading="lazy" decoding="async" src="'+attr(photo.url)+'" alt="Foto '+(index+1)+' del álbum privado">'+
+   '<span class="memories-v5-photo-hint" aria-hidden="true">'+ico('expand')+'</span></button>':
+   '<span class="memories-v5-photo-missing" role="status">Imagen no disponible</span>')+'</div>';
+ };
+ return '<div class="memories-v5-photo-grid" role="list" aria-label="Fotos del álbum privado">'+
+  albumDateGroups(items).map(({date,entries})=>
+   '<section class="memories-v5-photo-date-group"><h4>'+ico('calendar-days')+' '+
+   (date?'Incorporadas el '+date:'Sin fecha de incorporación')+' <small>'+entries.length+'</small></h4>'+
+   '<div class="memories-v5-photo-date-grid">'+entries.map(photoCard).join('')+'</div></section>').join('')+'</div>';
+}
+function albumViewer(photos,at,{attr,ico}){
+ const entries=Array.isArray(photos)?photos:[];
+ if(!Number.isSafeInteger(at)||at<0||at>=entries.length||!usablePhoto(entries[at]))return '';
+ const photo=entries[at],label='Foto '+(at+1)+' de '+entries.length;
+ return '<div class="memories-v5-photo-viewer" role="group" aria-label="'+attr(label)+'">'+
+  '<figure><img src="'+attr(photo.url)+'" alt="'+attr(label)+'" loading="eager" decoding="async"></figure>'+
+  '<div class="memories-v5-photo-toolbar"><button type="button" data-action="album-photo-view" data-index="'+(at-1)+'"'+(at===0?' disabled':'')+' aria-label="Foto anterior">'+ico('chevron-left')+' Anterior</button>'+
+  '<output aria-live="polite">'+label+'</output>'+
+  '<button type="button" data-action="album-photo-view" data-index="'+(at+1)+'"'+(at===entries.length-1?' disabled':'')+' aria-label="Foto siguiente">Siguiente '+ico('chevron-right')+'</button></div>'+
+  (typeof photo.path==='string'&&photo.path.length?'<div class="memories-v5-photo-danger"><button type="button" class="btn small ghost" data-action="media-delete" data-kind="photo" data-path="'+attr(photo.path)+'">'+ico('trash-2')+' Eliminar esta foto</button><p>Esta acción requiere confirmación.</p></div>':'')+
+  '</div>';
+}
+
+
+/* P6C: grouping is visual only. Original queue positions, providers and deletion
+ * permissions remain unchanged. No inference when the artist is missing.
+ */
+const normalizeLabel=s=>String(s??'').trim().replace(/\s+/g,' ').toLocaleLowerCase('es');
+const providerLabel=p=>p==='spotify'?'Spotify':p==='youtube'?'YouTube / YouTube Music':p==='mp3'?'MP3 privado':'Audio por URL';
+function musicGrouping(queue){
+ const rows=Array.isArray(queue)?queue:[];
+ const groups=[],byKey=new Map();
+ rows.forEach((track,index)=>{
+  if(!track||typeof track!=='object')return;
+  const artist=typeof track.artist==='string'?track.artist.trim():'';
+  const title=typeof track.title==='string'&&track.title.trim()?track.title.trim():'Canción';
+  const isProvider=track.platform==='spotify'||track.platform==='youtube';
+  const key=isProvider&&artist?normalizeLabel(title)+'|'+normalizeLabel(artist):null;
+  let group=key?byKey.get(key):null;
+  // Two entries from the same provider can be distinct recordings: do not merge.
+  if(group&&group.entries.some(e=>e.track.platform===track.platform))group=null;
+  if(!group){group={title,artist,entries:[]};groups.push(group);if(key&&!byKey.has(key))byKey.set(key,group);}
+  group.entries.push({track,index});
+ });
+ return groups;
+}
+function musicLibrary(queue,currentIndex,playing,{esc,attr,ico}){
+ const groups=musicGrouping(queue);
+ return '<div class="memories-v5-music-library" role="list" aria-label="Biblioteca de música">'+groups.map(group=>{
+  const multi=group.entries.length>1;
+  return '<article class="memories-v5-track-group" role="listitem"><div class="memories-v5-track-head"><span class="memories-v5-track-art" aria-hidden="true">'+ico('music-2')+'</span><div><h4>'+esc(group.title)+'</h4><small>'+esc(group.artist||'Artista no especificado')+(multi?' · '+group.entries.length+' fuentes':'')+'</small></div></div><div class="memories-v5-track-sources">'+group.entries.map(({track,index})=>{
+    const provider=providerLabel(track.platform),isActive=index===currentIndex;
+    const mp3=track.type==='mp3';
+    const deletion=mp3?(typeof track.path==='string'&&track.path?
+      '<button class="btn small ghost" data-action="media-delete" data-kind="music" data-path="'+attr(track.path)+'">Eliminar</button>':''):
+      '<button class="btn small ghost" data-action="item-delete" data-id="'+attr(track.id||'')+'">Eliminar</button>';
+    const share=!mp3?'<button class="btn small secondary" data-action="galaxy-share" data-card-type="SONG" data-kind="song" data-id="'+attr(track.id||'')+'" data-title="'+attr(track.title||'Canción')+'">'+ico('send')+' Galaxy Chat</button>':'';
+    return '<div class="memories-v5-track-source'+(isActive?' active':'')+'"><button type="button" class="music-play" data-action="music-play" data-index="'+index+'" aria-label="'+attr('Reproducir con '+provider+': '+group.title)+'">'+ico(isActive&&playing?'pause':'play')+'</button><span class="memories-v5-provider">'+esc(provider)+'</span><details class="memories-v5-track-more"><summary aria-label="'+attr('Opciones de '+provider)+'">'+ico('ellipsis')+' Opciones</summary><div class="row wrap">'+share+deletion+'</div></details></div>';
+   }).join('')+'</div></article>';
+ }).join('')+'</div>';
+}
+
+
+/* P6D — only a valid, explicit event date can appear on the calendar.
+ * An annual event repeats on its declared month/day; we do not invent dates
+ * for unclassified events or silently reinterpret item.created as event date.
+ */
+function validDate(raw){
+ if(typeof raw!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(raw))return false;
+ const year=Number(raw.slice(0,4)),month=Number(raw.slice(5,7)),day=Number(raw.slice(8,10));
+ if(year<1900||year>2199||month<1||month>12||day<1||day>31)return false;
+ return new Date(Date.UTC(year,month-1,day)).toISOString().slice(0,10)===raw;
+}
+const validMonth=value=>typeof value==='string'&&/^\d{4}-(0[1-9]|1[0-2])$/.test(value)&&Number(value.slice(0,4))>=1900&&Number(value.slice(0,4))<=2199;
+function shiftMonth(value,offset){
+ if(!validMonth(value)||!Number.isSafeInteger(offset)||Math.abs(offset)>12)return null;
+ const y=Number(value.slice(0,4)),m=Number(value.slice(5,7));
+ const next=new Date(Date.UTC(y,m-1+offset,1)),out=next.toISOString().slice(0,7);
+ return validMonth(out)?out:null;
+}
+function calendarMonth(month,today,items){
+ if(validMonth(month))return month;
+ if(validDate(today))return today.slice(0,7);
+ const found=(Array.isArray(items)?items:[]).find(item=>validDate(item?.data?.date));
+ return found?found.data.date.slice(0,7):null;
+}
+function annualDateForYear(original,year){
+ const day=original.slice(5),result=String(year).padStart(4,'0')+'-'+day;
+ return validDate(result)?result:null;
+}
+function eventOccurrence(item,today){
+ const date=item?.data?.date;
+ if(!validDate(date))return null;
+ if(!item.data?.annual||!validDate(today))return date;
+ const currentYear=Number(today.slice(0,4)),firstYear=Number(date.slice(0,4));
+ for(let y=Math.max(currentYear,firstYear);y<=Math.min(2199,currentYear+8);y++){
+  const when=annualDateForYear(date,y);
+  if(when&&when>=today)return when;
+ }
+ return null;
+}
+function eventRows(items,today){
+ const validToday=validDate(today)?today:null,dated=[],undated=[];
+ for(const item of Array.isArray(items)?items:[]){
+  if(!item||item.kind!=='event'||typeof item!=='object')continue;
+  const when=eventOccurrence(item,validToday);
+  if(when)dated.push({item,when,annual:item.data?.annual===true,upcoming:validToday?when>=validToday:null});
+  else if(!validDate(item?.data?.date))undated.push(item);
+ }
+ dated.sort((a,b)=>a.when.localeCompare(b.when)||String(a.item.id??'').localeCompare(String(b.item.id??'')));
+ return {dated,undated,validToday};
+}
+function monthEvents(items,month){
+ if(!validMonth(month))return [];
+ const output=[],year=Number(month.slice(0,4));
+ for(const item of Array.isArray(items)?items:[]){
+  if(!item||item.kind!=='event'||!validDate(item.data?.date))continue;
+  const original=item.data.date;
+  const when=item.data.annual===true&&year>=Number(original.slice(0,4))?
+   annualDateForYear(original,year):(original.slice(0,7)===month?original:null);
+  if(when&&when.slice(0,7)===month)output.push({item,when,annual:item.data.annual===true});
+ }
+ return output.sort((a,b)=>a.when.localeCompare(b.when));
+}
+function eventCalendar(items,{today,month,mode='month',selectedDate}={}, {esc,attr,ico,itemCard}){
+ const safe=Array.isArray(items)?items.filter(x=>x?.kind==='event'):[];
+ const current=calendarMonth(month,today,safe),rows=eventRows(safe,today);
+ const view=mode==='agenda'?'agenda':'month',button=(value,label)=>'<button type="button" data-action="memories-calendar-view" data-mode="'+value+'" aria-pressed="'+(view===value)+'">'+label+'</button>';
+ const toolbar='<div class="memories-v5-calendar-toggle" role="group" aria-label="Vista del calendario">'+button('month','Mes')+button('agenda','Agenda')+'</div>';
+ const renderItems=list=>'<div class="memories-v5-calendar-items">'+list.map(x=>itemCard(x.item||x)).join('')+'</div>';
+ if(view==='agenda'){
+  const upcoming=rows.validToday?rows.dated.filter(x=>x.upcoming):rows.dated;
+  const past=rows.validToday?rows.dated.filter(x=>!x.upcoming).reverse():[];
+  const section=(name,list,empty)=>'<section class="memories-v5-event-group"><h4>'+name+' <small>'+list.length+'</small></h4>'+(list.length?renderItems(list):'<p class="muted">'+empty+'</p>')+'</section>';
+  return '<div class="memories-v5-event-calendar">'+toolbar+
+   section(rows.validToday?'Próximas fechas':'Fechas guardadas',upcoming,'No hay fechas en esta sección.')+
+   (rows.validToday?section('Fechas vividas',past,'Aún no hay fechas anteriores.'):'')+
+   (rows.undated.length?section('Sin fecha definida',rows.undated,''):'')+'</div>';
+ }
+ if(!current)return '<div class="memories-v5-event-calendar">'+toolbar+'<p class="muted">Agrega una fecha válida a un evento para ver el calendario.</p></div>';
+ const [year,monthNum]=current.split('-').map(Number);
+ const first=(new Date(Date.UTC(year,monthNum-1,1)).getUTCDay()+6)%7;
+ const days=new Date(Date.UTC(year,monthNum,0)).getUTCDate();
+ const entries=monthEvents(safe,current),dayCounts=new Map();
+ for(const row of entries)dayCounts.set(row.when,(dayCounts.get(row.when)||0)+1);
+ const chosen=validDate(selectedDate)&&selectedDate.slice(0,7)===current?selectedDate:
+  validDate(today)&&today.slice(0,7)===current?today:null;
+ const controls='<div class="memories-v5-month-controls"><button type="button" data-action="memories-month-shift" data-offset="-1" aria-label="Mes anterior"'+(!shiftMonth(current,-1)?' disabled':'')+'>'+ico('chevron-left')+'</button><h4>'+esc(new Date(Date.UTC(year,monthNum-1,1)).toLocaleDateString('es-CO',{month:'long',year:'numeric',timeZone:'UTC'}))+'</h4><button type="button" data-action="memories-month-shift" data-offset="1" aria-label="Mes siguiente"'+(!shiftMonth(current,1)?' disabled':'')+'>'+ico('chevron-right')+'</button></div>';
+ const dayHeaders=['L','M','M','J','V','S','D'].map((label,index)=>'<span role="columnheader" aria-label="'+['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'][index]+'">'+label+'</span>').join('');
+ const slots=Array.from({length:first},()=>'<span class="memories-v5-calendar-empty" aria-hidden="true"></span>').join('')+
+  Array.from({length:days},(_,i)=>{const date=current+'-'+String(i+1).padStart(2,'0'),num=dayCounts.get(date)||0;
+   return '<button type="button" class="memories-v5-calendar-day'+(chosen===date?' selected':'')+(num?' has-events':'')+'" data-action="memories-calendar-day" data-date="'+date+'" aria-pressed="'+(chosen===date)+'" aria-label="'+attr('Día '+(i+1)+', '+num+' '+(num===1?'evento':'eventos'))+'">'+(i+1)+(num?'<span class="memories-v5-day-count" aria-hidden="true">'+num+'</span>':'')+'</button>';
+  }).join('');
+ const selection=chosen?entries.filter(x=>x.when===chosen):[];
+ return '<div class="memories-v5-event-calendar">'+toolbar+controls+
+  '<div class="memories-v5-calendar-grid" role="grid" aria-label="Calendario de fechas especiales">'+dayHeaders+slots+'</div>'+
+  '<section class="memories-v5-selected-day"><h4>'+(chosen?'Día '+esc(chosen)+' · '+selection.length+' '+(selection.length===1?'evento':'eventos'):'Selecciona un día')+'</h4>'+
+   (selection.length?renderItems(selection):'<p class="muted">'+(chosen?'No hay eventos guardados para este día.':'Selecciona una fecha para consultar sus eventos.')+'</p>')+'</section>'+
+   (rows.undated.length?'<p class="muted">'+rows.undated.length+' '+(rows.undated.length===1?'evento sin fecha':'eventos sin fecha')+'. Puedes consultarlos en Agenda.</p>':'')+'</div>';
+}
+
+
+/* P6D collections present original authenticated plan/note/wish objects.
+ * They only group visual states the user has explicitly saved.
+ * Never infer a completion state or silently update/remove source items.
+ */
+function organizedCollection(items,kind,{esc,attr,ico,itemCard}){
+ if(!['plan','note','wish'].includes(kind))return '';
+ const list=(Array.isArray(items)?items:[]).filter(x=>x&&x.kind===kind&&x.data&&typeof x.data==='object');
+ const sections=[];
+ if(kind==='plan'){
+  const active=list.filter(x=>x.data.done!==true),completed=list.filter(x=>x.data.done===true);
+  const chosen=active.filter(x=>x.data.planCategory==='this-week');
+  const later=active.filter(x=>x.data.planCategory==='someday');
+  const rest=active.filter(x=>x.data.planCategory!=='this-week'&&x.data.planCategory!=='someday');
+  sections.push(['Elegidos para esta semana',chosen,'calendar-check'],['Planes por hacer',rest,'list-todo'],['Algún día',later,'cloud-sun'],['Planes realizados',completed,'check-circle']);
+ }else if(kind==='wish'){
+  sections.push(['Deseos guardados',list.filter(x=>x.data.done!==true),'star'],['Deseos marcados como cumplidos',list.filter(x=>x.data.done===true),'sparkles']);
+ }else{
+  // Category is a user-saved label, not a generated topic or AI classification.
+  const byCategory=new Map();
+  for(const item of list){
+   const name=typeof item.data.category==='string'&&item.data.category.trim()?item.data.category.trim():'Sin categoría';
+   if(!byCategory.has(name))byCategory.set(name,[]);
+   byCategory.get(name).push(item);
+  }
+  for(const [title,group] of byCategory)sections.push([title,group,'notebook-pen']);
+ }
+ const card=(item)=>kind==='note'?
+  '<details class="memories-v5-note" data-item-id="'+attr(item.id??'')+'"><summary>'+ico('file-text')+' <span><b>'+esc(item.data.title||'Nota sin título')+'</b><small>Ver contenido y opciones de esta nota</small></span>'+ico('chevron-down')+'</summary><div class="memories-v5-note-body">'+itemCard(item)+'</div></details>':
+  '<div class="memories-v5-specialized-card">'+itemCard(item)+'</div>';
+ const groups=sections.filter(([title,rows])=>rows.length).map(([title,rows,icon])=>
+  '<section class="memories-v5-collection-group"><h4>'+ico(icon)+' '+esc(title)+' <small>'+rows.length+'</small></h4>'+
+  '<div class="memories-v5-specialized-list">'+rows.map(card).join('')+'</div></section>').join('');
+ const label=kind==='plan'?'planes':kind==='note'?'notas':'deseos';
+ return '<div class="memories-v5-organized" aria-label="Biblioteca de '+label+'">'+
+  (groups||'<div class="empty">Todavía no hay '+label+' guardados.</div>')+'</div>';
+}
+
+
+/* P6E: presentation only. Locked capsules must never invoke the full renderer. */
+function capsuleShelf(items,{esc,attr,ico,itemCard}){
+ const rows=(Array.isArray(items)?items:[]).filter(x=>x?.kind==='capsule'&&x.data&&typeof x.data==='object');
+ const locked=rows.filter(x=>x.data.locked===true),opened=rows.filter(x=>x.data.locked!==true);
+ const cover=x=>{
+  const d=x.data;
+  const when=d.unlockType==='place'?'Se abre al llegar al lugar elegido':
+   (typeof d.unlockDate==='string'&&validDate(d.unlockDate)?'Disponible desde '+d.unlockDate:'Aún no disponible');
+  return '<article class="memories-v5-capsule locked" data-item-id="'+attr(x.id??'')+'"><span class="memories-v5-symbol">'+ico('lock-keyhole')+'</span><div>'+
+   '<small>Guardada para después</small><h4>'+esc(d.title||'Cápsula')+'</h4><p>'+esc(when)+'</p><small>Contenido protegido</small></div></article>';
+ };
+ const open=x=>'<details class="memories-v5-capsule opened" data-item-id="'+attr(x.id??'')+'"><summary>'+
+  '<span class="memories-v5-symbol">'+ico('gift')+'</span><span><small>Disponible para descubrir</small><b>'+esc(x.data.title||'Cápsula')+'</b></span>'+
+  ico('chevron-down')+'</summary><div class="memories-v5-shelf-detail">'+itemCard(x)+'</div></details>';
+ const section=(label,rows,render)=>rows.length?'<section class="memories-v5-shelf-section"><h4>'+label+' <small>'+rows.length+'</small></h4>'+
+  '<div class="memories-v5-shelf-list">'+rows.map(render).join('')+'</div></section>':'';
+ return '<div class="memories-v5-shelf">'+section('Por descubrir',locked,cover)+section('Cápsulas abiertas',opened,open)+
+  (rows.length?'':'<div class="empty">Guarden una cápsula para descubrirla juntos cuando llegue su momento.</div>')+'</div>';
+}
+function journeyShelf(items,{esc,attr,ico,itemCard}){
+ const journeys=(Array.isArray(items)?items:[]).filter(x=>x?.kind==='journey'&&x.data&&typeof x.data==='object');
+ const dated=journeys.filter(x=>validDate(x.data.date)).slice().sort((a,b)=>b.data.date.localeCompare(a.data.date));
+ const groups=new Map();
+ for(const x of dated){const year=x.data.date.slice(0,4);if(!groups.has(year))groups.set(year,[]);groups.get(year).push(x);}
+ const undated=journeys.filter(x=>!validDate(x.data.date));
+ if(undated.length)groups.set('Sin fecha registrada',undated);
+ const card=x=>'<details class="memories-v5-journey" data-item-id="'+attr(x.id??'')+'"><summary>'+
+  '<span class="memories-v5-symbol">'+ico('route')+'</span><span><b>'+esc(x.data.title||'Nuestro viaje')+'</b><small>'+
+  (validDate(x.data.date)?esc(x.data.date):'Sin fecha guardada')+
+  (typeof x.data.placeName==='string'&&x.data.placeName.trim()?' · '+esc(x.data.placeName.trim()):'')+
+  '</small></span>'+ico('chevron-down')+'</summary><div class="memories-v5-shelf-detail">'+itemCard(x)+'</div></details>';
+ const sections=[...groups].map(([label,group])=>'<section class="memories-v5-shelf-section"><h4>'+esc(label)+' <small>'+group.length+'</small></h4><div class="memories-v5-shelf-list">'+group.map(card).join('')+'</div></section>').join('');
+ return '<div class="memories-v5-shelf">'+(sections||'<div class="empty">Sus próximas aventuras aparecerán aquí cuando las guarden.</div>')+'</div>';
+}
+
+
+/* P6F: history derived only from authenticated items and explicit event dates.
+ * The creation timestamp, if available, is labelled as save date, never as event date.
+ * Locked capsules are excluded even when their public unlock date is in the past.
+ */
+function timelineRows(items,today){
+ const allowed=new Set(['memory','journey','event','capsule','song']),todayKnown=validDate(today);
+ const known=[],undated=[];
+ for(const item of Array.isArray(items)?items:[]){
+  if(!item||!allowed.has(item.kind)||!item.data||typeof item.data!=='object')continue;
+  if(item.kind==='capsule'&&item.data.locked===true)continue;
+  const date=validDate(item.data.date)?item.data.date:null;
+  const created=typeof item.created==='string'&&/^\d{4}-\d{2}-\d{2}T/.test(item.created)&&validDate(item.created.slice(0,10))?item.created.slice(0,10):null;
+  const row={item,when:date,created,upcoming:date!==null&&todayKnown&&date>today};
+  if(date)known.push(row);else undated.push(row);
+ }
+ known.sort((a,b)=>b.when.localeCompare(a.when)||String(b.item.id??'').localeCompare(String(a.item.id??'')));
+ undated.sort((a,b)=>(b.created||'').localeCompare(a.created||''));
+ return {known,undated,todayKnown};
+}
+/* P6H VE-158: a same-title, same-day event is only a possible visual repeat.
+ * Each original record and its actions remain individually accessible.
+ * No backend changes, deletions or deduplication of stored records. */
+function historyVisualGroups(rows){
+ const groups=[],seen=new Map();
+ for(const row of rows){
+  const item=row?.item,raw=item?.data?.title;
+  const title=typeof raw==='string'?raw.trim():'';
+  const key=item?.kind==='event'&&title&&validDate(row.when)?row.when+'|'+normalizeLabel(title):null;
+  const existing=key?seen.get(key):null;
+  if(existing){existing.push(row);continue;}
+  const next=[row];groups.push(next);
+  if(key)seen.set(key,next);
+ }
+ return groups;
+}
+function historyTimeline(items,today,{esc,attr,ico,itemCard}){
+ const {known,undated}=timelineRows(items,today),upcoming=known.filter(x=>x.upcoming),past=known.filter(x=>!x.upcoming);
+ const typeNames={memory:['Recuerdo','heart'],journey:['Viaje','route'],event:['Fecha especial','calendar'],capsule:['Cápsula abierta','gift'],song:['Canción','music']};
+ const card=row=>{
+  const item=row.item,label=typeNames[item.kind]||['Historia','sparkles'];
+  const title=String(item.data?.title||label[0]);
+  return '<details class="memories-v5-history-card" data-item-id="'+attr(item.id??'')+'"><summary>'+
+   '<span class="memories-v5-history-icon" aria-hidden="true">'+ico(label[1])+'</span>'+
+   '<span class="memories-v5-history-summary"><b>'+esc(title)+'</b><small>'+esc(label[0])+
+   (row.when?' · Vivido el '+esc(row.when):row.created?' · Guardado el '+esc(row.created):' · Sin fecha registrada')+'</small></span>'+
+   ico('chevron-down')+'</summary><div class="memories-v5-history-detail">'+itemCard(item)+'</div></details>';
+ };
+ const group=(title,list,icon)=>{
+  if(!list.length)return '';
+  const months=new Map();
+  for(const row of list){
+   const month=row.when?.slice(0,7)||'Sin fecha de vivencia';
+   if(!months.has(month))months.set(month,[]);
+   months.get(month).push(row);
+  }
+  return '<section class="memories-v5-history-section"><h3>'+ico(icon)+' '+title+' <small>'+list.length+'</small></h3>'+
+   [...months].map(([month,group])=>'<div class="memories-v5-history-month"><h4>'+esc(month)+' <small>'+group.length+'</small></h4>'+
+    '<div class="memories-v5-history-stack">'+historyVisualGroups(group).map(rows=>rows.length===1?card(rows[0]):
+    '<details class="memories-v5-history-repeat"><summary>'+ico('copy-check')+
+    '<span><b>Posible repetición visual</b><small>'+esc(rows[0].item.data.title)+' · '+rows.length+' registros independientes</small></span>'+
+    ico('chevron-down')+'</summary><p class="muted">Coinciden título y fecha. Revisa cada evento; no se ha fusionado ni eliminado ningún registro.</p>'+
+    '<div class="memories-v5-history-repeat-items">'+rows.map(card).join('')+'</div></details>').join('')+'</div></div>').join('')+'</section>';
+ };
+ const unclassified=undated.length?'<section class="memories-v5-history-section"><h3>'+ico('book-open')+' Fecha de vivencia no registrada <small>'+undated.length+'</small></h3>'+
+  '<p class="muted">Cuando falta la fecha de la experiencia, mostramos la fecha de guardado si existe.</p>'+
+  '<div class="memories-v5-history-stack">'+undated.map(card).join('')+'</div></section>':'';
+ return '<section class="section memories-v5-history"><div class="section-head"><div><h2>Nuestra historia</h2>'+
+  '<p>Fechas auténticas de lo que vivimos, próximas experiencias y recuerdos aún sin fecha.</p></div></div>'+
+  group('Próximamente',upcoming,'calendar-clock')+group('Lo que vivimos',past,'book-heart')+unclassified+
+  (!known.length&&!undated.length?'<div class="empty">Nuestra historia crecerá a medida que guardemos recuerdos juntos.</div>':'')+'</section>';
+}
+
+
+/* P6F constellation: nodes come from authenticated saved items. We draw a line
+ * ONLY between neighbouring entries with explicit dates in the SAME year.
+ * The path means chronological order, not a social/causal or location link.
+ * Never include locked capsules, or infer dates from created timestamps.
+ */
+const constellationKinds=new Set(['memory','journey','song','event']);
+const constellationLabels={memory:['Recuerdo','heart'],journey:['Viaje','route'],song:['Canción','music'],event:['Fecha especial','calendar']};
+function constellationModel(items){
+ const seen=new Set(),dated=[],undated=[];
+ for(const item of Array.isArray(items)?items:[]){
+  if(!item||!constellationKinds.has(item.kind)||!item.data||typeof item.data!=='object')continue;
+  if(typeof item.id!=='string'&&typeof item.id!=='number')continue;
+  const id=String(item.id);
+  if(!id||seen.has(id))continue;
+  seen.add(id);
+  const date=validDate(item.data.date)?item.data.date:null;
+  const node={item,id,date,year:date?date.slice(0,4):null};
+  (date?dated:undated).push(node);
+ }
+ dated.sort((a,b)=>b.date.localeCompare(a.date)||a.id.localeCompare(b.id));
+ undated.sort((a,b)=>a.id.localeCompare(b.id));
+ return [...dated,...undated];
+}
+function constellationPreview(item,{esc,ico}){
+ if(!item||!constellationKinds.has(item.kind)||!item.data||typeof item.data!=='object')return '';
+ const name=constellationLabels[item.kind]||['Recuerdo','star'];
+ const title=String(item.data.title||name[0]),date=validDate(item.data.date)?item.data.date:null;
+ const created=typeof item.created==='string'&&validDate(item.created.slice(0,10))?item.created.slice(0,10):null;
+ const subtitle=date?'Vivido el '+date:created?'Guardado el '+created:'Sin fecha de vivencia';
+ const excerpt=typeof item.data.body==='string'?item.data.body.slice(0,240).trim():'';
+ return '<div class="memories-v5-star-preview"><span class="memories-v5-star-preview-icon">'+ico(name[1])+'</span>'+
+  '<div class="memories-v5-star-preview-copy"><small>'+esc(name[0])+' · '+esc(subtitle)+'</small><h4>'+esc(title)+'</h4>'+
+  (excerpt?'<p>'+esc(excerpt)+'</p>':'')+'</div></div>';
+}
+function constellationView(items,{limit=18,expanded=false}={}, {esc,attr,ico}){
+ const model=constellationModel(items),shown=expanded?model:model.slice(0,Math.max(1,Math.min(model.length,Number.isSafeInteger(limit)?limit:18)));
+ if(!model.length)return '<section class="section memories-v5-constellation-section"><h2>Constelación de recuerdos</h2><p class="muted">Cuando guarden experiencias, sus estrellas aparecerán aquí.</p></section>';
+ const groups=new Map();
+ for(const node of shown){
+  const key=node.year||'Sin fecha de vivencia';
+  if(!groups.has(key))groups.set(key,[]);
+  groups.get(key).push(node);
+ }
+ const boards=[...groups].map(([period,group])=>{
+  const year=period!=='Sin fecha de vivencia',height=Math.max(188,110+Math.ceil(group.length/4)*87);
+  const pos=group.map((node,i)=>({node,x:15+(i%4)*23.3,y:54+Math.floor(i/4)*87}));
+  // Both endpoints have an explicit saved date, and belong to the same calendar year.
+  const lines=year?pos.slice(1).map((p,i)=>'<line x1="'+(pos[i].x*10)+'" y1="'+pos[i].y+
+   '" x2="'+(p.x*10)+'" y2="'+p.y+'" />').join(''):'';
+  return '<section class="memories-v5-star-group" aria-label="'+attr(year?'Recuerdos de '+period:'Recuerdos sin fecha')+'">'+
+   '<h4>'+esc(period)+' <small>'+group.length+' '+(group.length===1?'estrella':'estrellas')+'</small></h4>'+
+   '<div class="memories-v5-star-field" style="--star-field-height:'+height+'px">'+
+   '<svg class="memories-v5-star-lines" viewBox="0 0 1000 '+height+'" preserveAspectRatio="none" aria-hidden="true" focusable="false">'+lines+'</svg>'+
+   pos.map(({node,x,y},i)=>{const name=constellationLabels[node.item.kind]||['Recuerdo','star'];
+    return '<button type="button" class="memories-v5-star" style="--star-x:'+x.toFixed(1)+'%;--star-y:'+y+'px" '+
+     'data-action="constellation-item" data-id="'+attr(node.id)+'" aria-label="'+attr(name[0]+': '+String(node.item.data.title||name[0])+
+      (node.date?', '+node.date:', sin fecha registrada'))+'">'+
+     '<span class="memories-v5-star-orb" aria-hidden="true"></span>'+
+     '<span class="memories-v5-star-kind" aria-hidden="true">'+ico(name[1])+'</span></button>';
+   }).join('')+'</div></section>';
+ }).join('');
+ const hidden=model.length-shown.length;
+ const toolbar=expanded?'':('<div class="memories-v5-star-toolbar"><button type="button" class="btn small secondary" data-action="constellation-expand">'+ico('maximize-2')+
+  ' Ampliar constelación</button>'+(hidden?'<button type="button" class="btn small secondary" data-action="constellation-more">'+ico('plus')+
+  ' Mostrar más ('+hidden+')</button>':'')+'</div>');
+ return '<section class="section memories-v5-constellation'+(expanded?' expanded':'')+'" aria-label="Constelación de recuerdos">'+
+  '<div class="section-head"><div><h2>Constelación de recuerdos</h2><p>Estrellas de historias guardadas. Las líneas unen fechas consecutivas del mismo año; no representan vínculos inventados.</p></div></div>'+
+  '<p class="memories-v5-star-guide">'+ico('info')+' Selecciona una estrella para leer su historia. Usa Ampliar para recorrer todas las épocas.</p>'+
+  '<p class="memories-v5-star-counter">Mostrando '+shown.length+' de '+model.length+' recuerdos</p>'+
+  '<div class="memories-v5-star-groups">'+boards+'</div>'+
+  '<div class="memories-v5-star-preview-host" data-constellation-preview role="status" aria-live="polite"><p class="muted">Elige una estrella para ver sus detalles.</p></div>'+
+  toolbar+'</section>';
+}
+
+
+/* P6G: local text/category/date filters over already authenticated collections.
+ * Never search private body, media paths, locked capsule content, or other
+ * fields that could reveal data unavailable to the current viewer.
+ */
+const normalizeSearch=value=>String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,' ').toLocaleLowerCase('es');
+const filterableKinds=new Set(['memory','journey','plan','note','wish','capsule']);
+function filterItems(items,filter={}){
+ const query=normalizeSearch(filter.query).slice(0,100);
+ const category=typeof filter.category==='string'?filter.category:'';
+ const month=validMonth(filter.month)?filter.month:'';
+ return (Array.isArray(items)?items:[]).filter(item=>{
+  if(!item||!filterableKinds.has(item.kind)||!item.data||typeof item.data!=='object')return false;
+  const d=item.data;
+  const name=typeof d.title==='string'?d.title:'';
+  const group=typeof d.category==='string'&&d.locked!==true?d.category:'';
+  if(query&&!normalizeSearch(name+' '+group).includes(query))return false;
+  if(category&&group!==category)return false;
+  if(month&&(!validDate(d.date)||d.date.slice(0,7)!==month))return false;
+  return true;
+ });
+}
+function filtersPanel(items,filter={}, {esc,attr,ico}){
+ const all=(Array.isArray(items)?items:[]).filter(x=>x&&filterableKinds.has(x.kind)&&x.data&&typeof x.data==='object');
+ const categories=[...new Set(all.filter(x=>x.data.locked!==true&&typeof x.data.category==='string').map(x=>x.data.category.trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+ const query=typeof filter.query==='string'?filter.query.slice(0,100):'';
+ const month=validMonth(filter.month)?filter.month:'',selected=categories.includes(filter.category)?filter.category:'';
+ const options='<option value="">Todas las categorías</option>'+categories.map(x=>'<option value="'+attr(x)+'"'+(selected===x?' selected':'')+'>'+esc(x)+'</option>').join('');
+ return '<div class="memories-v5-filters" role="search" aria-label="Filtrar recuerdos">'+
+  '<label>Buscar por título o categoría<input data-role="memories-filter-query" type="search" maxlength="100" value="'+attr(query)+'" placeholder="Buscar recuerdos" autocomplete="off"></label>'+
+  '<label>Categoría<select data-role="memories-filter-category">'+options+'</select></label>'+
+  '<label>Mes de la experiencia<input data-role="memories-filter-month" type="month" value="'+attr(month)+'"></label>'+
+  '<div class="memories-v5-filter-buttons"><button type="button" class="btn small" data-action="memories-filter-apply">'+ico('search')+' Aplicar</button>'+
+  '<button type="button" class="btn small secondary" data-action="memories-filter-reset">'+ico('x')+' Limpiar</button></div>'+
+  '<p class="muted">Solo se consultan los títulos, categorías y fechas que ya guardaron. No se buscan contenidos de cápsulas cerradas.</p></div>';
+}
+
+
+/* P6H: receipt for THIS session only. No persistent sync history is invented. */
+function driveSyncFeedback(state,{esc,ico}){
+ const clean=n=>typeof n==='number'&&Number.isSafeInteger(n)&&n>=0?n:0;
+ if(!state)return '<p class="memories-v5-drive-status muted" role="status">No hay sincronizaciones registradas en esta sesión.</p>';
+ if(state.phase==='working')return '<p class="memories-v5-drive-status" role="status" aria-live="polite">'+ico('loader-circle')+' Sincronizando carpeta elegida…</p>';
+ if(state.phase==='error')return '<p class="memories-v5-drive-status error" role="status" aria-live="polite">'+ico('alert-circle')+' No se pudo sincronizar o actualizar el álbum. Revisa la conexión antes de intentar nuevamente.</p>';
+ if(state.phase!=='success'&&state.phase!=='partial')return '';
+ const imported=clean(state.imported),skipped=clean(state.skipped),failed=clean(state.failed);
+ const stamp=typeof state.completedAt==='number'&&Number.isFinite(state.completedAt)&&state.completedAt>0?
+  'Última sincronización de esta sesión: '+esc(new Date(state.completedAt).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})):'Resultado de esta sesión';
+ return '<div class="memories-v5-drive-receipt" role="status" aria-live="polite"><b>'+ico(state.phase==='partial'?'alert-triangle':'check-circle')+' '+(state.phase==='partial'?'Importación con incidencias':'Sincronización completada')+'</b>'+
+  '<p>'+imported+' nuevas · '+skipped+' ya existentes · '+failed+' con error</p><small>'+stamp+'</small></div>';
+}
+
+root.GalaxyMemoriesV5=Object.freeze({categories:categories.map(x=>x.slice()),sectionsNav,collections,discover,safeItems,albumDateGroups,albumGallery,albumViewer,musicGrouping,musicLibrary,validDate,shiftMonth,calendarMonth,eventOccurrence,eventRows,monthEvents,eventCalendar,organizedCollection,capsuleShelf,journeyShelf,timelineRows,historyVisualGroups,historyTimeline,constellationModel,constellationPreview,constellationView,filterItems,filtersPanel,driveSyncFeedback});
+})(window);

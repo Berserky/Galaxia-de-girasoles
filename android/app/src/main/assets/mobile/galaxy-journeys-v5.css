@@ -4,7 +4,7 @@
 .map-immersive-toggle{
  position:absolute;z-index:560;top:12px;right:12px;
  display:inline-flex;align-items:center;justify-content:center;gap:8px;
- min-width:44px;min-height:44px;padding:10px 13px;border:1px solid var(--border);
+ box-sizing:border-box;min-width:52px;min-height:52px;padding:12px 14px;border:1px solid var(--border);
  border-radius:14px;color:var(--text);background:var(--control-glass);
  font-size:12px;font-weight:750;box-shadow:var(--shadow);touch-action:manipulation;
 }
@@ -62,12 +62,12 @@
 .gmap-controls button:focus-visible{outline:3px solid var(--v5-action,var(--accent));outline-offset:3px}
 .gmap-controls button:active{transform:scale(.96)}
 /* VE-063/069: distinct marker shape and explicit historical position. */
-.gmap-marker button{display:grid;place-items:center;min-width:44px;min-height:44px;
+.gmap-marker button{box-sizing:border-box;display:grid;place-items:center;min-width:52px;min-height:52px;
  transition:box-shadow .16s ease,transform .16s ease}
 .gmap-marker button:focus-visible{outline:3px solid var(--v5-action,var(--accent));outline-offset:3px}
 .gmap-marker button:active{transform:scale(.96)}
 .gmap-marker.partner button{border-radius:50%}
-.gmap-marker.place button{width:44px;height:44px;border-radius:12px;border-style:solid}
+.gmap-marker.place button{width:52px;height:52px;border-radius:12px;border-style:solid}
 .gmap-marker.stale button{border-style:dashed}
 .gmap-marker.open button{box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 35%,transparent),0 6px 20px rgba(0,0,0,.22)}
 @media(prefers-reduced-motion:reduce){

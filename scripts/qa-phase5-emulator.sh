@@ -2,7 +2,38 @@
 set -euo pipefail
 
 mkdir -p qa-artifacts
+# Preserve forensic evidence when Gradle/UTP exits early after the AVD disappears.
+# The runner is isolated and unpaired; never record environment variables or process args.
+LOGCAT_PID=""
+
+capture_exit() {
+  local status="$1"
+  trap - EXIT
+  set +e
+  printf 'exit_status=%s\n' "$status" > qa-artifacts/exit-status.txt
+  date -u +'%Y-%m-%dT%H:%M:%SZ' >> qa-artifacts/exit-status.txt
+  timeout 10s adb devices -l > qa-artifacts/adb-devices-at-exit.txt 2>&1
+  ps -eo pid,ppid,stat,rss,etime,comm > qa-artifacts/host-processes-at-exit.txt
+  cat /proc/meminfo > qa-artifacts/host-meminfo-at-exit.txt
+  if [[ -n "$LOGCAT_PID" ]]; then
+    kill "$LOGCAT_PID" 2>/dev/null || true
+    wait "$LOGCAT_PID" 2>/dev/null || true
+  fi
+  timeout 10s adb logcat -d -v threadtime -b main -b system -b crash \
+    > qa-artifacts/logcat-at-exit.txt 2> qa-artifacts/logcat-at-exit-stderr.txt || true
+  if (( status != 0 )); then
+    timeout 10s sudo -n dmesg -T 2>/dev/null \
+      | grep -Ei 'oom|out of memory|killed process|qemu|emulator|segfault' \
+      | tail -n 100 > qa-artifacts/host-kernel-signals.txt || true
+  fi
+  exit "$status"
+}
+trap 'capture_exit "$?"' EXIT
+
 adb logcat -c
+adb logcat -v threadtime -b main -b system -b crash \
+  > qa-artifacts/logcat-live.txt 2> qa-artifacts/logcat-live-stderr.txt &
+LOGCAT_PID=$!
 
 gradle -p android --no-daemon :app:connectedDebugAndroidTest \
   -PQA_EDGE_URL=http://127.0.0.1:18765 \

@@ -37,7 +37,22 @@ jobs:
           SDK_ROOT=/usr/local/lib/android/sdk
           SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | head -1)
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platforms;android-35" "platforms;android-36" "build-tools;36.0.0" "platform-tools" "emulator"
+          # Emulator runner manages its emulator package. Avoid re-downloading the
+          # already-installed emulator: corrupt ZIPs fail before instrumentation.
+          for attempt in 1 2 3; do
+            if "$SDKMANAGER" "platforms;android-35" "platforms;android-36" "build-tools;36.0.0" "platform-tools"; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            sleep 8
+          done
+          if [ ! -x "$SDK_ROOT/emulator/emulator" ]; then
+            for attempt in 1 2 3; do
+              if "$SDKMANAGER" "emulator"; then break; fi
+              if [ "$attempt" -eq 3 ]; then exit 1; fi
+              sleep 8
+            done
+          fi
           echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
       - name: Enable KVM

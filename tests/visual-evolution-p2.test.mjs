@@ -300,6 +300,8 @@ test('P2L privacy CTA synchronously navigates to the visible real settings panel
   focus:options=>calls.push(['focus',options])
  };
  const context={
+  app:{},
+  window:{GalaxyMoreV5:{revealGroup:(_app,id)=>calls.push(['reveal',id])}},
   go:view=>{calls.push(['go',view]);assert.equal(view,'more');},
   document:{getElementById:id=>{
    calls.push(['lookup',id]);assert.equal(id,'presencePrivacySettings');return panel;
@@ -307,21 +309,24 @@ test('P2L privacy CTA synchronously navigates to the visible real settings panel
  };
  runInNewContext(privacyDeepLinkSource+'\nopenPresencePrivacySettings();',context);
  assert.deepEqual(calls[0],['go','more']);
- assert.deepEqual(calls[1],['lookup','presencePrivacySettings']);
- assert.equal(calls[2][0],'scroll');
- assert.equal(calls[2][1].block,'center');
- assert.equal(calls[3][0],'focus');
- assert.equal(calls[3][1].preventScroll,true);
+ assert.deepEqual(calls[1],['reveal','privacy']);
+ assert.deepEqual(calls[2],['lookup','presencePrivacySettings']);
+ assert.equal(calls[3][0],'scroll');
+ assert.equal(calls[3][1].block,'center');
+ assert.equal(calls[4][0],'focus');
+ assert.equal(calls[4][1].preventScroll,true);
  assert.match(app,/if\(a==='now-settings'\)\{openPresencePrivacySettings\(\);return;\}/);
 });
 
 test('P2L privacy focus gracefully handles an unavailable panel without side effects or timeouts',()=>{
  const calls=[];
  runInNewContext(privacyDeepLinkSource+'\nopenPresencePrivacySettings();',{
+  app:{},
+  window:{GalaxyMoreV5:{revealGroup:(_app,id)=>calls.push('reveal-'+id)}},
   go:view=>calls.push(view),
   document:{getElementById:()=>null}
  });
- assert.deepEqual(calls,['more']);
+ assert.deepEqual(calls,['more','reveal-privacy']);
  assert.doesNotMatch(privacyDeepLinkSource,/setTimeout|setInterval|\bapi\s*\(|GalaxyNative\.call/);
  assert.match(app,/id="presencePrivacySettings" class="card presence-privacy-settings"/);
  assert.match(app,/aria-labelledby="presencePrivacyHeading" tabindex="-1"/);

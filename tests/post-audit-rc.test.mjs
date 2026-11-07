@@ -4,13 +4,13 @@ import {readFileSync} from 'node:fs';
 
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 
-test('Android 4.1.2 update is newer than 4.1.1 stable code 38',()=>{
+test('Android 5.0.0 update is newer than 4.1.2 stable code 39',()=>{
   const gradle=read('android/app/build.gradle.kts');
   const match=gradle.match(/versionCode = (\d+); versionName = "([^"]+)"/);
   assert.ok(match,'Android version metadata missing');
-  assert.equal(Number(match[1]),39);
-  assert.equal(match[2],'4.1.2');
-  assert.ok(Number(match[1])>38);
+  assert.equal(Number(match[1]),40);
+  assert.equal(match[2],'5.0.0');
+  assert.ok(Number(match[1])>39);
 });
 
 test('candidate requires the full automated release gate set',()=>{

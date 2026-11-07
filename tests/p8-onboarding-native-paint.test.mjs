@@ -1,0 +1,23 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const java=readFileSync(new URL('../android/app/src/androidTest/java/com/nuestragalaxia/companion/GalaxyOnboardingViewportTest.java',import.meta.url),'utf8');
+const python=readFileSync(new URL('../scripts/qa-onboarding-image-check.py',import.meta.url),'utf8');
+test('P8 NG-AUD-003 waits for two actual Android painted frames in both orientations',()=>{
+ assert.match(java,/awaitPaintedScreenshot\("portrait"\)/);
+ assert.match(java,/awaitPaintedScreenshot\("landscape"\)/);
+ assert.match(java,/postVisualStateCallback\(/);
+ assert.match(java,/new WebView\.VisualStateCallback\(\)/);
+ assert.match(java,/@Override public void onComplete\(long requestId\)/);
+ assert.doesNotMatch(java,/postVisualStateCallback\([^;]*requestId\s*->/);
+ assert.match(java,/getUiAutomation\(\)\.takeScreenshot\(\)/);
+ assert.match(java,/consecutive >= 2/);
+ assert.match(java,/30_000/);
+ assert.match(java,/frame\.recycle\(\)/);
+ assert.match(java,/throw new AssertionError\("NG-AUD-003 "/);
+ assert.doesNotMatch(java,/SystemClock\.sleep\(1400\)/);
+ assert.match(python,/fraction<\.01/);
+ assert.match(java,/screencap -p \/sdcard\/Download\/NG-AUD-003-onboarding-/);
+ assert.match(java,/getBoolean\("labelLinked"\)/);
+ assert.match(java,/getBoolean\("codeVisibleFirstViewport"\)/);
+});

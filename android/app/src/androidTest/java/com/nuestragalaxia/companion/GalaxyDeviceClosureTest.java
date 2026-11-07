@@ -415,24 +415,42 @@ public class GalaxyDeviceClosureTest {
 
         // Measure real layout rectangles; the extra add FAB and player are synthetic
         // UI-only fixtures and are removed before leaving this test.
-        String railJson = js("JSON.stringify((()=>{"
+        String addRailFixture = "const add=document.createElement('button');add.id='v5-qa-floating-add';"
+            + "add.className='floating-add';add.setAttribute('aria-label','Accion QA sintetica');"
+            + "document.getElementById('app').append(add)";
+        runV5Js(addRailFixture);
+        String railSettled = "['chatFab','v5-qa-floating-add'].every(id=>{"
+            + "const element=document.getElementById(id);if(!element)return false;"
+            + "element.getBoundingClientRect();return element.getAnimations().every(animation=>"
+            + "!animation.pending&&animation.playState!=='running')})";
+        String railGeometry = "JSON.stringify((()=>{"
             + "const nav=document.getElementById('bottomNav'),fab=document.getElementById('chatFab'),"
-            + "player=document.getElementById('globalPlayer'),oldClass=player.className;"
-            + "const add=document.createElement('button');add.className='floating-add';"
-            + "add.setAttribute('aria-label','Accion QA sintetica');document.getElementById('app').append(add);"
+            + "player=document.getElementById('globalPlayer'),add=document.getElementById('v5-qa-floating-add');"
             + "function overlap(a,b){const x=a.getBoundingClientRect(),y=b.getBoundingClientRect();"
             + "return x.left<y.right-1&&x.right>y.left+1&&x.top<y.bottom-1&&x.bottom>y.top+1}"
-            + "const withoutPlayer=!overlap(nav,fab)&&!overlap(nav,add)&&!overlap(fab,add);"
-            + "player.classList.add('visible');"
-            + "const withPlayer=!overlap(nav,fab)&&!overlap(nav,add)&&!overlap(nav,player)"
-            + "&&!overlap(fab,add)&&!overlap(fab,player)&&!overlap(add,player);"
-            + "const dims={width:innerWidth,height:innerHeight,navCount:nav.children.length};"
-            + "player.className=oldClass;add.remove();"
-            + "return {...dims,withoutPlayer,withPlayer}})())");
-        JSONObject rail = new JSONObject(railJson);
-        assertEquals("The bottom rail must keep all six controls", 6, rail.getInt("navCount"));
-        assertTrue("FAB/add collide with Android nav: " + rail, rail.getBoolean("withoutPlayer"));
-        assertTrue("FAB/add/player collide on real WebView: " + rail, rail.getBoolean("withPlayer"));
+            + "const separated=!overlap(nav,fab)&&!overlap(nav,add)&&!overlap(fab,add);"
+            + "const playerSeparated=!overlap(nav,player)&&!overlap(fab,player)&&!overlap(add,player);"
+            + "return {width:innerWidth,height:innerHeight,navCount:nav.children.length,"
+            + "separated,playerSeparated}})())";
+        boolean playerWasVisible = "true".equals(js("document.getElementById('globalPlayer').classList.contains('visible')"));
+        JSONObject rail;
+        try {
+            runV5Js("document.getElementById('globalPlayer').classList.remove('visible')");
+            awaitJs(railSettled);
+            rail = new JSONObject(js(railGeometry));
+            assertEquals("The bottom rail must keep all six controls", 6, rail.getInt("navCount"));
+            assertTrue("FAB/add collide with Android nav: " + rail, rail.getBoolean("separated"));
+            runV5Js("document.getElementById('globalPlayer').classList.add('visible')");
+            awaitJs(railSettled);
+            JSONObject railWithPlayer = new JSONObject(js(railGeometry));
+            assertTrue("FAB/add/player collide on real WebView: " + railWithPlayer,
+                railWithPlayer.getBoolean("separated") && railWithPlayer.getBoolean("playerSeparated"));
+            rail.put("withoutPlayer",rail.getBoolean("separated"));
+            rail.put("withPlayer",railWithPlayer.getBoolean("separated") && railWithPlayer.getBoolean("playerSeparated"));
+        } finally {
+            runV5Js("document.getElementById('globalPlayer').classList.toggle('visible',"+playerWasVisible+");"
+                + "document.getElementById('v5-qa-floating-add')?.remove()");
+        }
 
         for (String id : new String[]{"map","moments","ai","memories","more","home"}) {
             runV5Js("document.querySelector('[data-view=\"" + id + "\"]').click()");
@@ -461,8 +479,9 @@ public class GalaxyDeviceClosureTest {
         final int displayHeightPx=initialFrame.getHeight();
         initialFrame.recycle();
         final int baselineCssWidth=Integer.parseInt(js("String(Math.round(innerWidth))"));
+        final String originalDensity = densityRestoreValue();
         assertTrue("Bad CSS/native viewport scale",baselineCssWidth>200 && displayWidthPx>300);
-        final double deviceScale=(double)displayWidthPx/baselineCssWidth;
+        // Physical framebuffer stays constant; vary native density to measure real CSS widths.
         JSONArray responsive=new JSONArray();
         runV5Js("const m=document.createElement('div');m.id='v5-qa-paint-marker';"
             + "m.setAttribute('aria-hidden','true');"
@@ -471,54 +490,79 @@ public class GalaxyDeviceClosureTest {
             + "document.body.appendChild(m)");
         try {
             for (int targetCss : new int[]{320,360,393,412}) {
-                int displayTargetPx=(int)Math.round(targetCss*deviceScale);
-                String resizeResult=shell("wm size "+displayTargetPx+"x"+displayHeightPx);
-                assertFalse("Android virtual screen resize was rejected: "+resizeResult,
-                    resizeResult.toLowerCase(java.util.Locale.ROOT).contains("error"));
+                // wm size reallocates emulator graphics buffers while WebView renders;
+                // density changes viewport CSS width without resizing the hardware framebuffer.
+                int targetDensityDpi=(int)Math.round(160d*displayWidthPx/targetCss);
+                String densityResult=shell("wm density "+targetDensityDpi);
+                assertFalse("Android display density was rejected: "+densityResult,
+                    densityResult.toLowerCase(java.util.Locale.ROOT).contains("error"));
                 awaitCondition(() -> {
                     String size=js("String(Math.round(innerWidth))");
                     return Math.abs(Integer.parseInt(size)-targetCss)<=5;
                 },UI_TIMEOUT_MS);
                 awaitJs("document.querySelector('#bottomNav .nav-btn.active')?.dataset.view==='home'");
+                // Density transitions recreate WebView; the old QA paint marker
+                // belongs to its destroyed DOM and cannot prove this frame.
+                runV5Js("document.getElementById('v5-qa-paint-marker')?.remove();"
+                    + "const m=document.createElement('div');m.id='v5-qa-paint-marker';"
+                    + "m.setAttribute('aria-hidden','true');"
+                    + "m.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;"
+                    + "background:#07e1f7;z-index:2147483647;pointer-events:none';"
+                    + "document.body.appendChild(m)");
+                awaitJs("!!document.getElementById('v5-qa-paint-marker')");
                 awaitV5QaPainted("viewport-"+targetCss);
-                String measured=jsWithDeadline("JSON.stringify((()=>{"
-                    + "const nav=document.getElementById('bottomNav'),fab=document.getElementById('chatFab'),"
-                    + "player=document.getElementById('globalPlayer');"
-                    + "const original=player.className;player.classList.add('visible');"
-                    + "const add=document.createElement('button');add.className='floating-add';"
-                    + "add.setAttribute('aria-label','Accion QA sintetica');"
-                    + "document.getElementById('app').append(add);"
-                    + "function intersects(a,b){const x=a.getBoundingClientRect(),y=b.getBoundingClientRect();"
-                    + "return x.left<y.right-1&&x.right>y.left+1&&x.top<y.bottom-1&&x.bottom>y.top+1}"
-                    + "const n=nav.getBoundingClientRect(),f=fab.getBoundingClientRect(),"
-                    + "a=add.getBoundingClientRect(),p=player.getBoundingClientRect();"
-                    + "const noOverlap=![nav,fab,add,player].some((el,i,all)=>"
-                    + "all.slice(i+1).some(other=>intersects(el,other)));"
-                    + "const withinScreen=n.left>=-1&&n.right<=innerWidth+1&&f.right<=innerWidth+1"
-                    + "&&a.right<=innerWidth+1&&p.right<=innerWidth+1;"
-                    + "const heights=[...nav.querySelectorAll('.nav-btn')].map(el=>el.getBoundingClientRect().height);"
-                    + "const header=document.querySelector('#app .header'),"
-                    + "hButtons=[...header.querySelectorAll('.header-actions button')],"
-                    + "avatar=header.querySelector('.avatar');"
-                    + "const headerFits=hButtons.length===2&&[...hButtons,header.querySelector('.brand')]"
-                    + ".every(el=>{const r=el.getBoundingClientRect();return r.left>=-1&&r.right<=innerWidth+1});"
-                    + "const headerTouch=hButtons.every(el=>el.getBoundingClientRect().width>=44);"
-                    + "const avatarHidden=getComputedStyle(avatar).display==='none';"
-                    + "const welcome=document.querySelector('.galaxy-welcome'),"
-                    + "hero=welcome?.querySelector('.welcome-hero'),"
-                    + "cards=[...document.querySelectorAll('.welcome-bento .action-card')];"
-                    + "const heroRect=hero?.getBoundingClientRect();"
-                    + "const heroFits=!!heroRect&&heroRect.left>=-1&&heroRect.right<=innerWidth+1;"
-                    + "const bentoFits=cards.length===5&&cards.every(el=>{"
-                    + "const r=el.getBoundingClientRect();return r.left>=-1&&r.right<=innerWidth+1});"
-                    + "const noHorizontalOverflow=document.documentElement.scrollWidth<=innerWidth+2;"
-                    + "add.remove();player.className=original;"
-                    + "return {cssWidth:innerWidth,navCount:heights.length,minTouch:Math.min(...heights),"
-                    + "noOverlap,withinScreen,headerFits,headerTouch,avatarHidden,"
-                    + "heroFits,bentoFits,noHorizontalOverflow}})())",20);
-                assertTrue("Responsive metrics are not JSON at CSS "+targetCss+": "+measured,
-                    measured.startsWith("{"));
-                JSONObject row=new JSONObject(measured);
+                boolean responsivePlayerWasVisible = "true".equals(js(
+                    "document.getElementById('globalPlayer').classList.contains('visible')"));
+                AtomicReference<String> measured = new AtomicReference<>();
+                try {
+                    // A queued home render can replace the synthetic add button.
+                    // Prepare, check animations and measure in one WebView callback.
+                    awaitCondition(() -> {
+                        String result=jsWithDeadline("JSON.stringify((()=>{"
+                            + "const nav=document.getElementById('bottomNav'),fab=document.getElementById('chatFab'),"
+                            + "player=document.getElementById('globalPlayer');"
+                            + "if(!nav||!fab||!player||!document.getElementById('app'))return null;"
+                            + "if(!document.getElementById('v5-qa-floating-add')){" + addRailFixture + ";}"
+                            + "player.classList.add('visible');"
+                            + "if(!(" + railSettled + "))return null;"
+                            + "const add=document.getElementById('v5-qa-floating-add');"
+                            + "function intersects(a,b){const x=a.getBoundingClientRect(),y=b.getBoundingClientRect();"
+                            + "return x.left<y.right-1&&x.right>y.left+1&&x.top<y.bottom-1&&x.bottom>y.top+1}"
+                            + "const n=nav.getBoundingClientRect(),f=fab.getBoundingClientRect(),"
+                            + "a=add.getBoundingClientRect(),p=player.getBoundingClientRect();"
+                            + "const noOverlap=![nav,fab,add,player].some((el,i,all)=>"
+                            + "all.slice(i+1).some(other=>intersects(el,other)));"
+                            + "const withinScreen=n.left>=-1&&n.right<=innerWidth+1&&f.right<=innerWidth+1"
+                            + "&&a.right<=innerWidth+1&&p.right<=innerWidth+1;"
+                            + "const heights=[...nav.querySelectorAll('.nav-btn')].map(el=>el.getBoundingClientRect().height);"
+                            + "const header=document.querySelector('#app .header'),"
+                            + "hButtons=[...header.querySelectorAll('.header-actions button')],"
+                            + "avatar=header.querySelector('.avatar');"
+                            + "const headerFits=hButtons.length===2&&[...hButtons,header.querySelector('.brand')]"
+                            + ".every(el=>{const r=el.getBoundingClientRect();return r.left>=-1&&r.right<=innerWidth+1});"
+                            + "const headerTouch=hButtons.every(el=>el.getBoundingClientRect().width>=44);"
+                            + "const avatarHidden=getComputedStyle(avatar).display==='none';"
+                            + "const welcome=document.querySelector('.galaxy-welcome'),"
+                            + "hero=welcome?.querySelector('.welcome-hero'),"
+                            + "cards=[...document.querySelectorAll('.welcome-bento .action-card')];"
+                            + "const heroRect=hero?.getBoundingClientRect();"
+                            + "const heroFits=!!heroRect&&heroRect.left>=-1&&heroRect.right<=innerWidth+1;"
+                            + "const bentoFits=cards.length===5&&cards.every(el=>{"
+                            + "const r=el.getBoundingClientRect();return r.left>=-1&&r.right<=innerWidth+1});"
+                            + "const noHorizontalOverflow=document.documentElement.scrollWidth<=innerWidth+2;"
+                            + "return {cssWidth:innerWidth,navCount:heights.length,minTouch:Math.min(...heights),"
+                            + "noOverlap,withinScreen,headerFits,headerTouch,avatarHidden,"
+                            + "heroFits,bentoFits,noHorizontalOverflow}})())",20);
+                        if(result.isBlank()||"null".equals(result))return false;
+                        assertTrue("Invalid responsive metrics at CSS "+targetCss+": "+result, result.startsWith("{"));
+                        measured.set(result);
+                        return true;
+                    },UI_TIMEOUT_MS);
+                } finally {
+                    runV5Js("document.getElementById('globalPlayer').classList.toggle('visible',"
+                        +responsivePlayerWasVisible+");document.getElementById('v5-qa-floating-add')?.remove()");
+                }
+                JSONObject row=new JSONObject(measured.get());
                 assertEquals("Viewport has unexpected CSS width",targetCss,
                     row.getInt("cssWidth"),5);
                 assertEquals("Lost navigation actions at narrow viewport",6,row.getInt("navCount"));
@@ -789,11 +833,18 @@ public class GalaxyDeviceClosureTest {
                             compactEvidence.getInt("presence"));
                         assertTrue("P4 must show paused partner without GPS",compactEvidence.getBoolean("privacy"));
                         assertEquals("false",compactEvidence.getString("expanded"));
-                        runV5Js("const mark=document.createElement('div');"
+                        runV5Js("document.getElementById('journeyMapWrap')"
+                            + ".scrollIntoView({behavior:'auto',block:'center'})");
+                        // As with themed maps, keep the marker over the map on
+                        // document.body so a QA state refresh cannot detach it.
+                        runV5Js("const rect=document.getElementById('journeyMapWrap').getBoundingClientRect();"
+                            + "const mark=document.createElement('div');"
                             + "mark.id='p4-real-frame-marker';mark.setAttribute('aria-hidden','true');"
-                            + "mark.style.cssText='position:fixed;top:42px;left:22px;'+"
+                            + "const y=Math.min(innerHeight-56,Math.max(22,rect.top+16));"
+                            + "const x=Math.max(16,Math.min(innerWidth-100,rect.left+18));"
+                            + "mark.style.cssText='position:fixed;top:'+y+'px;left:'+x+'px;'+"
                             + "'width:74px;height:22px;background:#c142f0;z-index:2147483647;pointer-events:none';"
-                            + "document.getElementById('journeyMapWrap').append(mark)");
+                            + "document.body.append(mark)");
                         awaitV5P3ModalPainted(beforeP4,targetCss,"p4-compact-map",193,66,240);
                         shell("screencap -p /sdcard/Download/V5-P4-map-compact-"+targetCss+".png");
                         android.graphics.Bitmap compactFrame=instrumentation.getUiAutomation().takeScreenshot();
@@ -870,6 +921,8 @@ public class GalaxyDeviceClosureTest {
                             // could be overwritten during the 135% text screenshots.
                             // Reapply ONLY synthetic QA presentation data after the
                             // read and prior to the place action, without backend writes.
+                            // Keep the synthetic destination stable across periodic QA map refreshes.
+                            backend.setQaPlaceDestinationFixture(true);
                             // Wait for pending map-state reads before injecting the QA fixture.
                             awaitJs("view==='map' && !!map && mapStateReadsInFlight===0");
                             runV5Js("mapData={...(mapData||{}),"
@@ -954,7 +1007,7 @@ public class GalaxyDeviceClosureTest {
                         } finally {compactFrame.recycle();}
                     } finally {
                         beforeP4.recycle();
-                        runV5Js("go('home')");
+                        runV5Js("document.getElementById('p4-real-frame-marker')?.remove();go('home')");
                         awaitJs("view==='home' && !document.body.classList.contains('map-immersive-open')");
                         awaitV5QaPainted("p4-home-restored-"+targetCss);
                     }
@@ -965,7 +1018,9 @@ public class GalaxyDeviceClosureTest {
                 }
             }
         } finally {
-            shell("wm size reset");
+            backend.setQaPlaceDestinationFixture(false);
+            if (originalDensity == null) shell("wm density reset");
+            else shell("wm density "+originalDensity);
             runV5Js("document.getElementById('v5-qa-paint-marker')?.remove()");
             awaitCondition(() -> Math.abs(Integer.parseInt(js(
                 "String(Math.round(innerWidth))"))-baselineCssWidth)<=5,UI_TIMEOUT_MS);
@@ -977,6 +1032,195 @@ public class GalaxyDeviceClosureTest {
             .put("rail",rail)
             .put("nonChatModalFocusRestore",true)
             .put("responsiveViewports",responsive));
+    }
+
+    /**
+     * P5: actual packaged Android WebView with synthetic-only Bond entries.
+     * Screenshots are from the physical emulator framebuffer, not Chrome/mock HTML.
+     */
+    /** Rehydrate synthetic, private P5 QA data after Android density recreation.
+     * Density changes may destroy the WebView and reset transient cloud state;
+     * never mask this with a DOM-only screenshot or a permanent test bypass. */
+    private void seedP5MomentsVisualFixture() {
+        awaitJs("!!document.querySelector('#bottomNav [data-view=\"moments\"]') && !!cloud.bond");
+        // No backend writes, personal coordinates, voice binaries or actual user records.
+        runV5Js("""
+            const who=String(cloud.person);
+            const other=who==='0'?'1':'0';
+            const question=Object.keys(gameQuestions)[0];
+            const options=gameQuestions[question]?.options||[];
+            cloud.bond={...(cloud.bond||{}),
+             garden:{stage:3,label:'Primer botón',days:18,totalDays:18,
+              progressPct:25,currentStreak:4,recordStreak:6,
+              next:{label:'Girasol',days:30},
+              milestones:[{label:'Primer brote',days:1,icon:'sprout',unlocked:true},
+               {label:'Girasol',days:30,icon:'flower-2',unlocked:false}]},
+             entries:[
+              {id:'p5-game',author:other,type:'game',data:{
+               questionId:question,answer:'P5_SECRET_ANSWER',correct:false}},
+              {id:'p5-ritual',author:who,type:'ritual',version:2,
+               created:'2026-10-15T16:00:00Z',
+               data:{week:'2026-10-12',gratitude:'Gracias por existir',
+                need:'Necesito escucharte',plan:'Nuestro próximo paseo'}},
+              {id:'p5-note',author:other,type:'sharednote',version:3,
+               created:'2026-10-15T16:00:00Z',
+               data:{title:'Nota de QA',body:'Recuerdo seguro '+('x'.repeat(290))}},
+              {id:'p5-audio',author:who,type:'voice',version:1,
+               data:{title:'Voz de QA',audioUrl:'https://example.invalid/qa-only.m4a'}}
+             ]};
+            cloud.items=[...(cloud.items||[]).filter(i=>i.id!=='p5-surprise'),
+             {id:'p5-surprise',kind:'note',author:other,
+              data:{surprise:true,title:'P5_SECRET_TITLE',
+               body:'P5_SECRET_MESSAGE',unlockType:'date',unlockDate:'2099-12-31'}}];
+            go('moments');window.scrollTo(0,0);
+            """);
+        awaitJs("view==='moments' && !!document.querySelector('.living-moments')"
+            +" && document.querySelectorAll('.living-ritual-step').length===3"
+            +" && !!document.querySelector('.living-voice-player')"
+            +" && !!document.querySelector('.living-note-full')"
+            +" && !!document.querySelector('.living-surprise-card.sealed')"
+            +" && !!document.querySelector('.living-game-card')");
+        assertEquals("P5 synthetic secret must not appear in DOM","false",
+            jsWithDeadline("document.documentElement.innerHTML.includes('P5_SECRET_TITLE')"
+                +"||document.documentElement.innerHTML.includes('P5_SECRET_MESSAGE')"
+                +"||document.documentElement.innerHTML.includes('P5_SECRET_ANSWER')",20));
+        runV5Js("document.getElementById('v5-qa-paint-marker')?.remove();const marker=document.createElement('div');"
+            +"marker.id='v5-qa-paint-marker';marker.setAttribute('aria-hidden','true');"
+            +"marker.style.cssText='position:fixed;top:8px;left:8px;width:64px;height:8px;"
+            +"background:#07e1f7;z-index:2147483647;pointer-events:none';"
+            +"document.body.appendChild(marker)");
+    }
+
+    @Test public void visualEvolutionP5_realMomentsAndroidScreens_andPrivacy() throws Exception {
+        launch();
+        awaitJs("!!document.querySelector('#bottomNav [data-view=\"moments\"]') && !!cloud.bond");
+        android.graphics.Bitmap before=instrumentation.getUiAutomation().takeScreenshot();
+        assertNotNull("P5 baseline native framebuffer missing",before);
+        final int realWidth=before.getWidth(),realHeight=before.getHeight();
+        before.recycle();
+        final int cssBaseline=Integer.parseInt(js("String(Math.round(innerWidth))"));
+        final String originalDensity = densityRestoreValue();
+        assertTrue("P5 invalid native/CSS scale",realWidth>300&&cssBaseline>200&&cssBaseline<600);
+
+        try {
+            for(int css : new int[]{320,360,393,412}) {
+                // Preserve the native display's resolution and GPU buffers.
+                // Android's actual density controls WebView CSS viewport width.
+                int targetDensityDpi=(int)Math.round(160d*realWidth/css);
+                String densityResult=shell("wm density "+targetDensityDpi);
+                assertFalse("P5 native display density rejected: "+densityResult,
+                    densityResult.toLowerCase(java.util.Locale.ROOT).contains("error"));
+                awaitCondition(() -> Math.abs(Integer.parseInt(
+                    js("String(Math.round(innerWidth))"))-css)<=5,UI_TIMEOUT_MS);
+                // wm density recreates MainActivity/WebView on the API35 AOSP
+                // emulator: re-seed transient QA moments and physical marker for
+                // EACH viewport, then demand the full screen/8 actions again.
+                seedP5MomentsVisualFixture();
+                // Android AOSP WebView may defer visual JavaScript callbacks when
+                // recreating a 320px viewport. Preserve the 30s readiness gate,
+                // but use the same bounded 20s per-callback budget as visual QA.
+                // The full native 8-action assertion is still mandatory.
+                awaitCondition(() -> "true".equals(jsWithDeadline(
+                    "view==='moments' && !!document.querySelector('.living-garden')"
+                    +"&&document.querySelectorAll('.living-activity-grid .action-card').length===8",20)),UI_TIMEOUT_MS);
+                // A density recreation rebuilds WebView: verify packaged CSS
+                // and a REAL painted frame before inspecting touch geometry.
+                awaitJs("document.readyState==='complete' && [...document.querySelectorAll('link')].some(l=>l.getAttribute('href')==='./galaxy-moments-v5.css'&&!!l.sheet)");
+                // Recreate QA's visible native-paint marker after CSS and route
+                // have fully mounted. Density changes may rebuild WebView and
+                // late home rerenders can detach the earlier fixture marker.
+                // Keep the evidence tied to REAL Android framebuffer pixels.
+                runV5Js("document.getElementById('v5-qa-paint-marker')?.remove();"
+                    +"const m=document.createElement('div');"
+                    +"m.id='v5-qa-paint-marker';m.setAttribute('aria-hidden','true');"
+                    +"m.style.cssText='position:fixed;top:48px;left:24px;width:96px;height:18px;"
+                    +"background:#07e1f7;z-index:2147483647;pointer-events:none';"
+                    +"document.body.appendChild(m)");
+                // Keep native paint required; only the visual instrumentation
+                // callback gets 20s, not the Chat latency contract (still 5s).
+                // Only a QA marker: accept fractional CSS-pixel measurements.
+                // Keep the strict two-frame native framebuffer pixel gate below.
+                // Report actual dimensions rather than 30s opaque polling.
+                String markerRectJson=jsWithDeadline("JSON.stringify((()=>{"
+                    +"const m=document.getElementById('v5-qa-paint-marker');"
+                    +"if(!m)return {present:false};const b=m.getBoundingClientRect();"
+                    +"return {present:true,width:b.width,height:b.height,"
+                    +"top:b.top,right:b.right,viewport:innerWidth}})())",20);
+                JSONObject markerRect=new JSONObject(markerRectJson);
+                assertTrue("P5 native paint QA marker geometry: "+markerRectJson,
+                    markerRect.optBoolean("present")
+                    &&markerRect.optDouble("width")>=90d
+                    &&markerRect.optDouble("height")>=15d
+                    &&markerRect.optDouble("top")>=-2d
+                    &&markerRect.optDouble("right")<=markerRect.optDouble("viewport")+2d);
+                awaitV5QaPainted("p5-moments-premeasure-"+css);
+                String state=jsWithDeadline("JSON.stringify((()=>{"
+                    +"const root=document.querySelector('.living-moments'),"
+                    +"seek=document.querySelector('.living-voice-seek'),"
+                    +"play=document.querySelector('.living-voice-toggle'),"
+                    +"note=document.querySelector('.living-note-full summary'),"
+                    +"gesture=document.querySelector('.living-gestures .gesture'),"
+                    +"intro=document.querySelector('.living-moments-intro').getBoundingClientRect();"
+                    +"const btns=[play,note,gesture];"
+                    +"return {visible:!!root,activities:root.querySelectorAll('.living-activity-grid .action-card').length,"
+                    +"rituals:root.querySelectorAll('.living-ritual-step').length,"
+                    +"noOverflow:document.documentElement.scrollWidth<=innerWidth+3,"
+                    +"introInside:intro.left>=-2&&intro.right<=innerWidth+2,"
+                    +"touch:btns.every(b=>!!b&&b.getBoundingClientRect().height>=44),"
+                    +"touchHeights:btns.map(b=>b?Math.round(b.getBoundingClientRect().height*100)/100:null),"
+                    +"audioUnknown:seek.disabled&&document.querySelector('.living-voice-time').textContent.includes('--:--'),"
+                    +"secretAbsent:!document.documentElement.innerHTML.includes('P5_SECRET_MESSAGE')"
+                    +"&&!document.documentElement.innerHTML.includes('P5_SECRET_ANSWER')};})())",20);
+                JSONObject proof=new JSONObject(state);
+                assertEquals("P5 lost activities at "+css,8,proof.getInt("activities"));
+                assertEquals("P5 lost 3 ritual moments at "+css,3,proof.getInt("rituals"));
+                assertTrue("P5 horizontal overflow at "+css+": "+state,proof.getBoolean("noOverflow"));
+                assertTrue("P5 intro cropped at "+css+": "+state,proof.getBoolean("introInside"));
+                assertTrue("P5 touch targets below 44px at "+css+": "+state,proof.getBoolean("touch"));
+                assertTrue("P5 unknown audio duration fabricated at "+css,proof.getBoolean("audioUnknown"));
+                assertTrue("P5 secret leaked at "+css,proof.getBoolean("secretAbsent"));
+                runV5Js("window.scrollTo(0,0)");
+                // The exact native frame was already verified before touch metrics.
+                shell("screencap -p /sdcard/Download/V5-P5-moments-"+css+".png");
+                System.out.println("V5_P5_ANDROID_MOMENTS=css:"+css
+                    +";activities:8;ritualSteps:3;privacy:true;seekUnknown:true");
+
+                // Device WebView text zoom, not CSS font-size simulation.
+                try {
+                    scenario.onActivity(activity -> {
+                        WebView web=activity.findViewById(R.id.webView);
+                        assertNotNull("P5 requires actual Android WebView",web);
+                        web.getSettings().setTextZoom(135);
+                    });
+                    awaitJs("view==='moments' && !!document.querySelector('.living-moments')");
+                    assertEquals("P5 135% text horizontal overflow","true",
+                        js("document.documentElement.scrollWidth<=innerWidth+3"));
+                    awaitV5QaPainted("p5-text-zoom-"+css);
+                    shell("screencap -p /sdcard/Download/V5-P5-text-zoom-"+css+".png");
+                } finally {
+                    scenario.onActivity(activity -> {
+                        WebView web=activity.findViewById(R.id.webView);
+                        if(web!=null)web.getSettings().setTextZoom(100);
+                    });
+                }
+                if(css==393) {
+                    for(String theme : new String[]{"daylight","cosmic","halloween","christmas",
+                          "valentine","friendship","easter"}) {
+                        runV5Js("GalaxyTheme.applyTheme('"+theme+"');window.scrollTo(0,0)");
+                        awaitJs("document.documentElement.dataset.theme==='"+theme+"'"
+                            +" && !!document.querySelector('.living-moments')");
+                        assertEquals("P5 themed page overflow "+theme,"true",
+                            js("document.documentElement.scrollWidth<=innerWidth+3"));
+                        awaitV5QaPainted("p5-theme-"+theme);
+                        shell("screencap -p /sdcard/Download/V5-P5-theme-"+theme+".png");
+                    }
+                }
+            }
+        } finally {
+            if (originalDensity == null) shell("wm density reset");
+            else shell("wm density "+originalDensity);
+            runV5Js("document.getElementById('v5-qa-paint-marker')?.remove()");
+        }
     }
 
     @Test public void galaxyChat_renders13Cards_pollChecklistAndSend() throws Exception {
@@ -1017,7 +1261,8 @@ public class GalaxyDeviceClosureTest {
         long pssBefore = android.os.Debug.getPss();
         long cpuBefore = android.os.Process.getElapsedCpuTime();
         long openStarted = SystemClock.elapsedRealtime();
-        runJs("document.querySelector('#chatFab')?.click()");
+        // Launch via the real FAB, waiting for native WebView state and backend.
+        launchChat();
         awaitJs("!!document.querySelector('.chat-shell') && document.querySelectorAll('.chat-message').length>0");
         long openMs = SystemClock.elapsedRealtime() - openStarted;
 
@@ -1500,9 +1745,18 @@ public class GalaxyDeviceClosureTest {
         assertTrue(restored.getBoolean("restored"));
 
         runJs("go('more')");
-        awaitJs("document.body.innerText.includes('Copia de nuestra galaxia')");
-        assertTrue(js("document.body.innerText").contains("Actualizaciones"));
-        assertTrue(js("!!document.querySelector('[data-action=\"update-check\"]')").equals("true"));
+        // P7 groups hide their body until a real quick-link opens the <details>.
+        // Verify the user-facing navigation AND the original sensitive controls,
+        // instead of treating collapsed text as an absent feature.
+        awaitJs("!!document.querySelector('.v5-more-quick-link[aria-controls=\"v5-more-backups\"]')");
+        runJs("document.querySelector('.v5-more-quick-link[aria-controls=\"v5-more-backups\"]').click()");
+        awaitJs("document.querySelector('#v5-more-backups')?.open===true && document.body.innerText.includes('Copia de nuestra galaxia')");
+        assertTrue(js("!!document.querySelector('#v5-more-backups [data-action=\"backup-export\"]')").equals("true"));
+        assertTrue(js("!!document.querySelector('#v5-more-backups [data-action=\"backup-import\"]')").equals("true"));
+        awaitJs("!!document.querySelector('.v5-more-quick-link[aria-controls=\"v5-more-system\"]')");
+        runJs("document.querySelector('.v5-more-quick-link[aria-controls=\"v5-more-system\"]').click()");
+        awaitJs("document.querySelector('#v5-more-system')?.open===true && document.body.innerText.includes('Actualizaciones')");
+        assertTrue(js("!!document.querySelector('#v5-more-system [data-action=\"update-check\"]')").equals("true"));
 
         launchChat();
         awaitJs("document.querySelector('#chatMessages')?.innerText.includes('CÁPSULA BLOQUEADA')");
@@ -1700,6 +1954,24 @@ public class GalaxyDeviceClosureTest {
                 + "'background:#07e1f7;z-index:2147483647;pointer-events:none';"
                 + "document.body.appendChild(el)");
             awaitJs("!!document.getElementById('v5-qa-paint-marker')");
+            // DOM visibility is not native visibility. Confirm MainActivity is
+            // foreground and Chromium has committed a visual state before
+            // comparing screenshots against the real system document picker.
+            awaitCondition(() -> isResumedPackage(pkg), UI_TIMEOUT_MS);
+            CountDownLatch pickerFrameReady = new CountDownLatch(1);
+            scenario.onActivity(activity -> {
+                WebView web = activity.findViewById(R.id.webView);
+                assertNotNull("QA picker needs actual Android WebView", web);
+                web.postVisualStateCallback(SystemClock.uptimeMillis(), new WebView.VisualStateCallback() {
+                    @Override public void onComplete(long requestId) {
+                        web.invalidate();
+                        pickerFrameReady.countDown();
+                    }
+                });
+                web.invalidate();
+            });
+            assertTrue("QA picker baseline WebView was not composited",
+                pickerFrameReady.await(10, TimeUnit.SECONDS));
             awaitV5QaPainted("before-real-system-document-picker");
             System.out.println("GALAXY_PICKER_APP_FRAMEBASE=real-Android-frame-confirmed");
         }
@@ -1933,8 +2205,11 @@ public class GalaxyDeviceClosureTest {
 
     private void launchChat() {
         if (scenario == null) launch();
+        // Require the authentic authenticated Chat affordance: never jump to
+        // Chat by calling go('chat') as that would conceal a broken action.
+        awaitJs("!!document.querySelector('#chatFab') && !!cloud?.capabilities?.chat");
         runJs("document.querySelector('#chatFab')?.click()");
-        awaitJs("!!document.querySelector('.chat-shell')");
+        awaitJs("view==='chat' && !!document.querySelector('.chat-shell')");
         awaitCondition(() -> backend.actions().contains("chat-state"), UI_TIMEOUT_MS);
         runJs("document.activeElement?.blur();");
         scenario.onActivity(activity -> ((android.view.inputmethod.InputMethodManager)activity.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(activity.getWindow().getDecorView().getWindowToken(),0));
@@ -1958,7 +2233,11 @@ public class GalaxyDeviceClosureTest {
                 + "const form=document.querySelector('#chatForm'),button=form?.querySelector('.chat-send'),"
                 + "composer=typeof ensureChatComposer==='function'?ensureChatComposer().snapshot():null,"
                 + "delivery=typeof chatDeliveryEngine==='undefined'||!chatDeliveryEngine?null:chatDeliveryEngine.snapshot();"
-                + "return {chat:typeof view!=='undefined'&&view==='chat',form:!!form,"
+                + "const fab=document.querySelector('#chatFab');"
+                + "return {chat:typeof view!=='undefined'&&view==='chat',"
+                + "route:typeof view==='string'&&['home','map','moments','memories','more','chat'].includes(view)?view:'other',"
+                + "fabPresent:!!fab,fabHidden:!!fab?.classList.contains('hidden'),"
+                + "chatEnabled:!!cloud?.capabilities?.chat,form:!!form,"
                 + "buttonType:button?.type||null,buttonDisabled:!!button?.disabled,"
                 + "composerHasText:!!composer?.text?.trim(),composerDisabled:!!composer?.disabled,"
                 + "composerSending:!!composer?.sending,paired:typeof native!=='undefined'&&!!native?.paired,"
@@ -2236,7 +2515,25 @@ public class GalaxyDeviceClosureTest {
         return total>0?(double)changed/total:0d;
     }
 
-    private void awaitV5QaPainted(String theme) {
+    private String densityRestoreValue() throws Exception {
+        java.util.regex.Matcher override = java.util.regex.Pattern.compile(
+            "(?m)^Override density: (\\d+)\\s*$").matcher(shell("wm density"));
+        return override.find() ? override.group(1) : null;
+    }
+
+    private void awaitV5QaPainted(String theme) throws Exception {
+        JSONObject geometry = new JSONObject(jsWithDeadline("JSON.stringify((()=>{"
+            + "const marker=document.getElementById('v5-qa-paint-marker');"
+            + "if(!marker)return null;const rect=marker.getBoundingClientRect();"
+            + "return {left:rect.left,top:rect.top,right:rect.right,bottom:rect.bottom,"
+            + "scale:devicePixelRatio*(window.visualViewport?.scale||1)};})())",20));
+        int[] origin = new int[2];
+        scenario.onActivity(activity -> activity.findViewById(R.id.webView).getLocationOnScreen(origin));
+        double scale = geometry.getDouble("scale");
+        int left = origin[0] + (int) Math.ceil(geometry.getDouble("left") * scale);
+        int top = origin[1] + (int) Math.ceil(geometry.getDouble("top") * scale);
+        int right = origin[0] + (int) Math.floor(geometry.getDouble("right") * scale);
+        int bottom = origin[1] + (int) Math.floor(geometry.getDouble("bottom") * scale);
         long deadline=SystemClock.elapsedRealtime()+15_000;
         int consecutive=0;
         while (SystemClock.elapsedRealtime()<deadline) {
@@ -2245,10 +2542,10 @@ public class GalaxyDeviceClosureTest {
                 shot=instrumentation.getUiAutomation().takeScreenshot();
                 int matched=0;
                 if(shot!=null){
-                    int maxX=Math.min(shot.getWidth(),260);
-                    int maxY=Math.min(shot.getHeight(),260);
-                    for(int y=20;y<maxY;y+=4){
-                        for(int x=4;x<maxX;x+=4){
+                    int maxX=Math.min(shot.getWidth(),right);
+                    int maxY=Math.min(shot.getHeight(),bottom);
+                    for(int y=Math.max(0,top);y<maxY;y+=4){
+                        for(int x=Math.max(0,left);x<maxX;x+=4){
                             int pixel=shot.getPixel(x,y);
                             if(Math.abs(android.graphics.Color.red(pixel)-7)<=2
                                 && Math.abs(android.graphics.Color.green(pixel)-225)<=2
@@ -2267,9 +2564,13 @@ public class GalaxyDeviceClosureTest {
                 }else consecutive=0;
             } catch(RuntimeException ignored) { consecutive=0; }
             finally {if(shot!=null)shot.recycle();}
-            SystemClock.sleep(200);
+            // Native takeScreenshot is a full-frame GPU readback. Avoid
+            // saturating a headless AVD with up to 75 reads in 15 seconds.
+            // Keep the same 15s deadline and two positive real frames.
+            SystemClock.sleep(500);
         }
-        throw new AssertionError("V5 P1 screenshot rejected: real Android display has no QA home paint marker for "+theme);
+        throw new AssertionError("V5 P1 screenshot rejected: real Android display has no QA home paint marker for "
+            +theme+";screenBounds:["+left+","+top+","+right+","+bottom+"]");
     }
 
     // WCAG contrast of computed RGB colors, calculated on Android's Java side

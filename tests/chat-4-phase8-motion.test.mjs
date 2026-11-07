@@ -67,7 +67,8 @@ test('a bottom render never refocuses an old virtual anchor; a history restore d
 
 test('full render consumes bottom intent and it cannot affect a replacement element',()=>{
  const app=fs.readFileSync(new URL('../android/app/src/main/assets/mobile/app.js',import.meta.url),'utf8');
- const start=app.indexOf('function render(){'),end=app.indexOf(' const currentMemoriesTabs=',start);
+ const start=app.indexOf('function render(){'),end=app.indexOf(' const themeState=window.GalaxyTheme?.applyTheme',start);
+ assert.ok(start>=0&&end>start,'full-render preamble must be discoverable after P6 navigation redesign');
  const old={},replacement={};
  const context={view:'chat',document:{querySelector:()=>old},chatBottomRenderPending:old,chatCapturePositionState:()=>({atBottom:false})};
  vm.createContext(context);vm.runInContext(app.slice(start,end)+' return chatRenderState;}',context);
