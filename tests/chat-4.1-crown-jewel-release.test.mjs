@@ -4,9 +4,9 @@ import {readFileSync} from 'node:fs';
 
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 
-test('Crown Jewel code remains compatible with Android 4.1.2 code 39',()=>{
+test('Crown Jewel code remains compatible with Android 5.0.0 code 40',()=>{
   const gradle=read('android/app/build.gradle.kts');
-  assert.match(gradle,/versionCode = 39; versionName = "4\.1\.2"/);
+  assert.match(gradle,/versionCode = 40; versionName = "5\.0\.0"/);
 });
 
 test('Crown Jewel QA ledger contains exactly VIS-001 through VIS-066',()=>{
