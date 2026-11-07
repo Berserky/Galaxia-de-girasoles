@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync,mkdtempSync,mkdirSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 const read=x=>readFileSync(new URL('../'+x,import.meta.url),'utf8');
 const script=read('scripts/p8-configure-native-avd.sh');
@@ -36,7 +37,7 @@ test('P8 emulator prelaunch removes old dimensions, validates unique keys and is
   const avd=join(root,'test.avd');mkdirSync(avd);
   const config=join(avd,'config.ini');
   writeFileSync(config,'avd.ini.encoding=UTF-8\nhw.lcd.density=420\nhw.lcd.height=2400\nhw.lcd.width=1080\nhw.cpu.ncore=2\n');
-  const invoke=()=>execFileSync('bash',[new URL('../scripts/p8-configure-native-avd.sh',import.meta.url).pathname],{
+  const invoke=()=>execFileSync('bash',[fileURLToPath(new URL('../scripts/p8-configure-native-avd.sh',import.meta.url))],{
    env:{...process.env,ANDROID_AVD_HOME:root},encoding:'utf8'
   });
   assert.match(invoke(),/P8 AVD verified framebuffer/);
