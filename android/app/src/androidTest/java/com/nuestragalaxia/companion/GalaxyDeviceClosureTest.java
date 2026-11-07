@@ -513,47 +513,56 @@ public class GalaxyDeviceClosureTest {
                 awaitV5QaPainted("viewport-"+targetCss);
                 boolean responsivePlayerWasVisible = "true".equals(js(
                     "document.getElementById('globalPlayer').classList.contains('visible')"));
-                runV5Js(addRailFixture+";document.getElementById('globalPlayer').classList.add('visible')");
-                String measured;
+                AtomicReference<String> measured = new AtomicReference<>();
                 try {
-                    awaitJs(railSettled);
-                    measured=jsWithDeadline("JSON.stringify((()=>{"
-                    + "const nav=document.getElementById('bottomNav'),fab=document.getElementById('chatFab'),"
-                    + "player=document.getElementById('globalPlayer'),add=document.getElementById('v5-qa-floating-add');"
-                    + "function intersects(a,b){const x=a.getBoundingClientRect(),y=b.getBoundingClientRect();"
-                    + "return x.left<y.right-1&&x.right>y.left+1&&x.top<y.bottom-1&&x.bottom>y.top+1}"
-                    + "const n=nav.getBoundingClientRect(),f=fab.getBoundingClientRect(),"
-                    + "a=add.getBoundingClientRect(),p=player.getBoundingClientRect();"
-                    + "const noOverlap=![nav,fab,add,player].some((el,i,all)=>"
-                    + "all.slice(i+1).some(other=>intersects(el,other)));"
-                    + "const withinScreen=n.left>=-1&&n.right<=innerWidth+1&&f.right<=innerWidth+1"
-                    + "&&a.right<=innerWidth+1&&p.right<=innerWidth+1;"
-                    + "const heights=[...nav.querySelectorAll('.nav-btn')].map(el=>el.getBoundingClientRect().height);"
-                    + "const header=document.querySelector('#app .header'),"
-                    + "hButtons=[...header.querySelectorAll('.header-actions button')],"
-                    + "avatar=header.querySelector('.avatar');"
-                    + "const headerFits=hButtons.length===2&&[...hButtons,header.querySelector('.brand')]"
-                    + ".every(el=>{const r=el.getBoundingClientRect();return r.left>=-1&&r.right<=innerWidth+1});"
-                    + "const headerTouch=hButtons.every(el=>el.getBoundingClientRect().width>=44);"
-                    + "const avatarHidden=getComputedStyle(avatar).display==='none';"
-                    + "const welcome=document.querySelector('.galaxy-welcome'),"
-                    + "hero=welcome?.querySelector('.welcome-hero'),"
-                    + "cards=[...document.querySelectorAll('.welcome-bento .action-card')];"
-                    + "const heroRect=hero?.getBoundingClientRect();"
-                    + "const heroFits=!!heroRect&&heroRect.left>=-1&&heroRect.right<=innerWidth+1;"
-                    + "const bentoFits=cards.length===5&&cards.every(el=>{"
-                    + "const r=el.getBoundingClientRect();return r.left>=-1&&r.right<=innerWidth+1});"
-                    + "const noHorizontalOverflow=document.documentElement.scrollWidth<=innerWidth+2;"
-                    + "return {cssWidth:innerWidth,navCount:heights.length,minTouch:Math.min(...heights),"
-                    + "noOverlap,withinScreen,headerFits,headerTouch,avatarHidden,"
-                    + "heroFits,bentoFits,noHorizontalOverflow}})())",20);
+                    // A queued home render can replace the synthetic add button.
+                    // Prepare, check animations and measure in one WebView callback.
+                    awaitCondition(() -> {
+                        String result=jsWithDeadline("JSON.stringify((()=>{"
+                            + "const nav=document.getElementById('bottomNav'),fab=document.getElementById('chatFab'),"
+                            + "player=document.getElementById('globalPlayer');"
+                            + "if(!nav||!fab||!player||!document.getElementById('app'))return null;"
+                            + "if(!document.getElementById('v5-qa-floating-add')){" + addRailFixture + ";}"
+                            + "player.classList.add('visible');"
+                            + "if(!(" + railSettled + "))return null;"
+                            + "const add=document.getElementById('v5-qa-floating-add');"
+                            + "function intersects(a,b){const x=a.getBoundingClientRect(),y=b.getBoundingClientRect();"
+                            + "return x.left<y.right-1&&x.right>y.left+1&&x.top<y.bottom-1&&x.bottom>y.top+1}"
+                            + "const n=nav.getBoundingClientRect(),f=fab.getBoundingClientRect(),"
+                            + "a=add.getBoundingClientRect(),p=player.getBoundingClientRect();"
+                            + "const noOverlap=![nav,fab,add,player].some((el,i,all)=>"
+                            + "all.slice(i+1).some(other=>intersects(el,other)));"
+                            + "const withinScreen=n.left>=-1&&n.right<=innerWidth+1&&f.right<=innerWidth+1"
+                            + "&&a.right<=innerWidth+1&&p.right<=innerWidth+1;"
+                            + "const heights=[...nav.querySelectorAll('.nav-btn')].map(el=>el.getBoundingClientRect().height);"
+                            + "const header=document.querySelector('#app .header'),"
+                            + "hButtons=[...header.querySelectorAll('.header-actions button')],"
+                            + "avatar=header.querySelector('.avatar');"
+                            + "const headerFits=hButtons.length===2&&[...hButtons,header.querySelector('.brand')]"
+                            + ".every(el=>{const r=el.getBoundingClientRect();return r.left>=-1&&r.right<=innerWidth+1});"
+                            + "const headerTouch=hButtons.every(el=>el.getBoundingClientRect().width>=44);"
+                            + "const avatarHidden=getComputedStyle(avatar).display==='none';"
+                            + "const welcome=document.querySelector('.galaxy-welcome'),"
+                            + "hero=welcome?.querySelector('.welcome-hero'),"
+                            + "cards=[...document.querySelectorAll('.welcome-bento .action-card')];"
+                            + "const heroRect=hero?.getBoundingClientRect();"
+                            + "const heroFits=!!heroRect&&heroRect.left>=-1&&heroRect.right<=innerWidth+1;"
+                            + "const bentoFits=cards.length===5&&cards.every(el=>{"
+                            + "const r=el.getBoundingClientRect();return r.left>=-1&&r.right<=innerWidth+1});"
+                            + "const noHorizontalOverflow=document.documentElement.scrollWidth<=innerWidth+2;"
+                            + "return {cssWidth:innerWidth,navCount:heights.length,minTouch:Math.min(...heights),"
+                            + "noOverlap,withinScreen,headerFits,headerTouch,avatarHidden,"
+                            + "heroFits,bentoFits,noHorizontalOverflow}})())",20);
+                        if(result.isBlank()||"null".equals(result))return false;
+                        assertTrue("Invalid responsive metrics at CSS "+targetCss+": "+result, result.startsWith("{"));
+                        measured.set(result);
+                        return true;
+                    },UI_TIMEOUT_MS);
                 } finally {
                     runV5Js("document.getElementById('globalPlayer').classList.toggle('visible',"
                         +responsivePlayerWasVisible+");document.getElementById('v5-qa-floating-add')?.remove()");
                 }
-                assertTrue("Responsive metrics are not JSON at CSS "+targetCss+": "+measured,
-                    measured.startsWith("{"));
-                JSONObject row=new JSONObject(measured);
+                JSONObject row=new JSONObject(measured.get());
                 assertEquals("Viewport has unexpected CSS width",targetCss,
                     row.getInt("cssWidth"),5);
                 assertEquals("Lost navigation actions at narrow viewport",6,row.getInt("navCount"));
